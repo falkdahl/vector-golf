@@ -26,7 +26,8 @@ export function initParticles(count = PARTICLE_COUNT, width = 900, height = 600)
     particles.push({
       x: Math.random() * canvasW,
       y: Math.random() * canvasH,
-      life: Math.random() * 5
+      life: Math.random() * 2,
+      maxLife: 2
     });
   }
 }
@@ -45,9 +46,11 @@ export function updateParticles(dt, getWindAt) {
     if (p.y > canvasH) p.y = 0;
     p.life -= dt;
     if (p.life <= 0) {
+      // Fade-die after 2s per REQ-004, respawn uniformly random across whole map
       p.x = Math.random() * canvasW;
       p.y = Math.random() * canvasH;
-      p.life = 3 + Math.random() * 2;
+      p.life = 2;
+      p.maxLife = 2;
     }
   }
 }
@@ -71,6 +74,9 @@ export function drawArrows(ctx, field, cols, rows, cellW, cellH) {
   if (!showWind) return;
   ctx.save();
   ctx.lineCap = "round";
+  // Short arrows per REQ-004: max ≤16px, small variation, strength via opacity/head
+  const MIN_MAG = 4; // for WIND_STRENGTH 30, min force 120
+  const MAX_MAG_RANGE = 0.75; // variation from field generation (0.5*1.5)
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const vec = field[row][col];
@@ -78,9 +84,12 @@ export function drawArrows(ctx, field, cols, rows, cellW, cellH) {
       const cy = row * cellH + cellH / 2;
       const mag = Math.hypot(vec.x, vec.y);
       const angle = Math.atan2(vec.y, vec.x);
-      const len = 12 + mag * 10;
-      const alpha = 0.3 + mag * 0.4;
-      // arrow line
+      // Normalize magnitude to 0-1 for visual encoding, do not scale length linearly with raw mag
+      const normalizedMag = Math.max(0, Math.min(1, (mag - MIN_MAG) / MAX_MAG_RANGE));
+      const len = 10 + normalizedMag * 4; // 10-14px, max ≤16, variation ≤4px
+      const alpha = 0.35 + normalizedMag * 0.45; // 0.35-0.80
+      const headSize = 4 + normalizedMag * 2; // 4-6px
+      // arrow line - short
       ctx.strokeStyle = `rgba(100,160,255,${alpha})`;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -93,8 +102,8 @@ export function drawArrows(ctx, field, cols, rows, cellW, cellH) {
       ctx.fillStyle = `rgba(100,160,255,${alpha})`;
       ctx.beginPath();
       ctx.moveTo(hx, hy);
-      ctx.lineTo(hx - Math.cos(angle - 0.45) * 6, hy - Math.sin(angle - 0.45) * 6);
-      ctx.lineTo(hx - Math.cos(angle + 0.45) * 6, hy - Math.sin(angle + 0.45) * 6);
+      ctx.lineTo(hx - Math.cos(angle - 0.45) * headSize, hy - Math.sin(angle - 0.45) * headSize);
+      ctx.lineTo(hx - Math.cos(angle + 0.45) * headSize, hy - Math.sin(angle + 0.45) * headSize);
       ctx.closePath();
       ctx.fill();
     }
@@ -106,8 +115,9 @@ export function drawParticles(ctx) {
   if (!showWind) return;
   ctx.save();
   for (const p of particles) {
-    // dot + short trail
-    ctx.fillStyle = "rgba(180,220,255,0.65)";
+    // Fade over 2s per REQ-004: alpha = life / maxLife
+    const alpha = Math.max(0, Math.min(1, p.life / (p.maxLife || 2))) * 0.65;
+    ctx.fillStyle = `rgba(180,220,255,${alpha})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
     ctx.fill();
