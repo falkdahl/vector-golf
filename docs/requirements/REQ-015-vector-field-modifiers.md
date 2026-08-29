@@ -32,7 +32,7 @@ User requested ability to strategically shape the wind field before each shot, t
    - **Draggable**: Placed modifiers SHALL be draggable to adjust position without deleting. On `mousedown` on an existing modifier circle (hit test `dist < radius`), the modifier SHALL enter dragging state, follow the mouse (`mousemove`) updating its `x,y` in real-time, and finalize on `mouseup`. Dragging SHALL be allowed only before shooting (`AIMING`/`CHARGING`), not during `FLYING`. Dragging SHALL NOT delete the modifier; it only moves it. Visual feedback: dragged modifier opacity 0.6 and cursor `grabbing`.
    - Placement SHALL only be allowed before shooting (not during `FLYING`). Placing SHALL NOT trigger a launch.
    - Right-click or `Delete`/`Backspace` SHALL remove the modifier under cursor (or last placed) for misclick correction. `R` (ball reset) does NOT clear modifiers, but advancing hole or game reset does.
-   - Placement SHALL respect limits: max `3` modifiers per hole (configurable `MAX_MODIFIERS_PER_HOLE=3` in `src/levels.js` or `src/main.js`). If limit reached and no modifier is selected (per deselection rule), user must select again; if limit reached and user tries to place another, oldest modifier is replaced or placement is ignored with feedback (shake hotbar).
+   - Placement SHALL allow **any number of modifiers** in play at the same time (no hard limit). The game SHALL NOT enforce a maximum of 3 per hole; the player may place unlimited modifiers until they choose to remove them or advance holes. Previous limit of 3 is removed.
    - Modifiers SHALL be stored as array `modifiers = [{id, type:'amplify'|'nullify'|'flip', x, y, radius:90, isDragging?:boolean}]` in `src/main.js` or `src/vectorField.js`.
    - Modifiers SHALL persist through death resets (obstacle/edge) but SHALL be cleared on advancing to next hole or on game reset (`R` in WIN).
 
@@ -40,7 +40,7 @@ User requested ability to strategically shape the wind field before each shot, t
    - `getWindAt(worldX, worldY)` SHALL be modified to apply all active modifiers that contain the query point (`hypot(x - mod.x, y - mod.y) < mod.radius`).
    - If multiple modifiers overlap, they SHALL be applied in placement order (stacking) – e.g., amplify then flip = flipped amplified vector.
    - Radius SHALL be `80-100px` (tunable `MODIFIER_RADIUS=90`) for all three types, visible as circle.
-   - Performance: modifier check SHALL be `O(n)` with `n ≤3`, negligible over `getWindAt`.
+   - Performance: modifier check SHALL be `O(n)` with `n` being the number of active modifiers (unlimited, but typically <20), still negligible over `getWindAt` due to simple distance checks.
 
 4. **Visualization Integration** in `src/render.js`:
    - Placed modifiers SHALL be drawn as circles on the canvas (below ball but above arrows/particles): `amplify` solid orange ring `rgba(230,126,34,0.25)` with `>>` icon, `nullify` blue dashed `rgba(52,152,219,0.25)` with `∅`, `flip` purple double arrow `rgba(155,89,182,0.25)` with `↻`. While dragging, modifier SHALL be drawn with 60% opacity and `grabbing` cursor.
@@ -63,7 +63,7 @@ User requested ability to strategically shape the wind field before each shot, t
 - [ ] Arrows inside each modifier circle reflect resulting effect: inside amplify arrows more opaque/longer, inside nullify faint/zero, inside flip reversed direction (verified by sampling `getWindAt` for arrow drawing).
 - [ ] Hotbar hidden during `FLYING`; cannot place/drag while ball drifting.
 - [ ] Right-click or Delete on modifier removes it; dragging adjusts without deleting; `R` (ball reset) does not clear modifiers, but advancing hole or game reset does.
-- [ ] Max 3 modifiers per hole enforced; 4th placement either ignored or replaces oldest with visual feedback.
+- [ ] Any number of modifiers can be in play at the same time; placing 5, 10 or more modifiers is allowed and all are rendered and affect `getWindAt`.
 - [ ] Particles and arrows inside modifier circles visibly change per modifier type.
 - [ ] No 3rd-party libraries; pure canvas + vanilla JS.
 

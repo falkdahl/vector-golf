@@ -38,8 +38,7 @@ let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
 
-// Modifier system per REQ-015 - updated per new requirements - start with no selection
-const MAX_MODIFIERS_PER_HOLE = 3;
+// Modifier system per REQ-015 - unlimited modifiers per updated requirement
 let modifiers = [];
 let selectedModifier = null;
 let mousePos = null;
@@ -143,17 +142,9 @@ function getCanvasMousePos(e) {
 function placeModifier(x, y) {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (!selectedModifier) return;
-  if (modifiers.length >= MAX_MODIFIERS_PER_HOLE) {
-    // Replace oldest with shake feedback (preserve centering)
-    modifiers.shift();
-    if (hotbarEl) {
-      hotbarEl.style.transform = "translateX(-50%) translateX(-4px)";
-      setTimeout(() => hotbarEl.style.transform = "translateX(-50%)", 100);
-    }
-  }
   modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: MODIFIER_RADIUS });
   syncModifiersToField();
-  // Deselect after placement per new requirement
+  // Deselect after placement per requirement
   selectedModifier = null;
   updateHotbarUI();
   mousePos = null;
