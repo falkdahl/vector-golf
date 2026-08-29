@@ -64,6 +64,33 @@ canvas {
   font-size: 1.6rem;
 }
 
+#next-hole-button {
+  margin-top: 12px;
+  padding: 8px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #2ecc71;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#next-hole-button:hover {
+  background: #27ae60;
+}
+
+#next-hole-button.hidden {
+  display: none;
+}
+
+.win-hint {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
 #hotbar {
   position: absolute;
   bottom: 10px;

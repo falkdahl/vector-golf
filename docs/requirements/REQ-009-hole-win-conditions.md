@@ -15,30 +15,33 @@ User requirement: "If the ball does not land in the hole player restarts from th
 
 ## Requirements
 
-1. Hole definition in `src/levels.js`: `hole = {x, y, radius:14}` (radius tunable 12-16). Position e.g., `~820, 300` near right edge, not overlapping obstacles.
+1. Hole definition in `src/levels.js`: `hole = {x, y, radius:14}` (radius tunable 12-16, black circle). Position e.g., `~820, 300` near right edge, not overlapping obstacles.
 2. Win condition checked in `src/physics.js` or `src/main.js` every tick (continuous, not only at rest):
    - `distance = hypot(ball.pos.x - hole.x, ball.pos.y - hole.y)`
-   - If `distance < hole.radius - 2` (ball mostly inside) => WIN, regardless of speed. Ball entering hole at high speed still counts.
-   - Visual: ball must be mostly inside hole rim; allow 2px tolerance.
+   - If `distance < hole.radius + BALL_RADIUS` (ball touches **any part** of black circle, even edge grazing) => WIN, regardless of speed. Ball entering hole at high speed still counts. Touching any part triggers win.
+   - Upon win, **ball SHALL stop in place** (`vel=0`, `isMoving=false`, position frozen at touch point) and remain visible over hole.
+   - Visual: any overlap between ball circle and hole circle counts; no need for ball to be mostly inside.
 3. Lose/Reset condition:
    - Ball touching obstacle (REQ-008) or screen edge/OOB => instant death/reset (REQ-011). Ball drifting slowly into obstacle still dies.
    - Ball drifting indefinitely without hitting obstacle/edge/hole does NOT auto-reset; it continues until one of those events.
 4. Rendering in `src/render.js`:
    - Hole as dark circle `radius` filled `#111` with inner shadow, outer rim `2px #333`, optionally small flag pole/marker offset.
-   - When win, show overlay: "You Win! Attempts: N" + "Press R to Play Again" centered.
-5. Win state SHALL be terminal until player presses `R` (or clicks) to reset; during win, physics/input paused. Attempts counter SHALL be displayed on win overlay and during play (REQ-014).
-6. Attempts counter (REQ-014) SHALL increment on each launch and be shown in UI.
+   - When win, show **Victory menu** centered in middle of canvas: overlay with title `Victory`, attempts used (`Attempts this hole: X, Total: Y`), and if more holes remain, a button `Next` to load next hole. On final hole, button says `Next` is hidden and overlay shows `Game Complete!` with total.
+5. Win state SHALL be terminal until player presses `Next` button (or `R` as fallback) to load next hole; during win, physics/input paused, ball frozen. Attempts counter SHALL be displayed on win overlay and during play (REQ-014).
+6. Attempts counter (REQ-014) SHALL increment on each launch and be shown in UI. **Hole info SHALL be updated accordingly** when next hole is loaded (hole counter `N/M`, per-hole attempts reset to 0, total kept).
+7. **Hole Progression via Next Button**: When `Next` is pressed, next hole SHALL be loaded via `loadLevel(currentHoleIndex+1)`, `holeAttempts` reset to `0` but `totalAttempts` kept, hole counter updated (`2/3`, etc.), ball at new tee, and `gameState` set to `AIMING`. Victory menu hidden. If no more holes, `Next` hidden and `R` resets game.
 
 ## Acceptance Criteria
 
-- [ ] Hole is visible near opposite side from tee, radius 14px.
-- [ ] Ball entering with center 5px from hole center => win overlay appears immediately, even at high speed.
-- [ ] Ball drifting with center 20px from hole center does NOT trigger win and does NOT auto-reset; it continues drifting.
-- [ ] Ball entering hole at high speed (>10px/s) DOES count as win (no need to settle).
-- [ ] Ball drifting slowly into hole still counts as win.
+- [ ] Hole is visible near opposite side from tee, black circle radius 14px.
+- [ ] Ball touching any part of black circle (even edge grazing, `dist < hole.radius + BALL_RADIUS` ~20) => ball **stops in place** (vel 0, frozen) and **Victory menu** pops up in middle of canvas saying `Victory` and showing `Attempts this hole: N, Total: M`.
+- [ ] Ball with center 20px from hole center (outside hole+ball) does NOT trigger win and does NOT auto-reset; it continues drifting.
+- [ ] Ball entering hole at high speed (>10px/s) DOES count as win and stops in place.
+- [ ] Ball drifting slowly into hole still counts as win and stops.
 - [ ] Ball destroyed by obstacle mid-flight never triggers win, even if obstacle overlaps hole (obstacles must not overlap hole).
 - [ ] Hitting screen edge triggers instant reset, even when drifting slowly.
-- [ ] Pressing `R` in win screen resets to `AIMING` at tee and resets or continues attempts counter per REQ-014.
+- [ ] Victory menu shows `Victory`, attempts used, and if more holes remain, a `Next` button. Pressing `Next` loads next hole, resets `Attempts this hole` to `0` but keeps `Total`, updates hole counter `N/M`, and hides menu. On final hole, `Next` hidden, `R` resets game.
+- [ ] Hole info inside canvas top (REQ-012/014) updates correctly after `Next` (e.g., from `1/3` to `2/3`).
 
 ## Dependencies
 - REQ-005 (stop detection), REQ-008 (obstacle reset), REQ-011 (state)

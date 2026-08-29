@@ -52,6 +52,7 @@ let winHoleValue;
 let winHoleTotal;
 let winTotalValue;
 let winTitle;
+let nextHoleButton;
 
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -105,12 +106,26 @@ function updateAttemptsUI() {
   if (winAttemptsValue) winAttemptsValue.textContent = String(holeAttempts);
   if (winTotalValue) winTotalValue.textContent = String(totalAttempts);
   if (winTitle) {
-    if (gameState === "WIN" && currentHoleIndex === LEVELS.length - 1) {
-      winTitle.textContent = "Game Complete!";
-    } else if (gameState === "WIN") {
-      winTitle.textContent = "Hole Cleared!";
+    // Victory menu per new requirement - always Victory, with Game Complete on final hole
+    if (gameState === "WIN") {
+      if (currentHoleIndex === LEVELS.length - 1) {
+        winTitle.textContent = "Victory";
+      } else {
+        winTitle.textContent = "Victory";
+      }
     } else {
-      winTitle.textContent = "You Win!";
+      winTitle.textContent = "Victory";
+    }
+  }
+  if (nextHoleButton) {
+    const hasMoreHoles = currentHoleIndex < LEVELS.length - 1;
+    if (gameState === "WIN" && hasMoreHoles) {
+      nextHoleButton.classList.remove("hidden");
+      nextHoleButton.textContent = "Next";
+    } else if (gameState === "WIN" && !hasMoreHoles) {
+      nextHoleButton.classList.add("hidden");
+    } else {
+      nextHoleButton.classList.add("hidden");
     }
   }
 }
@@ -232,41 +247,53 @@ function handleLaunch(angle, power) {
 
 function checkWin() {
   const dist = Math.hypot(ball.pos.x - level.hole.x, ball.pos.y - level.hole.y);
-  if (dist < level.hole.radius - 2) {
-    if (currentHoleIndex < LEVELS.length - 1) {
-      // Advance to next hole, not final win
-      holeAttempts = 0; // reset per-hole for next hole will be done in advanceHole, but keep current holeAttempts for win display before advance
-      // Update UI before advancing to show current hole stats briefly, then advance
-      updateAttemptsUI();
-      // Briefly show hole cleared then advance - for now advance immediately per REQ-014
-      currentHoleIndex++;
-      holeAttempts = 0;
-      loadLevel(currentHoleIndex);
-      // validate
-      for (const obs of level.obstacles) {
-        if (obs.type === "rect") {
-          const teeInside = level.tee.x >= obs.x && level.tee.x <= obs.x + obs.w && level.tee.y >= obs.y && level.tee.y <= obs.y + obs.h;
-          const holeInside = level.hole.x >= obs.x && level.hole.x <= obs.x + obs.w && level.hole.y >= obs.y && level.hole.y <= obs.y + obs.h;
-          if (teeInside || holeInside) console.warn("Obstacle overlaps tee/hole", obs);
-        } else if (obs.type === "circle") {
-          const dTee = Math.hypot(level.tee.x - obs.x, level.tee.y - obs.y);
-          const dHole = Math.hypot(level.hole.x - obs.x, level.hole.y - obs.y);
-          if (dTee < 30 + BALL_RADIUS || dHole < 30 + obs.r) console.warn("Obstacle too close to tee/hole", obs);
-        }
+  // Victory when ball touches any part of black circle per new requirement
+  if (dist < level.hole.radius + BALL_RADIUS) {
+    // Ball stops in place per requirement
+    ball.vel.x = 0;
+    ball.vel.y = 0;
+    ball.isMoving = false;
+    gameState = "WIN";
+    updateAttemptsUI();
+    winOverlay.classList.remove("hidden");
+    // Ensure Next button visibility reflects if more holes remain
+    if (nextHoleButton) {
+      if (currentHoleIndex < LEVELS.length - 1) {
+        nextHoleButton.classList.remove("hidden");
+      } else {
+        nextHoleButton.classList.add("hidden");
       }
-      gameState = "AIMING";
-      winOverlay.classList.add("hidden");
-      updateAttemptsUI();
-      updateForceBar();
-      return true; // handled as advance, not WIN overlay
-    } else {
-      gameState = "WIN";
-      updateAttemptsUI();
-      winOverlay.classList.remove("hidden");
-      return true;
     }
+    return true;
   }
   return false;
+}
+
+function handleNextHole() {
+  if (currentHoleIndex < LEVELS.length - 1) {
+    currentHoleIndex++;
+    holeAttempts = 0; // reset per-hole attempts, keep total per requirement
+    loadLevel(currentHoleIndex);
+    // validate
+    for (const obs of level.obstacles) {
+      if (obs.type === "rect") {
+        const teeInside = level.tee.x >= obs.x && level.tee.x <= obs.x + obs.w && level.tee.y >= obs.y && level.tee.y <= obs.y + obs.h;
+        const holeInside = level.hole.x >= obs.x && level.hole.x <= obs.x + obs.w && level.hole.y >= obs.y && level.hole.y <= obs.y + obs.h;
+        if (teeInside || holeInside) console.warn("Obstacle overlaps tee/hole", obs);
+      } else if (obs.type === "circle") {
+        const dTee = Math.hypot(level.tee.x - obs.x, level.tee.y - obs.y);
+        const dHole = Math.hypot(level.hole.x - obs.x, level.hole.y - obs.y);
+        if (dTee < 30 + BALL_RADIUS || dHole < 30 + obs.r) console.warn("Obstacle too close to tee/hole", obs);
+      }
+    }
+    gameState = "AIMING";
+    winOverlay.classList.add("hidden");
+    updateAttemptsUI();
+    updateForceBar();
+  } else {
+    // Final hole - Next should not be visible, but if pressed, do nothing or reset game
+    resetGameAfterWin();
+  }
 }
 
 function update(dt) {
@@ -385,6 +412,7 @@ function init() {
   winHoleTotal = document.getElementById("win-hole-total");
   winTotalValue = document.getElementById("win-total-value");
   winTitle = document.getElementById("win-title");
+  nextHoleButton = document.getElementById("next-hole-button");
   hotbarEl = document.getElementById("hotbar");
 
   setupCanvas();
@@ -420,6 +448,9 @@ function init() {
       });
     });
     updateHotbarUI();
+  }
+  if (nextHoleButton) {
+    nextHoleButton.addEventListener("click", handleNextHole);
   }
   window.addEventListener("keydown", (e) => {
     if (e.code === "Escape") {
