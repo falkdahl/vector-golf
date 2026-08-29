@@ -426,7 +426,11 @@ function init() {
       onLaunch: handleLaunch,
       onReset: () => {
         if (gameState === "WIN") {
-          resetGameAfterWin();
+          if (currentHoleIndex === LEVELS.length - 1) {
+            resetGameAfterWin();
+          } else {
+            handleNextHole();
+          }
         } else {
           resetBall();
         }
