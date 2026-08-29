@@ -72,10 +72,27 @@ function resetSupply() {
   updateHotbarUI();
 }
 
-// Reward menu per REQ-021: every 5 totalAttempts inside canvas
+// Free shots hidden counter per REQ-022 - conditional attempt counting
+let freeShots = 0;
+function getFreeShots() { return freeShots; }
+function setFreeShots(v) { freeShots = Math.max(0, Math.floor(v)); }
+function addFreeShots(n = 1) { freeShots = Math.max(0, freeShots + Math.floor(n)); }
+
+// Reward menu per REQ-021: every 5 totalAttempts inside canvas - 3 random of 4 pool
+const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, null initially
 let rewardMenuHover = null; // hovered type for visual feedback
+let rewardOffered = []; // 3 distinct types randomly chosen from REWARD_POOL per trigger
+
+function shuffleArray(a) {
+  // Fisher-Yates with Math.random, uniform
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 function maybeShowRewardMenu() {
   if (gameState === "WIN") return;
@@ -83,6 +100,8 @@ function maybeShowRewardMenu() {
   if (rewardMenuVisible) return;
   if (totalAttempts % 5 !== 0) return;
   if (rewardClaimedFor === totalAttempts) return;
+  // REQ-021: randomly select 3 distinct upgrades from 4 pool
+  rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
   rewardMenuVisible = true;
   rewardMenuHover = null;
   // Ensure hotbar reflects blocked state
@@ -91,17 +110,25 @@ function maybeShowRewardMenu() {
 
 function claimReward(type) {
   if (!rewardMenuVisible) return false;
-  if (!(type in supply)) return false;
+  if (!rewardOffered.includes(type)) return false;
   // Idempotent: only once per trigger
   if (rewardClaimedFor === totalAttempts) return false;
-  addToSupply(type, 1);
+  if (type === 'freeShots') {
+    addFreeShots(3); // REQ-022: Free Shots +3
+  } else {
+    if (!(type in supply)) return false;
+    addToSupply(type, 1);
+  }
   rewardClaimedFor = totalAttempts;
   rewardMenuVisible = false;
   rewardMenuHover = null;
+  rewardOffered = [];
   updateHotbarUI();
   if (canvas) canvas.style.cursor = "default";
   return true;
 }
+
+function getRewardOffered() { return [...rewardOffered]; }
 
 function isRewardMenuVisible() {
   return rewardMenuVisible;
@@ -149,14 +176,15 @@ function loadLevel(index) {
 }
 
 function initLevel() {
-  // REQ-020: new game starts with empty supply; ensure supply is zeroed on initial load
-  // (declaration already 0, but reset explicitly for clarity and for testing reload)
+  // REQ-020/REQ-022: new game starts with empty supply and freeShots
   if (currentHoleIndex === 0) {
     supply = { amplify: 0, nullify: 0, flip: 0 };
+    freeShots = 0;
+    rewardOffered = [];
   }
   loadLevel(currentHoleIndex);
   updateAttemptsUI();
-  // REQ-021: show reward menu at start if totalAttempts %5==0 (initial 0)
+  // REQ-021: show reward menu at start if totalAttempts %5==0 (initial 0) - random 3
   maybeShowRewardMenu();
   // validate obstacles not overlapping tee/hole
   for (const obs of level.obstacles) {
@@ -323,12 +351,14 @@ function resetGameAfterWin() {
   holeAttempts = 0;
   totalAttempts = 0;
   attempts = 0;
-  // REQ-020: reset supply to empty on new game
+  // REQ-020/REQ-022: reset supply and freeShots to empty on new game
   supply = { amplify: 0, nullify: 0, flip: 0 };
-  // REQ-021: reset reward state for new game
+  freeShots = 0;
+  // REQ-021: reset reward state for new game (random offer cleared)
   rewardMenuVisible = false;
   rewardClaimedFor = null;
   rewardMenuHover = null;
+  rewardOffered = [];
   loadLevel(currentHoleIndex);
   for (const obs of level.obstacles) {
     if (obs.type === "rect") {
@@ -354,9 +384,14 @@ function handleLaunch(angle, power) {
   if (rewardMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   launchBall(angle, power);
-  holeAttempts += 1;
-  totalAttempts += 1;
-  attempts = totalAttempts;
+  // REQ-022: free shots consumed first, hidden, mutually exclusive with counting
+  if (freeShots > 0) {
+    freeShots = Math.max(0, freeShots - 1);
+  } else {
+    holeAttempts += 1;
+    totalAttempts += 1;
+    attempts = totalAttempts;
+  }
   updateAttemptsUI();
   gameState = "FLYING";
   resetCharge();
@@ -511,9 +546,9 @@ function render() {
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
   }
-  // REQ-021: reward menu inside canvas (on top of HUD)
+  // REQ-021: reward menu inside canvas (on top of HUD) - 3 random of 4
   if (rewardMenuVisible) {
-    drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, totalAttempts, rewardMenuHover);
+    drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover);
   }
 }
 
@@ -608,19 +643,19 @@ function init() {
     nextHoleButton.addEventListener("click", handleNextHole);
   }
   window.addEventListener("keydown", (e) => {
-    // REQ-021: when reward menu visible, 1/2/3 selects reward, other inputs blocked
+    // REQ-021: when reward menu visible, 1/2/3 selects random offered reward by position, other inputs blocked
     if (rewardMenuVisible) {
-      if (e.code === "Digit1") {
-        claimReward('amplify');
+      if (e.code === "Digit1" && rewardOffered[0]) {
+        claimReward(rewardOffered[0]);
         e.preventDefault();
-      } else if (e.code === "Digit2") {
-        claimReward('nullify');
+      } else if (e.code === "Digit2" && rewardOffered[1]) {
+        claimReward(rewardOffered[1]);
         e.preventDefault();
-      } else if (e.code === "Digit3") {
-        claimReward('flip');
+      } else if (e.code === "Digit3" && rewardOffered[2]) {
+        claimReward(rewardOffered[2]);
         e.preventDefault();
-      } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD") {
-        // Block aiming/charging while menu open
+      } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4") {
+        // Block aiming/charging while menu open (including Digit4 which is not used - only 3 options)
         e.preventDefault();
       }
       return;
@@ -657,11 +692,11 @@ function init() {
   });
   // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020 + REQ-021
   canvas.addEventListener("mousemove", (e) => {
-    // REQ-021: handle hover for reward menu
+    // REQ-021: handle hover for reward menu (random 3 offered)
     if (rewardMenuVisible) {
       const pos = getCanvasMousePos(e);
       mousePos = pos;
-      const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H);
+      const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H, rewardOffered);
       let hovered = null;
       for (const btn of layout) {
         if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
@@ -735,10 +770,10 @@ function init() {
     }
   });
   canvas.addEventListener("click", (e) => {
-    // REQ-021: handle reward menu selection first
+    // REQ-021: handle reward menu selection first (random 3 offered)
     if (rewardMenuVisible) {
       const pos = getCanvasMousePos(e);
-      const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H);
+      const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H, rewardOffered);
       for (const btn of layout) {
         if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
           claimReward(btn.type);
@@ -808,10 +843,11 @@ function getSelectedModifier() { return selectedModifier; }
 
 // Helpers for REQ-021 testing
 function getRewardMenuState() {
-  return { visible: rewardMenuVisible, claimedFor: rewardClaimedFor, hover: rewardMenuHover };
+  return { visible: rewardMenuVisible, claimedFor: rewardClaimedFor, hover: rewardMenuHover, offered: [...rewardOffered] };
 }
 function setRewardClaimedFor(v) { rewardClaimedFor = v; }
 function setRewardMenuVisible(v) { rewardMenuVisible = v; }
+function setRewardOffered(v) { if (Array.isArray(v)) rewardOffered = [...v]; }
 
 // Expose for manual/browser testing and for acceptance checks without import
 if (typeof window !== 'undefined') {
@@ -836,6 +872,19 @@ if (typeof window !== 'undefined') {
   window.__getRewardMenuState = getRewardMenuState;
   window.__setRewardClaimedFor = setRewardClaimedFor;
   window.__setRewardMenuVisible = setRewardMenuVisible;
+  window.__getRewardOffered = getRewardOffered;
+  window.__setRewardOffered = setRewardOffered;
+  window.__getFreeShots = getFreeShots;
+  window.__setFreeShots = setFreeShots;
+  window.__addFreeShots = addFreeShots;
+  Object.defineProperty(window, 'freeShots', {
+    get: () => freeShots,
+    set: (v) => setFreeShots(v)
+  });
+  Object.defineProperty(window, 'rewardOffered', {
+    get: () => [...rewardOffered],
+    set: (v) => setRewardOffered(v)
+  });
   Object.defineProperty(window, 'rewardMenuVisible', {
     get: () => rewardMenuVisible,
     set: (v) => { rewardMenuVisible = v; }
@@ -853,4 +902,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, totalAttempts, holeAttempts, currentHoleIndex };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, totalAttempts, holeAttempts, currentHoleIndex };

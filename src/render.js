@@ -421,7 +421,16 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   ctx.restore();
 }
 
-export function getRewardButtonsLayout(width, height) {
+const REWARD_TYPE_DEFS = {
+  amplify: { icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.28)', fillHover: 'rgba(230,126,34,0.38)', hint: '+1 to supply' },
+  nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
+  flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
+  freeShots: { icon: '★', label: 'Free Shots', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+3 free shots' }
+};
+
+export function getRewardButtonsLayout(width, height, offered = null) {
+  // REQ-021: 3 random of 4 pool; if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
+  const types = Array.isArray(offered) && offered.length === 3 ? offered : ['amplify', 'nullify', 'flip'];
   const cardW = 340;
   const cardH = 220;
   const cardX = (width - cardW) / 2;
@@ -429,17 +438,51 @@ export function getRewardButtonsLayout(width, height) {
   const btnW = 90;
   const btnH = 110;
   const gap = 12;
-  const totalBtnW = 3 * btnW + 2 * gap;
+  const totalBtnW = types.length * btnW + (types.length - 1) * gap;
   const startX = cardX + (cardW - totalBtnW) / 2;
   const btnY = cardY + 75;
-  return [
-    { x: startX, y: btnY, w: btnW, h: btnH, type: 'amplify', icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.12)', fillHover: 'rgba(230,126,34,0.22)' },
-    { x: startX + btnW + gap, y: btnY, w: btnW, h: btnH, type: 'nullify', icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.12)', fillHover: 'rgba(52,152,219,0.22)' },
-    { x: startX + 2 * (btnW + gap), y: btnY, w: btnW, h: btnH, type: 'flip', icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.12)', fillHover: 'rgba(155,89,182,0.22)' }
-  ];
+  return types.map((type, i) => {
+    const def = REWARD_TYPE_DEFS[type] || REWARD_TYPE_DEFS.amplify;
+    return {
+      x: startX + i * (btnW + gap),
+      y: btnY,
+      w: btnW,
+      h: btnH,
+      type,
+      icon: def.icon,
+      label: def.label,
+      color: def.color,
+      border: def.border,
+      fill: def.fill,
+      fillHover: def.fillHover,
+      hint: def.hint
+    };
+  });
 }
 
-export function drawRewardMenu(ctx, width, height, totalAttempts, hoveredType = null) {
+export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType = null) {
+  // Backward compat: if third arg is number (old totalAttempts), use default offered
+  // New signature: (ctx, width, height, offeredArray, hovered)
+  let offered;
+  let hovered = hoveredType;
+  if (Array.isArray(offeredOrTotal)) {
+    offered = offeredOrTotal;
+  } else if (typeof offeredOrTotal === 'number' && hoveredType === null) {
+    // old call with totalAttempts number, no hovered
+    offered = ['amplify', 'nullify', 'flip'];
+  } else if (Array.isArray(hoveredType)) {
+    // shouldn't happen
+    offered = offeredOrTotal;
+    hovered = null;
+  } else {
+    // offeredOrTotal is offered array, hoveredType is hover string
+    offered = Array.isArray(offeredOrTotal) ? offeredOrTotal : ['amplify', 'nullify', 'flip'];
+    // hoveredType already set
+  }
+  // Ensure 3 distinct
+  if (!Array.isArray(offered) || offered.length !== 3) {
+    offered = ['amplify', 'nullify', 'flip'];
+  }
   ctx.save();
   // Dim background full canvas - preserves green context but ensures contrast
   ctx.fillStyle = "rgba(0,0,0,0.55)";
@@ -463,10 +506,11 @@ export function drawRewardMenu(ctx, width, height, totalAttempts, hoveredType = 
   ctx.strokeText("Choose an Upgrade", width / 2, cardY + 28);
   ctx.fillText("Choose an Upgrade", width / 2, cardY + 28);
 
-  // Buttons
-  const buttons = getRewardButtonsLayout(width, height);
-  for (const btn of buttons) {
-    const isHover = hoveredType === btn.type;
+  // Buttons - 3 random offered
+  const buttons = getRewardButtonsLayout(width, height, offered);
+  for (let idx = 0; idx < buttons.length; idx++) {
+    const btn = buttons[idx];
+    const isHover = hovered === btn.type;
     ctx.save();
     if (isHover) {
       // hover brighten
@@ -516,16 +560,16 @@ export function drawRewardMenu(ctx, width, height, totalAttempts, hoveredType = 
     ctx.fillStyle = "white";
     ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + 55);
 
-    // Supply hint - light gray/white with subtle stroke
+    // Supply hint - uses per-type hint (+1 to supply or +3 free shots) with high contrast
     ctx.font = "600 11px system-ui, sans-serif";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
-    ctx.strokeText("+1 to supply", btn.x + btn.w / 2, btn.y + 72);
+    ctx.strokeText(btn.hint, btn.x + btn.w / 2, btn.y + 72);
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.fillText("+1 to supply", btn.x + btn.w / 2, btn.y + 72);
+    ctx.fillText(btn.hint, btn.x + btn.w / 2, btn.y + 72);
 
-    // Key hint - light with stroke
-    const key = btn.type === 'amplify' ? '1' : btn.type === 'nullify' ? '2' : '3';
+    // Key hint - positional 1/2/3 for random offered order
+    const key = String(idx + 1);
     ctx.font = "600 11px system-ui, sans-serif";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
