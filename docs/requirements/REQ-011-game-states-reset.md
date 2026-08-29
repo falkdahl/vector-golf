@@ -22,7 +22,7 @@ User selected "Instant reset" for failure. A clear state machine prevents input 
    - `WIN`: ball entered hole (distance < radius-2), overlay shown, physics paused, wait for `R` -> `reset()` and increment attempts handling per REQ-014.
 2. `resetBall()` function SHALL:
    - Set `ball.pos = {...tee}`, `ball.vel = {0,0}`, `ball.isMoving=false`.
-   - Reset `aimAngle` to initial (tee->hole direction).
+   - **Keep `aimAngle` unchanged** (persisted between attempts per REQ-019); do NOT reset to tee->hole direction.
    - Reset `charge=0`, `charging=false`, force bar to 0%.
    - Set `state = 'AIMING'`.
    - Clear any win overlay.

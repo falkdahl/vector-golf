@@ -26,7 +26,7 @@ User specified: "Use arrow keys to move along a circle around the ball". This re
    - Draw aim line from `ball.pos` outward length `30px` (or `30 + charge*40` when charging) in direction `aimAngle`.
    - Draw small indicator dot at orbit circumference at `ball.pos + (cos angle, sin angle)*orbitRadius`.
 4. Aiming SHALL only be active when `gameState === 'AIMING'` or `'CHARGING'`; ignored when `ball.isMoving`.
-5. Initial `aimAngle` SHALL point toward hole (tee->hole vector) on reset for usability.
+5. Initial `aimAngle` SHALL point toward hole (tee->hole vector) **only when a new hole is loaded** (`loadLevel()`), for usability. **Between attempts on the same hole, `aimAngle` SHALL be kept** (persisted) and **NOT reset** on `resetBall()` (death, OOB, `R` during play) per REQ-019.
 6. No mouse/touch aiming required for MVP.
 
 ## Acceptance Criteria
@@ -36,7 +36,8 @@ User specified: "Use arrow keys to move along a circle around the ball". This re
 - [ ] Holding both arrows cancels (or last pressed wins - documented).
 - [ ] Orbit dot and aim line update in real-time at 60fps without jitter.
 - [ ] Aiming input is ignored during `FLYING` state (ball in motion).
-- [ ] After instant reset, aim angle resets to tee->hole direction.
+- [ ] After instant reset (death, OOB, `R` during play) on same hole, aim angle is **kept** (not reset) – verified by aiming 90° off, dying, and seeing same angle after reset.
+- [ ] On new hole load (Hole 1 start or advancing to Hole 2), aim angle is initialized toward new hole (tee->hole).
 
 ## Dependencies
 - REQ-002 (loop dt), REQ-005 (ball pos), REQ-011 (states)

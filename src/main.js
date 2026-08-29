@@ -172,9 +172,7 @@ function removeModifierAt(x, y) {
 function resetBall() {
   physicsResetBall(level.tee);
   resetCharge();
-  const dx = level.hole.x - level.tee.x;
-  const dy = level.hole.y - level.tee.y;
-  setAimAngle(Math.atan2(dy, dx));
+  // Keep aimAngle between attempts per REQ-019 - do NOT reset to tee->hole
   gameState = "AIMING";
   winOverlay.classList.add("hidden");
   updateForceBar();
