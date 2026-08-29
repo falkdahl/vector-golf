@@ -118,25 +118,3 @@ canvas {
 #instructions p {
   margin: 4px 0;
 }
-
-#wind-legend {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.8rem;
-  opacity: 0.8;
-}
-
-.legend-arrow {
-  color: #64a0ff;
-  font-weight: bold;
-  font-size: 1rem;
-}
-
-.legend-gradient {
-  width: 60px;
-  height: 8px;
-  background: linear-gradient(90deg, rgba(100,160,255,0.3), rgba(100,160,255,1));
-  border-radius: 4px;
-}
