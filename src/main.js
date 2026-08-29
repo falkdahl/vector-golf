@@ -144,11 +144,11 @@ function placeModifier(x, y) {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (!selectedModifier) return;
   if (modifiers.length >= MAX_MODIFIERS_PER_HOLE) {
-    // Replace oldest with shake feedback
+    // Replace oldest with shake feedback (preserve centering)
     modifiers.shift();
     if (hotbarEl) {
-      hotbarEl.style.transform = "translateX(-4px)";
-      setTimeout(() => hotbarEl.style.transform = "", 100);
+      hotbarEl.style.transform = "translateX(-50%) translateX(-4px)";
+      setTimeout(() => hotbarEl.style.transform = "translateX(-50%)", 100);
     }
   }
   modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: MODIFIER_RADIUS });

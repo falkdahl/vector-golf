@@ -65,11 +65,19 @@ canvas {
 }
 
 #hotbar {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  gap: 12px;
-  margin-top: 12px;
+  gap: 10px;
   justify-content: center;
   align-items: center;
+  background: rgba(0,0,0,0.45);
+  padding: 6px 10px;
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  z-index: 5;
 }
 .hotbar-slot {
   display: flex;
