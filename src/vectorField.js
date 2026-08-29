@@ -1,9 +1,9 @@
-// Tunable constants at top per REQ-003
-export const WIND_STRENGTH = 30;
+// Tunable constants at top per REQ-003 - high acceleration per updated requirement
+export const WIND_STRENGTH = 90;
 export const DEFAULT_COLS = 20;
 export const DEFAULT_ROWS = 15;
 export const MAX_POWER_REF = 600; // for min force calc per REQ-003
-export const MIN_WIND_FORCE = 0.1 * MAX_POWER_REF; // 60 per lowered requirement
+export const MIN_WIND_FORCE = 0.1 * MAX_POWER_REF; // 60
 
 export let field = [];
 export let cols = DEFAULT_COLS;
@@ -48,10 +48,10 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
       const magBase = 0.35 + 0.6 * Math.abs(Math.sin(nx * 8 + ny * 6 + seed * 0.02));
       const magRand = rand() * 0.35;
       let magnitude = Math.min(1.5, magBase + magRand);
-      // Enforce minimum force 10% of max power per REQ-003 (lowered from 20%) and varying strength per location
-      const minMagnitude = MIN_WIND_FORCE / WIND_STRENGTH; // e.g., 60/30=2
-      // Preserve angle variation but ensure magnitude varies by location (stronger/weaker regions)
-      magnitude = minMagnitude + magnitude * 1.0; // range ~2.35-3.5 for ws30, force 70-105, variation >10% max/min and diff >8% for distant points
+      // Enforce minimum force 10% of max power per REQ-003 and varying strength per location - high acceleration
+      const minMagnitude = MIN_WIND_FORCE / WIND_STRENGTH; // e.g., 60/80=0.75
+      // Preserve angle variation but ensure magnitude varies by location (stronger/weaker regions) with high acceleration
+      magnitude = minMagnitude + magnitude * 1.0; // range ~1.1-2.25 for ws80, force 88-180, strong enough for quick direction change
 
       field[row][col] = {
         x: Math.cos(angle) * magnitude,

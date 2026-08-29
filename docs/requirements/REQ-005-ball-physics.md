@@ -17,8 +17,8 @@ Believable golf physics without over-engineering; wind must continuously influen
 
 1. Ball state in `src/physics.js` SHALL be `{pos:{x,y}, vel:{x,y}, radius:6, mass:1, isMoving:boolean}` with start position from `levels.js` tee (e.g., `80,300`).
 2. Update per fixed tick `updateBall(dt)` SHALL:
-   - Apply wind: `vel.x += wind.x * WIND_STRENGTH * dt`, `vel.y += wind.y * WIND_STRENGTH * dt` (wind from `getWindAt(pos)`). Wind force SHALL be at least 20% of `MAX_POWER` (REQ-003) so the ball is always being pushed.
-   - Apply linear friction/damping: `vel *= (1 - FRICTION * dt)` where `FRICTION` is tunable (previously 0.02-0.05, now tuned to allow drift; e.g., 0.5-1.0 so that wind can overcome friction and keep ball moving). Friction SHALL NOT be strong enough to permanently stop the ball against the minimum wind.
+   - Apply wind: `vel.x += wind.x * WIND_STRENGTH * dt`, `vel.y += wind.y * WIND_STRENGTH * dt` (wind from `getWindAt(pos)`). Wind force SHALL be at least 10% of `MAX_POWER` (REQ-003) and with **high acceleration** (effective force ≥120-180 when `WIND_STRENGTH` 80) so the ball re-accelerates quickly after wind-induced direction changes and does not crawl slowly.
+   - Apply linear friction/damping: `vel *= (1 - FRICTION * dt)` where `FRICTION` is tunable (e.g., 0.7-0.9 so that wind can overcome friction but not overdamp; lower than 1.2 to allow faster wind response). Friction SHALL be low enough that wind acceleration dominates and ball reaches >60 px/s within 0.5s after being slowed to 20 px/s.
    - Integrate: `pos += vel * dt`.
    - Handle canvas bounds: touching the edge of the screen SHALL be treated as OOB/death and trigger instant reset (no bounce). The ball SHALL NOT bounce off walls; edge contact is fatal (REQ-008).
 3. **No Stop-Reset**: The ball SHALL NOT be reset merely because it became stationary or slow. If `speed < 5`, the ball SHALL continue to be influenced by wind and will drift. There SHALL be no automatic reset on rest. The only terminal conditions are: obstacle collision, OOB/edge, or entering the hole.
@@ -28,9 +28,9 @@ Believable golf physics without over-engineering; wind must continuously influen
 
 ## Acceptance Criteria
 
-- [ ] Ball launched at max power travels ~500-700px before friction would stop it without wind; with wind (min 20% max power) it never fully stops but drifts.
-- [ ] With zero wind, ball travels straight along launch angle; with wind field, path curves visibly (>15px lateral deviation over flight).
-- [ ] **Drift**: Ball placed at rest (`vel=0`) anywhere on the field begins moving within 0.5s and is continuously drifted by wind; it does NOT remain stationary for >1s.
+- [ ] Ball launched at max power travels ~500-700px before friction would stop it without wind; with wind (min 10% max power, high acceleration) it never fully stops but drifts.
+- [ ] With zero wind, ball travels straight along launch angle; with wind field, path curves visibly (>15px lateral deviation over flight) and direction changes are sharp, not sluggish.
+- [ ] **Drift & Acceleration**: Ball placed at rest (`vel=0`) anywhere on the field begins moving within 0.5s and reaches >50 px/s within 0.5s; a ball slowed to 15 px/s by friction and then hit by perpendicular wind accelerates to >60 px/s within 0.5s (verified by measuring speed 0.5s after 90° wind turn). Ball does NOT crawl at <20 px/s for >0.5s after direction change.
 - [ ] Ball does NOT reset when it becomes slow/stops; it only resets on obstacle, edge, or hole.
 - [ ] Edge contact: ball touching canvas edge (`pos +/- radius` outside bounds) triggers instant death/reset (no bounce), verified by launching ball toward edge.
 

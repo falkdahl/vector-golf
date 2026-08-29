@@ -1,6 +1,6 @@
-// Tunable constants at top per REQ-005
+// Tunable constants at top per REQ-005 - tuned for high wind acceleration
 export const BALL_RADIUS = 6;
-export const FRICTION = 1.0;
+export const FRICTION = 0.7;
 export const STOP_THRESHOLD = 5; // px/s
 export const STOP_TIME = 0.4; // seconds
 export const BOUNCE_DAMPING = 0.7;
@@ -48,12 +48,12 @@ export function resetBall(tee) {
 export function updateBall(dt, getWindAt, windStrength, canvasW, canvasH) {
   if (!ball.isMoving) return { status: "idle" };
 
-  // Apply wind - never less than 20% max power per REQ-003, so ball always drifts
+  // Apply wind - high acceleration per updated REQ-003/005, always drifts and re-accelerates quickly after turn
   const wind = getWindAt(ball.pos.x, ball.pos.y);
   ball.vel.x += wind.x * windStrength * dt;
   ball.vel.y += wind.y * windStrength * dt;
 
-  // Friction - tuned to allow wind to keep ball drifting (REQ-005)
+  // Friction - lower to allow fast wind response (0.7) per updated requirement
   const frictionFactor = 1 - FRICTION * dt;
   ball.vel.x *= frictionFactor;
   ball.vel.y *= frictionFactor;

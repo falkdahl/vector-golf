@@ -12,7 +12,7 @@ export const LEVELS = [
       { type: "rect", x: 650, y: 80, w: 20, h: 180 },
       { type: "circle", x: 430, y: 140, r: 30 }
     ],
-    field: { cols: 20, rows: 15, strength: 30, seed: 42 }
+    field: { cols: 20, rows: 15, strength: 90, seed: 42 }
   },
   {
     id: "hole-2",
@@ -27,7 +27,7 @@ export const LEVELS = [
       { type: "rect", x: 650, y: 180, w: 20, h: 220 },
       { type: "circle", x: 300, y: 360, r: 28 }
     ],
-    field: { cols: 20, rows: 15, strength: 30, seed: 133 }
+    field: { cols: 20, rows: 15, strength: 90, seed: 133 }
   },
   {
     id: "hole-3",
@@ -43,7 +43,7 @@ export const LEVELS = [
       { type: "rect", x: 700, y: 80, w: 20, h: 180 },
       { type: "circle", x: 480, y: 250, r: 25 }
     ],
-    field: { cols: 20, rows: 15, strength: 30, seed: 77 }
+    field: { cols: 20, rows: 15, strength: 90, seed: 77 }
   }
 ];
 
