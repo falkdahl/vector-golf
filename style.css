@@ -64,6 +64,50 @@ canvas {
   font-size: 1.6rem;
 }
 
+#hotbar {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  justify-content: center;
+  align-items: center;
+}
+.hotbar-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: #2c3e50;
+  color: #eee;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+.hotbar-slot[data-type="amplify"] { border-color: rgba(230,126,34,0.5); }
+.hotbar-slot[data-type="nullify"] { border-color: rgba(52,152,219,0.5); }
+.hotbar-slot[data-type="flip"] { border-color: rgba(155,89,182,0.5); }
+.hotbar-slot.selected {
+  border-color: #fff !important;
+  background: #34495e;
+  transform: scale(1.05);
+}
+.hotbar-slot[data-type="amplify"].selected { background: rgba(230,126,34,0.35); }
+.hotbar-slot[data-type="nullify"].selected { background: rgba(52,152,219,0.35); }
+.hotbar-slot[data-type="flip"].selected { background: rgba(155,89,182,0.35); }
+.hotbar-icon { font-size: 1.1rem; }
+.hotbar-key {
+  font-size: 0.7rem;
+  background: #1a1a1a;
+  color: #aaa;
+  padding: 2px 5px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+#hotbar.hidden { display: none; }
+
 #instructions {
   margin-top: 12px;
   font-size: 0.9rem;

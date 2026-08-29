@@ -342,6 +342,74 @@ export function drawForceBar(ctx, ball, charge) {
   ctx.restore();
 }
 
+export function drawModifiers(ctx, modifiers) {
+  for (const mod of modifiers) {
+    ctx.save();
+    if (mod.type === 'amplify') {
+      ctx.fillStyle = "rgba(230,126,34,0.20)";
+      ctx.strokeStyle = "rgba(230,126,34,0.9)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+    } else if (mod.type === 'nullify') {
+      ctx.fillStyle = "rgba(52,152,219,0.18)";
+      ctx.strokeStyle = "rgba(52,152,219,0.9)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+    } else if (mod.type === 'flip') {
+      ctx.fillStyle = "rgba(155,89,182,0.20)";
+      ctx.strokeStyle = "rgba(155,89,182,0.9)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+    }
+    ctx.beginPath();
+    ctx.arc(mod.x, mod.y, mod.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // icon
+    ctx.fillStyle = "white";
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 3;
+    ctx.font = "600 14px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : "↻";
+    ctx.strokeText(icon, mod.x, mod.y);
+    ctx.fillText(icon, mod.x, mod.y);
+    ctx.restore();
+  }
+}
+
+export function drawModifierPreview(ctx, x, y, type, radius) {
+  if (!type) return;
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  if (type === 'amplify') {
+    ctx.fillStyle = "rgba(230,126,34,0.25)";
+    ctx.strokeStyle = "rgba(230,126,34,0.9)";
+  } else if (type === 'nullify') {
+    ctx.fillStyle = "rgba(52,152,219,0.25)";
+    ctx.strokeStyle = "rgba(52,152,219,0.9)";
+  } else if (type === 'flip') {
+    ctx.fillStyle = "rgba(155,89,182,0.25)";
+    ctx.strokeStyle = "rgba(155,89,182,0.9)";
+  }
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "white";
+  ctx.font = "600 14px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const icon = type === 'amplify' ? "»" : type === 'nullify' ? "∅" : "↻";
+  ctx.fillText(icon, x, y);
+  ctx.restore();
+}
+
 export function drawWinOverlay(ctx, width, height) {
   // Canvas overlay not needed; DOM overlay used. Keep for completeness if desired.
 }

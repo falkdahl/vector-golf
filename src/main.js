@@ -1,5 +1,5 @@
 import { LEVEL, LEVELS } from "./levels.js";
-import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH } from "./vectorField.js";
+import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, clearModifiers } from "./vectorField.js";
 import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS } from "./physics.js";
 import { checkObstacleCollision, isOutOfBounds } from "./obstacles.js";
 import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
@@ -15,6 +15,8 @@ import {
   drawAim,
   drawHUD,
   drawForceBar,
+  drawModifiers,
+  drawModifierPreview,
   setCanvasSize,
   toggleWind as toggleWindRender,
   isWindVisible
@@ -35,6 +37,13 @@ let currentHoleIndex = 0;
 let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
+
+// Modifier system per REQ-015
+const MAX_MODIFIERS_PER_HOLE = 3;
+let modifiers = [];
+let selectedModifier = 'amplify';
+let mousePos = null;
+let hotbarEl = null;
 
 let winOverlay;
 let winAttemptsValue;
@@ -59,12 +68,16 @@ function loadLevel(index) {
   level = LEVELS[currentHoleIndex];
   windStrength = level.field.strength ?? WIND_STRENGTH;
   createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H);
+  // Clear modifiers for new hole per REQ-015 (persist through death, cleared on hole advance)
+  modifiers = [];
+  syncModifiersToField();
   // Keep canvas size consistent per REQ-010 (all levels 900x600); if varying, would re-setup canvas
   initParticles(80, LOGICAL_W, LOGICAL_H);
   createBall(level.tee);
   const dx = level.hole.x - level.tee.x;
   const dy = level.hole.y - level.tee.y;
   setAimAngle(Math.atan2(dy, dx));
+  updateHotbarUI();
 }
 
 function initLevel() {
@@ -99,6 +112,55 @@ function updateAttemptsUI() {
       winTitle.textContent = "You Win!";
     }
   }
+}
+
+function updateHotbarUI() {
+  if (!hotbarEl) return;
+  const isAiming = gameState === "AIMING" || gameState === "CHARGING";
+  hotbarEl.classList.toggle("hidden", !isAiming);
+  for (const slot of hotbarEl.querySelectorAll(".hotbar-slot")) {
+    slot.classList.toggle("selected", slot.dataset.type === selectedModifier);
+  }
+}
+
+function syncModifiersToField() {
+  setModifiers(modifiers);
+}
+
+function getCanvasMousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  // Use logical coordinates (900x600)
+  const scaleX = LOGICAL_W / rect.width;
+  const scaleY = LOGICAL_H / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+  return { x, y };
+}
+
+function placeModifier(x, y) {
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+  // Check if clicking on existing modifier to remove? handled in remove
+  if (modifiers.length >= MAX_MODIFIERS_PER_HOLE) {
+    // Replace oldest with shake feedback
+    modifiers.shift();
+    if (hotbarEl) {
+      hotbarEl.style.transform = "translateX(-4px)";
+      setTimeout(() => hotbarEl.style.transform = "", 100);
+    }
+  }
+  modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: MODIFIER_RADIUS });
+  syncModifiersToField();
+}
+
+function removeModifierAt(x, y) {
+  const idx = modifiers.findIndex(m => Math.hypot(m.x - x, m.y - y) < m.radius);
+  if (idx !== -1) {
+    modifiers.splice(idx, 1);
+    syncModifiersToField();
+    return true;
+  }
+  return false;
 }
 
 function resetBall() {
@@ -221,6 +283,8 @@ function update(dt) {
     gameState = "CHARGING";
   }
 
+  updateHotbarUI();
+
   if (gameState === "AIMING" || gameState === "CHARGING") {
     updateForceBar();
   }
@@ -266,14 +330,19 @@ function render() {
   ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
   ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-  // Draw order: background -> arrows -> particles -> obstacles -> hole -> ball -> aim -> HUD/force bar (on top)
+  // Draw order: background -> arrows -> particles -> obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers (on top)
   drawBackground(ctx, LOGICAL_W, LOGICAL_H);
   drawArrows(ctx, field, cols, rows, cellW, cellH);
   drawParticles(ctx);
+  drawModifiers(ctx, modifiers);
   drawObstacles(ctx, level.obstacles);
   drawHole(ctx, level.hole);
   drawBall(ctx, ball);
   drawAim(ctx, ball, getAimAngle(), charge, gameState);
+  // Preview circle follows mouse when selecting modifier before shooting
+  if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos) {
+    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, MODIFIER_RADIUS);
+  }
   // HUD inside canvas on top per REQ-012/014
   drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts);
   // Power bar under ball when charging per REQ-007
@@ -321,6 +390,7 @@ function init() {
   winHoleTotal = document.getElementById("win-hole-total");
   winTotalValue = document.getElementById("win-total-value");
   winTitle = document.getElementById("win-title");
+  hotbarEl = document.getElementById("hotbar");
 
   setupCanvas();
   initLevel();
@@ -341,6 +411,57 @@ function init() {
       onToggleWind: () => toggleWindRender()
     }
   );
+
+  // Hotbar selection per REQ-015
+  if (hotbarEl) {
+    hotbarEl.querySelectorAll(".hotbar-slot").forEach(slot => {
+      slot.addEventListener("click", () => {
+        selectedModifier = slot.dataset.type;
+        updateHotbarUI();
+      });
+    });
+    updateHotbarUI();
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Digit1") { selectedModifier = 'amplify'; updateHotbarUI(); }
+    else if (e.code === "Digit2") { selectedModifier = 'nullify'; updateHotbarUI(); }
+    else if (e.code === "Digit3") { selectedModifier = 'flip'; updateHotbarUI(); }
+    else if (e.code === "Delete" || e.code === "Backspace") {
+      // Remove last modifier
+      if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
+        modifiers.pop();
+        syncModifiersToField();
+      }
+    }
+  });
+  // Canvas mouse for modifier placement per REQ-015
+  canvas.addEventListener("mousemove", (e) => {
+    if (gameState !== "AIMING" && gameState !== "CHARGING") {
+      mousePos = null;
+      return;
+    }
+    mousePos = getCanvasMousePos(e);
+  });
+  canvas.addEventListener("mouseleave", () => { mousePos = null; });
+  canvas.addEventListener("click", (e) => {
+    if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+    const pos = getCanvasMousePos(e);
+    // Check if clicking on existing modifier to remove
+    const existingIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+    if (existingIdx !== -1) {
+      // Click on existing - remove it
+      modifiers.splice(existingIdx, 1);
+      syncModifiersToField();
+      return;
+    }
+    placeModifier(pos.x, pos.y);
+  });
+  canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+    const pos = getCanvasMousePos(e);
+    removeModifierAt(pos.x, pos.y);
+  });
 
   // Resize handling debounced
   let resizeTimer;

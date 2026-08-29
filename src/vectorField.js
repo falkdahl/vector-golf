@@ -5,6 +5,12 @@ export const DEFAULT_ROWS = 15;
 export const MAX_POWER_REF = 600; // for min force calc per REQ-003
 export const MIN_WIND_FORCE = 0.1 * MAX_POWER_REF; // 60
 
+export const MODIFIER_RADIUS = 90;
+export let modifiers = [];
+export function setModifiers(mods) { modifiers = mods; }
+export function clearModifiers() { modifiers = []; }
+export function getModifiers() { return modifiers; }
+
 export let field = [];
 export let cols = DEFAULT_COLS;
 export let rows = DEFAULT_ROWS;
@@ -82,38 +88,63 @@ export function getWindAt(worldX, worldY) {
   const cx = Math.max(0, Math.min(1, tx));
   const cy = Math.max(0, Math.min(1, ty));
 
+  let base;
   // If single cell (no interpolation needed)
-  if (x0 === x1 && y0 === y1) return { ...field[y0][x0] };
-  if (x0 === x1) {
+  if (x0 === x1 && y0 === y1) base = { ...field[y0][x0] };
+  else if (x0 === x1) {
     const a = field[y0][x0];
     const b = field[y1][x0];
-    return {
+    base = {
       x: a.x + (b.x - a.x) * cy,
       y: a.y + (b.y - a.y) * cy
     };
-  }
-  if (y0 === y1) {
+  } else if (y0 === y1) {
     const a = field[y0][x0];
     const b = field[y0][x1];
-    return {
+    base = {
       x: a.x + (b.x - a.x) * cx,
       y: a.y + (b.y - a.y) * cx
     };
+  } else {
+    const a = field[y0][x0];
+    const b = field[y0][x1];
+    const c = field[y1][x0];
+    const d = field[y1][x1];
+
+    // Bilinear
+    const topX = a.x + (b.x - a.x) * cx;
+    const topY = a.y + (b.y - a.y) * cx;
+    const botX = c.x + (d.x - c.x) * cx;
+    const botY = c.y + (d.y - c.y) * cx;
+
+    base = {
+      x: topX + (botX - topX) * cy,
+      y: topY + (botY - topY) * cy
+    };
   }
 
-  const a = field[y0][x0];
-  const b = field[y0][x1];
-  const c = field[y1][x0];
-  const d = field[y1][x1];
-
-  // Bilinear
-  const topX = a.x + (b.x - a.x) * cx;
-  const topY = a.y + (b.y - a.y) * cx;
-  const botX = c.x + (d.x - c.x) * cx;
-  const botY = c.y + (d.y - c.y) * cx;
-
-  return {
-    x: topX + (botX - topX) * cy,
-    y: topY + (botY - topY) * cy
-  };
+  // Apply modifiers in placement order (REQ-015/016/017/018)
+  let result = { ...base };
+  let amplifyCount = 0;
+  for (const mod of modifiers) {
+    const dx = worldX - mod.x;
+    const dy = worldY - mod.y;
+    if (dx * dx + dy * dy < mod.radius * mod.radius) {
+      if (mod.type === 'amplify') {
+        // Cap at 25x per REQ-016
+        if (amplifyCount < 2) {
+          result.x *= 5;
+          result.y *= 5;
+          amplifyCount++;
+        }
+      } else if (mod.type === 'nullify') {
+        result.x = 0;
+        result.y = 0;
+      } else if (mod.type === 'flip') {
+        result.x *= -1;
+        result.y *= -1;
+      }
+    }
+  }
+  return result;
 }
