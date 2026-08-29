@@ -382,11 +382,14 @@ export function drawModifiers(ctx, modifiers) {
   }
 }
 
-export function drawModifierPreview(ctx, x, y, type, radius) {
+export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   if (!type) return;
   ctx.save();
-  ctx.globalAlpha = 0.5;
-  if (type === 'amplify') {
+  ctx.globalAlpha = blocked ? 0.35 : 0.5;
+  if (blocked) {
+    ctx.fillStyle = "rgba(120,120,120,0.20)";
+    ctx.strokeStyle = "rgba(180,40,40,0.9)";
+  } else if (type === 'amplify') {
     ctx.fillStyle = "rgba(230,126,34,0.25)";
     ctx.strokeStyle = "rgba(230,126,34,0.9)";
   } else if (type === 'nullify') {
@@ -396,19 +399,25 @@ export function drawModifierPreview(ctx, x, y, type, radius) {
     ctx.fillStyle = "rgba(155,89,182,0.25)";
     ctx.strokeStyle = "rgba(155,89,182,0.9)";
   }
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 4]);
+  ctx.lineWidth = blocked ? 2 : 2;
+  ctx.setLineDash(blocked ? [4, 6] : [6, 4]);
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = "white";
+  ctx.fillStyle = blocked ? "rgba(255,80,80,0.95)" : "white";
   ctx.font = "600 14px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const icon = type === 'amplify' ? "»" : type === 'nullify' ? "∅" : "⇄";
+  const icon = blocked ? "✕" : type === 'amplify' ? "»" : type === 'nullify' ? "∅" : "⇄";
   ctx.fillText(icon, x, y);
+  // blocked label
+  if (blocked) {
+    ctx.font = "600 10px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,80,80,0.9)";
+    ctx.fillText("no supply", x, y + 16);
+  }
   ctx.restore();
 }
 

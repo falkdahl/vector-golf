@@ -38,13 +38,37 @@ let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
 
-// Modifier system per REQ-015 - unlimited modifiers per updated requirement
+// Modifier system per REQ-015 + REQ-020 (supply-limited)
 let modifiers = [];
 let selectedModifier = null;
 let mousePos = null;
 let hotbarEl = null;
 let draggingIdx = -1;
 let isDragging = false;
+
+// Supply per REQ-020: per-type inventory, starts empty on new game
+let supply = { amplify: 0, nullify: 0, flip: 0 };
+
+function canPlace(type) {
+  if (!type || !(type in supply)) return false;
+  const activeCount = modifiers.filter(m => m.type === type).length;
+  return activeCount < supply[type];
+}
+
+function getSupply() {
+  return { ...supply };
+}
+
+function addToSupply(type, n = 1) {
+  if (!(type in supply)) return;
+  supply[type] = Math.max(0, supply[type] + n);
+  updateHotbarUI();
+}
+
+function resetSupply() {
+  supply = { amplify: 0, nullify: 0, flip: 0 };
+  updateHotbarUI();
+}
 
 let winOverlay;
 let winAttemptsValue;
@@ -71,6 +95,7 @@ function loadLevel(index) {
   windStrength = level.field.strength ?? WIND_STRENGTH;
   createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H);
   // Clear modifiers for new hole per REQ-015 (persist through death, cleared on hole advance)
+  // REQ-020: supply persists across hole advances, do NOT reset supply here
   modifiers = [];
   syncModifiersToField();
   // Keep canvas size consistent per REQ-010 (all levels 900x600); if varying, would re-setup canvas
@@ -83,6 +108,11 @@ function loadLevel(index) {
 }
 
 function initLevel() {
+  // REQ-020: new game starts with empty supply; ensure supply is zeroed on initial load
+  // (declaration already 0, but reset explicitly for clarity and for testing reload)
+  if (currentHoleIndex === 0) {
+    supply = { amplify: 0, nullify: 0, flip: 0 };
+  }
   loadLevel(currentHoleIndex);
   updateAttemptsUI();
   // validate obstacles not overlapping tee/hole
@@ -135,7 +165,32 @@ function updateHotbarUI() {
   const isAiming = gameState === "AIMING" || gameState === "CHARGING";
   hotbarEl.classList.toggle("hidden", !isAiming);
   for (const slot of hotbarEl.querySelectorAll(".hotbar-slot")) {
+    const type = slot.dataset.type;
+    const activeCount = modifiers.filter(m => m.type === type).length;
+    const supplyCount = supply[type] ?? 0;
+    const canPlaceThis = activeCount < supplyCount;
     slot.classList.toggle("selected", slot.dataset.type === selectedModifier);
+    slot.classList.toggle("disabled", !canPlaceThis);
+    // Update count badge
+    const countEl = slot.querySelector(".hotbar-count");
+    if (countEl) {
+      // Show  active/supply  or just supply remaining
+      countEl.textContent = `${activeCount}/${supplyCount}`;
+    }
+    // Update label fallback if no countEl (legacy)
+    // Accessibility title
+    if (!canPlaceThis) {
+      if (supplyCount === 0) {
+        slot.title = `${type} - No supply (0)`;
+      } else {
+        slot.title = `${type} - Limit reached (${activeCount}/${supplyCount} placed)`;
+      }
+    } else {
+      slot.title = `${type} - ${activeCount}/${supplyCount} placed (press ${type === 'amplify' ? '1' : type === 'nullify' ? '2' : '3'})`;
+    }
+    // For testing: expose supply via dataset
+    slot.dataset.supply = String(supplyCount);
+    slot.dataset.active = String(activeCount);
   }
 }
 
@@ -157,6 +212,11 @@ function getCanvasMousePos(e) {
 function placeModifier(x, y) {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (!selectedModifier) return;
+  if (!canPlace(selectedModifier)) {
+    // REQ-020: reject placement if supply insufficient; keep selection for retry, update UI
+    updateHotbarUI();
+    return;
+  }
   modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: MODIFIER_RADIUS });
   syncModifiersToField();
   // Deselect after placement per requirement
@@ -170,6 +230,7 @@ function removeModifierAt(x, y) {
   if (idx !== -1) {
     modifiers.splice(idx, 1);
     syncModifiersToField();
+    updateHotbarUI();
     return true;
   }
   return false;
@@ -215,6 +276,8 @@ function resetGameAfterWin() {
   holeAttempts = 0;
   totalAttempts = 0;
   attempts = 0;
+  // REQ-020: reset supply to empty on new game
+  supply = { amplify: 0, nullify: 0, flip: 0 };
   loadLevel(currentHoleIndex);
   for (const obs of level.obstacles) {
     if (obs.type === "rect") {
@@ -362,8 +425,12 @@ function render() {
   drawBall(ctx, ball);
   drawAim(ctx, ball, getAimAngle(), charge, gameState);
   // Preview circle follows mouse when selecting modifier before shooting
-  if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos) {
+  // REQ-020: only show preview if supply allows placement
+  if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, MODIFIER_RADIUS);
+  } else if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
+    // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
+    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, MODIFIER_RADIUS, true);
   }
   // HUD inside canvas on top per REQ-012/014
   drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts);
@@ -483,10 +550,11 @@ function init() {
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
         modifiers.pop();
         syncModifiersToField();
+        updateHotbarUI();
       }
     }
   });
-  // Canvas mouse for modifier placement & dragging per updated REQ-015
+  // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020
   canvas.addEventListener("mousemove", (e) => {
     if (gameState !== "AIMING" && gameState !== "CHARGING") {
       mousePos = null;
@@ -505,7 +573,12 @@ function init() {
       if (overIdx !== -1) {
         canvas.style.cursor = "grab";
       } else if (selectedModifier) {
-        canvas.style.cursor = "crosshair";
+        // REQ-020: show not-allowed if cannot place due to supply
+        if (!canPlace(selectedModifier)) {
+          canvas.style.cursor = "not-allowed";
+        } else {
+          canvas.style.cursor = "crosshair";
+        }
       } else {
         canvas.style.cursor = "default";
       }
@@ -582,6 +655,36 @@ function init() {
   requestAnimationFrame(loop);
 }
 
+// Helpers for REQ-020 testing / external acquisition
+function setSupply(newSupply) {
+  supply = {
+    amplify: Math.max(0, newSupply.amplify ?? 0),
+    nullify: Math.max(0, newSupply.nullify ?? 0),
+    flip: Math.max(0, newSupply.flip ?? 0),
+  };
+  updateHotbarUI();
+}
+function getModifiers() { return [...modifiers]; }
+function getSelectedModifier() { return selectedModifier; }
+
+// Expose for manual/browser testing and for acceptance checks without import
+if (typeof window !== 'undefined') {
+  window.__getSupply = getSupply;
+  window.__setSupply = setSupply;
+  window.__addToSupply = addToSupply;
+  window.__canPlace = canPlace;
+  window.__getModifiers = getModifiers;
+  Object.defineProperty(window, 'supply', {
+    get: () => supply,
+    set: (v) => setSupply(v)
+  });
+  Object.defineProperty(window, '__supply', {
+    get: () => supply,
+    set: (v) => setSupply(v)
+  });
+  window.__getSelectedModifier = getSelectedModifier;
+}
+
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
@@ -589,4 +692,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier };

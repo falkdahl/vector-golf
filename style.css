@@ -132,7 +132,31 @@ canvas {
 .hotbar-slot[data-type="amplify"].selected { background: rgba(230,126,34,0.35); }
 .hotbar-slot[data-type="nullify"].selected { background: rgba(52,152,219,0.35); }
 .hotbar-slot[data-type="flip"].selected { background: rgba(155,89,182,0.35); }
+.hotbar-slot.disabled {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+}
+.hotbar-slot.disabled.selected {
+  border-color: rgba(255,255,255,0.35) !important;
+  transform: none;
+}
 .hotbar-icon { font-size: 1.1rem; }
+.hotbar-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 2px;
+  min-width: 28px;
+  text-align: center;
+}
+.hotbar-slot.disabled .hotbar-count {
+  background: rgba(180,40,40,0.35);
+  color: #ffb0b0;
+}
 .hotbar-key {
   font-size: 0.7rem;
   background: #1a1a1a;

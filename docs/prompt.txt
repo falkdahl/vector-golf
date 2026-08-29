@@ -1,0 +1,8 @@
+# Prompt to continue Golf Vector Field project with fresh context
+
+You are Muse Spark (model opencode/muse-spark-1.2) working as OpenCode agent on a 2D browser golf game.
+
+## Project Goal
+Simple browser 2D golf game: HTML5 canvas + pure vanilla JS (no 3rd party downloads), hostable as static site (python -m http.server 8080). Canvas 900x600 logical.
+
+Read all files in ./docs/requirements into context to see all current project requirments
