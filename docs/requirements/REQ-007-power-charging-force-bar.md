@@ -26,7 +26,7 @@ User specified: "hold space, the longer it is hold the harder it is hit. Include
 3. Force Bar UI - **Inside Canvas Under Ball** (updated):
    - Canvas-drawn bar rendered in `src/render.js` (e.g., `drawForceBar(ctx, ball, charge)`) positioned **under the player ball inside the canvas** (e.g., centered at `ball.pos.x`, `ball.pos.y + 28px`) and visible **only while Space is held (`CHARGING`)**. No DOM `#force-bar` below canvas shall be used; the bar lives inside the canvas.
    - Dimensions: width ~60px, height 8-10px, border `1px #222`, background `rgba(0,0,0,0.35)`, fill width `charge*100%`, background color lerps green (`#2ecc71` at 0%) -> yellow -> red (`#e74c3c` at 100%).
-   - Optionally show `Power: XX%` text just below bar (canvas text, 10px, white with shadow).
+   - Show percentage text just below bar as **only the percentage** (e.g., `78%`), **without the word "Power"**, with a **slightly larger font** (e.g., `13-14px` instead of `10px`, `600` weight) for readability, white with shadow/stroke.
    - Bar SHALL be hidden during `AIMING` (not charging), `FLYING`, and `WIN` (or reset to 0 and not drawn).
 4. Aim line length SHALL scale with `charge` during charging (`base 30px + charge*50px`) as preview.
 5. Launch SHALL be ignored if ball is moving.

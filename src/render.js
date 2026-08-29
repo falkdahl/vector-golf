@@ -329,16 +329,16 @@ export function drawForceBar(ctx, ball, charge) {
   ctx.fillStyle = `rgb(${Math.round(rr)},${Math.round(gg)},${Math.round(bb)})`;
   const fillW = (barW - 2) * pct;
   ctx.fillRect(x + 1, y + 1, fillW, barH - 2);
-  // optional Power text below bar
+  // percentage text below bar - larger font, only percentage per updated requirement
   ctx.fillStyle = "white";
   ctx.strokeStyle = "rgba(0,0,0,0.7)";
-  ctx.lineWidth = 2;
-  ctx.font = "10px system-ui, sans-serif";
+  ctx.lineWidth = 3;
+  ctx.font = "600 14px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  const label = `Power: ${Math.round(pct * 100)}%`;
-  ctx.strokeText(label, ball.pos.x, y + barH + 3);
-  ctx.fillText(label, ball.pos.x, y + barH + 3);
+  const label = `${Math.round(pct * 100)}%`;
+  ctx.strokeText(label, ball.pos.x, y + barH + 4);
+  ctx.fillText(label, ball.pos.x, y + barH + 4);
   ctx.restore();
 }
 
