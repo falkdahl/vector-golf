@@ -368,14 +368,14 @@ export function drawModifiers(ctx, modifiers) {
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
-    // icon
+    // icon - flip now two opposite arrows ⇄
     ctx.fillStyle = "white";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
     ctx.font = "600 14px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : "↻";
+    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : "⇄";
     ctx.strokeText(icon, mod.x, mod.y);
     ctx.fillText(icon, mod.x, mod.y);
     ctx.restore();
@@ -407,7 +407,7 @@ export function drawModifierPreview(ctx, x, y, type, radius) {
   ctx.font = "600 14px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const icon = type === 'amplify' ? "»" : type === 'nullify' ? "∅" : "↻";
+  const icon = type === 'amplify' ? "»" : type === 'nullify' ? "∅" : "⇄";
   ctx.fillText(icon, x, y);
   ctx.restore();
 }

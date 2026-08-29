@@ -418,21 +418,43 @@ function init() {
     }
   );
 
-  // Hotbar selection per REQ-015
+  // Hotbar selection per REQ-015 - updated for deselection via escape / same hotkey / same button
   if (hotbarEl) {
     hotbarEl.querySelectorAll(".hotbar-slot").forEach(slot => {
       slot.addEventListener("click", () => {
-        selectedModifier = slot.dataset.type;
+        if (selectedModifier === slot.dataset.type) {
+          selectedModifier = null;
+        } else {
+          selectedModifier = slot.dataset.type;
+        }
         updateHotbarUI();
       });
     });
     updateHotbarUI();
   }
   window.addEventListener("keydown", (e) => {
-    if (e.code === "Digit1") { selectedModifier = 'amplify'; updateHotbarUI(); }
-    else if (e.code === "Digit2") { selectedModifier = 'nullify'; updateHotbarUI(); }
-    else if (e.code === "Digit3") { selectedModifier = 'flip'; updateHotbarUI(); }
-    else if (e.code === "Delete" || e.code === "Backspace") {
+    if (e.code === "Escape") {
+      if (selectedModifier !== null) {
+        selectedModifier = null;
+        updateHotbarUI();
+        e.preventDefault();
+      }
+    } else if (e.code === "Digit1") {
+      if (selectedModifier === 'amplify') selectedModifier = null;
+      else selectedModifier = 'amplify';
+      updateHotbarUI();
+      e.preventDefault();
+    } else if (e.code === "Digit2") {
+      if (selectedModifier === 'nullify') selectedModifier = null;
+      else selectedModifier = 'nullify';
+      updateHotbarUI();
+      e.preventDefault();
+    } else if (e.code === "Digit3") {
+      if (selectedModifier === 'flip') selectedModifier = null;
+      else selectedModifier = 'flip';
+      updateHotbarUI();
+      e.preventDefault();
+    } else if (e.code === "Delete" || e.code === "Backspace") {
       // Remove last modifier
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
         modifiers.pop();

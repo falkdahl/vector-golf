@@ -22,6 +22,7 @@ User requested ability to strategically shape the wind field before each shot, t
      - Slot 2: `Nullify` (e.g., icon `○` or `∅`, color `#3498db` blue)
      - Slot 3: `Flip` (e.g., icon `↻` or `⇄`, color `#9b59b6` purple)
    - Selection SHALL be via mouse click on hotbar slot or keyboard `1`, `2`, `3`. Selected slot SHALL be visually highlighted (border `2px #fff`, background brightened, or scale `1.1`).
+   - **Deselection**: Pressing `Escape`, pressing the number hotkey of the currently selected modifier (e.g., `1` when Amplify already selected), or clicking the hotbar button of the currently selected modifier SHALL deselect it, leaving **no modifier selected** (hotbar shows no highlight, no preview circle). This allows the player to cancel placement without having to place.
    - Hotbar SHALL be visible during `AIMING`/`CHARGING` only; hidden during `FLYING`/`WIN` to prevent mid-flight manipulation.
 
 2. **Placement Interaction** in `src/input.js` and `src/main.js`:
@@ -51,8 +52,10 @@ User requested ability to strategically shape the wind field before each shot, t
 ## Acceptance Criteria
 
 - [ ] Hotbar with 3 slots visible below canvas showing Amplify x5, Nullify, Flip with distinct colors/icons and selection highlight.
-- [ ] Pressing `1` selects Amplify (highlight moves), `2` nullify, `3` flip; clicking hotbar slot does same.
-- [ ] With Amplify selected, moving mouse over canvas shows orange preview circle radius ~90 following cursor.
+- [ ] Pressing `1` selects Amplify (highlight moves), `2` nullify, `3` flip; clicking hotbar slot does same. Pressing the same hotkey again (e.g., `1` when Amplify already selected) deselects it.
+- [ ] Clicking the hotbar button of the currently selected modifier deselects it (no selection).
+- [ ] Pressing `Escape` deselects any selected modifier (no selection).
+- [ ] With Amplify selected, moving mouse over canvas shows orange preview circle radius ~90 following cursor; with no selection, no preview is shown.
 - [ ] Left-click places modifier at cursor; it remains drawn as solid circle after click **and no modifier remains selected** (hotbar shows no selection, preview disappears until next selection).
 - [ ] Placed modifier is draggable: mousedown on modifier, drag moves it, mouseup finalizes; works only before shooting, not during `FLYING`; dragging does not delete.
 - [ ] Placing a modifier does not launch ball; ball remains at tee in `AIMING`.
