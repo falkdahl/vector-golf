@@ -13,6 +13,8 @@ import {
   drawHole,
   drawBall,
   drawAim,
+  drawHUD,
+  drawForceBar,
   setCanvasSize,
   toggleWind as toggleWindRender,
   isWindVisible
@@ -34,14 +36,8 @@ let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
 
-let forceFill;
-let forceLabel;
 let winOverlay;
-let attemptsValue;
 let winAttemptsValue;
-let holeValue;
-let holeTotal;
-let totalAttemptsValue;
 let winHoleValue;
 let winHoleTotal;
 let winTotalValue;
@@ -90,10 +86,6 @@ function initLevel() {
 
 function updateAttemptsUI() {
   attempts = totalAttempts; // keep alias synced
-  if (holeValue) holeValue.textContent = String(currentHoleIndex + 1);
-  if (holeTotal) holeTotal.textContent = String(LEVELS.length);
-  if (attemptsValue) attemptsValue.textContent = String(holeAttempts);
-  if (totalAttemptsValue) totalAttemptsValue.textContent = String(totalAttempts);
   if (winHoleValue) winHoleValue.textContent = String(currentHoleIndex + 1);
   if (winHoleTotal) winHoleTotal.textContent = String(LEVELS.length);
   if (winAttemptsValue) winAttemptsValue.textContent = String(holeAttempts);
@@ -266,30 +258,7 @@ function update(dt) {
 }
 
 function updateForceBar() {
-  if (!forceFill) return;
-  const pct = Math.round(charge * 100);
-  forceFill.style.width = pct + "%";
-  // lerps green -> yellow -> red
-  // green #2ecc71 (46,204,113) -> yellow #f1c40f (241,196,15) -> red #e74c3c (231,60,60)
-  let r, g, b;
-  if (charge < 0.5) {
-    const t = charge / 0.5;
-    r = 46 + (241 - 46) * t;
-    g = 204 + (196 - 204) * t;
-    b = 113 + (15 - 113) * t;
-  } else {
-    const t = (charge - 0.5) / 0.5;
-    r = 241 + (231 - 241) * t;
-    g = 196 + (60 - 196) * t;
-    b = 15 + (60 - 15) * t;
-  }
-  forceFill.style.background = `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
-  if (forceLabel) forceLabel.textContent = pct + "%";
-  // Hide dim when flying? Keep visible but at 0
-  if (gameState === "FLYING" || gameState === "WIN") {
-    forceFill.style.width = "0%";
-    if (forceLabel) forceLabel.textContent = "0%";
-  }
+  // Power bar now drawn inside canvas under ball when CHARGING per REQ-007 - no DOM
 }
 
 function render() {
@@ -297,7 +266,7 @@ function render() {
   ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
   ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-  // Draw order: background -> arrows -> particles -> obstacles -> hole -> ball -> aim
+  // Draw order: background -> arrows -> particles -> obstacles -> hole -> ball -> aim -> HUD/force bar (on top)
   drawBackground(ctx, LOGICAL_W, LOGICAL_H);
   drawArrows(ctx, field, cols, rows, cellW, cellH);
   drawParticles(ctx);
@@ -305,6 +274,12 @@ function render() {
   drawHole(ctx, level.hole);
   drawBall(ctx, ball);
   drawAim(ctx, ball, getAimAngle(), charge, gameState);
+  // HUD inside canvas on top per REQ-012/014
+  drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts);
+  // Power bar under ball when charging per REQ-007
+  if (gameState === "CHARGING" && charging) {
+    drawForceBar(ctx, ball, charge);
+  }
 }
 
 function loop(now) {
@@ -340,14 +315,8 @@ function init() {
     return;
   }
   ctx = canvas.getContext("2d");
-  forceFill = document.getElementById("force-fill");
-  forceLabel = document.getElementById("force-label");
   winOverlay = document.getElementById("win-overlay");
-  attemptsValue = document.getElementById("attempts-value");
   winAttemptsValue = document.getElementById("win-attempts-value");
-  holeValue = document.getElementById("hole-value");
-  holeTotal = document.getElementById("hole-total");
-  totalAttemptsValue = document.getElementById("total-attempts-value");
   winHoleValue = document.getElementById("win-hole-value");
   winHoleTotal = document.getElementById("win-hole-total");
   winTotalValue = document.getElementById("win-total-value");

@@ -23,12 +23,11 @@ User specified: "hold space, the longer it is hold the harder it is hit. Include
    - If `holdTime` reaches `MAX_CHARGE_TIME`, clamp at 100% (optionally pulsate bar).
    - Minimum charge: releasing within <0.1s still launches with small power (5-10% of max) to allow tap shots; alternatively ignore if <50ms (document).
 2. Constants in `src/physics.js` or `src/input.js:5`: `MAX_CHARGE_TIME=1.5`, `MAX_POWER=600` (px/s), `MIN_POWER=50`.
-3. Force Bar UI:
-   - DOM element `<div id="force-bar"><div id="force-fill"></div></div>` in `index.html` styled in `style.css` (width 200px, height 18px, border, background `#333`).
-   - Fill width `charge*100%`, background color lerps green (`#2ecc71` at 0%) -> yellow -> red (`#e74c3c` at 100%).
-   - Text label `Power: XX%` optionally inside or beside bar.
-   - Bar SHALL be visible only when `AIMING`/`CHARGING`; hidden or dimmed during flight (or reset to 0).
-   - Alternative canvas-drawn bar is acceptable but DOM preferred for accessibility.
+3. Force Bar UI - **Inside Canvas Under Ball** (updated):
+   - Canvas-drawn bar rendered in `src/render.js` (e.g., `drawForceBar(ctx, ball, charge)`) positioned **under the player ball inside the canvas** (e.g., centered at `ball.pos.x`, `ball.pos.y + 28px`) and visible **only while Space is held (`CHARGING`)**. No DOM `#force-bar` below canvas shall be used; the bar lives inside the canvas.
+   - Dimensions: width ~60px, height 8-10px, border `1px #222`, background `rgba(0,0,0,0.35)`, fill width `charge*100%`, background color lerps green (`#2ecc71` at 0%) -> yellow -> red (`#e74c3c` at 100%).
+   - Optionally show `Power: XX%` text just below bar (canvas text, 10px, white with shadow).
+   - Bar SHALL be hidden during `AIMING` (not charging), `FLYING`, and `WIN` (or reset to 0 and not drawn).
 4. Aim line length SHALL scale with `charge` during charging (`base 30px + charge*50px`) as preview.
 5. Launch SHALL be ignored if ball is moving.
 
@@ -50,6 +49,6 @@ User specified: "hold space, the longer it is hold the harder it is hit. Include
 
 ## File Paths
 - `src/input.js:30` (charge state)
-- `src/main.js:50` (launch trigger)
-- `index.html:15` (force bar DOM)
-- `style.css:30` (bar styling)
+- `src/main.js:50` (launch trigger, charge)
+- `src/render.js:30` (drawForceBar inside canvas under ball)
+- `src/physics.js:5` (MAX_POWER, MAX_CHARGE_TIME)

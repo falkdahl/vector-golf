@@ -24,21 +24,15 @@ User requirement: "Number of attempts until the level is cleared should also be 
 
 2. Increment: On each successful `launchBall(angle, power)` (Space release when `state` is `AIMING`/`CHARGING`), both `holeAttempts++` and `totalAttempts++` SHALL be executed exactly once. Pressing `R` to reset without launching SHALL NOT increment. Dying (obstacle/edge) SHALL NOT increment beyond the launch that caused it; only the launch counts.
 
-3. Display - Next to Power Bar (REQ-012):
-   - DOM elements SHALL be placed inline next to the power bar in `index.html`, e.g., inside `#force-bar-container` or adjacent flex row:
-     ```html
-     <div id="force-bar-container">
-       <label>Power: <span id="force-label">0%</span></label><div id="force-bar">...</div>
-       <div id="hole-counter">Hole: <span id="hole-value">1</span>/<span id="hole-total">3</span></div>
-       <div id="attempts-counter">Attempts: <span id="attempts-value">0</span></div>
-       <div id="total-attempts-counter">Total: <span id="total-attempts-value">0</span></div>
-     </div>
-     ```
-   - `hole-counter` SHALL show `currentHoleIndex+1 / totalHoles`.
-   - `attempts-counter` SHALL show `holeAttempts` (current hole attempts).
-   - `total-attempts-counter` SHALL show `totalAttempts` (across all holes).
-   - All three SHALL be visible during `AIMING`/`CHARGING`/`FLYING` without scrolling, adjacent to the power bar.
-   - Win overlay SHALL show `You Win! Hole N/M - Attempts this hole: X, Total: Y` and on final hole `Game Complete! Total Attempts: Y`.
+3. Display - **Inside Canvas on Top** (REQ-012):
+   - HUD SHALL be drawn **inside the canvas on top** in `src/render.js` (e.g., `drawHUD(ctx, currentHoleIndex, totalHoles, holeAttempts, totalAttempts)`) during every `render()` call, not as DOM next to power bar.
+   - `drawHUD` SHALL render:
+     - `Hole: N/M` at top-left (`x=12, y=22`)
+     - `Attempts: X` (per-hole) at top-center (`x=canvasW/2, y=22`)
+     - `Total: Y` (across all holes) at top-right (`x=canvasW-12, y=22`, right-aligned)
+   - Font: 14px `system-ui` sans, fill `white`, stroke `rgba(0,0,0,0.7)` 3px lineWidth or shadow for contrast on `#3a9d23` fairway.
+   - All three SHALL be visible during `AIMING`/`CHARGING`/`FLYING` without scrolling, inside the canvas top bar (e.g., semi-transparent dark strip `rgba(0,0,0,0.25)` full width 28px tall behind text).
+   - Win overlay (DOM) SHALL still show `You Win! Hole N/M - Attempts this hole: X, Total: Y` and on final hole `Game Complete! Total Attempts: Y`.
 
 4. Hole Progression:
    - Upon entering hole (REQ-009), if `currentHoleIndex < totalHoles-1`, the game SHALL advance to next hole: `currentHoleIndex++`, `holeAttempts=0` (reset per-hole), ball reset to next hole tee, state `AIMING`, field regenerated for next level. `totalAttempts` persists.
@@ -57,13 +51,14 @@ User requirement: "Number of attempts until the level is cleared should also be 
 
 ## Acceptance Criteria
 
-- [ ] On load, Hole shows `1/3` (or `1/1` if single hole), Attempts `0`, Total `0`, all visible inline next to power bar.
-- [ ] After 1st launch, Hole still `1/3`, Attempts `1`, Total `1` even if ball is still flying/drifting.
-- [ ] After ball hits obstacle and resets to tee, Hole `1/3`, Attempts `1`, Total `1` (not incremented again).
-- [ ] After 2nd launch, Attempts `2`, Total `2`.
-- [ ] After 3rd launch hits hole 1 and wins (non-final), game advances to Hole `2/3`, Attempts resets to `0` for new hole, Total remains `3`, ball at new tee, no win overlay yet (or "Hole Cleared!" briefly).
+- [ ] On load, canvas top shows `Hole: 1/3` left, `Attempts: 0` center, `Total: 0` right inside the canvas (not DOM next to power bar).
+- [ ] Power bar is **not** visible as DOM below canvas; instead a 60×8px canvas bar appears **under the ball inside the canvas** only while `CHARGING` (Space held), at `ball.x -30, ball.y+28`, fill `charge*100%` green→yellow→red.
+- [ ] After 1st launch, canvas top still `Hole 1/3`, `Attempts 1`, `Total 1` even if ball is still flying/drifting; power bar hidden.
+- [ ] After ball hits obstacle and resets to tee, canvas top `Hole 1/3`, `Attempts 1`, `Total 1` (not incremented again).
+- [ ] After 2nd launch, `Attempts 2`, `Total 2` inside canvas top.
+- [ ] After 3rd launch hits hole 1 and wins (non-final), game advances to Hole `2/3`, `Attempts` resets to `0` for new hole, `Total` remains `3`, ball at new tee, canvas top updates immediately.
 - [ ] After clearing final hole, overlay shows `Game Complete! Total Attempts: N` (or `You Win! Hole 3/3 - Attempts this hole: X, Total: Y`).
-- [ ] Counters are inline next to power bar (flex row), visible without scrolling on 900px viewport, no layout shift when power bar charges, and update immediately on launch.
+- [ ] No DOM `#force-bar-container` / `#hole-counter` counters remain; HUD is purely canvas-drawn. Counters visible without scrolling on 900px viewport and update immediately on launch.
 - [ ] Pressing `R` in win/game-complete overlay resets all counters to `0` and returns to Hole `1/3` with ball at tee.
 
 ## Dependencies
@@ -76,7 +71,6 @@ User requirement: "Number of attempts until the level is cleared should also be 
 - Edge: rapid Space tap still counts as 1 attempt if it launches.
 
 ## File Paths
-- `src/main.js:1` (currentHoleIndex, holeAttempts, totalAttempts, handleLaunch, resetBall, update UI)
+- `src/main.js:1` (currentHoleIndex, holeAttempts, totalAttempts, handleLaunch, resetBall)
+- `src/render.js:1` (drawHUD inside canvas top, drawForceBar under ball)
 - `src/levels.js:1` (LEVELS array length = totalHoles)
-- `index.html:15` (hole-counter, attempts-counter, total-attempts-counter DOM next to power bar)
-- `style.css:30` (counter styling inline next to power bar)

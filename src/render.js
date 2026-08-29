@@ -255,6 +255,93 @@ export function drawAim(ctx, ball, aimAngle, charge, gameState) {
   ctx.restore();
 }
 
+export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, totalAttempts) {
+  // Top bar inside canvas per REQ-012/014 - Hole left, Attempts center, Total right
+  ctx.save();
+  // semi-transparent strip
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(0, 0, width, 28);
+  ctx.font = "14px system-ui, sans-serif";
+  ctx.fillStyle = "white";
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  const holeText = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
+  const attemptsText = `Attempts: ${holeAttempts}`;
+  const totalText = `Total: ${totalAttempts}`;
+  // Hole left
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.strokeText(holeText, 12, 16);
+  ctx.fillText(holeText, 12, 16);
+  // Attempts center
+  ctx.textAlign = "center";
+  ctx.strokeText(attemptsText, width / 2, 16);
+  ctx.fillText(attemptsText, width / 2, 16);
+  // Total right
+  ctx.textAlign = "right";
+  ctx.strokeText(totalText, width - 12, 16);
+  ctx.fillText(totalText, width - 12, 16);
+  ctx.restore();
+}
+
+export function drawForceBar(ctx, ball, charge) {
+  // Under ball inside canvas when CHARGING per REQ-007
+  if (charge <= 0) return;
+  const barW = 60;
+  const barH = 8;
+  const x = ball.pos.x - barW / 2;
+  const y = ball.pos.y + 28;
+  const pct = Math.max(0, Math.min(1, charge));
+  // background
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // rounded rect simple
+  const r = 3;
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + barW - r, y);
+  ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
+  ctx.lineTo(x + barW, y + barH - r);
+  ctx.quadraticCurveTo(x + barW, y + barH, x + barW - r, y + barH);
+  ctx.lineTo(x + r, y + barH);
+  ctx.quadraticCurveTo(x, y + barH, x, y + barH - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // fill with lerp green->yellow->red
+  let rr, gg, bb;
+  if (pct < 0.5) {
+    const t = pct / 0.5;
+    rr = 46 + (241 - 46) * t;
+    gg = 204 + (196 - 204) * t;
+    bb = 113 + (15 - 113) * t;
+  } else {
+    const t = (pct - 0.5) / 0.5;
+    rr = 241 + (231 - 241) * t;
+    gg = 196 + (60 - 196) * t;
+    bb = 15 + (60 - 15) * t;
+  }
+  ctx.fillStyle = `rgb(${Math.round(rr)},${Math.round(gg)},${Math.round(bb)})`;
+  const fillW = (barW - 2) * pct;
+  ctx.fillRect(x + 1, y + 1, fillW, barH - 2);
+  // optional Power text below bar
+  ctx.fillStyle = "white";
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  ctx.lineWidth = 2;
+  ctx.font = "10px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const label = `Power: ${Math.round(pct * 100)}%`;
+  ctx.strokeText(label, ball.pos.x, y + barH + 3);
+  ctx.fillText(label, ball.pos.x, y + barH + 3);
+  ctx.restore();
+}
+
 export function drawWinOverlay(ctx, width, height) {
   // Canvas overlay not needed; DOM overlay used. Keep for completeness if desired.
 }

@@ -25,12 +25,11 @@ Even a simple golf game needs clear affordances (aim line, wind legend, instruct
    6. Ball (REQ-005)
    7. Aim orbit + line + indicator (REQ-006) when state AIMING/CHARGING
    8. Win overlay (REQ-009) when WIN
-3. **DOM UI** in `index.html` / `style.css`:
+3. **UI** in `index.html` / `style.css` and **Canvas HUD** in `src/render.js`:
    - Title `<h1>Golf Vector Field</h1>` above canvas.
-   - Force bar row below canvas: flex row containing Power bar (REQ-007, 200x18px) **inline with** counters (REQ-014): `Hole: 1/3`, `Attempts: 0` (per-hole), `Total: 0` (across all holes) - all next to power bar on same line.
-   - Attempts/Hole counters SHALL be shown next to power bar (not above canvas), e.g., inside `#force-bar-container` as flex items with gap, so all are visible together without scrolling.
-   - Instructions panel: "Arrows: Aim | Space: Shoot | R: Reset | H: Toggle Wind" (text near canvas).
-   - Wind legend: small arrow icon + "Wind strength" text, color scale.
+   - **Power bar (REQ-007) SHALL be drawn inside the canvas under the player ball** when `CHARGING` (Space held), not as DOM below canvas. It appears centered under `ball.pos` (e.g., `x - 30px, y + 28px`, 60×8px) with fill `charge*100%`.
+   - **Hole/Attempts/Total counters (REQ-014) SHALL be drawn inside the canvas on top** (e.g., `ctx.fillText` at `y = 20px`, `x = 12px` for Hole left, `x = canvasW/2` for Attempts center, `x = canvasW-12` for Total right, or top-left/top-right layout). No DOM `#force-bar-container` / `#hole-counter` / `#attempts-counter` below canvas shall be used; HUD is purely canvas. Font: 14px system sans, white with 1px black stroke/shadow for contrast on green.
+   - Instructions panel: "Arrows: Aim | Space: Shoot | R: Reset | H: Toggle Wind" (text near canvas, DOM below).
    - Win overlay: centered absolute `<div>` with semi-transparent background, hidden by default, showing `Hole Cleared!` or `Game Complete! Total Attempts: Y` and per-hole attempts.
 4. **Aim Enhancements** (optional but recommended):
    - Predicted trajectory: dotted line sampling 30 steps ahead using current angle/power and `getWindAt` (no friction for preview) to hint wind effect.
