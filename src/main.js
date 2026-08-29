@@ -38,10 +38,10 @@ let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
 
-// Modifier system per REQ-015 - updated per new requirements
+// Modifier system per REQ-015 - updated per new requirements - start with no selection
 const MAX_MODIFIERS_PER_HOLE = 3;
 let modifiers = [];
-let selectedModifier = 'amplify';
+let selectedModifier = null;
 let mousePos = null;
 let hotbarEl = null;
 let draggingIdx = -1;
