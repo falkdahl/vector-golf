@@ -29,7 +29,7 @@ Even a simple golf game needs clear affordances (aim line, wind legend, instruct
    - Title `<h1>Golf Vector Field</h1>` above canvas.
    - Force bar row below canvas: flex row containing Power bar (REQ-007, 200x18px) **inline with** counters (REQ-014): `Hole: 1/3`, `Attempts: 0` (per-hole), `Total: 0` (across all holes) - all next to power bar on same line.
    - Attempts/Hole counters SHALL be shown next to power bar (not above canvas), e.g., inside `#force-bar-container` as flex items with gap, so all are visible together without scrolling.
-   - Instructions panel: "Arrows: Aim | Hold Space: Charge | R: Reset | H: Toggle Wind" (text near canvas).
+   - Instructions panel: "Arrows: Aim | Space: Shoot | R: Reset | H: Toggle Wind" (text near canvas).
    - Wind legend: small arrow icon + "Wind strength" text, color scale.
    - Win overlay: centered absolute `<div>` with semi-transparent background, hidden by default, showing `Hole Cleared!` or `Game Complete! Total Attempts: Y` and per-hole attempts.
 4. **Aim Enhancements** (optional but recommended):
