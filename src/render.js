@@ -441,54 +441,27 @@ export function getRewardButtonsLayout(width, height) {
 
 export function drawRewardMenu(ctx, width, height, totalAttempts, hoveredType = null) {
   ctx.save();
-  // Dim background full canvas
+  // Dim background full canvas - preserves green context but ensures contrast
   ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.fillRect(0, 0, width, height);
 
-  // Card
+  // No white card background per updated requirement - text/buttons drawn directly
+  // with high-contrast colors for readability on green (#3a9d23) + dim
   const cardW = 340;
   const cardH = 220;
   const cardX = (width - cardW) / 2;
   const cardY = (height - cardH) / 2;
-  const radius = 12;
-  ctx.fillStyle = "#fff";
-  ctx.strokeStyle = "#222";
-  ctx.lineWidth = 2;
-  ctx.shadowColor = "rgba(0,0,0,0.4)";
-  ctx.shadowBlur = 30;
-  ctx.shadowOffsetY = 8;
-  // rounded rect
-  ctx.beginPath();
-  ctx.moveTo(cardX + radius, cardY);
-  ctx.lineTo(cardX + cardW - radius, cardY);
-  ctx.quadraticCurveTo(cardX + cardW, cardY, cardX + cardW, cardY + radius);
-  ctx.lineTo(cardX + cardW, cardY + cardH - radius);
-  ctx.quadraticCurveTo(cardX + cardW, cardY + cardH, cardX + cardW - radius, cardY + cardH);
-  ctx.lineTo(cardX + radius, cardY + cardH);
-  ctx.quadraticCurveTo(cardX, cardY + cardH, cardX, cardY + cardH - radius);
-  ctx.lineTo(cardX, cardY + radius);
-  ctx.quadraticCurveTo(cardX, cardY, cardX + radius, cardY);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowColor = "transparent";
-  ctx.stroke();
 
-  // Title
-  ctx.fillStyle = "#222";
-  ctx.font = "600 18px system-ui, sans-serif";
+  // Title - white with strong dark stroke for contrast on green/dim
+  ctx.font = "700 22px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("Choose a Reward", width / 2, cardY + 28);
-
-  // Subtitle total attempts
-  ctx.fillStyle = "#666";
-  ctx.font = "12px system-ui, sans-serif";
-  ctx.fillText(`Total Attempts: ${totalAttempts}`, width / 2, cardY + 46);
-
-  // Hint
-  ctx.fillStyle = "#888";
-  ctx.font = "11px system-ui, sans-serif";
-  ctx.fillText("Every 5 attempts", width / 2, cardY + 60);
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.lineWidth = 5;
+  ctx.fillStyle = "white";
+  ctx.strokeText("Choose an Upgrade", width / 2, cardY + 28);
+  ctx.fillText("Choose an Upgrade", width / 2, cardY + 28);
 
   // Buttons
   const buttons = getRewardButtonsLayout(width, height);
@@ -519,27 +492,45 @@ export function drawRewardMenu(ctx, width, height, totalAttempts, hoveredType = 
     ctx.fill();
     ctx.stroke();
 
-    // Icon
-    ctx.fillStyle = btn.color;
-    ctx.font = "600 22px system-ui, sans-serif";
+    // Icon - keep modifier color but add dark outline and shadow for contrast on green/dim
+    ctx.font = "700 24px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(0,0,0,0.65)";
+    ctx.lineWidth = 4;
+    ctx.strokeText(btn.icon, btn.x + btn.w / 2, btn.y + 28);
+    ctx.fillStyle = btn.color;
+    // brighten icon slightly for contrast
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = 6;
     ctx.fillText(btn.icon, btn.x + btn.w / 2, btn.y + 28);
+    ctx.shadowColor = "transparent";
 
-    // Label
-    ctx.fillStyle = "#222";
-    ctx.font = "600 13px system-ui, sans-serif";
+    // Label - white with dark stroke for good contrast against green/dim
+    ctx.font = "700 13px system-ui, sans-serif";
+    ctx.strokeStyle = "rgba(0,0,0,0.75)";
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.strokeText(btn.label, btn.x + btn.w / 2, btn.y + 55);
+    ctx.fillStyle = "white";
     ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + 55);
 
-    // Supply hint
-    ctx.fillStyle = "#666";
-    ctx.font = "11px system-ui, sans-serif";
+    // Supply hint - light gray/white with subtle stroke
+    ctx.font = "600 11px system-ui, sans-serif";
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 3;
+    ctx.strokeText("+1 to supply", btn.x + btn.w / 2, btn.y + 72);
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
     ctx.fillText("+1 to supply", btn.x + btn.w / 2, btn.y + 72);
 
-    // Key hint
+    // Key hint - light with stroke
     const key = btn.type === 'amplify' ? '1' : btn.type === 'nullify' ? '2' : '3';
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.font = "10px system-ui, sans-serif";
+    ctx.font = "600 11px system-ui, sans-serif";
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 3;
+    ctx.strokeText(`[${key}]`, btn.x + btn.w / 2, btn.y + 88);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.fillText(`[${key}]`, btn.x + btn.w / 2, btn.y + 88);
 
     ctx.restore();
