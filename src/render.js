@@ -421,6 +421,133 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   ctx.restore();
 }
 
+export function getRewardButtonsLayout(width, height) {
+  const cardW = 340;
+  const cardH = 220;
+  const cardX = (width - cardW) / 2;
+  const cardY = (height - cardH) / 2;
+  const btnW = 90;
+  const btnH = 110;
+  const gap = 12;
+  const totalBtnW = 3 * btnW + 2 * gap;
+  const startX = cardX + (cardW - totalBtnW) / 2;
+  const btnY = cardY + 75;
+  return [
+    { x: startX, y: btnY, w: btnW, h: btnH, type: 'amplify', icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.12)', fillHover: 'rgba(230,126,34,0.22)' },
+    { x: startX + btnW + gap, y: btnY, w: btnW, h: btnH, type: 'nullify', icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.12)', fillHover: 'rgba(52,152,219,0.22)' },
+    { x: startX + 2 * (btnW + gap), y: btnY, w: btnW, h: btnH, type: 'flip', icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.12)', fillHover: 'rgba(155,89,182,0.22)' }
+  ];
+}
+
+export function drawRewardMenu(ctx, width, height, totalAttempts, hoveredType = null) {
+  ctx.save();
+  // Dim background full canvas
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, width, height);
+
+  // Card
+  const cardW = 340;
+  const cardH = 220;
+  const cardX = (width - cardW) / 2;
+  const cardY = (height - cardH) / 2;
+  const radius = 12;
+  ctx.fillStyle = "#fff";
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 2;
+  ctx.shadowColor = "rgba(0,0,0,0.4)";
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 8;
+  // rounded rect
+  ctx.beginPath();
+  ctx.moveTo(cardX + radius, cardY);
+  ctx.lineTo(cardX + cardW - radius, cardY);
+  ctx.quadraticCurveTo(cardX + cardW, cardY, cardX + cardW, cardY + radius);
+  ctx.lineTo(cardX + cardW, cardY + cardH - radius);
+  ctx.quadraticCurveTo(cardX + cardW, cardY + cardH, cardX + cardW - radius, cardY + cardH);
+  ctx.lineTo(cardX + radius, cardY + cardH);
+  ctx.quadraticCurveTo(cardX, cardY + cardH, cardX, cardY + cardH - radius);
+  ctx.lineTo(cardX, cardY + radius);
+  ctx.quadraticCurveTo(cardX, cardY, cardX + radius, cardY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.stroke();
+
+  // Title
+  ctx.fillStyle = "#222";
+  ctx.font = "600 18px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("Choose a Reward", width / 2, cardY + 28);
+
+  // Subtitle total attempts
+  ctx.fillStyle = "#666";
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.fillText(`Total Attempts: ${totalAttempts}`, width / 2, cardY + 46);
+
+  // Hint
+  ctx.fillStyle = "#888";
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.fillText("Every 5 attempts", width / 2, cardY + 60);
+
+  // Buttons
+  const buttons = getRewardButtonsLayout(width, height);
+  for (const btn of buttons) {
+    const isHover = hoveredType === btn.type;
+    ctx.save();
+    if (isHover) {
+      // hover brighten
+      ctx.shadowColor = "rgba(0,0,0,0.18)";
+      ctx.shadowBlur = 8;
+    }
+    // Button background
+    ctx.fillStyle = isHover ? btn.fillHover : btn.fill;
+    ctx.strokeStyle = btn.border;
+    ctx.lineWidth = 2;
+    const br = 10;
+    ctx.beginPath();
+    ctx.moveTo(btn.x + br, btn.y);
+    ctx.lineTo(btn.x + btn.w - br, btn.y);
+    ctx.quadraticCurveTo(btn.x + btn.w, btn.y, btn.x + btn.w, btn.y + br);
+    ctx.lineTo(btn.x + btn.w, btn.y + btn.h - br);
+    ctx.quadraticCurveTo(btn.x + btn.w, btn.y + btn.h, btn.x + btn.w - br, btn.y + btn.h);
+    ctx.lineTo(btn.x + br, btn.y + btn.h);
+    ctx.quadraticCurveTo(btn.x, btn.y + btn.h, btn.x, btn.y + btn.h - br);
+    ctx.lineTo(btn.x, btn.y + br);
+    ctx.quadraticCurveTo(btn.x, btn.y, btn.x + br, btn.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Icon
+    ctx.fillStyle = btn.color;
+    ctx.font = "600 22px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(btn.icon, btn.x + btn.w / 2, btn.y + 28);
+
+    // Label
+    ctx.fillStyle = "#222";
+    ctx.font = "600 13px system-ui, sans-serif";
+    ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + 55);
+
+    // Supply hint
+    ctx.fillStyle = "#666";
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.fillText("+1 to supply", btn.x + btn.w / 2, btn.y + 72);
+
+    // Key hint
+    const key = btn.type === 'amplify' ? '1' : btn.type === 'nullify' ? '2' : '3';
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.font = "10px system-ui, sans-serif";
+    ctx.fillText(`[${key}]`, btn.x + btn.w / 2, btn.y + 88);
+
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 export function drawWinOverlay(ctx, width, height) {
   // Canvas overlay not needed; DOM overlay used. Keep for completeness if desired.
 }

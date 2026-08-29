@@ -17,6 +17,8 @@ import {
   drawForceBar,
   drawModifiers,
   drawModifierPreview,
+  drawRewardMenu,
+  getRewardButtonsLayout,
   setCanvasSize,
   toggleWind as toggleWindRender,
   isWindVisible
@@ -70,6 +72,45 @@ function resetSupply() {
   updateHotbarUI();
 }
 
+// Reward menu per REQ-021: every 5 totalAttempts inside canvas
+let rewardMenuVisible = false;
+let rewardClaimedFor = null; // last totalAttempts value claimed, null initially
+let rewardMenuHover = null; // hovered type for visual feedback
+
+function maybeShowRewardMenu() {
+  if (gameState === "WIN") return;
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+  if (rewardMenuVisible) return;
+  if (totalAttempts % 5 !== 0) return;
+  if (rewardClaimedFor === totalAttempts) return;
+  rewardMenuVisible = true;
+  rewardMenuHover = null;
+  // Ensure hotbar reflects blocked state
+  updateHotbarUI();
+}
+
+function claimReward(type) {
+  if (!rewardMenuVisible) return false;
+  if (!(type in supply)) return false;
+  // Idempotent: only once per trigger
+  if (rewardClaimedFor === totalAttempts) return false;
+  addToSupply(type, 1);
+  rewardClaimedFor = totalAttempts;
+  rewardMenuVisible = false;
+  rewardMenuHover = null;
+  updateHotbarUI();
+  if (canvas) canvas.style.cursor = "default";
+  return true;
+}
+
+function isRewardMenuVisible() {
+  return rewardMenuVisible;
+}
+
+function getRewardClaimedFor() {
+  return rewardClaimedFor;
+}
+
 let winOverlay;
 let winAttemptsValue;
 let winHoleValue;
@@ -115,6 +156,8 @@ function initLevel() {
   }
   loadLevel(currentHoleIndex);
   updateAttemptsUI();
+  // REQ-021: show reward menu at start if totalAttempts %5==0 (initial 0)
+  maybeShowRewardMenu();
   // validate obstacles not overlapping tee/hole
   for (const obs of level.obstacles) {
     if (obs.type === "rect") {
@@ -243,6 +286,8 @@ function resetBall() {
   gameState = "AIMING";
   winOverlay.classList.add("hidden");
   updateForceBar();
+  // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
+  maybeShowRewardMenu();
 }
 
 function advanceHole() {
@@ -266,6 +311,8 @@ function advanceHole() {
     winOverlay.classList.add("hidden");
     updateAttemptsUI();
     updateForceBar();
+    // REQ-021: check reward menu when entering next hole in AIMING
+    maybeShowRewardMenu();
   } else {
     // Final hole already, will show WIN
   }
@@ -278,6 +325,10 @@ function resetGameAfterWin() {
   attempts = 0;
   // REQ-020: reset supply to empty on new game
   supply = { amplify: 0, nullify: 0, flip: 0 };
+  // REQ-021: reset reward state for new game
+  rewardMenuVisible = false;
+  rewardClaimedFor = null;
+  rewardMenuHover = null;
   loadLevel(currentHoleIndex);
   for (const obs of level.obstacles) {
     if (obs.type === "rect") {
@@ -294,9 +345,13 @@ function resetGameAfterWin() {
   winOverlay.classList.add("hidden");
   updateAttemptsUI();
   updateForceBar();
+  // REQ-021: on new game reset, show reward at 0
+  maybeShowRewardMenu();
 }
 
 function handleLaunch(angle, power) {
+  // REQ-021: block launch while reward menu visible
+  if (rewardMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   launchBall(angle, power);
   holeAttempts += 1;
@@ -353,6 +408,8 @@ function handleNextHole() {
     winOverlay.classList.add("hidden");
     updateAttemptsUI();
     updateForceBar();
+    // REQ-021: check reward menu when entering next hole in AIMING (e.g., total 5 after win)
+    maybeShowRewardMenu();
   } else {
     // Final hole - Next should not be visible, but if pressed, do nothing or reset game
     resetGameAfterWin();
@@ -360,6 +417,20 @@ function handleNextHole() {
 }
 
 function update(dt) {
+  // REQ-021: when reward menu visible, block aiming/charging but still update particles
+  if (rewardMenuVisible) {
+    // Still allow particles animation, but block ball physics and charging transition
+    updateParticles(dt, getWindAt);
+    updateHotbarUI();
+    // Ensure we stay in AIMING and not charging, and don't process input drift
+    if (charging) {
+      // cancel stray charging while menu open
+      resetCharge();
+      gameState = "AIMING";
+    }
+    return;
+  }
+
   // Update input
   updateInput(dt, gameState);
 
@@ -423,20 +494,26 @@ function render() {
   drawObstacles(ctx, level.obstacles);
   drawHole(ctx, level.hole);
   drawBall(ctx, ball);
-  drawAim(ctx, ball, getAimAngle(), charge, gameState);
+  if (!rewardMenuVisible) {
+    drawAim(ctx, ball, getAimAngle(), charge, gameState);
+  }
   // Preview circle follows mouse when selecting modifier before shooting
-  // REQ-020: only show preview if supply allows placement
-  if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
+  // REQ-020: only show preview if supply allows placement; REQ-021: not during reward menu
+  if (!rewardMenuVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, MODIFIER_RADIUS);
-  } else if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
+  } else if (!rewardMenuVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
     // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, MODIFIER_RADIUS, true);
   }
   // HUD inside canvas on top per REQ-012/014
   drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts);
   // Power bar under ball when charging per REQ-007
-  if (gameState === "CHARGING" && charging) {
+  if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
+  }
+  // REQ-021: reward menu inside canvas (on top of HUD)
+  if (rewardMenuVisible) {
+    drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, totalAttempts, rewardMenuHover);
   }
 }
 
@@ -488,10 +565,12 @@ function init() {
   updateAttemptsUI();
 
   initInput(
-    () => gameState,
+    () => rewardMenuVisible ? "REWARD" : gameState,
     {
       onLaunch: handleLaunch,
       onReset: () => {
+        // REQ-021: block R while reward menu visible
+        if (rewardMenuVisible) return;
         if (gameState === "WIN") {
           if (currentHoleIndex === LEVELS.length - 1) {
             resetGameAfterWin();
@@ -502,7 +581,10 @@ function init() {
           resetBall();
         }
       },
-      onToggleWind: () => toggleWindRender()
+      onToggleWind: () => {
+        if (rewardMenuVisible) return;
+        toggleWindRender();
+      }
     }
   );
 
@@ -510,6 +592,8 @@ function init() {
   if (hotbarEl) {
     hotbarEl.querySelectorAll(".hotbar-slot").forEach(slot => {
       slot.addEventListener("click", () => {
+        // REQ-021: block hotbar selection while reward menu visible
+        if (rewardMenuVisible) return;
         if (selectedModifier === slot.dataset.type) {
           selectedModifier = null;
         } else {
@@ -524,6 +608,23 @@ function init() {
     nextHoleButton.addEventListener("click", handleNextHole);
   }
   window.addEventListener("keydown", (e) => {
+    // REQ-021: when reward menu visible, 1/2/3 selects reward, other inputs blocked
+    if (rewardMenuVisible) {
+      if (e.code === "Digit1") {
+        claimReward('amplify');
+        e.preventDefault();
+      } else if (e.code === "Digit2") {
+        claimReward('nullify');
+        e.preventDefault();
+      } else if (e.code === "Digit3") {
+        claimReward('flip');
+        e.preventDefault();
+      } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD") {
+        // Block aiming/charging while menu open
+        e.preventDefault();
+      }
+      return;
+    }
     if (e.code === "Escape") {
       if (selectedModifier !== null) {
         selectedModifier = null;
@@ -554,8 +655,24 @@ function init() {
       }
     }
   });
-  // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020
+  // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020 + REQ-021
   canvas.addEventListener("mousemove", (e) => {
+    // REQ-021: handle hover for reward menu
+    if (rewardMenuVisible) {
+      const pos = getCanvasMousePos(e);
+      mousePos = pos;
+      const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H);
+      let hovered = null;
+      for (const btn of layout) {
+        if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+          hovered = btn.type;
+          break;
+        }
+      }
+      rewardMenuHover = hovered;
+      canvas.style.cursor = hovered ? "pointer" : "default";
+      return;
+    }
     if (gameState !== "AIMING" && gameState !== "CHARGING") {
       mousePos = null;
       return;
@@ -584,8 +701,13 @@ function init() {
       }
     }
   });
-  canvas.addEventListener("mouseleave", () => { mousePos = null; canvas.style.cursor = "default"; });
+  canvas.addEventListener("mouseleave", () => { mousePos = null; rewardMenuHover = null; canvas.style.cursor = "default"; });
   canvas.addEventListener("mousedown", (e) => {
+    if (rewardMenuVisible) {
+      // Block dragging while reward menu open
+      e.preventDefault();
+      return;
+    }
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     if (e.button !== 0) return; // only left
     const pos = getCanvasMousePos(e);
@@ -613,6 +735,21 @@ function init() {
     }
   });
   canvas.addEventListener("click", (e) => {
+    // REQ-021: handle reward menu selection first
+    if (rewardMenuVisible) {
+      const pos = getCanvasMousePos(e);
+      const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H);
+      for (const btn of layout) {
+        if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+          claimReward(btn.type);
+          e.preventDefault();
+          return;
+        }
+      }
+      // Click outside buttons while menu open = ignore (block placement)
+      e.preventDefault();
+      return;
+    }
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     if (isDragging) return; // was dragging, not a placement click
     const pos = getCanvasMousePos(e);
@@ -627,6 +764,8 @@ function init() {
   });
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
+    // REQ-021: block removal while reward menu visible
+    if (rewardMenuVisible) return;
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     const pos = getCanvasMousePos(e);
     // If dragging, cancel drag and remove?
@@ -667,6 +806,13 @@ function setSupply(newSupply) {
 function getModifiers() { return [...modifiers]; }
 function getSelectedModifier() { return selectedModifier; }
 
+// Helpers for REQ-021 testing
+function getRewardMenuState() {
+  return { visible: rewardMenuVisible, claimedFor: rewardClaimedFor, hover: rewardMenuHover };
+}
+function setRewardClaimedFor(v) { rewardClaimedFor = v; }
+function setRewardMenuVisible(v) { rewardMenuVisible = v; }
+
 // Expose for manual/browser testing and for acceptance checks without import
 if (typeof window !== 'undefined') {
   window.__getSupply = getSupply;
@@ -683,6 +829,21 @@ if (typeof window !== 'undefined') {
     set: (v) => setSupply(v)
   });
   window.__getSelectedModifier = getSelectedModifier;
+  window.__maybeShowRewardMenu = maybeShowRewardMenu;
+  window.__claimReward = claimReward;
+  window.__isRewardMenuVisible = isRewardMenuVisible;
+  window.__getRewardClaimedFor = getRewardClaimedFor;
+  window.__getRewardMenuState = getRewardMenuState;
+  window.__setRewardClaimedFor = setRewardClaimedFor;
+  window.__setRewardMenuVisible = setRewardMenuVisible;
+  Object.defineProperty(window, 'rewardMenuVisible', {
+    get: () => rewardMenuVisible,
+    set: (v) => { rewardMenuVisible = v; }
+  });
+  Object.defineProperty(window, 'rewardClaimedFor', {
+    get: () => rewardClaimedFor,
+    set: (v) => { rewardClaimedFor = v; }
+  });
 }
 
 // Auto-init when loaded as module via script tag
@@ -692,4 +853,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, totalAttempts, holeAttempts, currentHoleIndex };
