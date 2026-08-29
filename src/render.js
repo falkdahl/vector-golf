@@ -70,18 +70,20 @@ export function drawBackground(ctx, width, height) {
   }
 }
 
-export function drawArrows(ctx, field, cols, rows, cellW, cellH) {
+export function drawArrows(ctx, fieldOrGetWindAt, cols, rows, cellW, cellH) {
   if (!showWind) return;
   ctx.save();
   ctx.lineCap = "round";
-  // Short arrows per REQ-004: max ≤16px, varying strength per location, strength via opacity/head - high acceleration
+  // Short arrows per REQ-004 & REQ-015: reflect modified field inside modifiers, varying strength per location
   const MIN_MAG = 0.66; // for WIND_STRENGTH 90, min force 60 (10% of 600)
   const MAX_MAG_RANGE = 1.5; // variation from field generation (1.0*1.5)
+  // Support both old signature (field array) and new getWindAt function for modifier-aware arrows
+  const isFunction = typeof fieldOrGetWindAt === 'function';
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const vec = field[row][col];
       const cx = col * cellW + cellW / 2;
       const cy = row * cellH + cellH / 2;
+      const vec = isFunction ? fieldOrGetWindAt(cx, cy) : fieldOrGetWindAt[row][col];
       const mag = Math.hypot(vec.x, vec.y);
       const angle = Math.atan2(vec.y, vec.x);
       // Normalize magnitude to 0-1 for visual encoding, do not scale length linearly with raw mag

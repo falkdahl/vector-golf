@@ -10,6 +10,12 @@ export let modifiers = [];
 export function setModifiers(mods) { modifiers = mods; }
 export function clearModifiers() { modifiers = []; }
 export function getModifiers() { return modifiers; }
+export function isInsideNullify(x, y) {
+  for (const mod of modifiers) {
+    if (mod.type === 'nullify' && Math.hypot(x - mod.x, y - mod.y) < mod.radius) return true;
+  }
+  return false;
+}
 
 export let field = [];
 export let cols = DEFAULT_COLS;

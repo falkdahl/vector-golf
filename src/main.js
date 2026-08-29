@@ -38,12 +38,14 @@ let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
 
-// Modifier system per REQ-015
+// Modifier system per REQ-015 - updated per new requirements
 const MAX_MODIFIERS_PER_HOLE = 3;
 let modifiers = [];
 let selectedModifier = 'amplify';
 let mousePos = null;
 let hotbarEl = null;
+let draggingIdx = -1;
+let isDragging = false;
 
 let winOverlay;
 let winAttemptsValue;
@@ -140,7 +142,7 @@ function getCanvasMousePos(e) {
 
 function placeModifier(x, y) {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
-  // Check if clicking on existing modifier to remove? handled in remove
+  if (!selectedModifier) return;
   if (modifiers.length >= MAX_MODIFIERS_PER_HOLE) {
     // Replace oldest with shake feedback
     modifiers.shift();
@@ -151,6 +153,10 @@ function placeModifier(x, y) {
   }
   modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: MODIFIER_RADIUS });
   syncModifiersToField();
+  // Deselect after placement per new requirement
+  selectedModifier = null;
+  updateHotbarUI();
+  mousePos = null;
 }
 
 function removeModifierAt(x, y) {
@@ -332,7 +338,7 @@ function render() {
 
   // Draw order: background -> arrows -> particles -> obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers (on top)
   drawBackground(ctx, LOGICAL_W, LOGICAL_H);
-  drawArrows(ctx, field, cols, rows, cellW, cellH);
+  drawArrows(ctx, getWindAt, cols, rows, cellW, cellH);
   drawParticles(ctx);
   drawModifiers(ctx, modifiers);
   drawObstacles(ctx, level.obstacles);
@@ -434,32 +440,81 @@ function init() {
       }
     }
   });
-  // Canvas mouse for modifier placement per REQ-015
+  // Canvas mouse for modifier placement & dragging per updated REQ-015
   canvas.addEventListener("mousemove", (e) => {
     if (gameState !== "AIMING" && gameState !== "CHARGING") {
       mousePos = null;
       return;
     }
-    mousePos = getCanvasMousePos(e);
+    const pos = getCanvasMousePos(e);
+    mousePos = pos;
+    if (isDragging && draggingIdx !== -1) {
+      modifiers[draggingIdx].x = pos.x;
+      modifiers[draggingIdx].y = pos.y;
+      syncModifiersToField();
+      canvas.style.cursor = "grabbing";
+    } else {
+      // Update cursor based on hover over modifier
+      const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+      if (overIdx !== -1) {
+        canvas.style.cursor = "grab";
+      } else if (selectedModifier) {
+        canvas.style.cursor = "crosshair";
+      } else {
+        canvas.style.cursor = "default";
+      }
+    }
   });
-  canvas.addEventListener("mouseleave", () => { mousePos = null; });
+  canvas.addEventListener("mouseleave", () => { mousePos = null; canvas.style.cursor = "default"; });
+  canvas.addEventListener("mousedown", (e) => {
+    if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+    if (e.button !== 0) return; // only left
+    const pos = getCanvasMousePos(e);
+    const idx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+    if (idx !== -1) {
+      // Start dragging existing modifier
+      draggingIdx = idx;
+      isDragging = true;
+      canvas.style.cursor = "grabbing";
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("mouseup", (e) => {
+    if (isDragging && draggingIdx !== -1) {
+      const pos = getCanvasMousePos(e);
+      // If mouse released outside canvas, pos may be out of bounds, but still update
+      if (pos) {
+        modifiers[draggingIdx].x = Math.max(0, Math.min(LOGICAL_W, pos.x));
+        modifiers[draggingIdx].y = Math.max(0, Math.min(LOGICAL_H, pos.y));
+        syncModifiersToField();
+      }
+      isDragging = false;
+      draggingIdx = -1;
+      canvas.style.cursor = "default";
+    }
+  });
   canvas.addEventListener("click", (e) => {
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+    if (isDragging) return; // was dragging, not a placement click
     const pos = getCanvasMousePos(e);
-    // Check if clicking on existing modifier to remove
-    const existingIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
-    if (existingIdx !== -1) {
-      // Click on existing - remove it
-      modifiers.splice(existingIdx, 1);
-      syncModifiersToField();
+    // If clicked on existing modifier and not dragging, do not place (drag handles move, click on existing previously removed - now we keep draggable, so click on existing should not place nor remove)
+    const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+    if (overIdx !== -1) {
+      // Click on existing without drag - no action (drag to move, right-click to remove)
       return;
     }
+    if (!selectedModifier) return; // no modifier selected after placement per new requirement
     placeModifier(pos.x, pos.y);
   });
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     const pos = getCanvasMousePos(e);
+    // If dragging, cancel drag and remove?
+    if (isDragging) {
+      isDragging = false;
+      draggingIdx = -1;
+    }
     removeModifierAt(pos.x, pos.y);
   });
 

@@ -22,6 +22,7 @@ User explicitly selected "Both" (arrows + particles) when asked how wind should 
    - Encode strength via **both** capped length **and** opacity (`0.35 + normalizedMag * 0.45`) and/or head size; normalized magnitude `normalizedMag = (mag - MIN_MAG)/range` (0-1).
    - Style: 1px stroke `rgba(100,160,255,alpha)`, head triangle filled.
    - Arrows SHALL be drawn each frame (or cached to offscreen canvas for performance - decision left to implementation, but must reflect current field if field ever animates).
+   - **Modifier-Aware Arrows**: Arrows **inside each modifier circle SHALL be updated to reflect the resulting effect on the ball**: use the **modified** `getWindAt(cellCenter)` that includes active modifiers (amplify/nullify/flip) for arrow direction/magnitude, not the base field. Thus inside amplify arrows appear stronger, inside nullify faint/zero, inside flip reversed. This ensures visualization matches the actual physics the ball will experience.
 
 2. **Particle Flow**:
    - Spawn ~60-100 lightweight particles with `{x, y, life, maxLife}` in `src/render.js` or `src/vectorField.js`.
@@ -39,6 +40,7 @@ User explicitly selected "Both" (arrows + particles) when asked how wind should 
 
 - [ ] At game start, canvas shows arrows covering the whole play area with varying angles (non-uniform) **and varying length/opacity reflecting strength** at each point (stronger points visibly longer/brighter, weaker shorter/fainter), but all arrows still short (≤16px) and **no arrows touch each other** (visibly separated by cell gap).
 - [ ] Arrow length **does reflect strength** within capped range (max-min length difference 2-6px, stronger = longer), and opacity/head size also vary with strength; length is not raw `mag*10` but capped normalized `base + normalizedMag*4-6`.
+- [ ] **Modifier-Aware**: Placing an amplify at center, arrows inside its 90px circle immediately become more opaque/longer reflecting 5× effect; inside nullify arrows become faint/zero; inside flip arrows reverse direction. Verified by placing each modifier and observing arrow change in real-time.
 - [ ] Particles at start are distributed across the whole map (visible in all quadrants top-left, top-right, bottom-left, bottom-right), not clustered.
 - [ ] Particles visibly flow along arrows, curving where field curls, and visibly fade out over 2 seconds.
 - [ ] Each particle fades from opaque to transparent over 2s (`alpha = life/2.0`) and dies exactly at 2s, then respawns uniformly random across the whole map (not at edge cluster). No particle is visible longer than 2s without fading.

@@ -8,19 +8,19 @@
 - **Related Plan Section:** New Feature - Modifiers (2/3)
 
 ## Description
-The Nullify modifier SHALL cancel the wind vector to zero within a circular area. It creates a calm zone where the ball drifts only by its existing momentum and friction, allowing the player to create a safe path or stop wind-induced drift.
+The Nullify modifier SHALL create a calm zone where the ball is **not braked**: the ball SHALL keep moving in the same direction and with the same speed as it had when it entered, unaffected by wind or friction while inside. It does not bring the ball to a stop.
 
 ## Rationale
-User requested nullify as second modifier. A zero-wind circle provides strategic counterplay to the always-present minimum wind (10% of max power) and amplified zones, letting the player neutralize a dangerous vortex or create a parking spot before the hole.
+User requested nullify to not brake the ball. Instead of zeroing wind and letting friction stop the ball, the nullify circle shall preserve momentum, allowing the ball to glide through the calm zone at entry speed, useful for crossing a strong headwind without losing speed.
 
 ## Requirements
 
-1. **Effect Definition** in `src/vectorField.js`:
+1. **Effect Definition** in `src/physics.js` and `src/vectorField.js`:
    - Type identifier `type: 'nullify'`, `factor: 0`.
-   - When `getWindAt(x,y)` finds point inside nullify circle, the wind vector SHALL be set to `{x:0, y:0}`, regardless of base field or other modifiers before it in stack. If nullify is placed after an amplify in stack order, nullify overrides (result zero).
-   - If flip is inside nullify, result remains zero (nullify dominates if later in stack).
-   - Minimum force per REQ-003 is intentionally violated inside nullify (0 < 60) – nullify is the exception that creates a calm zone. Acceptance for min force SHALL exclude nullify circles (they are intentional zero zones).
-   - No wind means ball will eventually stop due to friction if it stays inside long enough (friction will bring speed <5 and ball would normally drift, but with zero wind it will truly stop; per updated REQ-005, ball should then remain stationary until friction is overcome – but since nullify is zero, ball will stop; this is intended).
+   - When `getWindAt(x,y)` finds point inside nullify circle, the wind vector SHALL still be `{x:0, y:0}` for visualization (arrows faint), but **physics SHALL NOT brake the ball**: while inside nullify, **both wind and friction SHALL be disabled**, so the ball keeps the exact velocity vector it had upon entry (same direction and speed) until it exits the circle.
+   - Implementation in `src/physics.js:updateBall`: detect `isInsideNullify = modifiers.some(m=>type==='nullify' && dist<radius)`. If true, skip `vel += wind*...` and `vel *= frictionFactor` for that tick; just `pos += vel*dt` with preserved `vel`.
+   - If nullify overlaps amplify/flip, nullify's "no brake" behavior dominates for physics, while `getWindAt` still returns zero for arrow visualization.
+   - Minimum force per REQ-003 is intentionally violated inside nullify for physics (ball not wind-driven there), but arrow visualization still shows zero as calm.
 
 2. **Area**: Circle radius `MODIFIER_RADIUS = 90` (same as others). Center at placement.
 
@@ -33,12 +33,13 @@ User requested nullify as second modifier. A zero-wind circle provides strategic
 ## Acceptance Criteria
 
 - [ ] Selecting slot 2 highlights blue and shows blue dashed preview circle.
-- [ ] Placing nullify at (300,300) and sampling `getWindAt(300,300)` returns `{0,0}` (within 0.01).
+- [ ] Placing nullify at (300,300) and sampling `getWindAt(300,300)` returns `{0,0}` (within 0.01) for visualization.
 - [ ] Sampling just outside (400,300) returns non-zero base vector.
-- [ ] Ball entering nullify circle with wind-driven speed visibly decelerates due to friction and no wind push; if ball stays inside >2s without momentum, it comes to near-stop (speed <5).
-- [ ] Placing amplify then nullify overlapping at same point results in zero vector (nullify overrides).
+- [ ] Ball entering nullify circle at speed `V` (e.g., 80 px/s) keeps moving at ~`V` (±5%) in same direction while inside; it does NOT decelerate due to friction, verified by measuring speed 0.5s after entry vs entry speed (difference <5%).
+- [ ] Ball inside nullify for >2s does NOT come to stop; it continues at entry speed until exiting circle.
+- [ ] Placing amplify then nullify overlapping at same point still results in preserved velocity (nullify dominates physics).
 - [ ] Circle drawn with blue dashed tint and `∅` icon.
-- [ ] Arrows inside circle are faint/absent, clearly distinguishable from normal/amplified arrows.
+- [ ] Arrows inside circle are faint/absent, reflecting zero wind for visualization.
 
 ## Dependencies
 - REQ-015 (placement, circular area)
