@@ -48,57 +48,25 @@ export function resetBall(tee) {
 export function updateBall(dt, getWindAt, windStrength, canvasW, canvasH) {
   if (!ball.isMoving) return { status: "idle" };
 
-  // Apply wind
+  // Apply wind - never less than 20% max power per REQ-003, so ball always drifts
   const wind = getWindAt(ball.pos.x, ball.pos.y);
   ball.vel.x += wind.x * windStrength * dt;
   ball.vel.y += wind.y * windStrength * dt;
 
-  // Friction
+  // Friction - tuned to allow wind to keep ball drifting (REQ-005)
   const frictionFactor = 1 - FRICTION * dt;
   ball.vel.x *= frictionFactor;
   ball.vel.y *= frictionFactor;
-
-  // Extra damping when slow to guarantee stop
-  const speedPre = Math.hypot(ball.vel.x, ball.vel.y);
-  if (speedPre < 10 && speedPre > 0) {
-    const extraDamping = 1 - 0.8 * dt; // stronger damping at low speed
-    ball.vel.x *= extraDamping;
-    ball.vel.y *= extraDamping;
-  }
 
   // Integrate
   ball.pos.x += ball.vel.x * dt;
   ball.pos.y += ball.vel.y * dt;
 
-  // Wall bounce (elastic)
-  if (ball.pos.x - ball.radius < 0) {
-    ball.pos.x = ball.radius;
-    ball.vel.x *= -BOUNCE_DAMPING;
-  } else if (ball.pos.x + ball.radius > canvasW) {
-    ball.pos.x = canvasW - ball.radius;
-    ball.vel.x *= -BOUNCE_DAMPING;
-  }
-  if (ball.pos.y - ball.radius < 0) {
-    ball.pos.y = ball.radius;
-    ball.vel.y *= -BOUNCE_DAMPING;
-  } else if (ball.pos.y + ball.radius > canvasH) {
-    ball.pos.y = canvasH - ball.radius;
-    ball.vel.y *= -BOUNCE_DAMPING;
-  }
+  // Edge is fatal per REQ-005/REQ-008 - no bounce, let main.js handle OOB death
+  // Keep position as is, no clamping
 
-  // Stop detection
-  const speed = Math.hypot(ball.vel.x, ball.vel.y);
-  if (speed < STOP_THRESHOLD) {
-    stopTimer += dt;
-    if (stopTimer >= STOP_TIME) {
-      ball.isMoving = false;
-      ball.vel.x = 0;
-      ball.vel.y = 0;
-      return { status: "stopped", pos: { ...ball.pos } };
-    }
-  } else {
-    stopTimer = 0;
-  }
+  // No stop detection per REQ-005: ball never considered stopped, continues drifting
+  // Keep isMoving true until death or win
 
   return { status: "moving" };
 }

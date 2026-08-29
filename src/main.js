@@ -29,10 +29,13 @@ let accumulator = 0;
 let lastTime = 0;
 let level = LEVEL;
 let windStrength = level.field.strength ?? WIND_STRENGTH;
+let attempts = 0;
 
 let forceFill;
 let forceLabel;
 let winOverlay;
+let attemptsValue;
+let winAttemptsValue;
 
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -68,6 +71,11 @@ function initLevel() {
   }
 }
 
+function updateAttemptsUI() {
+  if (attemptsValue) attemptsValue.textContent = String(attempts);
+  if (winAttemptsValue) winAttemptsValue.textContent = String(attempts);
+}
+
 function resetBall() {
   physicsResetBall(level.tee);
   resetCharge();
@@ -79,69 +87,69 @@ function resetBall() {
   updateForceBar();
 }
 
+function resetGameAfterWin() {
+  attempts = 0;
+  updateAttemptsUI();
+  resetBall();
+}
+
 function handleLaunch(angle, power) {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   launchBall(angle, power);
+  attempts += 1;
+  updateAttemptsUI();
   gameState = "FLYING";
   resetCharge();
   updateForceBar();
 }
 
-function checkWinLose() {
+function checkWin() {
   const dist = Math.hypot(ball.pos.x - level.hole.x, ball.pos.y - level.hole.y);
   if (dist < level.hole.radius - 2) {
-    // Win - ball settled inside hole
     gameState = "WIN";
+    updateAttemptsUI();
     winOverlay.classList.remove("hidden");
-  } else {
-    // Lose - rest outside hole => instant reset
-    resetBall();
+    return true;
   }
+  return false;
 }
 
 function update(dt) {
   // Update input
-  const prevCharging = charging;
   updateInput(dt, gameState);
 
   // Transition AIMING -> CHARGING when charging starts
   if (charging && gameState === "AIMING") {
     gameState = "CHARGING";
   }
-  // If charge released via input, launch already handled; but if input cancelled, handle
-  // Keep charging state synced
 
   if (gameState === "AIMING" || gameState === "CHARGING") {
     updateForceBar();
-    // If charging was cancelled (e.g., R reset), sync
-    if (!charging && gameState === "CHARGING" && !keys.Space) {
-      // waiting for launch; if charge reset elsewhere, go back to AIMING
-      // input.js handles launch on keyup; if we are still CHARGING but not charging (due to launch), main will set FLYING
-      // So if charging false and state CHARGING but no launch happened (user pressed R), reset to AIMING
-      // ResetBall already sets AIMING
-    }
   }
 
   if (gameState === "FLYING") {
     updateParticles(dt, getWindAt);
-    const result = updateBall(dt, getWindAt, windStrength, LOGICAL_W, LOGICAL_H);
+    updateBall(dt, getWindAt, windStrength, LOGICAL_W, LOGICAL_H);
 
-    // Check OOB
+    // Check win every tick - immediate, regardless of speed (REQ-009)
+    if (checkWin()) {
+      return;
+    }
+
+    // Check OOB / edge - fatal per REQ-005/REQ-008
     if (isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H)) {
       resetBall();
       return;
     }
-    // Check obstacle collision - instant reset
+    // Check obstacle collision - instant reset even when drifting slowly
     const hit = checkObstacleCollision(ball.pos, BALL_RADIUS, level.obstacles);
     if (hit) {
       resetBall();
       return;
     }
 
-    if (result.status === "stopped") {
-      // Ball came to rest, check win/lose
-      checkWinLose();
-    }
+    // No auto-reset on rest - ball continues drifting per REQ-005
+
   } else if (gameState === "WIN") {
     // paused physics, still update particles for visual
     updateParticles(dt, getWindAt);
@@ -229,16 +237,25 @@ function init() {
   forceFill = document.getElementById("force-fill");
   forceLabel = document.getElementById("force-label");
   winOverlay = document.getElementById("win-overlay");
+  attemptsValue = document.getElementById("attempts-value");
+  winAttemptsValue = document.getElementById("win-attempts-value");
 
   setupCanvas();
   initLevel();
   updateForceBar();
+  updateAttemptsUI();
 
   initInput(
     () => gameState,
     {
       onLaunch: handleLaunch,
-      onReset: () => resetBall(),
+      onReset: () => {
+        if (gameState === "WIN") {
+          resetGameAfterWin();
+        } else {
+          resetBall();
+        }
+      },
       onToggleWind: () => toggleWindRender()
     }
   );
@@ -268,4 +285,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState };
+export { init, resetBall, gameState, attempts };

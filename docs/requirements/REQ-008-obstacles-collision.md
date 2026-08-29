@@ -22,7 +22,7 @@ User requirement: "There should be static obstacles that when touched destroys t
 2. Collision detection in `src/physics.js` or `src/obstacles.js` exported `checkObstacleCollision(ballPos, ballRadius, obstacles)`:
    - Circle-vs-AABB: find closest point on rect to circle center, distance < radius => collision.
    - Circle-vs-Circle: distance between centers < sum radii => collision.
-   - Checked every physics tick while ball is moving.
+   - Checked every physics tick while ball exists (including when drifting slowly), not only when `isMoving`.
 3. On collision:
    - Immediately call `resetBall()` (REQ-011) - ball position reset to tee, velocity zero, state -> `AIMING`, charge reset.
    - No explosion animation beyond optional 1-frame flash (must feel instant per spec).
@@ -31,7 +31,7 @@ User requirement: "There should be static obstacles that when touched destroys t
    - Rects: filled `#2c3e50` or `#444` with 2px border, drawn before ball.
    - Circles: same style.
 5. Obstacles SHALL NOT overlap tee or hole spawn areas (minimum 30px clearance).
-6. Out-of-bounds (ball center leaves canvas + radius*2) SHALL also trigger instant reset (treated as obstacle).
+6. Out-of-bounds / Edge: ball center touching or leaving canvas bounds (`pos.x - radius < 0` or `pos.x + radius > canvasW` or same for y, or `pos` outside `canvas + radius*2`) SHALL also trigger instant death/reset (treated as obstacle). Edge is fatal; no bounce.
 
 ## Acceptance Criteria
 

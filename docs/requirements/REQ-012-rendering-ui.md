@@ -27,10 +27,11 @@ Even a simple golf game needs clear affordances (aim line, wind legend, instruct
    8. Win overlay (REQ-009) when WIN
 3. **DOM UI** in `index.html` / `style.css`:
    - Title `<h1>Golf Vector Field</h1>` above canvas.
+   - Attempts counter (REQ-014) `<div id="attempts-counter">Attempts: 0</div>` visible near top of canvas, updating on each launch.
    - Instructions panel: "Arrows: Aim | Hold Space: Charge | R: Reset | H: Toggle Wind" (text near canvas).
    - Force bar (REQ-007) below canvas, 200x18px, with label.
    - Wind legend: small arrow icon + "Wind strength" text, color scale.
-   - Win overlay: centered absolute `<div>` with semi-transparent background, hidden by default.
+   - Win overlay: centered absolute `<div>` with semi-transparent background, hidden by default, showing `You Win! Attempts: N`.
 4. **Aim Enhancements** (optional but recommended):
    - Predicted trajectory: dotted line sampling 30 steps ahead using current angle/power and `getWindAt` (no friction for preview) to hint wind effect.
 5. Styling in `style.css`:

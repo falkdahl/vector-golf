@@ -24,11 +24,11 @@ export function checkObstacleCollision(ballPos, ballRadius, obstacles) {
 }
 
 export function isOutOfBounds(pos, radius, canvasW, canvasH) {
-  // OOB if center leaves canvas + radius*2
+  // Edge is fatal per REQ-005/REQ-008: touching edge counts as death
   return (
-    pos.x < -radius * 2 ||
-    pos.x > canvasW + radius * 2 ||
-    pos.y < -radius * 2 ||
-    pos.y > canvasH + radius * 2
+    pos.x - radius < 0 ||
+    pos.x + radius > canvasW ||
+    pos.y - radius < 0 ||
+    pos.y + radius > canvasH
   );
 }
