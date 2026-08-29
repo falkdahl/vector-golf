@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Golf Vector Field</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Golf Vector Field</h1>
+
+  <div id="game-container">
+    <canvas id="game" width="900" height="600"></canvas>
+    <div id="win-overlay" class="hidden">
+      <div class="win-content">
+        <h2>You Win!</h2>
+        <p>Press R to Play Again</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="force-bar-container">
+    <label for="force-bar">Power: <span id="force-label">0%</span></label>
+    <div id="force-bar">
+      <div id="force-fill"></div>
+    </div>
+  </div>
+
+  <div id="instructions">
+    <p><strong>Arrows</strong>: Aim &nbsp;|&nbsp; <strong>Hold Space</strong>: Charge &nbsp;|&nbsp; <strong>Release Space</strong>: Launch &nbsp;|&nbsp; <strong>R</strong>: Reset &nbsp;|&nbsp; <strong>H</strong>: Toggle Wind</p>
+  </div>
+
+  <div id="wind-legend">
+    <div class="legend-arrow">→</div>
+    <span>Wind field</span>
+    <div class="legend-gradient"></div>
+    <span>strength</span>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
