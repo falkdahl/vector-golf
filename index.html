@@ -8,15 +8,14 @@
 </head>
 <body>
   <h1>Golf Vector Field</h1>
-  <div id="attempts-counter">Attempts: <span id="attempts-value">0</span></div>
 
   <div id="game-container">
     <canvas id="game" width="900" height="600"></canvas>
     <div id="win-overlay" class="hidden">
       <div class="win-content">
-        <h2>You Win!</h2>
-        <p>Attempts: <span id="win-attempts-value">0</span></p>
-        <p>Press R to Play Again</p>
+        <h2 id="win-title">You Win!</h2>
+        <p>Hole <span id="win-hole-value">1</span>/<span id="win-hole-total">3</span> - Attempts this hole: <span id="win-attempts-value">0</span>, Total: <span id="win-total-value">0</span></p>
+        <p>Press R to Continue</p>
       </div>
     </div>
   </div>
@@ -26,6 +25,9 @@
     <div id="force-bar">
       <div id="force-fill"></div>
     </div>
+    <div id="hole-counter">Hole: <span id="hole-value">1</span>/<span id="hole-total">3</span></div>
+    <div id="attempts-counter">Attempts: <span id="attempts-value">0</span></div>
+    <div id="total-attempts-counter">Total: <span id="total-attempts-value">0</span></div>
   </div>
 
   <div id="instructions">

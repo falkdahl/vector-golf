@@ -29,13 +29,23 @@ let accumulator = 0;
 let lastTime = 0;
 let level = LEVEL;
 let windStrength = level.field.strength ?? WIND_STRENGTH;
-let attempts = 0;
+let currentHoleIndex = 0;
+let holeAttempts = 0;
+let totalAttempts = 0;
+let attempts = 0; // alias for totalAttempts for backward compat
 
 let forceFill;
 let forceLabel;
 let winOverlay;
 let attemptsValue;
 let winAttemptsValue;
+let holeValue;
+let holeTotal;
+let totalAttemptsValue;
+let winHoleValue;
+let winHoleTotal;
+let winTotalValue;
+let winTitle;
 
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -48,15 +58,22 @@ function setupCanvas() {
   setCanvasSize(LOGICAL_W, LOGICAL_H);
 }
 
-function initLevel() {
-  level = LEVELS[0];
-  windStrength = level.field.strength;
+function loadLevel(index) {
+  currentHoleIndex = index;
+  level = LEVELS[currentHoleIndex];
+  windStrength = level.field.strength ?? WIND_STRENGTH;
   createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H);
+  // Keep canvas size consistent per REQ-010 (all levels 900x600); if varying, would re-setup canvas
   initParticles(80, LOGICAL_W, LOGICAL_H);
   createBall(level.tee);
   const dx = level.hole.x - level.tee.x;
   const dy = level.hole.y - level.tee.y;
   setAimAngle(Math.atan2(dy, dx));
+}
+
+function initLevel() {
+  loadLevel(currentHoleIndex);
+  updateAttemptsUI();
   // validate obstacles not overlapping tee/hole
   for (const obs of level.obstacles) {
     if (obs.type === "rect") {
@@ -72,8 +89,24 @@ function initLevel() {
 }
 
 function updateAttemptsUI() {
-  if (attemptsValue) attemptsValue.textContent = String(attempts);
-  if (winAttemptsValue) winAttemptsValue.textContent = String(attempts);
+  attempts = totalAttempts; // keep alias synced
+  if (holeValue) holeValue.textContent = String(currentHoleIndex + 1);
+  if (holeTotal) holeTotal.textContent = String(LEVELS.length);
+  if (attemptsValue) attemptsValue.textContent = String(holeAttempts);
+  if (totalAttemptsValue) totalAttemptsValue.textContent = String(totalAttempts);
+  if (winHoleValue) winHoleValue.textContent = String(currentHoleIndex + 1);
+  if (winHoleTotal) winHoleTotal.textContent = String(LEVELS.length);
+  if (winAttemptsValue) winAttemptsValue.textContent = String(holeAttempts);
+  if (winTotalValue) winTotalValue.textContent = String(totalAttempts);
+  if (winTitle) {
+    if (gameState === "WIN" && currentHoleIndex === LEVELS.length - 1) {
+      winTitle.textContent = "Game Complete!";
+    } else if (gameState === "WIN") {
+      winTitle.textContent = "Hole Cleared!";
+    } else {
+      winTitle.textContent = "You Win!";
+    }
+  }
 }
 
 function resetBall() {
@@ -87,16 +120,61 @@ function resetBall() {
   updateForceBar();
 }
 
+function advanceHole() {
+  if (currentHoleIndex < LEVELS.length - 1) {
+    currentHoleIndex++;
+    holeAttempts = 0;
+    loadLevel(currentHoleIndex);
+    // validate next level
+    for (const obs of level.obstacles) {
+      if (obs.type === "rect") {
+        const teeInside = level.tee.x >= obs.x && level.tee.x <= obs.x + obs.w && level.tee.y >= obs.y && level.tee.y <= obs.y + obs.h;
+        const holeInside = level.hole.x >= obs.x && level.hole.x <= obs.x + obs.w && level.hole.y >= obs.y && level.hole.y <= obs.y + obs.h;
+        if (teeInside || holeInside) console.warn("Obstacle overlaps tee/hole", obs);
+      } else if (obs.type === "circle") {
+        const dTee = Math.hypot(level.tee.x - obs.x, level.tee.y - obs.y);
+        const dHole = Math.hypot(level.hole.x - obs.x, level.hole.y - obs.y);
+        if (dTee < 30 + BALL_RADIUS || dHole < 30 + obs.r) console.warn("Obstacle too close to tee/hole", obs);
+      }
+    }
+    gameState = "AIMING";
+    winOverlay.classList.add("hidden");
+    updateAttemptsUI();
+    updateForceBar();
+  } else {
+    // Final hole already, will show WIN
+  }
+}
+
 function resetGameAfterWin() {
+  currentHoleIndex = 0;
+  holeAttempts = 0;
+  totalAttempts = 0;
   attempts = 0;
+  loadLevel(currentHoleIndex);
+  for (const obs of level.obstacles) {
+    if (obs.type === "rect") {
+      const teeInside = level.tee.x >= obs.x && level.tee.x <= obs.x + obs.w && level.tee.y >= obs.y && level.tee.y <= obs.y + obs.h;
+      const holeInside = level.hole.x >= obs.x && level.hole.x <= obs.x + obs.w && level.hole.y >= obs.y && level.hole.y <= obs.y + obs.h;
+      if (teeInside || holeInside) console.warn("Obstacle overlaps tee/hole", obs);
+    } else if (obs.type === "circle") {
+      const dTee = Math.hypot(level.tee.x - obs.x, level.tee.y - obs.y);
+      const dHole = Math.hypot(level.hole.x - obs.x, level.hole.y - obs.y);
+      if (dTee < 30 + BALL_RADIUS || dHole < 30 + obs.r) console.warn("Obstacle too close to tee/hole", obs);
+    }
+  }
+  gameState = "AIMING";
+  winOverlay.classList.add("hidden");
   updateAttemptsUI();
-  resetBall();
+  updateForceBar();
 }
 
 function handleLaunch(angle, power) {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   launchBall(angle, power);
-  attempts += 1;
+  holeAttempts += 1;
+  totalAttempts += 1;
+  attempts = totalAttempts;
   updateAttemptsUI();
   gameState = "FLYING";
   resetCharge();
@@ -106,10 +184,38 @@ function handleLaunch(angle, power) {
 function checkWin() {
   const dist = Math.hypot(ball.pos.x - level.hole.x, ball.pos.y - level.hole.y);
   if (dist < level.hole.radius - 2) {
-    gameState = "WIN";
-    updateAttemptsUI();
-    winOverlay.classList.remove("hidden");
-    return true;
+    if (currentHoleIndex < LEVELS.length - 1) {
+      // Advance to next hole, not final win
+      holeAttempts = 0; // reset per-hole for next hole will be done in advanceHole, but keep current holeAttempts for win display before advance
+      // Update UI before advancing to show current hole stats briefly, then advance
+      updateAttemptsUI();
+      // Briefly show hole cleared then advance - for now advance immediately per REQ-014
+      currentHoleIndex++;
+      holeAttempts = 0;
+      loadLevel(currentHoleIndex);
+      // validate
+      for (const obs of level.obstacles) {
+        if (obs.type === "rect") {
+          const teeInside = level.tee.x >= obs.x && level.tee.x <= obs.x + obs.w && level.tee.y >= obs.y && level.tee.y <= obs.y + obs.h;
+          const holeInside = level.hole.x >= obs.x && level.hole.x <= obs.x + obs.w && level.hole.y >= obs.y && level.hole.y <= obs.y + obs.h;
+          if (teeInside || holeInside) console.warn("Obstacle overlaps tee/hole", obs);
+        } else if (obs.type === "circle") {
+          const dTee = Math.hypot(level.tee.x - obs.x, level.tee.y - obs.y);
+          const dHole = Math.hypot(level.hole.x - obs.x, level.hole.y - obs.y);
+          if (dTee < 30 + BALL_RADIUS || dHole < 30 + obs.r) console.warn("Obstacle too close to tee/hole", obs);
+        }
+      }
+      gameState = "AIMING";
+      winOverlay.classList.add("hidden");
+      updateAttemptsUI();
+      updateForceBar();
+      return true; // handled as advance, not WIN overlay
+    } else {
+      gameState = "WIN";
+      updateAttemptsUI();
+      winOverlay.classList.remove("hidden");
+      return true;
+    }
   }
   return false;
 }
@@ -239,6 +345,13 @@ function init() {
   winOverlay = document.getElementById("win-overlay");
   attemptsValue = document.getElementById("attempts-value");
   winAttemptsValue = document.getElementById("win-attempts-value");
+  holeValue = document.getElementById("hole-value");
+  holeTotal = document.getElementById("hole-total");
+  totalAttemptsValue = document.getElementById("total-attempts-value");
+  winHoleValue = document.getElementById("win-hole-value");
+  winHoleTotal = document.getElementById("win-hole-total");
+  winTotalValue = document.getElementById("win-total-value");
+  winTitle = document.getElementById("win-title");
 
   setupCanvas();
   initLevel();

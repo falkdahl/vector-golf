@@ -74,8 +74,8 @@ export function drawArrows(ctx, field, cols, rows, cellW, cellH) {
   if (!showWind) return;
   ctx.save();
   ctx.lineCap = "round";
-  // Short arrows per REQ-004: max ≤16px, small variation, strength via opacity/head
-  const MIN_MAG = 4; // for WIND_STRENGTH 30, min force 120
+  // Short arrows per REQ-004: max ≤16px, small variation, strength via opacity/head (keep size even though min force lowered to 10%)
+  const MIN_MAG = 2; // for WIND_STRENGTH 30, min force 60 (10% of 600)
   const MAX_MAG_RANGE = 0.75; // variation from field generation (0.5*1.5)
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {

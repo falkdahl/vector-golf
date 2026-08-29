@@ -24,7 +24,7 @@ User requirement: "wind should be more complex than just a single direction, the
    - Returns `{x, y}` in world units (pixels per second influence).
 4. Generation: For MVP, `createField(cols, rows)` SHALL procedurally generate a non-uniform field using a combination of trigonometric swirl (e.g., `sin(x*0.02)`, `cos(y*0.02)`) plus pseudo-random offset to create curl/divergence. Values MUST NOT be uniform across the grid.
 5. A constant `WIND_STRENGTH` (default 30-80, tunable) SHALL scale the sampled vector before applying to velocity: `vel += wind * WIND_STRENGTH * dt`.
-6. **Minimum Force**: The effective wind force applied each tick SHALL never be less than 20% of max launch power. With `MAX_POWER=600`, the minimum effective force `|wind| * WIND_STRENGTH` SHALL be `>= 0.2 * MAX_POWER = 120` for every cell and every interpolated sample. Generation SHALL enforce this by scaling magnitudes so that `magnitude >= 0.2 * MAX_POWER / WIND_STRENGTH`. For `WIND_STRENGTH=30`, `magnitude >=4`; for `WIND_STRENGTH=60`, `magnitude >=2`. This ensures the ball never comes to rest and is continuously drifted by the field.
+6. **Minimum Force**: The effective wind force applied each tick SHALL never be less than 10% of max launch power. With `MAX_POWER=600`, the minimum effective force `|wind| * WIND_STRENGTH` SHALL be `>= 0.1 * MAX_POWER = 60` for every cell and every interpolated sample. Generation SHALL enforce this by scaling magnitudes so that `magnitude >= 0.1 * MAX_POWER / WIND_STRENGTH`. For `WIND_STRENGTH=30`, `magnitude >=2`; for `WIND_STRENGTH=60`, `magnitude >=1`. This ensures the ball never comes to rest and is continuously drifted by the field, while keeping vector arrows short (per REQ-004 arrow length is capped and not scaled with raw magnitude).
 7. The field SHALL be deterministic per level load (seeded or fixed) so the challenge is consistent; random generation must be reproducible on refresh for the single-hole MVP.
 8. No third-party noise libraries SHALL be used; implement inline math.
 
@@ -35,8 +35,9 @@ User requirement: "wind should be more complex than just a single direction, the
 - [ ] Bilinear interpolation verified: sampling at cell center equals cell value; sampling at midpoint between two cells equals average of neighbors within 0.01 tolerance.
 - [ ] Ball launched with identical angle/power but at two different map regions experiences different lateral deflection (>10px difference after 1s flight) due to field variance.
 - [ ] Performance: `getWindAt` completes <0.05ms avg (measured over 1000 calls).
-- [ ] **Min Force**: For every grid cell and for 100 random interpolated samples, `hypot(wind.x, wind.y) * WIND_STRENGTH >= 0.2 * MAX_POWER` (120 when `MAX_POWER=600`). No zero or near-zero wind exists.
+- [ ] **Min Force**: For every grid cell and for 100 random interpolated samples, `hypot(wind.x, wind.y) * WIND_STRENGTH >= 0.1 * MAX_POWER` (60 when `MAX_POWER=600`). No zero or near-zero wind exists.
 - [ ] Wind is strong enough that a ball with `vel=0` placed anywhere on the field begins moving within 1 tick and never remains stationary for >0.4s without drifting.
+- [ ] Arrow size remains short per REQ-004 (≤16px) even with lowered min force; arrow length is decoupled from raw magnitude.
 
 ## Dependencies
 - REQ-002 (game loop provides dt)

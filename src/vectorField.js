@@ -3,7 +3,7 @@ export const WIND_STRENGTH = 30;
 export const DEFAULT_COLS = 20;
 export const DEFAULT_ROWS = 15;
 export const MAX_POWER_REF = 600; // for min force calc per REQ-003
-export const MIN_WIND_FORCE = 0.2 * MAX_POWER_REF; // 120
+export const MIN_WIND_FORCE = 0.1 * MAX_POWER_REF; // 60 per lowered requirement
 
 export let field = [];
 export let cols = DEFAULT_COLS;
@@ -48,11 +48,10 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
       const magBase = 0.35 + 0.6 * Math.abs(Math.sin(nx * 8 + ny * 6 + seed * 0.02));
       const magRand = rand() * 0.35;
       let magnitude = Math.min(1.5, magBase + magRand);
-      // Enforce minimum force 20% of max power per REQ-003
-      const minMagnitude = MIN_WIND_FORCE / WIND_STRENGTH; // e.g., 120/30=4
-      // Preserve angle variation but ensure magnitude never below min
-      // Map original 0.35-1.5 range to minMag+small variation (min 20% to ~24%)
-      magnitude = minMagnitude + magnitude * 0.5; // range ~4.17-4.75 for ws30
+      // Enforce minimum force 10% of max power per REQ-003 (lowered from 20%)
+      const minMagnitude = MIN_WIND_FORCE / WIND_STRENGTH; // e.g., 60/30=2
+      // Preserve angle variation but ensure magnitude never below min, keep arrows short per REQ-004
+      magnitude = minMagnitude + magnitude * 0.5; // range ~2.17-2.75 for ws30, force 65-82
 
       field[row][col] = {
         x: Math.cos(angle) * magnitude,

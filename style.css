@@ -20,15 +20,17 @@ h1 {
   letter-spacing: 0.02em;
 }
 
-#attempts-counter {
-  margin: 0 0 10px;
-  font-size: 1.1rem;
+#attempts-counter,
+#hole-counter,
+#total-attempts-counter {
+  font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
   background: #2c3e50;
-  padding: 6px 14px;
+  padding: 4px 10px;
   border-radius: 6px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 #game-container {
@@ -80,6 +82,8 @@ canvas {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 #force-bar-container label {
