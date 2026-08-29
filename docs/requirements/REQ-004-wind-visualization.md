@@ -17,8 +17,9 @@ User explicitly selected "Both" (arrows + particles) when asked how wind should 
 
 1. **Arrow Grid** (in `src/render.js`):
    - Draw one arrow per field cell (or decimated every cell for 20x15 grid = 300 arrows) at cell center `cellX, cellY`.
-   - Arrow direction = field vector angle. Arrows SHALL NOT be too long: use short uniform length or tightly capped length (e.g., `base 8-10px + normalized magnitude * 4-6px`, max ≤16px) so the grid remains readable and does not clutter the fairway. Do not scale length directly by raw magnitude (which can be ≥4).
-   - Use normalized direction for length; encode strength via opacity (`0.35 + normalizedMag * 0.45`) and/or head size, not length.
+   - Arrow direction = field vector angle; arrow **SHALL reflect strength at each point, not only direction**: stronger wind = longer/brighter arrow, weaker = shorter/fainter. Field SHALL have varying strength across points (per REQ-003 min 10% but varying above that).
+   - Arrows SHALL NOT be too large and SHALL NOT touch each other: use tightly capped length (e.g., `base 8-10px + normalized magnitude * 4-6px`, **max ≤16px**, max-min length difference ≤6px) so with cell size 45x40 there remains ≥25px gap between neighboring arrow tips and grid stays readable. Do not scale length directly by raw magnitude (which can be ≥2).
+   - Encode strength via **both** capped length **and** opacity (`0.35 + normalizedMag * 0.45`) and/or head size; normalized magnitude `normalizedMag = (mag - MIN_MAG)/range` (0-1).
    - Style: 1px stroke `rgba(100,160,255,alpha)`, head triangle filled.
    - Arrows SHALL be drawn each frame (or cached to offscreen canvas for performance - decision left to implementation, but must reflect current field if field ever animates).
 
@@ -36,8 +37,8 @@ User explicitly selected "Both" (arrows + particles) when asked how wind should 
 
 ## Acceptance Criteria
 
-- [ ] At game start, canvas shows arrows covering the whole play area with varying angles (non-uniform) but short consistent length (all arrows ≤16px, no overly long arrows cluttering).
-- [ ] Arrow length does NOT scale linearly with raw magnitude (max-min length difference ≤6px); strength is shown via opacity/head, not length.
+- [ ] At game start, canvas shows arrows covering the whole play area with varying angles (non-uniform) **and varying length/opacity reflecting strength** at each point (stronger points visibly longer/brighter, weaker shorter/fainter), but all arrows still short (≤16px) and **no arrows touch each other** (visibly separated by cell gap).
+- [ ] Arrow length **does reflect strength** within capped range (max-min length difference 2-6px, stronger = longer), and opacity/head size also vary with strength; length is not raw `mag*10` but capped normalized `base + normalizedMag*4-6`.
 - [ ] Particles at start are distributed across the whole map (visible in all quadrants top-left, top-right, bottom-left, bottom-right), not clustered.
 - [ ] Particles visibly flow along arrows, curving where field curls, and visibly fade out over 2 seconds.
 - [ ] Each particle fades from opaque to transparent over 2s (`alpha = life/2.0`) and dies exactly at 2s, then respawns uniformly random across the whole map (not at edge cluster). No particle is visible longer than 2s without fading.
