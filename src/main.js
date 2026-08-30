@@ -847,10 +847,13 @@ function init() {
       } else if (e.code === "Digit3" && rewardOffered[2]) {
         claimReward(rewardOffered[2]);
         e.preventDefault();
-      } else if (e.code === "KeyR" && !rewardRerolled) {
+      } else if ((e.code === "Digit0" || e.code === "Numpad0") && !rewardRerolled) {
         rerollReward();
         e.preventDefault();
-      } else if (e.code === "KeyR" && rewardRerolled) {
+      } else if ((e.code === "Digit0" || e.code === "Numpad0") && rewardRerolled) {
+        e.preventDefault();
+      } else if (e.code === "KeyR") {
+        // R no longer rerolls (now 0); block R during menu to prevent reset behind overlay
         e.preventDefault();
       } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4") {
         // Block aiming/charging while menu open (including Digit4 which is not used - only 3 options)

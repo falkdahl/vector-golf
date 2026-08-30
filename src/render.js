@@ -744,7 +744,7 @@ export function getRewardRerollButtonLayout(width, height) {
   const cardW = 340;
   const cardH = 220;
   const cardY = (height - cardH) / 2;
-  const btnW = 190; // was 110 - widened to fully cover "↻ Re-roll (1 attempt) [R]" text
+  const btnW = 190; // was 110 - widened to fully cover "↻ Re-roll (1 attempt) [0]" text
   const btnH = 30; // was 28 - slightly taller for padding
   const x = width / 2 - btnW / 2;
   const y = cardY + 192; // was 188, moved down ~4px further (now 7px below options bottom, was 3px)
@@ -906,7 +906,7 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
   ctx.lineJoin = "round";
   ctx.strokeStyle = isDisabled ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.65)";
   ctx.lineWidth = 3;
-  const rerollText = isDisabled ? "Re-rolled" : "↻ Re-roll (1 attempt) [R]";
+  const rerollText = isDisabled ? "Re-rolled" : "↻ Re-roll (1 attempt) [0]";
   ctx.strokeText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
   ctx.fillStyle = isDisabled ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.95)";
   ctx.fillText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
