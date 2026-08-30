@@ -107,6 +107,89 @@ function addBouncyBall(n = 1) {
 function setBouncyBallCount(v) { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
 function initBouncyForAttempt() { bouncyRemaining = bouncyBallCount; }
 
+// Persistent Progress via Local Storage per REQ-027 — save on each attempt, resume on revisit
+const STORAGE_KEY = "golfVectorField.progress.v1";
+function getSavePayload() {
+  // sharpshooterCount may not exist (REQ-026 optional) — fallback 0
+  let sharpshooterVal = 0;
+  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterVal = sharpshooterCount; } catch {}
+  return {
+    version: 1,
+    currentHoleIndex,
+    holeAttempts,
+    totalAttempts,
+    supply: { ...supply },
+    freeShots,
+    areaUpgradeCount,
+    bouncyBallCount,
+    sharpshooterCount: sharpshooterVal,
+    secretRewardCounter,
+    rewardPending,
+    firstRewardClaimed,
+    rewardOffered: [...rewardOffered],
+    rewardRerolled,
+    rewardMenuVisible,
+    modifiers: modifiers.map(m => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })),
+    aimAngle: getAimAngle(),
+    savedAt: Date.now()
+  };
+}
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(getSavePayload()));
+  } catch (e) {}
+}
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || d.version !== 1) return null;
+    // clamp & validate — missing fields default to 0/false/[]
+    currentHoleIndex = Math.max(0, Math.min(LEVELS.length - 1, Math.floor(d.currentHoleIndex || 0)));
+    holeAttempts = Math.max(0, Math.floor(d.holeAttempts || 0));
+    totalAttempts = Math.max(0, Math.floor(d.totalAttempts || 0));
+    attempts = totalAttempts;
+    supply = {
+      amplify: Math.max(0, Math.floor(d.supply?.amplify || 0)),
+      nullify: Math.max(0, Math.floor(d.supply?.nullify || 0)),
+      flip: Math.max(0, Math.floor(d.supply?.flip || 0))
+    };
+    freeShots = Math.max(0, Math.floor(d.freeShots || 0));
+    areaUpgradeCount = Math.max(0, Math.floor(d.areaUpgradeCount || 0));
+    bouncyBallCount = Math.max(0, Math.floor(d.bouncyBallCount || 0));
+    bouncyRemaining = bouncyBallCount;
+    try { if (typeof sharpshooterCount !== 'undefined' && typeof d.sharpshooterCount === 'number') sharpshooterCount = Math.max(0, Math.floor(d.sharpshooterCount || 0)); } catch {}
+    secretRewardCounter = Math.max(0, Math.min(4, Math.floor(d.secretRewardCounter || 0)));
+    rewardPending = !!d.rewardPending;
+    firstRewardClaimed = !!d.firstRewardClaimed;
+    rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length === 3 ? [...d.rewardOffered] : [];
+    rewardRerolled = !!d.rewardRerolled;
+    rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length === 3;
+    if (Array.isArray(d.modifiers)) {
+      const effR = getEffectiveModifierRadius();
+      modifiers = d.modifiers.filter(m => m && typeof m.x === 'number' && typeof m.y === 'number' && typeof m.type === 'string').map(m => ({
+        id: m.id ?? (Date.now() + Math.random()),
+        type: m.type,
+        x: Math.max(0, Math.min(LOGICAL_W, Number(m.x))),
+        y: Math.max(0, Math.min(LOGICAL_H, Number(m.y))),
+        radius: effR
+      }));
+    } else {
+      modifiers = [];
+    }
+    if (typeof d.aimAngle === 'number' && Number.isFinite(d.aimAngle)) {
+      try { setAimAngle(d.aimAngle); } catch {}
+    }
+    return d;
+  } catch {
+    return null;
+  }
+}
+function clearProgress() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
 function selectHole(n) {
   // Secret: 1-indexed hole number (1..LEVELS.length)
   const idx = Math.floor(Number(n)) - 1;
@@ -123,6 +206,7 @@ function selectHole(n) {
   bouncyRemaining = bouncyBallCount;
   // Check reward menu if needed for current totalAttempts
   maybeShowRewardMenu();
+  saveProgress();
   // Update URL hash for sharing without reload (secret but visible)
   try { history.replaceState(null, "", `#hole-${idx+1}`); } catch {}
   return true;
@@ -207,6 +291,7 @@ function rerollReward() {
   rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
   rewardMenuHover = null;
   rewardRerollHover = false;
+  saveProgress();
   return true;
 }
 
@@ -231,6 +316,7 @@ function maybeShowRewardMenu() {
     rewardRerolled = false;
     rewardRerollHover = false;
     updateHotbarUI();
+    // Do NOT save initial menu before any attempt per REQ-027 AC (no pre-create until attempt)
     return;
   }
   if (rewardPending) {
@@ -241,6 +327,7 @@ function maybeShowRewardMenu() {
     rewardRerolled = false;
     rewardRerollHover = false;
     updateHotbarUI();
+    saveProgress();
     return;
   }
 }
@@ -270,6 +357,7 @@ function claimReward(type) {
   rewardPending = false;
   updateHotbarUI();
   if (canvas) canvas.style.cursor = "default";
+  saveProgress();
   return true;
 }
 
@@ -454,6 +542,7 @@ function placeModifier(x, y) {
   selectedModifier = null;
   updateHotbarUI();
   mousePos = null;
+  saveProgress();
 }
 
 function removeModifierAt(x, y) {
@@ -462,6 +551,7 @@ function removeModifierAt(x, y) {
     modifiers.splice(idx, 1);
     syncModifiersToField();
     updateHotbarUI();
+    saveProgress();
     return true;
   }
   return false;
@@ -478,6 +568,7 @@ function resetBall() {
   updateForceBar();
   // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
   maybeShowRewardMenu();
+  saveProgress();
 }
 
 function advanceHole() {
@@ -503,12 +594,14 @@ function advanceHole() {
     updateForceBar();
     // REQ-021: check reward menu when entering next hole in AIMING
     maybeShowRewardMenu();
+    saveProgress();
   } else {
     // Final hole already, will show WIN
   }
 }
 
 function resetGameAfterWin() {
+  clearProgress();
   currentHoleIndex = 0;
   holeAttempts = 0;
   totalAttempts = 0;
@@ -574,6 +667,7 @@ function handleLaunch(angle, power) {
   gameState = "FLYING";
   resetCharge();
   updateForceBar();
+  saveProgress();
 }
 
 function checkWin() {
@@ -623,6 +717,7 @@ function handleNextHole() {
     updateForceBar();
     // REQ-021: check reward menu when entering next hole in AIMING (e.g., total 5 after win)
     maybeShowRewardMenu();
+    saveProgress();
   } else {
     // Final hole - Next should not be visible, but if pressed, do nothing or reset game
     resetGameAfterWin();
@@ -776,14 +871,37 @@ function init() {
   hotbarEl = document.getElementById("hotbar");
 
   setupCanvas();
+  // REQ-027: try resume from localStorage before new game init
+  let _loaded = null;
+  try { _loaded = loadProgress(); } catch {}
   // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden)
   const _secretHole = getSecretHoleFromURL();
   if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
+    // URL override takes precedence over saved progress for testing
+    if (_loaded) clearProgress();
     currentHoleIndex = _secretHole - 1;
+    _loaded = null;
   }
-  initLevel();
-  updateForceBar();
-  updateAttemptsUI();
+  if (_loaded) {
+    // Resume saved run — re-create field/ball for saved hole, keep persisted counters/inventory
+    level = LEVELS[currentHoleIndex];
+    windStrength = level.field.strength ?? WIND_STRENGTH;
+    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H);
+    syncModifiersToField();
+    initParticles(80, LOGICAL_W, LOGICAL_H);
+    createBall(level.tee);
+    // aimAngle already restored via loadProgress
+    bouncyRemaining = bouncyBallCount;
+    gameState = "AIMING";
+    if (winOverlay) winOverlay.classList.add("hidden");
+    updateAttemptsUI();
+    updateHotbarUI();
+    // rewardMenuVisible/rewardOffered already restored; hotbar and HUD now reflect saved state
+  } else {
+    initLevel();
+    updateForceBar();
+    updateAttemptsUI();
+  }
   // Secret: react to hash changes for direct hole jumps
   window.addEventListener("hashchange", () => {
     const h = getSecretHoleFromURL();
@@ -897,6 +1015,7 @@ function init() {
         modifiers.pop();
         syncModifiersToField();
         updateHotbarUI();
+        saveProgress();
       }
     }
   });
@@ -1027,6 +1146,7 @@ function init() {
       isDragging = false;
       draggingIdx = -1;
       canvas.style.cursor = "default";
+      saveProgress();
     }
   });
   canvas.addEventListener("click", (e) => {
@@ -1261,6 +1381,18 @@ if (typeof window !== 'undefined') {
     get: () => rewardRerollHover,
     set: (v) => { rewardRerollHover = !!v; }
   });
+  // REQ-027: expose storage helpers for tests
+  window.__saveProgress = saveProgress;
+  window.__loadProgress = loadProgress;
+  window.__clearProgress = clearProgress;
+  window.__getSavePayload = getSavePayload;
+  window.__STORAGE_KEY = STORAGE_KEY;
+  window.STORAGE_KEY = STORAGE_KEY;
+  window.saveProgress = saveProgress;
+  window.loadProgress = loadProgress;
+  window.clearProgress = clearProgress;
+  window.getSavePayload = getSavePayload;
+  Object.defineProperty(window, 'STORAGE_KEY', { get: () => STORAGE_KEY });
 }
 
 // Auto-init when loaded as module via script tag
@@ -1270,4 +1402,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress };
