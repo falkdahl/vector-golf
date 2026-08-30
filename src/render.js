@@ -915,6 +915,40 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
   ctx.restore();
 }
 
-export function drawWinOverlay(ctx, width, height) {
-  // Canvas overlay not needed; DOM overlay used. Keep for completeness if desired.
+export function drawWinOverlay(ctx, width, height, holeIndex = 0, totalHoles = 1, holeAttempts = 0, totalAttempts = 0) {
+  // Victory screen - background transparent, Victory same font as "Choose an Upgrade", big yellow star
+  ctx.save();
+  // no dim fill - transparent background per requirement
+  const centerX = width / 2;
+  const centerY = height / 2 - 10;
+  // Big yellow star
+  ctx.font = "700 64px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.65)";
+  ctx.lineWidth = 4;
+  ctx.fillStyle = "#FFD700";
+  // shadow for contrast
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 6;
+  ctx.strokeText("★", centerX, centerY - 38);
+  ctx.fillText("★", centerX, centerY - 38);
+  ctx.shadowBlur = 0;
+  // Victory title - same as "Choose an Upgrade": 700 22px system-ui white with dark stroke 5px
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.lineWidth = 5;
+  ctx.fillStyle = "white";
+  ctx.strokeText("Victory", centerX, centerY + 22);
+  ctx.fillText("Victory", centerX, centerY + 22);
+  // Attempts info below - white with stroke for readability on transparent
+  ctx.font = "600 14px system-ui, sans-serif";
+  ctx.strokeStyle = "rgba(0,0,0,0.65)";
+  ctx.lineWidth = 3;
+  ctx.fillStyle = "white";
+  const info = `Hole ${holeIndex + 1}/${totalHoles} - Attempts this hole: ${holeAttempts}, Total: ${totalAttempts}`;
+  ctx.strokeText(info, centerX, centerY + 48);
+  ctx.fillText(info, centerX, centerY + 48);
+  ctx.restore();
 }
