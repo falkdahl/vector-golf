@@ -954,3 +954,138 @@ export function drawWinOverlay(ctx, width, height, holeIndex = 0, totalHoles = 1
   ctx.fillText(info, centerX, centerY + 48);
   ctx.restore();
 }
+
+export function getPauseButtonsLayout(width, height) {
+  const btnW = 140, btnH = 44;
+  const cx = width / 2, cy = height / 2 - 10;
+  return {
+    resume: { x: cx - btnW / 2, y: cy - 28, w: btnW, h: btnH },
+    newGame: { x: cx - btnW / 2, y: cy + 28, w: btnW, h: btnH }
+  };
+}
+
+export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts = {}) {
+  ctx.save();
+  // Dim like reward menu
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, width, height);
+  // Title Paused same as Choose an Upgrade / Victory
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.lineWidth = 5;
+  ctx.fillStyle = "white";
+  ctx.strokeText("Paused", width / 2, height / 2 - 80);
+  ctx.fillText("Paused", width / 2, height / 2 - 80);
+  const layout = getPauseButtonsLayout(width, height);
+  // Resume button
+  const isResumeHover = hovered === "resume";
+  ctx.save();
+  if (isResumeHover) { ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 6; }
+  ctx.fillStyle = isResumeHover ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.12)";
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
+  ctx.lineWidth = 2;
+  const r1 = layout.resume;
+  const br = 8;
+  ctx.beginPath();
+  ctx.moveTo(r1.x + br, r1.y); ctx.lineTo(r1.x + r1.w - br, r1.y);
+  ctx.quadraticCurveTo(r1.x + r1.w, r1.y, r1.x + r1.w, r1.y + br);
+  ctx.lineTo(r1.x + r1.w, r1.y + r1.h - br); ctx.quadraticCurveTo(r1.x + r1.w, r1.y + r1.h, r1.x + r1.w - br, r1.y + r1.h);
+  ctx.lineTo(r1.x + br, r1.y + r1.h); ctx.quadraticCurveTo(r1.x, r1.y + r1.h, r1.x, r1.y + r1.h - br);
+  ctx.lineTo(r1.x, r1.y + br); ctx.quadraticCurveTo(r1.x, r1.y, r1.x + br, r1.y);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "700 14px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
+  ctx.strokeText("▶ Resume", r1.x + r1.w/2, r1.y + r1.h/2);
+  ctx.fillStyle = "white"; ctx.fillText("▶ Resume", r1.x + r1.w/2, r1.y + r1.h/2);
+  ctx.font = "600 10px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 2;
+  ctx.strokeText("[Esc]", r1.x + r1.w/2, r1.y + r1.h/2 + 12);
+  ctx.fillText("[Esc]", r1.x + r1.w/2, r1.y + r1.h/2 + 12);
+  ctx.restore();
+  // New Game button - red distinct
+  const isNewHover = hovered === "newGame";
+  ctx.save();
+  if (isNewHover) { ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 6; }
+  ctx.fillStyle = isNewHover ? "rgba(231,76,60,0.38)" : "rgba(231,76,60,0.28)";
+  ctx.strokeStyle = "rgba(231,76,60,0.9)";
+  ctx.lineWidth = 2;
+  const r2 = layout.newGame;
+  ctx.beginPath();
+  ctx.moveTo(r2.x + br, r2.y); ctx.lineTo(r2.x + r2.w - br, r2.y);
+  ctx.quadraticCurveTo(r2.x + r2.w, r2.y, r2.x + r2.w, r2.y + br);
+  ctx.lineTo(r2.x + r2.w, r2.y + r2.h - br); ctx.quadraticCurveTo(r2.x + r2.w, r2.y + r2.h, r2.x + r2.w - br, r2.y + r2.h);
+  ctx.lineTo(r2.x + br, r2.y + r2.h); ctx.quadraticCurveTo(r2.x, r2.y + r2.h, r2.x, r2.y + r2.h - br);
+  ctx.lineTo(r2.x, r2.y + br); ctx.quadraticCurveTo(r2.x, r2.y, r2.x + br, r2.y);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "700 14px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
+  ctx.strokeText("↺ New Game", r2.x + r2.w/2, r2.y + r2.h/2);
+  ctx.fillStyle = "white"; ctx.fillText("↺ New Game", r2.x + r2.w/2, r2.y + r2.h/2);
+  ctx.restore();
+  // Bottom reward list - all types with xN
+  const types = ['amplify','nullify','flip','freeShots','areaUp','bouncyBall'];
+  // include sharpshooter if defined in pool but keep 6 for now
+  const listY = height / 2 + 100;
+  const gap = 8;
+  const entryW = 88, entryH = 34;
+  const cols = 3;
+  const totalW = cols * entryW + (cols - 1) * gap;
+  const startX = (width - totalW) / 2;
+  // title for list
+  ctx.font = "600 11px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
+  ctx.strokeText("Rewards this run", width/2, listY - 16);
+  ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.fillText("Rewards this run", width/2, listY - 16);
+  for (let i = 0; i < types.length; i++) {
+    const type = types[i];
+    const def = REWARD_TYPE_DEFS[type] || { icon:'?', color:'#fff' };
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = startX + col * (entryW + gap);
+    const y = listY + row * (entryH + 8);
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1;
+    const br2 = 6;
+    ctx.beginPath();
+    ctx.moveTo(x + br2, y); ctx.lineTo(x + entryW - br2, y);
+    ctx.quadraticCurveTo(x + entryW, y, x + entryW, y + br2);
+    ctx.lineTo(x + entryW, y + entryH - br2); ctx.quadraticCurveTo(x + entryW, y + entryH, x + entryW - br2, y + entryH);
+    ctx.lineTo(x + br2, y + entryH); ctx.quadraticCurveTo(x, y + entryH, x, y + entryH - br2);
+    ctx.lineTo(x, y + br2); ctx.quadraticCurveTo(x, y, x + br2, y);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // icon
+    ctx.font = "700 16px system-ui, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
+    ctx.strokeText(def.icon, x + 8, y + entryH/2);
+    ctx.fillStyle = def.color; ctx.fillText(def.icon, x + 8, y + entryH/2);
+    // label + count
+    const cnt = Math.max(0, Math.floor(rewardCounts[type] || 0));
+    const label = def.label;
+    // label 11px, count 700 12px
+    ctx.font = "600 10px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 2.5;
+    ctx.strokeText(label, x + 26, y + 11);
+    ctx.fillStyle = "white"; ctx.fillText(label, x + 26, y + 11);
+    ctx.font = "700 12px system-ui, sans-serif";
+    ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
+    const countText = `x${cnt}`;
+    // right align count inside entry
+    ctx.textAlign = "right";
+    ctx.strokeText(countText, x + entryW - 6, y + 11);
+    ctx.fillStyle = "white"; ctx.fillText(countText, x + entryW - 6, y + 11);
+    ctx.restore();
+  }
+  ctx.restore();
+}

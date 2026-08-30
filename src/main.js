@@ -20,6 +20,8 @@ import {
   drawRewardMenu,
   getRewardButtonsLayout,
   getRewardRerollButtonLayout,
+  drawPauseMenu,
+  getPauseButtonsLayout,
   setCanvasSize,
   toggleWind as toggleWindRender,
   isWindVisible
@@ -131,6 +133,8 @@ function getSavePayload() {
     rewardMenuVisible,
     modifiers: modifiers.map(m => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })),
     aimAngle: getAimAngle(),
+    rewardChosenCounts: { ...rewardChosenCounts },
+    paused: pauseMenuVisible,
     savedAt: Date.now()
   };
 }
@@ -181,6 +185,21 @@ function loadProgress() {
     if (typeof d.aimAngle === 'number' && Number.isFinite(d.aimAngle)) {
       try { setAimAngle(d.aimAngle); } catch {}
     }
+    if (d.rewardChosenCounts && typeof d.rewardChosenCounts === 'object') {
+      for (const k of Object.keys(rewardChosenCounts)) {
+        if (k in d.rewardChosenCounts) rewardChosenCounts[k] = Math.max(0, Math.floor(d.rewardChosenCounts[k] || 0));
+      }
+    } else if (d.version === 1) {
+      // Derive from existing counters for old saves
+      rewardChosenCounts.amplify = Math.max(0, Math.floor(d.supply?.amplify || supply.amplify || 0));
+      rewardChosenCounts.nullify = Math.max(0, Math.floor(d.supply?.nullify || supply.nullify || 0));
+      rewardChosenCounts.flip = Math.max(0, Math.floor(d.supply?.flip || supply.flip || 0));
+      rewardChosenCounts.areaUp = Math.max(0, Math.floor(d.areaUpgradeCount || areaUpgradeCount || 0));
+      rewardChosenCounts.bouncyBall = Math.max(0, Math.floor(d.bouncyBallCount || bouncyBallCount || 0));
+      // freeShots times chosen cannot be derived, stays 0 if missing
+    }
+    // Do not restore paused state as visible on load — resume as AIMING
+    pauseMenuVisible = false; pauseMenuHover = null;
     return d;
   } catch {
     return null;
@@ -189,6 +208,47 @@ function loadProgress() {
 function clearProgress() {
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
 }
+
+// Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
+let pauseMenuVisible = false;
+let pauseMenuHover = null;
+let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
+function getRewardChosenCounts() { return { ...rewardChosenCounts }; }
+function getRewardChosenCount(type) { return Math.max(0, Math.floor(rewardChosenCounts[type] || 0)); }
+function setRewardChosenCounts(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const k of Object.keys(rewardChosenCounts)) {
+    if (k in obj) rewardChosenCounts[k] = Math.max(0, Math.floor(obj[k] || 0));
+  }
+}
+function resumeGame() {
+  if (!pauseMenuVisible) return false;
+  pauseMenuVisible = false;
+  pauseMenuHover = null;
+  if (canvas) canvas.style.cursor = "default";
+  syncPauseOverlay();
+  return true;
+}
+function startNewGame() {
+  clearProgress();
+  currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
+  supply = { amplify: 0, nullify: 0, flip: 0 };
+  freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
+  secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
+  rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  pauseMenuVisible = false; pauseMenuHover = null;
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
+  modifiers = []; syncModifiersToField(); selectedModifier = null;
+  loadLevel(0);
+  gameState = "AIMING";
+  if (winOverlay) winOverlay.classList.add("hidden");
+  syncPauseOverlay();
+  updateAttemptsUI(); updateHotbarUI();
+  maybeShowRewardMenu();
+  return true;
+}
+function isPauseMenuVisible() { return pauseMenuVisible; }
 
 function selectHole(n) {
   // Secret: 1-indexed hole number (1..LEVELS.length)
@@ -306,6 +366,7 @@ function shuffleArray(a) {
 
 function maybeShowRewardMenu() {
   if (gameState === "WIN") return;
+  if (pauseMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (rewardMenuVisible) return;
   // Very first attempt: show before any counted shot (secretRewardCounter==0 && totalAttempts==0 && not yet claimed)
@@ -338,13 +399,17 @@ function claimReward(type) {
   // Idempotent: only once per trigger (rewardMenuVisible guards double-click)
   if (type === 'freeShots') {
     addFreeShots(3); // REQ-022: Free Shots +3
+    rewardChosenCounts.freeShots = Math.max(0, (rewardChosenCounts.freeShots || 0) + 1);
   } else if (type === 'areaUp') {
     addAreaUpgrade(1); // REQ-023: Area +20% additive (addAreaUpgrade handles retroactive grow + sync)
+    rewardChosenCounts.areaUp = Math.max(0, (rewardChosenCounts.areaUp || 0) + 1);
   } else if (type === 'bouncyBall') {
     addBouncyBall(1); // REQ-024: Bouncy Ball +1
+    rewardChosenCounts.bouncyBall = Math.max(0, (rewardChosenCounts.bouncyBall || 0) + 1);
   } else {
     if (!(type in supply)) return false;
     addToSupply(type, 1);
+    if (type in rewardChosenCounts) rewardChosenCounts[type] = Math.max(0, (rewardChosenCounts[type] || 0) + 1);
   }
   // Mark first and general claimed for backward compat
   firstRewardClaimed = true;
@@ -411,7 +476,7 @@ function loadLevel(index) {
 }
 
 function initLevel() {
-  // REQ-020/022/023/024 + REQ-021 secret counter + REQ-025 reroll: new game starts with empty supply, freeShots, areaUpgradeCount, bouncy and secret counter
+  // REQ-020/022/023/024 + REQ-021 secret counter + REQ-025 reroll + REQ-028 pause stats: new game starts with empty supply, freeShots, areaUpgradeCount, bouncy and secret counter
   if (currentHoleIndex === 0) {
     supply = { amplify: 0, nullify: 0, flip: 0 };
     freeShots = 0;
@@ -426,6 +491,11 @@ function initLevel() {
     rewardOffered = [];
     rewardRerolled = false;
     rewardRerollHover = false;
+    pauseMenuVisible = false;
+    pauseMenuHover = null;
+    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
+    const pauseOverlay = document.getElementById("pause-overlay");
+    if (pauseOverlay) pauseOverlay.classList.add("hidden");
   } else {
     // For non-zero start (hole advance), ensure remaining matches count, keep secret counter
     bouncyRemaining = bouncyBallCount;
@@ -482,7 +552,8 @@ function updateAttemptsUI() {
 function updateHotbarUI() {
   if (!hotbarEl) return;
   const isAiming = gameState === "AIMING" || gameState === "CHARGING";
-  hotbarEl.classList.toggle("hidden", !isAiming);
+  const hideForPause = pauseMenuVisible || rewardMenuVisible;
+  hotbarEl.classList.toggle("hidden", !isAiming || hideForPause);
   for (const slot of hotbarEl.querySelectorAll(".hotbar-slot")) {
     const type = slot.dataset.type;
     const activeCount = modifiers.filter(m => m.type === type).length;
@@ -515,6 +586,22 @@ function updateHotbarUI() {
 
 function syncModifiersToField() {
   setModifiers(modifiers);
+}
+
+function syncPauseOverlay() {
+  const po = document.getElementById("pause-overlay");
+  if (!po) return;
+  if (pauseMenuVisible) {
+    po.classList.remove("hidden");
+    for (const el of po.querySelectorAll(".reward-stats [data-type]")) {
+      const t = el.dataset.type;
+      const cnt = rewardChosenCounts[t] ?? 0;
+      const countEl = el.querySelector(".count");
+      if (countEl) countEl.textContent = `x${cnt}`;
+    }
+  } else {
+    po.classList.add("hidden");
+  }
 }
 
 function getCanvasMousePos(e) {
@@ -612,7 +699,7 @@ function resetGameAfterWin() {
   areaUpgradeCount = 0;
   bouncyBallCount = 0;
   bouncyRemaining = 0;
-  // REQ-021 + REQ-025: reset secret counter + reward state + reroll for new game (random offer cleared)
+  // REQ-021 + REQ-025 + REQ-028: reset secret counter + reward state + reroll + pause stats
   secretRewardCounter = 0;
   rewardPending = false;
   firstRewardClaimed = false;
@@ -622,6 +709,11 @@ function resetGameAfterWin() {
   rewardOffered = [];
   rewardRerolled = false;
   rewardRerollHover = false;
+  pauseMenuVisible = false;
+  pauseMenuHover = null;
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
+  const pauseOverlay2 = document.getElementById("pause-overlay");
+  if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
   loadLevel(currentHoleIndex);
   for (const obs of level.obstacles) {
     if (obs.type === "rect") {
@@ -643,8 +735,9 @@ function resetGameAfterWin() {
 }
 
 function handleLaunch(angle, power) {
-  // REQ-021: block launch while reward menu visible
+  // REQ-021: block launch while reward menu visible; REQ-028: block while pause visible
   if (rewardMenuVisible) return;
+  if (pauseMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   launchBall(angle, power);
   // REQ-024: init bouncy bounces for this attempt
@@ -738,6 +831,16 @@ function update(dt) {
     }
     return;
   }
+  // REQ-028: when pause menu visible, pause physics like reward/win
+  if (pauseMenuVisible) {
+    updateParticles(dt, getWindAt);
+    updateHotbarUI();
+    if (charging) {
+      resetCharge();
+      gameState = "AIMING";
+    }
+    return;
+  }
 
   // Update input
   updateInput(dt, gameState);
@@ -826,6 +929,7 @@ function render() {
   if (rewardMenuVisible) {
     drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover, rewardRerolled, rewardRerollHover);
   }
+  // REQ-028: pause menu is DOM-only (#pause-overlay) to avoid duplicate rendering; canvas pause draw disabled
 }
 
 function loop(now) {
@@ -915,8 +1019,9 @@ function init() {
     {
       onLaunch: handleLaunch,
       onReset: () => {
-        // REQ-021: block R while reward menu visible
+        // REQ-021: block R while reward menu visible; REQ-028: block while pause visible
         if (rewardMenuVisible) return;
+        if (pauseMenuVisible) return;
         if (gameState === "WIN") {
           if (currentHoleIndex === LEVELS.length - 1) {
             resetGameAfterWin();
@@ -929,6 +1034,7 @@ function init() {
       },
       onToggleWind: () => {
         if (rewardMenuVisible) return;
+        if (pauseMenuVisible) return;
         toggleWindRender();
       }
     }
@@ -938,8 +1044,9 @@ function init() {
   if (hotbarEl) {
     hotbarEl.querySelectorAll(".hotbar-slot").forEach(slot => {
       slot.addEventListener("click", () => {
-        // REQ-021: block hotbar selection while reward menu visible
+        // REQ-021: block hotbar selection while reward menu visible; REQ-028: block while pause
         if (rewardMenuVisible) return;
+        if (pauseMenuVisible) return;
         if (selectedModifier === slot.dataset.type) {
           selectedModifier = null;
         } else {
@@ -953,6 +1060,13 @@ function init() {
   if (nextHoleButton) {
     nextHoleButton.addEventListener("click", handleNextHole);
   }
+  // REQ-028: pause overlay DOM wiring
+  const pauseOverlayDom = document.getElementById("pause-overlay");
+  const resumeBtnDom = document.getElementById("resume-button");
+  const newGameBtnDom = document.getElementById("new-game-button");
+  if (resumeBtnDom) resumeBtnDom.addEventListener("click", () => resumeGame());
+  if (newGameBtnDom) newGameBtnDom.addEventListener("click", () => startNewGame());
+  syncPauseOverlay();
   window.addEventListener("keydown", (e) => {
     // REQ-021: when reward menu visible, 1/2/3 selects random offered reward by position, other inputs blocked
     if (rewardMenuVisible) {
@@ -980,12 +1094,39 @@ function init() {
       return;
     }
     if (e.code === "Escape") {
+      // REQ-028 Escape priority chain: reward already handled above
+      if (pauseMenuVisible) {
+        resumeGame();
+        e.preventDefault();
+        return;
+      }
+      if (gameState === "WIN") {
+        e.preventDefault();
+        return;
+      }
       if (selectedModifier !== null) {
         selectedModifier = null;
         updateHotbarUI();
         e.preventDefault();
+        return;
       }
-    } else if (e.code === "Digit1") {
+      // Open pause only in AIMING/CHARGING and not FLYING/WIN/reward
+      if ((gameState === "AIMING" || gameState === "CHARGING") && !rewardMenuVisible) {
+        pauseMenuVisible = true;
+        pauseMenuHover = null;
+        if (canvas) canvas.style.cursor = "default";
+        syncPauseOverlay();
+        updateHotbarUI();
+        e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+    }
+    if (pauseMenuVisible) {
+      e.preventDefault();
+      return;
+    }
+    if (e.code === "Digit1") {
       if (selectedModifier === 'amplify') selectedModifier = null;
       else selectedModifier = 'amplify';
       updateHotbarUI();
@@ -1063,6 +1204,21 @@ function init() {
 
   // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020 + REQ-021
   canvas.addEventListener("mousemove", (e) => {
+    // REQ-028: handle hover for pause menu
+    if (pauseMenuVisible) {
+      const pos = getCanvasMousePos(e);
+      mousePos = pos;
+      try {
+        const pl = getPauseButtonsLayout(LOGICAL_W, LOGICAL_H);
+        const overResume = pos.x >= pl.resume.x && pos.x <= pl.resume.x + pl.resume.w && pos.y >= pl.resume.y && pos.y <= pl.resume.y + pl.resume.h;
+        const overNew = pos.x >= pl.newGame.x && pos.x <= pl.newGame.x + pl.newGame.w && pos.y >= pl.newGame.y && pos.y <= pl.newGame.y + pl.newGame.h;
+        if (overResume) pauseMenuHover = "resume";
+        else if (overNew) pauseMenuHover = "newGame";
+        else pauseMenuHover = null;
+        canvas.style.cursor = (overResume || overNew) ? "pointer" : "default";
+      } catch { pauseMenuHover = null; }
+      return;
+    }
     // REQ-021: handle hover for reward menu (random 3 offered) + REQ-025 re-roll
     if (rewardMenuVisible) {
       const pos = getCanvasMousePos(e);
@@ -1115,8 +1271,12 @@ function init() {
       }
     }
   });
-  canvas.addEventListener("mouseleave", () => { mousePos = null; rewardMenuHover = null; rewardRerollHover = false; canvas.style.cursor = "default"; });
+  canvas.addEventListener("mouseleave", () => { mousePos = null; rewardMenuHover = null; rewardRerollHover = false; pauseMenuHover = null; canvas.style.cursor = "default"; });
   canvas.addEventListener("mousedown", (e) => {
+    if (pauseMenuVisible) {
+      e.preventDefault();
+      return;
+    }
     if (rewardMenuVisible) {
       // Block dragging while reward menu open
       e.preventDefault();
@@ -1150,6 +1310,19 @@ function init() {
     }
   });
   canvas.addEventListener("click", (e) => {
+    // REQ-028: handle pause menu first
+    if (pauseMenuVisible) {
+      const pos = getCanvasMousePos(e);
+      try {
+        const pl = getPauseButtonsLayout(LOGICAL_W, LOGICAL_H);
+        const overResume = pos.x >= pl.resume.x && pos.x <= pl.resume.x + pl.resume.w && pos.y >= pl.resume.y && pos.y <= pl.resume.y + pl.resume.h;
+        const overNew = pos.x >= pl.newGame.x && pos.x <= pl.newGame.x + pl.newGame.w && pos.y >= pl.newGame.y && pos.y <= pl.newGame.y + pl.newGame.h;
+        if (overResume) { resumeGame(); e.preventDefault(); return; }
+        if (overNew) { startNewGame(); e.preventDefault(); return; }
+      } catch {}
+      e.preventDefault();
+      return;
+    }
     // REQ-021: handle reward menu selection first (random 3 offered) + REQ-025 re-roll
     if (rewardMenuVisible) {
       const pos = getCanvasMousePos(e);
@@ -1188,8 +1361,9 @@ function init() {
   });
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    // REQ-021: block removal while reward menu visible
+    // REQ-021: block removal while reward menu visible; REQ-028: block while pause
     if (rewardMenuVisible) return;
+    if (pauseMenuVisible) return;
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     const pos = getCanvasMousePos(e);
     // If dragging, cancel drag and remove?
@@ -1393,6 +1567,22 @@ if (typeof window !== 'undefined') {
   window.clearProgress = clearProgress;
   window.getSavePayload = getSavePayload;
   Object.defineProperty(window, 'STORAGE_KEY', { get: () => STORAGE_KEY });
+  // REQ-028: expose pause + reward stats helpers
+  window.__getRewardChosenCounts = getRewardChosenCounts;
+  window.__getRewardChosenCount = getRewardChosenCount;
+  window.__setRewardChosenCounts = setRewardChosenCounts;
+  window.__isPauseMenuVisible = isPauseMenuVisible;
+  window.__resumeGame = resumeGame;
+  window.__startNewGame = startNewGame;
+  window.getRewardChosenCounts = getRewardChosenCounts;
+  window.getRewardChosenCount = getRewardChosenCount;
+  window.resumeGame = resumeGame;
+  window.startNewGame = startNewGame;
+  window.isPauseMenuVisible = isPauseMenuVisible;
+  Object.defineProperty(window, 'pauseMenuVisible', { get: () => pauseMenuVisible, set: (v) => { pauseMenuVisible = !!v; } });
+  Object.defineProperty(window, '__pauseMenuVisible', { get: () => pauseMenuVisible, set: (v) => { pauseMenuVisible = !!v; } });
+  Object.defineProperty(window, 'rewardChosenCounts', { get: () => ({...rewardChosenCounts}), set: (v) => setRewardChosenCounts(v) });
+  Object.defineProperty(window, '__rewardChosenCounts', { get: () => ({...rewardChosenCounts}), set: (v) => setRewardChosenCounts(v) });
 }
 
 // Auto-init when loaded as module via script tag
@@ -1402,4 +1592,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible };
