@@ -78,8 +78,22 @@ function getFreeShots() { return freeShots; }
 function setFreeShots(v) { freeShots = Math.max(0, Math.floor(v)); }
 function addFreeShots(n = 1) { freeShots = Math.max(0, freeShots + Math.floor(n)); }
 
-// Reward menu per REQ-021: every 5 totalAttempts inside canvas - 3 random of 4 pool
-const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots'];
+// Modifier Area +20% per REQ-023 - additive stacking, hidden bonus
+const BASE_MODIFIER_RADIUS = MODIFIER_RADIUS; // 90 base per REQ-015
+let areaUpgradeCount = 0;
+function getAreaUpgradeCount() { return areaUpgradeCount; }
+function getAreaMultiplier() { return (5 + areaUpgradeCount) / 5; }
+function getEffectiveModifierRadius() { return (BASE_MODIFIER_RADIUS * (10 + 2 * areaUpgradeCount)) / 10; }
+function addAreaUpgrade(n = 1) {
+  areaUpgradeCount = Math.max(0, areaUpgradeCount + Math.floor(n));
+  // Retroactively grow existing modifiers per REQ-023 (if called via helper or reward)
+  const newR = getEffectiveModifierRadius();
+  for (const m of modifiers) m.radius = newR;
+  syncModifiersToField();
+}
+
+// Reward menu per REQ-021/023: every 5 totalAttempts inside canvas - 3 random of 5 pool
+const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, null initially
 let rewardMenuHover = null; // hovered type for visual feedback
@@ -100,7 +114,7 @@ function maybeShowRewardMenu() {
   if (rewardMenuVisible) return;
   if (totalAttempts % 5 !== 0) return;
   if (rewardClaimedFor === totalAttempts) return;
-  // REQ-021: randomly select 3 distinct upgrades from 4 pool
+  // REQ-021/023: randomly select 3 distinct upgrades from 5 pool
   rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
   rewardMenuVisible = true;
   rewardMenuHover = null;
@@ -115,6 +129,8 @@ function claimReward(type) {
   if (rewardClaimedFor === totalAttempts) return false;
   if (type === 'freeShots') {
     addFreeShots(3); // REQ-022: Free Shots +3
+  } else if (type === 'areaUp') {
+    addAreaUpgrade(1); // REQ-023: Area +20% additive (addAreaUpgrade handles retroactive grow + sync)
   } else {
     if (!(type in supply)) return false;
     addToSupply(type, 1);
@@ -176,10 +192,11 @@ function loadLevel(index) {
 }
 
 function initLevel() {
-  // REQ-020/REQ-022: new game starts with empty supply and freeShots
+  // REQ-020/022/023: new game starts with empty supply, freeShots and areaUpgradeCount
   if (currentHoleIndex === 0) {
     supply = { amplify: 0, nullify: 0, flip: 0 };
     freeShots = 0;
+    areaUpgradeCount = 0;
     rewardOffered = [];
   }
   loadLevel(currentHoleIndex);
@@ -288,7 +305,7 @@ function placeModifier(x, y) {
     updateHotbarUI();
     return;
   }
-  modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: MODIFIER_RADIUS });
+  modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: getEffectiveModifierRadius() });
   syncModifiersToField();
   // Deselect after placement per requirement
   selectedModifier = null;
@@ -351,10 +368,11 @@ function resetGameAfterWin() {
   holeAttempts = 0;
   totalAttempts = 0;
   attempts = 0;
-  // REQ-020/REQ-022: reset supply and freeShots to empty on new game
+  // REQ-020/022/023: reset supply, freeShots and areaUpgradeCount to empty on new game
   supply = { amplify: 0, nullify: 0, flip: 0 };
   freeShots = 0;
-  // REQ-021: reset reward state for new game (random offer cleared)
+  areaUpgradeCount = 0;
+  // REQ-021/023: reset reward state for new game (random offer cleared)
   rewardMenuVisible = false;
   rewardClaimedFor = null;
   rewardMenuHover = null;
@@ -533,12 +551,12 @@ function render() {
     drawAim(ctx, ball, getAimAngle(), charge, gameState);
   }
   // Preview circle follows mouse when selecting modifier before shooting
-  // REQ-020: only show preview if supply allows placement; REQ-021: not during reward menu
+  // REQ-020: only show preview if supply allows placement; REQ-021/023: not during reward menu
   if (!rewardMenuVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
-    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, MODIFIER_RADIUS);
+    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius());
   } else if (!rewardMenuVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
     // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
-    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, MODIFIER_RADIUS, true);
+    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true);
   }
   // HUD inside canvas on top per REQ-012/014
   drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts);
@@ -546,7 +564,7 @@ function render() {
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
   }
-  // REQ-021: reward menu inside canvas (on top of HUD) - 3 random of 4
+  // REQ-021/023: reward menu inside canvas (on top of HUD) - 3 random of 5
   if (rewardMenuVisible) {
     drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover);
   }
@@ -841,7 +859,7 @@ function setSupply(newSupply) {
 function getModifiers() { return [...modifiers]; }
 function getSelectedModifier() { return selectedModifier; }
 
-// Helpers for REQ-021 testing
+// Helpers for REQ-021/023 testing (area upgrade)
 function getRewardMenuState() {
   return { visible: rewardMenuVisible, claimedFor: rewardClaimedFor, hover: rewardMenuHover, offered: [...rewardOffered] };
 }
@@ -877,6 +895,10 @@ if (typeof window !== 'undefined') {
   window.__getFreeShots = getFreeShots;
   window.__setFreeShots = setFreeShots;
   window.__addFreeShots = addFreeShots;
+  window.__getAreaUpgradeCount = getAreaUpgradeCount;
+  window.__getAreaMultiplier = getAreaMultiplier;
+  window.__getEffectiveModifierRadius = getEffectiveModifierRadius;
+  window.__addAreaUpgrade = addAreaUpgrade;
   Object.defineProperty(window, 'freeShots', {
     get: () => freeShots,
     set: (v) => setFreeShots(v)
@@ -893,6 +915,24 @@ if (typeof window !== 'undefined') {
     get: () => rewardClaimedFor,
     set: (v) => { rewardClaimedFor = v; }
   });
+  Object.defineProperty(window, 'areaUpgradeCount', {
+    get: () => areaUpgradeCount,
+    set: (v) => {
+      areaUpgradeCount = Math.max(0, Math.floor(v));
+      const newR = getEffectiveModifierRadius();
+      for (const m of modifiers) m.radius = newR;
+      syncModifiersToField();
+    }
+  });
+  Object.defineProperty(window, '__areaUpgradeCount', {
+    get: () => areaUpgradeCount,
+    set: (v) => {
+      areaUpgradeCount = Math.max(0, Math.floor(v));
+      const newR = getEffectiveModifierRadius();
+      for (const m of modifiers) m.radius = newR;
+      syncModifiersToField();
+    }
+  });
 }
 
 // Auto-init when loaded as module via script tag
@@ -902,4 +942,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, totalAttempts, holeAttempts, currentHoleIndex };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, totalAttempts, holeAttempts, currentHoleIndex };

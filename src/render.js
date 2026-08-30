@@ -425,11 +425,12 @@ const REWARD_TYPE_DEFS = {
   amplify: { icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.28)', fillHover: 'rgba(230,126,34,0.38)', hint: '+1 to supply' },
   nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
-  freeShots: { icon: '★', label: 'Free Shots', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+3 free shots' }
+  freeShots: { icon: '★', label: 'Free Shots', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+3 free shots' },
+  areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' }
 };
 
 export function getRewardButtonsLayout(width, height, offered = null) {
-  // REQ-021: 3 random of 4 pool; if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
+  // REQ-021/023: 3 random of 5 pool; if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
   const types = Array.isArray(offered) && offered.length === 3 ? offered : ['amplify', 'nullify', 'flip'];
   const cardW = 340;
   const cardH = 220;
