@@ -8,20 +8,20 @@
 - **Related Plan Section:** Game States / Persistence / UI (REQ-011/REQ-014/REQ-027/REQ-028 Extension)
 
 ## Description
-The game SHALL show a **main menu** whenever **no current run is in play** (fresh load with no saved progress, after `End Run`, or after a completed run has been cleared). The main menu SHALL have a single primary button **New Game** which starts a fresh run at hole 1, below it a text **Current high score** with the best total shots from a completed run (lowest total wins), and a simple decorative background drawing of a golf ball, golf club and hole with flag. The existing **pause menu** (`Escape`) SHALL be changed: its second button SHALL no longer say **New Game** but **End Run**, and clicking **End Run** SHALL abandon the current run and return to the **main menu** (clearing the active run, preserving the high score).
+The game SHALL show a **main menu** whenever **no current run is in play** (fresh load with no saved progress, after `End Run`, or after a completed run has been cleared). The main menu SHALL have a single primary button **New Game** which starts a fresh run at hole 1 with supply `{1,1,1}` (one of each modifier) and no pending reward, below it a text **Current high score** with the best total shots from a completed run (lowest total wins), and a simple decorative background drawing of a golf ball, golf club and hole with flag. The existing **pause menu** (`Escape`) SHALL be changed: its second button SHALL no longer say **New Game** but **End Run**, and clicking **End Run** SHALL abandon the current run and return to the **main menu** (clearing the active run to `{1,1,1}` no-menu state, preserving the high score).
 
 ## Rationale
-With `localStorage` persistence (REQ-027) the game now resumes automatically, so a player who has no active run (first visit, after `End Run`, or after storage was cleared) would otherwise see an empty fairway with the reward overlay and no affordance to start. An explicit main menu gives a clear entry point and surfaces the long-term goal — beating the high score — instead of leaving `Total` as the only number. Moving `New Game` to the main menu and making the pause action `End Run` (to main menu) separates “abandon run and go to menu” from “immediately start hole 1” and avoids accidental resets mid-hole. A tiny golf illustration behind the menu makes the static start screen feel like a game and not an empty canvas, without adding image assets (pure canvas/CSS drawing per REQ-001).
+With `localStorage` persistence (REQ-027) the game now resumes automatically, so a player who has no active run (first visit, after `End Run`, or after storage was cleared) would otherwise see an empty fairway with the reward overlay and no affordance to start. An explicit main menu gives a clear entry point and surfaces the long-term goal — beating the high score — instead of leaving `Total` as the only number. Moving `New Game` to the main menu and making the pause action `End Run` (to main menu) separates “abandon run and go to menu” from “immediately start hole 1” and avoids accidental resets mid-hole. A tiny golf illustration behind the menu makes the static start screen feel like a game and not an empty canvas, without adding image assets (pure canvas/CSS drawing per REQ-001). New games start with one of each modifier (`{1,1,1}`) per REQ-020 and no initial award before first attempt per REQ-021.
 
 ## Requirements
 
 1. **Main Menu State & Visibility** in `src/main.js` / `src/render.js` / `index.html`:
    - State SHALL include `mainMenuVisible: boolean` (default `false` until evaluated on load). `mainMenuVisible === true` SHALL mean the main menu overlay is shown and the underlying game is paused; `false` means normal play (`AIMING`/`CHARGING`/`FLYING`/`WIN`/pause/reward).
    - **When to show:** `mainMenuVisible` SHALL be `true` if and only if **no current run is in play**:
-     - On initial page load after `setupCanvas()` and `loadProgress()` attempt (REQ-027), if `localStorage.getItem(STORAGE_KEY)` is `null`/corrupt/wrong version **and** no in-memory run has been started (`currentHoleIndex===0 && totalAttempts===0 && holeAttempts===0 && modifiers.length===0 && supply all 0` after `initLevel(0)` would have run, but before any attempt), then `mainMenuVisible = true`.
+     - On initial page load after `setupCanvas()` and `loadProgress()` attempt (REQ-027), if `localStorage.getItem(STORAGE_KEY)` is `null`/corrupt/wrong version **and** no in-memory run has been started (`currentHoleIndex===0 && totalAttempts===0 && holeAttempts===0 && modifiers.length===0 && supply all 1` after `initLevel(0)` would have run, but before any attempt), then `mainMenuVisible = true`.
      - After `End Run` (pause → `End Run`) which does `clearProgress()` and clears the in-memory run (see §3), `mainMenuVisible = true`.
      - After a **new game clear** that is **not immediately followed by an auto-start** — `mainMenuVisible` should be the idle state. If `New Game` was clicked **from the main menu**, it SHALL immediately set `mainMenuVisible=false` and start hole 1 (see §2).
-     - `mainMenuVisible` SHALL be `false` while a run is active: `totalAttempts>0` or `holeAttempts>0` or `supply`/`freeShots`/`areaUpgradeCount`/`bouncyBallCount` non-zero or `modifiers.length>0` or `gameState==="FLYING"`/`"WIN"` or after `loadProgress()` restored a saved run.
+     - `mainMenuVisible` SHALL be `false` while a run is active: `totalAttempts>0` or `holeAttempts>0` or `supply`/`freeShots`/`areaUpgradeCount`/`bouncyBallCount` non-zero beyond start `{1,1,1}` or `modifiers.length>0` or `gameState==="FLYING"`/`"WIN"` or after `loadProgress()` restored a saved run.
    - **Blocking:** While `mainMenuVisible===true`, the game SHALL be paused exactly like `pauseMenuVisible`/`rewardMenuVisible`/`WIN`: `update(dt)` SHALL NOT advance `ball` physics (`updateBall`) but SHALL still call `updateParticles(dt,getWindAt)`; `handleLaunch()` SHALL return without incrementing `holeAttempts`/`totalAttempts`; modifier placement/drag (`placeModifier`, `removeModifierAt`, hotbar `1`/`2`/`3`, `Delete`) SHALL be ignored; `Escape` while main menu visible SHALL be ignored (not open pause). `gameState` MAY remain `AIMING` or be a dedicated `MAIN_MENU` state — either is acceptable if `update` is blocked and `render` still draws.
    - `mainMenuVisible` SHALL be reset to `false` on `New Game` start and to `true` on `End Run`. Page reload SHALL re-evaluate via `loadProgress()` + run-empty check (so visiting after `End Run` still shows main menu).
 
@@ -32,9 +32,9 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
      function startNewGameFromMain(){
        clearProgress(); // ensure no stale saved run
        currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-       supply={amplify:0,nullify:0,flip:0}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
+       supply={amplify:1,nullify:1,flip:1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
        // sharpshooterCount 0 if exists
-       secretRewardCounter=0; rewardPending=false; firstRewardClaimed=false;
+       secretRewardCounter=0; rewardPending=false;
        rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false; rewardMenuHover=null; rewardClaimedFor=null;
        pauseMenuVisible=false; pauseMenuHover=null; mainMenuVisible=false;
        rewardChosenCounts={amplify:0,nullify:0,flip:0,freeShots:0,areaUp:0,bouncyBall:0};
@@ -46,11 +46,11 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
        const pauseOverlay=document.getElementById("pause-overlay");
        if(pauseOverlay) pauseOverlay.classList.add("hidden");
        updateAttemptsUI(); updateHotbarUI();
-       maybeShowRewardMenu(); // initial 3-of-N for hole 1
+       // no initial reward menu: do NOT call maybeShowRewardMenu() to show at 0; game starts with {1,1,1} and first reward after 5 counted shots
        // Do NOT write high score; do NOT saveProgress yet — first attempt will create save per REQ-027 AC
      }
      ```
-     It SHALL start at **hole 1** (`LEVELS[0].tee`, `LEVELS[0].hole`, field `createField(..., LEVELS[0].field.seed, ...)`), `AIMING`, HUD `Hole:1/M Attempts:0 Total:0`, and the initial reward menu SHALL appear as usual. It SHALL NOT require `WIN` state.
+     It SHALL start at **hole 1** (`LEVELS[0].tee`, `LEVELS[0].hole`, field `createField(..., LEVELS[0].field.seed, ...)`), `AIMING`, HUD `Hole:1/M Attempts:0 Total:0`, hotbar shows `1` for each modifier, and **no** initial reward menu SHALL appear (first reward after 5 counted shots per REQ-021). It SHALL NOT require `WIN` state.
    - The button SHALL be centered, size `160×48` (or `140×44` like pause buttons, but documented), border `rgba(46,204,113,0.9)` 2px, fill `rgba(46,204,113,0.28)` (hover `0.38`), label `New Game` `700 14px` white with stroke `rgba(0,0,0,0.65) 3px`, icon `▶` or `⛳` 14px optional, hover brightens and `cursor pointer`.
    - While main menu is visible, `Escape` SHALL NOT close it (only `New Game` closes it). `R` while main menu SHALL be ignored.
 
@@ -63,8 +63,8 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
        clearProgress(); // REQ-027 — abandon current run
        // keep high score storage intact (see §4 — different key)
        currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-       supply={amplify:0,nullify:0,flip:0}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
-       secretRewardCounter=0; rewardPending=false; firstRewardClaimed=false;
+       supply={amplify:1,nullify:1,flip:1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
+       secretRewardCounter=0; rewardPending=false;
        rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
        rewardChosenCounts={amplify:0,nullify:0,flip:0,freeShots:0,areaUp:0,bouncyBall:0};
        modifiers=[]; syncModifiersToField(); selectedModifier=null;
@@ -77,11 +77,11 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
        const mainOverlay=document.getElementById("main-menu-overlay");
        if(mainOverlay) mainOverlay.classList.remove("hidden");
        updateAttemptsUI(); updateHotbarUI();
-       // Do NOT call maybeShowRewardMenu — main menu blocks it; it will show after New Game
+       // Do NOT call maybeShowRewardMenu — main menu blocks it; it will show after New Game only after 5 counted shots
        return true;
      }
      ```
-     It SHALL abandon the current run, **clear the active run** (`localStorage` key `STORAGE_KEY` via `clearProgress()`) but **preserve the high score key** (`HIGH_SCORE_KEY`, see §4), reset the same state as `New Game` but **leave `mainMenuVisible=true`** so the game returns to the main menu instead of immediately becoming playable. The player must then press `New Game` on the main menu to start. It SHALL work from any hole (1..M) mid-run, even with `rewardMenuVisible`? No — while `rewardMenuVisible` the pause menu cannot be opened, so `End Run` cannot be clicked then (reward has priority). While `WIN` the pause menu cannot be opened either.
+     It SHALL abandon the current run, **clear the active run** (`localStorage` key `STORAGE_KEY` via `clearProgress()`) but **preserve the high score key** (`HIGH_SCORE_KEY`, see §4), reset the same state as `New Game` but **leave `mainMenuVisible=true`** so the game returns to the main menu instead of immediately becoming playable. Hotbar after reset shows `{1,1,1}`. No reward menu appears until 5 counted shots. The player must then press `New Game` on the main menu to start. It SHALL work from any hole (1..M) mid-run, even with `rewardMenuVisible`? No — while `rewardMenuVisible` the pause menu cannot be opened, so `End Run` cannot be clicked then (reward has priority). While `WIN` the pause menu cannot be opened either.
    - **Resume** button behavior unchanged: `resumeGame()` closes pause and resumes same run.
 
 4. **High Score — Current High Score Text** below New Game button (Main Menu):
@@ -123,12 +123,12 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
 
 ## Acceptance Criteria
 
-- [ ] On fresh visit (clear `localStorage` for both keys, reload), page shows **main menu** (`mainMenuVisible true`): full-canvas dim `rgba(0,0,0,0.55)` like pause/reward/win, title `Golf Vector Field` or `Main Menu` `700 22px` white stroke `5px` (or at least `New Game` button), centered button `New Game` `160×48` green `rgba(46,204,113,0.28)` hover `0.38` with `▶`/`⛳`, below it text `Current high score: —` (or `none`) `600 13px` white stroke `3px`, and behind the button a **simple golf drawing** — recognizable ball (white `6px` circle), club (brown shaft + silver head angled toward ball), and hole with flag (black circle `14px` + white pole + red flag `14×10`) — all drawn with canvas/CSS, no `<img>`/external asset, visible behind the panel.
-- [ ] While main menu is visible, the game is paused: holding `ArrowRight` does not change `getAimAngle()`, `Space` does not increase `charge`, clicking canvas does not place modifiers. `gameState` stays `AIMING` (or `MAIN_MENU`) with ball at `LEVELS[0].tee`. Pressing `Escape` does **not** open pause and does **not** close main menu. HUD still shows `Hole:1/M Attempts:0 Total:0` underneath the dim (if not fully covered) but hotbar is hidden.
-- [ ] Clicking `New Game` (hit-test inside its rect or DOM `#main-new-game-button`) immediately starts a new run at hole 1: `mainMenuVisible false`, overlay hidden, `currentHoleIndex 0`, `holeAttempts 0`, `totalAttempts 0`, `supply {0,0,0}`, `freeShots 0`, etc., `modifiers []`, ball at tee, `maybeShowRewardMenu()` shows initial 3-of-N offer, `localStorage STORAGE_KEY` is still `null` before first attempt (per REQ-027, not pre-created), and no high-score change yet. Second reload **after** one counted attempt (`Total 1`) resumes at `Hole:1 Attempts:1 Total:1` (not main menu), because a run is now in play.
+- [ ] On fresh visit (clear `localStorage` for both keys, reload), page shows **main menu** (`mainMenuVisible true`): full-canvas dim `rgba(0,0,0,0.55)` like pause/reward/win, title `Golf Vector Field` or `Main Menu` `700 22px` white stroke `5px` (or at least `New Game` button), centered button `New Game` `160×48` green `rgba(46,204,113,0.28)` hover `0.38` with `▶`/`⛳`, below it text `Current high score: —` (or `none`) `600 13px` white stroke `3px`, and behind the button a **simple golf drawing** — recognizable ball (white `6px` circle), club (brown shaft + silver head angled toward ball), and hole with flag (black circle `14px` + white pole + red flag `14×10`) — all drawn with canvas/CSS, no `<img>`/external asset, visible behind the panel. Supply on main menu background is `{1,1,1}` conceptually; no reward menu is visible.
+- [ ] While main menu is visible, the game is paused: holding `ArrowRight` does not change `getAimAngle()`, `Space` does not increase `charge`, clicking canvas does not place modifiers. `gameState` stays `AIMING` (or `MAIN_MENU`) with ball at `LEVELS[0].tee`. Pressing `Escape` does **not** open pause and does **not** close main menu. HUD still shows `Hole:1/M Attempts:0 Total:0` underneath the dim (if not fully covered) but hotbar is hidden (shows `1` for each type when game starts).
+- [ ] Clicking `New Game` (hit-test inside its rect or DOM `#main-new-game-button`) immediately starts a new run at hole 1: `mainMenuVisible false`, overlay hidden, `currentHoleIndex 0`, `holeAttempts 0`, `totalAttempts 0`, `supply {1,1,1}`, `freeShots 0`, etc., `modifiers []`, ball at tee, **no** initial reward menu (`rewardMenuVisible===false`), `localStorage STORAGE_KEY` is still `null` before first attempt (per REQ-027, not pre-created), and no high-score change yet. Second reload **after** one counted attempt (`Total 1`) resumes at `Hole:1 Attempts:1 Total:1` (not main menu), because a run is now in play.
 - [ ] Completing a full run: clear `localStorage` for both keys, click `New Game`, complete holes 1..M (e.g., via `checkWin` or programmatically `totalAttempts=12` then `checkWin` on final hole). After final hole win (`gameState WIN` on last hole), `maybeUpdateHighScore()` SHALL have stored `bestTotal = 12` under `HIGH_SCORE_KEY` (`localStorage.getItem("golfVectorField.highScore.v1")` JSON `{"version":1,"bestTotal":12}`). Return to main menu via `End Run` or `resetGameAfterWin`/`R` then reload: main menu now shows `Current high score: 12` (not `—`) below `New Game` (verified via `getHighScore()===12` and DOM text inside `#main-menu-overlay .high-score` or canvas `drawMainMenu` text).
 - [ ] High score is best (lowest) total: complete a second run with `Total 15` → after final win, `bestTotal` stays `12` (not overwritten). Complete a third run with `Total 10` → after final win, `bestTotal` becomes `10` and main menu shows `Current high score: 10`.
-- [ ] `End Run` change: open pause via `Escape` (from `AIMING` with no reward/WIN). Pause now shows title `Paused`, centered `Resume` white button (`140×44` `rgba(255,255,255,0.12)`) and **`End Run`** red button (`↺`/`✕` `rgba(231,76,60,0.28)`, `700 14px`, not `New Game`). Clicking `Resume` closes pause and resumes same run (no state change). Clicking **`End Run`** (hit-test inside `endRun` rect or DOM `#end-run-button`) abandons the run: `pauseMenuVisible false`, `mainMenuVisible true`, `currentHoleIndex 0`, `holeAttempts 0`, `totalAttempts 0`, `supply {0,0,0}` etc., `modifiers []`, `STORAGE_KEY` cleared (`null`), but `HIGH_SCORE_KEY` preserved (e.g., stays `10`), main menu now visible with `Current high score: 10` and golf art behind it. No new run starts until `New Game` is clicked on main menu.
+- [ ] `End Run` change: open pause via `Escape` (from `AIMING` with no reward/WIN). Pause now shows title `Paused`, centered `Resume` white button (`140×44` `rgba(255,255,255,0.12)`) and **`End Run`** red button (`↺`/`✕` `rgba(231,76,60,0.28)`, `700 14px`, not `New Game`). Clicking `Resume` closes pause and resumes same run (no state change). Clicking **`End Run`** (hit-test inside `endRun` rect or DOM `#end-run-button`) abandons the run: `pauseMenuVisible false`, `mainMenuVisible true`, `currentHoleIndex 0`, `holeAttempts 0`, `totalAttempts 0`, `supply {1,1,1}` etc., `modifiers []`, `STORAGE_KEY` cleared (`null`), but `HIGH_SCORE_KEY` preserved (e.g., stays `10`), main menu now visible with `Current high score: 10` and golf art behind it. No new run starts until `New Game` is clicked on main menu. No reward menu is pending after End Run.
 - [ ] `End Run` from hole 2 or 3 also returns to main menu at hole 1 (not staying on current hole). `handleLaunch` is blocked while pause is open, so `Total` does not increment from a queued launch.
 - [ ] Main menu golf art: with main menu open, the canvas (or overlay background) shows a recognizable ball (`#fff` circle `6px` with stroke `#222`), club (brown `6B3A2A` shaft diagonal, silver `C0C0C0` head), and hole with flag (same shapes as in-game `drawHole`/`drawBall` but as static decoration, e.g., at `W/2, H/2+70`). No `<img src="https://...">` or external asset; pure canvas 2D or CSS.
 - [ ] No `New Game` text remains in the pause menu: search of `#pause-overlay` and canvas `drawPauseMenu` SHALL NOT contain `New Game` as the second button label — only `End Run`. The main menu SHALL be the only place with `New Game`.
@@ -140,7 +140,7 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
 - REQ-014 (attempts counters, `drawHUD`)
 - REQ-027 (persistence `STORAGE_KEY`, `saveProgress`/`loadProgress`/`clearProgress`)
 - REQ-028 (pause menu `pauseMenuVisible`, `Escape`, `Resume`, reward `xN` list — now `End Run`)
-- REQ-021/022/023/024/025 (reward pool, `claimReward`, secret counter)
+- REQ-021/022/023/024/025 (reward pool, `claimReward`, secret counter — no initial menu, start {1,1,1})
 - REQ-012 (rendering, `drawBackground`/`drawHoly`/`drawBall`)
 
 ## Notes
@@ -168,8 +168,8 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
   function startNewGameFromMain(){
     clearProgress();
     currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-    supply={amplify:0,nullify:0,flip:0}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
-    secretRewardCounter=0; rewardPending=false; firstRewardClaimed=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
+    supply={amplify:1,nullify:1,flip:1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
+    secretRewardCounter=0; rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
     rewardChosenCounts={amplify:0,nullify:0,flip:0,freeShots:0,areaUp:0,bouncyBall:0};
     modifiers=[]; syncModifiersToField(); selectedModifier=null;
     mainMenuVisible=false; pauseMenuVisible=false; pauseMenuHover=null;
@@ -177,14 +177,13 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
     if(winOverlay) winOverlay.classList.add("hidden");
     syncMainMenu(); syncPauseOverlay();
     updateAttemptsUI(); updateHotbarUI();
-    maybeShowRewardMenu();
   }
   function endRun(){
     if(!pauseMenuVisible) return false;
     clearProgress();
     currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-    supply={amplify:0,nullify:0,flip:0}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
-    secretRewardCounter=0; rewardPending=false; firstRewardClaimed=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
+    supply={amplify:1,nullify:1,flip:1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
+    secretRewardCounter=0; rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
     rewardChosenCounts={amplify:0,nullify:0,flip:0,freeShots:0,areaUp:0,bouncyBall:0};
     modifiers=[]; syncModifiersToField(); selectedModifier=null;
     pauseMenuVisible=false; pauseMenuHover=null; mainMenuVisible=true;
@@ -241,8 +240,7 @@ With `localStorage` persistence (REQ-027) the game now resumes automatically, so
 
 ## File Paths
 
-- `src/main.js:1` (mainMenuVisible, HIGH_SCORE_KEY, getHighScore/setHighScore/maybeUpdateHighScore, startNewGameFromMain, endRun, claimReward not affected, getSavePayload not affected, init main menu visibility check, render blocking, window keydown main menu ignored, window exposure)
+- `src/main.js:1` (mainMenuVisible, HIGH_SCORE_KEY, getHighScore/setHighScore/maybeUpdateHighScore, startNewGameFromMain with {1,1,1} no menu, endRun with {1,1,1} to main menu, claimReward not affected, getSavePayload not affected, init main menu visibility check, render blocking, window keydown main menu ignored, window exposure)
 - `src/render.js:1` (drawMainMenu, getMainMenuButtonsLayout, drawMainMenuBackground, pause drawPauseMenu button label End Run, golf art drawing)
 - `index.html:1` (#main-menu-overlay with title, #main-new-game-button, .high-score, golf art container or canvas; #pause-overlay second button now #end-run-button End Run)
 - `style.css:1` (#main-menu-overlay dim, .main-menu-content transparent, buttons, .high-score text, golf art positioning)
-

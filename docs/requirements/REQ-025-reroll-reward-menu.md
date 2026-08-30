@@ -8,7 +8,7 @@
 - **Related Plan Section:** New Feature - Reward / Inventory Acquisition (REQ-021 Extension)
 
 ## Description
-When the reward menu is visible (triggered via the secret counter per REQ-021 - very first attempt and every 5 counted shots), the player SHALL be able to **re-roll** the three offered upgrades **exactly once** per menu appearance at the cost of **one attempt**. Pressing the re-roll control SHALL immediately increment both `holeAttempts` and `totalAttempts` (and the `attempts` alias) by `+1`, update the HUD and win-overlay counters, **but SHALL NOT increment the secret reward counter** `secretRewardCounter` (so it does NOT advance towards the next reward), and **SHALL NOT consume a free shot** even if `freeShots > 0`. The re-rolled menu SHALL show a new set of three distinct random options from the same 6-pool `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']`, replacing the previous offer. The re-roll SHALL be allowed only once per menu; after it is used the control becomes disabled/hidden until the next time the reward menu is triggered (new secret cycle or new game).
+When the reward menu is visible (triggered via the secret counter per REQ-021 — every 5 counted shots, with no reward before the first attempt), the player SHALL be able to **re-roll** the three offered upgrades **exactly once** per menu appearance at the cost of **one attempt**. Pressing the re-roll control SHALL immediately increment both `holeAttempts` and `totalAttempts` (and the `attempts` alias) by `+1`, update the HUD and win-overlay counters, **but SHALL NOT increment the secret reward counter** `secretRewardCounter` (so it does NOT advance towards the next reward), and **SHALL NOT consume a free shot** even if `freeShots > 0`. The re-rolled menu SHALL show a new set of three distinct random options from the same 6-pool `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']`, replacing the previous offer. The re-roll SHALL be allowed only once per menu; after it is used the control becomes disabled/hidden until the next time the reward menu is triggered (new secret cycle or new game).
 
 ## Rationale
 The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a corridor is blocked). Allowing a single paid re-roll gives agency at a meaningful cost: one attempt is the primary score metric (REQ-014), so the player trades score for choice. Excluding free shots guarantees the cost is always real - free shots are meant to *save* attempts, not to pay for re-rolls. Excluding the secret counter keeps the reward cadence predictable (every 5 *counted* shots) and prevents re-rolls from accelerating or stalling the next reward. Limiting to once per menu avoids infinite re-roll loops and keeps the decision tense.
@@ -16,7 +16,7 @@ The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a
 ## Requirements
 
 1. **Re-roll State & Cost Logic** in `src/main.js`:
-   - State SHALL include `rewardRerolled: boolean` (per-menu flag, `false` when menu is freshly shown, `true` after re-rolling once). It SHALL be reset to `false` whenever a new reward menu is triggered (`maybeShowRewardMenu` when creating a fresh `rewardOffered`), and also cleared on **new game** (`resetGameAfterWin`, `initLevel` with `currentHoleIndex===0`, page reload) alongside `secretRewardCounter`, `rewardPending`, `firstRewardClaimed`, `rewardMenuVisible`, `rewardOffered`.
+   - State SHALL include `rewardRerolled: boolean` (per-menu flag, `false` when menu is freshly shown, `true` after re-rolling once). It SHALL be reset to `false` whenever a new reward menu is triggered (`maybeShowRewardMenu` when creating a fresh `rewardOffered`), and also cleared on **new game** (`resetGameAfterWin`, `startNewGameFromMain` (REQ-029), `endRun` (REQ-029), `clearProgress` (REQ-027), `initLevel` with `currentHoleIndex===0`, page reload) alongside `secretRewardCounter`, `rewardPending`, `rewardMenuVisible`, `rewardOffered`.
    - While `rewardMenuVisible === true` and `rewardRerolled === false`, a re-roll SHALL be executable exactly once:
      ```js
      function rerollReward() {
@@ -33,7 +33,7 @@ The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a
        // It MAY randomly be identical to the previous set - this is allowed, but implementation
        // SHOULD attempt to produce a different set if possible (e.g., re-shuffle until at least one element differs), not required for MVP.
        rewardOffered = shuffle([...POOL]).slice(0, 3);
-       // Keep rewardMenuVisible true, rewardPending already false, firstRewardClaimed unchanged
+       // Keep rewardMenuVisible true, rewardPending already false
        // Optionally keep hover state cleared
        rewardMenuHover = null;
        return true;
@@ -45,9 +45,8 @@ The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a
 
 2. **Trigger & Lifecycle Interaction** with Secret Counter (REQ-021):
    - Re-roll SHALL NOT affect the secret counter flow: it does not increment it, does not reset it, and does not set `rewardPending`. The next reward after the current menu will still require 5 counted shots from the time the menu was first shown (secret counter continues from its current value `0..4`).
-   - Very first attempt menu: re-roll costs `holeAttempts 0→1, totalAttempts 0→1, secretRewardCounter stays 0`. After claiming, the next reward still needs 5 counted shots (`secret 0→5`).
-   - After 5 counted shots trigger (`secret 4→5 → reset to 0 + pending→menu`): re-roll in that menu costs `holeAttempts/totalAttempts +1` but keeps `secret 0`. Next reward needs 5 more counted shots (`secret 0→5`).
-   - Re-roll state SHALL persist only for the current menu. New menu triggers (next secret cycle or new game) SHALL reset `rewardRerolled=false`. Death resets (`resetBall()`), `R` during play, or hole advances SHALL NOT occur while menu is visible (menu blocks), so they do not interfere. `resetGameAfterWin()` or page reload SHALL clear `rewardRerolled` alongside secret counter.
+   - After 5 counted shots trigger (`secret 4→5 → reset to 0 + pending→menu`): re-roll in that menu costs `holeAttempts/totalAttempts +1` but keeps `secret 0`. Next reward needs 5 more counted shots (`secret 0→5`). There is no initial reward before first attempt to re-roll.
+   - Re-roll state SHALL persist only for the current menu. New menu triggers (next secret cycle or new game) SHALL reset `rewardRerolled=false`. Death resets (`resetBall()`), `R` during play, or hole advances SHALL NOT occur while menu is visible (menu blocks), so they do not interfere. `resetGameAfterWin()` / `startNewGameFromMain()` / `endRun()` / `clearProgress()` or page reload SHALL clear `rewardRerolled` alongside secret counter.
 
 3. **Menu Blocking & Input**:
    - While `rewardMenuVisible === true` (before and after re-roll), the game SHALL remain in blocking state per REQ-021: `AIMING`/`CHARGING` input (`ArrowLeft`/`Right`, `Space`, modifier placement) SHALL be ignored; `update()` advances particles only; `handleLaunch()` blocked.
@@ -68,11 +67,11 @@ The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a
 
 ## Acceptance Criteria
 
-- [ ] On fresh page load (new game, `secretRewardCounter=0`, `totalAttempts=0`) the reward menu (very first attempt) shows **exactly three** upgrade buttons **plus** a **Re-roll button** centered below them (`↻ Re-roll (1 attempt) [R]`, `110×28`, white border, `rgba(255,255,255,0.12)` fill). The re-roll button is enabled (bright, `cursor pointer` on hover). `holeAttempts=0, totalAttempts=0, secretRewardCounter=0, freeShots=0`.
-- [ ] Clicking the Re-roll button (or pressing `R`/`r` while menu visible) **once** immediately increments `holeAttempts 0→1` and `totalAttempts 0→1` (HUD updates to `Attempts:1 Total:1`), **does NOT** increment `secretRewardCounter` (stays `0`, verified via `getSecretRewardCounter()===0`), **does NOT** decrement `freeShots` (stays `0`), and replaces the three offered upgrades with a **new** random 3-set (three distinct, subset of 6-pool, may be different from previous; at least the `rewardOffered` array reference changes). The re-roll button becomes **disabled** (`rgba(255,255,255,0.06)` fill, `not-allowed` cursor, or hidden) and a second click/press of `R` does **not** cost another attempt (counters stay `1/1`, `rewardOffered` unchanged on second attempt).
-- [ ] After re-rolling on the very first menu, selecting an offered upgrade (e.g., `Amplify` via `1` or click) closes the menu, `supply.amplify 0→1`, menu hides, `secretRewardCounter` still `0`, `holeAttempts`/`totalAttempts` remain `1` (the re-roll cost is retained). Next reward still requires 5 counted shots (`secret 0→5`), not 4.
+- [ ] On fresh page load (new game, `secretRewardCounter=0`, `totalAttempts=0`, `supply={1,1,1}`) **no reward menu is visible**. After 5 counted shots, the reward menu shows **exactly three** upgrade buttons **plus** a **Re-roll button** centered below them (`↻ Re-roll (1 attempt) [R]`, `110×28`, white border, `rgba(255,255,255,0.12)` fill). The re-roll button is enabled (bright, `cursor pointer` on hover). `holeAttempts/totalAttempts` reflect the 5 counted shots, `secretRewardCounter=0`, `freeShots=0`.
+- [ ] Clicking the Re-roll button (or pressing `R`/`r` while menu visible) **once** immediately increments `holeAttempts` and `totalAttempts` by `+1` (HUD updates, e.g., from `5/5 → 6/6` on first trigger), **does NOT** increment `secretRewardCounter` (stays `0`, verified via `getSecretRewardCounter()===0`), **does NOT** decrement `freeShots` (stays `0`), and replaces the three offered upgrades with a **new** random 3-set (three distinct, subset of 6-pool, may be different from previous; at least the `rewardOffered` array reference changes). The re-roll button becomes **disabled** (`rgba(255,255,255,0.06)` fill, `not-allowed` cursor, or hidden) and a second click/press of `R` does **not** cost another attempt (counters unchanged, `rewardOffered` unchanged on second attempt).
+- [ ] After re-rolling on the first reward menu (after 5 counted shots, `Total 5→6` cost, secret `0`), selecting an offered upgrade (e.g., `Amplify` via `1` or click) closes the menu, `supply.amplify` increments by `1`, menu hides, `secretRewardCounter` still `0`, `holeAttempts`/`totalAttempts` remain `6` (the re-roll cost is retained). Next reward still requires 5 counted shots (`secret 0→5`), not 4.
 - [ ] Re-roll with free shots present does **not** consume free shots: set `freeShots=2, secretRewardCounter=3, holeAttempts=5, totalAttempts=5`, trigger next reward (simulate `secret 4→5→0` menu: set `secretRewardCounter=0` pending, show menu). With menu visible and `freeShots=2`, click Re-roll → `freeShots` stays `2` (not `1`), `secretRewardCounter` stays `0`, `holeAttempts 5→6, totalAttempts 5→6`, HUD `6/6`, new offer, button disabled. Second `R` does nothing. Selecting `Nullify` after re-roll grants `+1` nullify, menu closes, counters stay `6/6`, `secret` remains `0`.
-- [ ] Re-roll delay: after re-rolling on first menu (`Total 0→1` cost, secret `0`), launching 5 counted shots (`secret 0→5` → reset to `0` + pending) shows next menu before the 6th counted attempt, which will be `totalAttempts 1→6` (since one extra attempt was spent on re-roll). Without re-roll, the next menu would be at `totalAttempts 5`; with re-roll it is at `6` — proving the re-roll cost is an *extra* counted attempt that does not accelerate the secret counter. `secretRewardCounter` after the 5 counted shots is `0` again.
+- [ ] Re-roll delay: after re-rolling on first menu (`Total 5→6` cost, secret `0`), launching 5 counted shots (`secret 0→5` → reset to `0` + pending) shows next menu before the 6th counted attempt, which will be `totalAttempts 6→11` (since one extra attempt was spent on re-roll). Without re-roll, the next menu would be at `totalAttempts 10`; with re-roll it is at `11` — proving the re-roll cost is an *extra* counted attempt that does not accelerate the secret counter. `secretRewardCounter` after the 5 counted shots is `0` again.
 - [ ] Re-roll limited to once per menu: on a menu triggered after 5 counted shots (`secret 0` pending), `rewardRerolled` is `false` initially. Click Re-roll once → `true`, counters `+1`, new offer. Click Re-roll again (or press `R` again) → `rerollReward()` returns `false`, counters do **not** increment again, offer does not change. After claiming an upgrade and later triggering the next menu (after another 5 counted shots), the new menu's re-roll button is again enabled (`rewardRerolled` reset to `false`), and one more re-roll can be purchased for another `+1` attempt.
 - [ ] Re-roll while `WIN` overlay is shown is blocked (no `R` re-roll, no attempt cost). Re-roll during `FLYING` is impossible because menu is not visible. Pressing `R` during normal `AIMING` with no menu still does `resetBall` per REQ-011, not re-roll.
 - [ ] Hidden cost: canvas top HUD still shows only `Hole: N/M` `Attempts: X` `Total: Y` (now incremented by re-roll), win overlay shows `Attempts this hole: X, Total: Y` including the re-roll attempt. No `Free Shots` or `Secret` text is shown in HUD. `window.__getSecretRewardCounter()` and `window.__getRewardRerolled()`/`getRewardRerolled()` return correct hidden values.
@@ -80,7 +79,7 @@ The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a
 
 ## Dependencies
 
-- REQ-021 (upgrade reward menu via secret counter, 3-random-of-6, `POOL`, `maybeShowRewardMenu`, `claimReward`, `firstRewardClaimed`, `rewardPending`, `secretRewardCounter`)
+- REQ-021 (upgrade reward menu via secret counter, 3-random-of-6, `POOL`, `maybeShowRewardMenu`, `claimReward`, `rewardPending`, `secretRewardCounter` — no initial menu)
 - REQ-014 (attempts counter, `holeAttempts`, `totalAttempts`, `handleLaunch`, `resetGameAfterWin`, HUD `drawHUD`)
 - REQ-022 (free shots hidden counter, `freeShots`, must *not* be consumed on re-roll)
 - REQ-011 (game states `AIMING`/`FLYING`/`WIN`, `resetBall`, `loadLevel`; `R` key collides with re-roll only when menu visible)
@@ -106,9 +105,8 @@ The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a
     return true;
   }
   // maybeShowRewardMenu() for new menu: rewardRerolled = false; rewardOffered = shuffle...
-  // Very first attempt: rewardRerolled = false initially
   // After reaching 5 counted shots: secretRewardCounter=0; rewardPending=true; on next AIMING, maybeShow sets rewardRerolled=false and shows menu
-  // claimReward(): after selection, rewardRerolled is irrelevant until next menu; firstRewardClaimed = true; rewardMenuVisible=false;
+  // claimReward(): after selection, rewardRerolled is irrelevant until next menu;
   // New game: rewardRerolled=false; secretRewardCounter=0; rewardPending=false; etc.
   // Reroll input: in window keydown when rewardMenuVisible, if (e.code==='KeyR' && !rewardRerolled) { rerollReward(); e.preventDefault(); } else if (e.code==='KeyR' && rewardRerolled) { e.preventDefault(); } // block second
   // Click: getRewardRerollButtonLayout(width,height) -> Rect 110x28 at (width/2-55, cardY+155); if inside and !rewardRerolled, rerollReward()
@@ -120,7 +118,7 @@ The 3-of-6 random offer can present undesired options (e.g., no `Amplify` when a
 
 ## File Paths
 
-- `src/main.js:1` (rewardRerolled per-menu flag, rerollReward() costs 1 attempt no secret/freeShot, maybeShowRewardMenu resets flag, claimReward leaves flag until next menu, handleLaunch unchanged, resetGameAfterWin/initLevel clears flag, window.__rerollReward/__getRewardRerolled, R key re-bound to re-roll when menu visible)
+- `src/main.js:1` (rewardRerolled per-menu flag, rerollReward() costs 1 attempt no secret/freeShot, maybeShowRewardMenu resets flag, claimReward leaves flag until next menu, handleLaunch unchanged, resetGameAfterWin/startNewGameFromMain/endRun/clearProgress clears flag, window.__rerollReward/__getRewardRerolled, R key re-bound to re-roll when menu visible)
 - `src/render.js:1` (drawRewardMenu draws Re-roll button `110×28` below 3 cards, getRewardRerollButtonLayout, hover/disabled states, high-contrast white text)
 - `index.html:1` (no DOM for re-roll; canvas-only)
 - `style.css:1` (no new CSS needed for canvas menu)

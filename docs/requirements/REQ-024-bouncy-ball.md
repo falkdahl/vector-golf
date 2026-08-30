@@ -18,16 +18,16 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
 1. **Pool Inclusion** in `src/main.js` (REQ-021 Pool):
    - The random upgrade pool `POOL` per REQ-021 SHALL be extended from five to **six** distinct types: `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']` (internal identifiers; `bouncyBall` MAY be alias `bouncy` or `bouncyBallPlus1`, but SHALL be documented consistently).
    - The reward menu SHALL still display **exactly three** distinct options per trigger, now randomly chosen as `shuffle([...POOL]).slice(0,3)` (3-of-6 uniform without replacement). The excluded three types SHALL not be shown that trigger. Over many triggers all six types SHALL remain possible to appear.
-   - No change to trigger timing (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5` + very first attempt) or blocking logic; only the pool size grows.
+   - No change to trigger timing (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5`, no reward before first attempt) or blocking logic; only the pool size grows.
 
 2. **Stacking State & Hidden Tracker** in `src/main.js`:
-   - SHALL include `bouncyBallCount: number` (integer `>=0`, total times reward has been selected) and `bouncyRemaining: number` (integer `>=0`, per-attempt remaining bounces), initialized to `0` on **new game**: page load / `initLevel()` with `currentHoleIndex===0`, `resetGameAfterWin()` (press `R` in `WIN`/`GAME_COMPLETE`), and full page reload.
+   - SHALL include `bouncyBallCount: number` (integer `>=0`, total times reward has been selected) and `bouncyRemaining: number` (integer `>=0`, per-attempt remaining bounces), initialized to `0` on **new game**: page load / `initLevel()` with `currentHoleIndex===0`, `resetGameAfterWin()` (press `R` in `WIN`/`GAME_COMPLETE`), `startNewGameFromMain()` (REQ-029), `endRun()` (REQ-029), `clearProgress()` (REQ-027), and full page reload.
    - On each acquisition of the `Bouncy Ball +1` reward (`claimReward('bouncyBall')` when offered), `bouncyBallCount += 1` (exactly `+1` per selection, clamped `>=0`, integer) SHALL be executed once. No `supply`/`freeShots`/`areaUpgradeCount` change in this branch.
    - The per-attempt tracker SHALL be re-initialized at the start of **each attempt** to the current total: `bouncyRemaining = bouncyBallCount`. This SHALL occur on:
      - `handleLaunch(angle,power)` after launching (set before `gameState="FLYING"`),
      - `resetBall()` (death/OOB/`R` during play re-entering `AIMING`),
      - `loadLevel(n)` / `advanceHole()` / `handleNextHole()` when entering next hole in `AIMING`,
-     - `resetGameAfterWin()` SHALL reset both to `0` (new game) and NOT re-initialize to old total.
+     - `resetGameAfterWin()` / `startNewGameFromMain()` / `endRun()` / `clearProgress()` SHALL reset both to `0` (new game) and NOT re-initialize to old total.
    - `bouncyRemaining` SHALL be clamped `>=0`, integer, hidden (no HUD). `bouncyBallCount` MAY be exposed via helpers for tests but SHALL NOT be rendered in `drawHUD` or win overlay. Debug exposure via `window.__getBouncyBallCount`, `window.__getBouncyRemaining`, etc. is allowed.
    - Helpers SHALL be `getBouncyBallCount()`, `getBouncyRemaining()`, `getBouncyCount()` alias, `addBouncyBall(n=1)`, `setBouncyBallCount(v)` that clamp to `>=0` and update `bouncyRemaining` appropriately when setting total outside of attempt (for tests). For per-attempt semantics, `setBouncyBallCount` SHOULD also reset `bouncyRemaining = bouncyBallCount` if called while in `AIMING` (or leave to next `resetBall` for `FLYING`).
 
@@ -56,7 +56,7 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
 4. **Persistence & Lifecycle** per REQ-011/REQ-014/REQ-020/REQ-022/REQ-023:
    - `bouncyBallCount` SHALL **persist** through death resets (`resetBall()` on obstacle/OOB when out of bounces, or after a bounce) and through `R` during play — those SHALL re-initialize `bouncyRemaining` to current `bouncyBallCount` but SHALL NOT reset `bouncyBallCount` itself.
    - `bouncyBallCount` SHALL **persist** across hole advances (`advanceHole()` / `handleNextHole()` / `loadLevel(n>0)`) — advancing SHALL NOT reset it (similar to `supply`, `freeShots`, `areaUpgradeCount`). Only a new game reset SHALL zero it. `bouncyRemaining` SHALL be re-initialized to the persisted `bouncyBallCount` on entering the new hole.
-   - Deterministic per run: bounces for a given count SHALL be same; randomness only affects *whether* the reward was offered (REQ-021), not bounce logic itself. No `localStorage` required.
+   - Deterministic per run: bounces for a given count SHALL be same; randomness only affects *whether* the reward was offered (REQ-021), not bounce logic itself. No `localStorage` required beyond REQ-027.
 
 5. **Rendering of Upgrade Button** in `src/render.js`:
    - When `bouncyBall` is among the three randomly offered upgrades, its button SHALL be rendered with distinct styling for recognizability and high contrast (similar to other buttons, no white card):
@@ -70,10 +70,10 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
 
 ## Acceptance Criteria
 
-- [ ] On fresh page load (new game) hidden `bouncyBallCount===0`, `getBouncyRemaining()===0`, `getBouncyBallCount()===0`, HUD shows no bounce info, reward menu at `Total=0` draws **exactly three** buttons randomly chosen from **six** possible types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%`, `Bouncy Ball +1` (pool size 6). Never duplicate types in one menu, never 2/4/5/6 buttons, never shows excluded types. Over 12 reloads, all six pool types appear at least once statistically (3-of-6 random). Verified by `getRewardOffered().length===3` and `new Set(offered).size===3` subset of pool.
+- [ ] On fresh page load (new game) hidden `bouncyBallCount===0`, `getBouncyRemaining()===0`, `getBouncyBallCount()===0`, HUD shows no bounce info, supply is `{1,1,1}` and no reward menu is visible before first attempt (`rewardMenuVisible===false`). After 5 counted shots, menu draws **exactly three** buttons randomly chosen from **six** possible types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%`, `Bouncy Ball +1` (pool size 6). Never duplicate types in one menu, never 2/4/5/6 buttons, never shows excluded types. Over 12 triggers, all six pool types appear at least once statistically (3-of-6 random). Verified by `getRewardOffered().length===3` and `new Set(offered).size===3` subset of pool.
 - [ ] When `Bouncy Ball +1` is among the three offered, its button shows label `Bouncy Ball +1`, icon `◎` (or `◉`/`⦿`) 22-24px teal `#1abc9c`, border `rgba(26,188,156,0.9)`, hint `+1 bounce`, key hint positional `[1]`/`[2]`/`[3]`.
-- [ ] Selecting `Bouncy Ball +1` when offered (click or positional key `1`/`2`/`3`) closes the menu, increments `bouncyBallCount` from `0` to `1`, `bouncyRemaining` becomes `1` (initialized for next attempt), `supply`, `freeShots`, `areaUpgradeCount` unchanged, `Total` still `0`, no `Total Attempts: N` text drawn.
-- [ ] Stacking: take `Bouncy Ball +1` a second time (next `Total=5` menu where it is again randomly offered and chosen). `bouncyBallCount` becomes `2`, `bouncyRemaining` for next attempt becomes `2`. Verified via `getBouncyBallCount()===2` and after `handleLaunch()` `getBouncyRemaining()===2`.
+- [ ] Selecting `Bouncy Ball +1` when offered (click or positional key `1`/`2`/`3`) after first trigger closes the menu, increments `bouncyBallCount` from `0` to `1`, `bouncyRemaining` becomes `1` (initialized for next attempt), `supply` remains `{1,1,1}` plus any claimed modifiers, `freeShots`, `areaUpgradeCount` unchanged, `Total` at that point unchanged (still first trigger total).
+- [ ] Stacking: take `Bouncy Ball +1` a second time (next `Total` +5 menu where it is again randomly offered and chosen). `bouncyBallCount` becomes `2`, `bouncyRemaining` for next attempt becomes `2`. Verified via `getBouncyBallCount()===2` and after `handleLaunch()` `getBouncyRemaining()===2`.
 - [ ] With `bouncyBallCount===0` (no upgrades), ball hitting obstacle or edge dies immediately: `resetBall()` called, ball at tee, `gameState==="AIMING"`, `bouncyRemaining` stays `0`.
 - [ ] With `bouncyBallCount===1` and `bouncyRemaining===1` at launch, ball hitting rect obstacle at speed does NOT die on first hit: `bouncyRemaining` decrements to `0`, velocity reflects (dot product with normal inverted, `BOUNCE_DAMPING` applied), position repositioned outside obstacle, ball remains `FLYING` and wind-controllable. Second hit on same obstacle (now `0` remaining) dies and resets to tee with `bouncyRemaining` re-initialized to `1` for next attempt.
 - [ ] Edge bounce similarly: with `1` bounce, ball touching edge (`pos +/- radius` outside bounds) bounces (e.g., left wall `vel.x *= -BOUNCE_DAMPING`, clamped to `radius`), `bouncyRemaining 1→0`, remains `FLYING`; next edge hit with `0` dies.
@@ -81,7 +81,7 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
 - [ ] `bouncyRemaining` is re-initialized each attempt: with `bouncyBallCount===1`, launch → `remaining=1`; bounce → `0`; die → next launch → `remaining=1` again (not `0`). Verified by launching, bouncing, dying, and checking `getBouncyRemaining()===1` at start of new attempt.
 - [ ] With `bouncyBallCount===1`, dying without bouncing (e.g., directly into hole win, or `R` reset) also re-initializes to `1` for next attempt.
 - [ ] Advancing hole (`handleNextHole()` after win) does NOT reset `bouncyBallCount`; `bouncyRemaining` for next hole's first attempt is still `1` (or `2` if stacked). Modifiers cleared but bounce count persists.
-- [ ] Pressing `R` in `WIN`/`GAME_COMPLETE` (`resetGameAfterWin()`) resets `bouncyBallCount` to `0`, `bouncyRemaining` to `0`, together with `holeAttempts=0, totalAttempts=0, supply={0,0,0}, freeShots=0, areaUpgradeCount=0`, and next `0` menu again offers new random 3-of-6.
+- [ ] Pressing `R` in `WIN`/`GAME_COMPLETE` (`resetGameAfterWin()`), `startNewGameFromMain` (REQ-029), or `endRun` (REQ-029) resets `bouncyBallCount` to `0`, `bouncyRemaining` to `0`, together with `holeAttempts=0, totalAttempts=0, supply={1,1,1}, freeShots=0, areaUpgradeCount=0`, and next menu requires 5 counted shots (no menu at `0`).
 - [ ] `Bouncy Ball +1` not offered scenario: if current random 3-set does not contain `bouncyBall`, it cannot be selected and counts stay unchanged that trigger.
 - [ ] Hidden tracker: canvas top HUD still shows only `Hole: N/M` `Attempts: X` `Total: Y`, win overlay shows only hole/total, no `Bounces` text in DOM or HUD. `window.__getBouncyRemaining()` and `window.__getBouncyBallCount()` still return correct values.
 - [ ] No 3rd-party libraries; pure vanilla JS `bouncyBallCount`, `bouncyRemaining = bouncyBallCount` per attempt, `Math.random()` shuffle 3-of-6, reflection math with `BOUNCE_DAMPING`.
@@ -89,7 +89,7 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
 ## Dependencies
 
 - REQ-015 (modifier area, but bouncy is independent; same hotbar persistence model)
-- REQ-021 (upgrade reward menu 3-random-of-N, trigger `totalAttempts%5`, `rewardOffered`, `claimReward` branching)
+- REQ-021 (upgrade reward menu 3-random-of-N, trigger secret counter `5`, `rewardOffered`, `claimReward` branching — no initial menu)
 - REQ-020 (supply coexistence; bouncy does not affect supply)
 - REQ-022 (free shots coexistence; bouncy does not affect freeShots, but both are hidden per-run counters)
 - REQ-023 (modifier area coexistence; pool now 6, bouncy competes with area)
@@ -120,13 +120,12 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
     else if(type==='areaUp') addAreaUpgrade(1);
     else if(type==='bouncyBall') addBouncyBall(1);
     else addToSupply(type,1);
-    rewardClaimedFor = totalAttempts;
     rewardMenuVisible=false; rewardOffered=[];
   }
   // handleLaunch: after launch, initBouncyForAttempt() or set bouncyRemaining = bouncyBallCount
   // resetBall: after reset, bouncyRemaining = bouncyBallCount
   // loadLevel/handleNextHole: bouncyRemaining = bouncyBallCount
-  // resetGameAfterWin: bouncyBallCount=0; bouncyRemaining=0;
+  // resetGameAfterWin/startNewGameFromMain/endRun/clearProgress: bouncyBallCount=0; bouncyRemaining=0;
 
   function bounceBall(hit, isEdge, canvasW, canvasH){
     if(isEdge){
@@ -172,7 +171,7 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
 
 ## File Paths
 
-- `src/main.js:1` (POOL size 6 with bouncyBall, bouncyBallCount, bouncyRemaining, getBouncyBallCount/getBouncyRemaining/addBouncyBall/setBouncyBallCount, initBouncyForAttempt, claimReward bouncyBall branch +1, handleLaunch/resetBall/loadLevel/handleNextHole/resetGameAfterWin lifecycle, bounce vs die branching, bounceBall helper with BOUNCE_DAMPING)
+- `src/main.js:1` (POOL size 6 with bouncyBall, bouncyBallCount, bouncyRemaining, getBouncyBallCount/getBouncyRemaining/addBouncyBall/setBouncyBallCount, initBouncyForAttempt, claimReward bouncyBall branch +1, handleLaunch/resetBall/loadLevel/handleNextHole/resetGameAfterWin/startNewGameFromMain/endRun/clearProgress lifecycle, bounce vs die branching, bounceBall helper with BOUNCE_DAMPING)
 - `src/physics.js:1` (BOUNCE_DAMPING export, optional bounce helper, updateBall unchanged but main handles bounce)
 - `src/obstacles.js:1` (checkObstacleCollision / isOutOfBounds still used; optional getCollisionNormal helper)
 - `src/render.js:1` (REWARD_TYPE_DEFS bouncyBall entry #1abc9c ◎, getRewardButtonsLayout now 3-of-6 random, drawRewardMenu draws Bouncy Ball +1 button when offered, no HUD for bounces)

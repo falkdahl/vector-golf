@@ -53,8 +53,8 @@ let hotbarEl = null;
 let draggingIdx = -1;
 let isDragging = false;
 
-// Supply per REQ-020: per-type inventory, starts empty on new game
-let supply = { amplify: 0, nullify: 0, flip: 0 };
+// Supply per REQ-020: per-type inventory, starts with one of each on new game
+let supply = { amplify: 1, nullify: 1, flip: 1 };
 
 function canPlace(type) {
   if (!type || !(type in supply)) return false;
@@ -73,7 +73,7 @@ function addToSupply(type, n = 1) {
 }
 
 function resetSupply() {
-  supply = { amplify: 0, nullify: 0, flip: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1 };
   updateHotbarUI();
 }
 
@@ -234,7 +234,7 @@ function resumeGame() {
 function startNewGame() {
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 0, nullify: 0, flip: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1 };
   freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
@@ -296,7 +296,7 @@ function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 0, nullify: 0, flip: 0 }; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1 }; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
@@ -314,7 +314,7 @@ function endRun() {
   if (!pauseMenuVisible) return false;
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 0, nullify: 0, flip: 0 }; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1 }; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
@@ -401,16 +401,16 @@ function bounceBall(hit, isEdge) {
   ball.isMoving = true;
 }
 
-// Reward menu per REQ-021/023/024: secret counter + very first attempt - 3 random of 6 pool
+// Reward menu per REQ-021/023/024: secret counter (every 5 counted shots) - 3 random of 6 pool, no award before first attempt
 const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp', 'bouncyBall'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
 let rewardMenuHover = null; // hovered type for visual feedback
 let rewardOffered = []; // 3 distinct types randomly chosen from REWARD_POOL per trigger
-// Secret hidden counter per updated REQ-021: increments only on counted (non-free) shots
+// Secret hidden counter per updated REQ-021: increments only on counted (non-free) shots, first reward after 5
 let secretRewardCounter = 0; // hidden 0..4
 let rewardPending = false;
-let firstRewardClaimed = false;
+let firstRewardClaimed = false; // kept for backward compat but no longer triggers initial menu
 let rewardRerolled = false; // per-menu flag per REQ-025, false when menu freshly shown
 let rewardRerollHover = false; // hover for re-roll button
 
@@ -449,17 +449,7 @@ function maybeShowRewardMenu() {
   if (mainMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (rewardMenuVisible) return;
-  // Very first attempt: show before any counted shot (secretRewardCounter==0 && totalAttempts==0 && not yet claimed)
-  if (!firstRewardClaimed && secretRewardCounter === 0 && totalAttempts === 0) {
-    rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
-    rewardMenuVisible = true;
-    rewardMenuHover = null;
-    rewardRerolled = false;
-    rewardRerollHover = false;
-    updateHotbarUI();
-    // Do NOT save initial menu before any attempt per REQ-027 AC (no pre-create until attempt)
-    return;
-  }
+  // No reward before first attempt — first reward only after 5 counted shots via rewardPending
   if (rewardPending) {
     rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
     rewardMenuVisible = true;
@@ -556,9 +546,9 @@ function loadLevel(index) {
 }
 
 function initLevel() {
-  // REQ-020/022/023/024 + REQ-021 secret counter + REQ-025 reroll + REQ-028 pause stats: new game starts with empty supply, freeShots, areaUpgradeCount, bouncy and secret counter
+  // REQ-020/022/023/024 + REQ-021 secret counter + REQ-025 reroll + REQ-028 pause stats: new game starts with one of each modifier, no award before first attempt
   if (currentHoleIndex === 0) {
-    supply = { amplify: 0, nullify: 0, flip: 0 };
+    supply = { amplify: 1, nullify: 1, flip: 1 };
     freeShots = 0;
     areaUpgradeCount = 0;
     bouncyBallCount = 0;
@@ -773,8 +763,8 @@ function resetGameAfterWin() {
   holeAttempts = 0;
   totalAttempts = 0;
   attempts = 0;
-  // REQ-020/022/023/024: reset supply, freeShots, areaUpgradeCount and bouncy to empty on new game
-  supply = { amplify: 0, nullify: 0, flip: 0 };
+  // REQ-020/022/023/024: reset supply to one of each on new game, no award before first attempt
+  supply = { amplify: 1, nullify: 1, flip: 1 };
   freeShots = 0;
   areaUpgradeCount = 0;
   bouncyBallCount = 0;
@@ -810,8 +800,7 @@ function resetGameAfterWin() {
   winOverlay.classList.add("hidden");
   updateAttemptsUI();
   updateForceBar();
-  // REQ-021: on new game reset, show reward at 0
-  maybeShowRewardMenu();
+  // No initial reward — first reward after 5 counted shots
 }
 
 function handleLaunch(angle, power) {
@@ -1121,9 +1110,9 @@ function init() {
     mainMenuVisible = true;
     pauseMenuVisible = false; rewardMenuVisible = false;
     if (winOverlay) winOverlay.classList.add("hidden");
-    // Ensure run state is clean (no attempts)
+    // Ensure run state is clean (no attempts) but with one of each modifier per REQ-020
     holeAttempts = 0; totalAttempts = 0; attempts = 0;
-    supply = { amplify: 0, nullify: 0, flip: 0 };
+    supply = { amplify: 1, nullify: 1, flip: 1 };
     freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
     rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
     secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false; rewardOffered = []; rewardRerolled = false;

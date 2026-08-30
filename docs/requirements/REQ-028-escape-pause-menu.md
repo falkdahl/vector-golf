@@ -8,10 +8,10 @@
 - **Related Plan Section:** Game States / UI (REQ-011/REQ-014 Extension)
 
 ## Description
-The game SHALL provide a pause menu accessible with the **Escape** key. The menu SHALL have two buttons: **Resume** which simply closes the menu and resumes play, and **New Game** which clears the current run state and starts over at hole 1. In the bottom of the menu SHALL be a list of all reward types with a count `xN` showing how many times the player has chosen that reward in the current run (e.g., `Amplify x5` means amplify was chosen 5 times this run).
+The game SHALL provide a pause menu accessible with the **Escape** key. The menu SHALL have two buttons: **Resume** which simply closes the menu and resumes play, and **New Game** which clears the current run state and starts over at hole 1 with supply `{1,1,1}` and no pending reward. In the bottom of the menu SHALL be a list of all reward types with a count `xN` showing how many times the player has chosen that reward in the current run (e.g., `Amplify x5` means amplify was chosen 5 times this run).
 
 ## Rationale
-Players need a discoverable way to pause, inspect run progress, and restart without waiting for a win. Escape is the standard PC pause affordance and is already partially used to deselect modifiers (REQ-015). Centralizing `Resume`/`New Game` in a single overlay avoids hidden `R`-only resets and makes the new `localStorage` persistence (REQ-027) understandable — `New Game` explicitly clears the saved run. Showing reward counts `xN` at the bottom gives immediate feedback on build (how many times each upgrade was taken), which is otherwise invisible (counters are hidden per REQ-022/023/024), and helps players plan future rerolls without opening storage.
+Players need a discoverable way to pause, inspect run progress, and restart without waiting for a win. Escape is the standard PC pause affordance and is already partially used to deselect modifiers (REQ-015). Centralizing `Resume`/`New Game` in a single overlay avoids hidden `R`-only resets and makes the new `localStorage` persistence (REQ-027) understandable — `New Game` explicitly clears the saved run. Showing reward counts `xN` at the bottom gives immediate feedback on build (how many times each upgrade was taken), which is otherwise invisible (counters are hidden per REQ-022/023/024), and helps players plan future rerolls without opening storage. New games start with one of each modifier (`{1,1,1}`) per REQ-020 and no initial reward pending per REQ-021.
 
 ## Requirements
 
@@ -42,10 +42,10 @@ Players need a discoverable way to pause, inspect run progress, and restart with
      function startNewGame(){
        clearProgress(); // REQ-027 localStorage remove
        currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-       supply={amplify:0,nullify:0,flip:0};
+       supply={amplify:1,nullify:1,flip:1};
        freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
        // if sharpshooterCount exists -> 0
-       secretRewardCounter=0; rewardPending=false; firstRewardClaimed=false;
+       secretRewardCounter=0; rewardPending=false;
        rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
        pauseMenuVisible=false;
        // REQ-028 stats
@@ -56,15 +56,15 @@ Players need a discoverable way to pause, inspect run progress, and restart with
        gameState="AIMING";
        winOverlay.classList.add("hidden");
        updateAttemptsUI(); updateHotbarUI();
-       maybeShowRewardMenu(); // will show initial 3-of-N offer on hole 1
+       // no initial reward menu: maybeShowRewardMenu() will keep menu hidden until 5 counted shots
      }
      ```
-     SHALL be executable **any time the pause menu is visible**, even mid-run on hole 2/3. SHALL clear `localStorage` via `clearProgress()` (REQ-027), reset all run state as above (equivalent to `resetGameAfterWin` but callable outside `WIN`), reset `bouncyRemaining`, clear `rewardChosenCounts`, close the pause menu, and start at hole 1 in `AIMING` at its tee. It SHALL NOT require `WIN` state.
+     SHALL be executable **any time the pause menu is visible**, even mid-run on hole 2/3. SHALL clear `localStorage` via `clearProgress()` (REQ-027), reset all run state as above (equivalent to `resetGameAfterWin` but callable outside `WIN` — new supply is `{1,1,1}` and no pending reward), reset `bouncyRemaining`, clear `rewardChosenCounts`, close the pause menu, and start at hole 1 in `AIMING` at its tee with hotbar showing `1` for each modifier. It SHALL NOT require `WIN` state and SHALL NOT show an initial reward menu.
    - Both actions SHALL be idempotent and SHALL set `pauseMenuHover=null` and cursor to `default`.
 
 3. **Reward Stats Tracking** in `src/main.js` (shared with REQ-021/022/023/024):
-   - State SHALL include `rewardChosenCounts: Record<string,number>` with keys matching the pool `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']` (and `'sharpshooter'` if pool is 7). Initialized to `0` for all keys on new game (`initLevel` index 0, `resetGameAfterWin`, `startNewGame`, page reload with no save). If `sharpshooter` pool exists, include it; otherwise 6 keys.
-   - On each successful `claimReward(type)` (exactly once per menu trigger, `rewardMenuVisible` guard), the corresponding counter SHALL increment by `1`:
+   - State SHALL include `rewardChosenCounts: Record<string,number>` with keys matching the pool `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']` (and `'sharpshooter'` if pool is 7). Initialized to `0` for all keys on new game (`initLevel` index 0, `resetGameAfterWin`, `startNewGame`, `startNewGameFromMain`, `endRun`, page reload with no save). If `sharpshooter` pool exists, include it; otherwise 6 keys.
+   - On each successful `claimReward(type)` (exactly once per menu trigger after 5 counted shots, `rewardMenuVisible` guard), the corresponding counter SHALL increment by `1`:
      ```js
      // inside claimReward after the existing supply/freeShots/area/bouncy mutation
      if(type in rewardChosenCounts) rewardChosenCounts[type] = Math.max(0, (rewardChosenCounts[type]||0)+1);
@@ -72,10 +72,10 @@ Players need a discoverable way to pause, inspect run progress, and restart with
      saveProgress(); // also persist counts per REQ-027 (extend payload)
      ```
      - For `freeShots`, the count is **times chosen**, not remaining `freeShots` (e.g., choosing freeShots twice → `freeShots` remaining may be `3` after using some, but `rewardChosenCounts.freeShots ===2` and bottom list shows `Free Shots x2`).
-     - For `areaUp` and `bouncyBall`, the counts SHALL equal `areaUpgradeCount` and `bouncyBallCount` respectively after the increment (they are the same as “times chosen” for those upgrades). For `amplify`/`nullify`/`flip`, counts SHALL equal `supply[type]` after the increment (since each choice adds `+1` to supply).
-   - The counts SHALL **persist** through death resets (`resetBall()`), `R` during play (ball reset without scoring), and hole advances (`advanceHole`/`handleNextHole`/`loadLevel(n>0)`) — those SHALL NOT reset them. Only `startNewGame`/`resetGameAfterWin`/new game (index 0) SHALL zero them. `clearProgress` SHALL also clear them from storage.
+     - For `areaUp` and `bouncyBall`, the counts SHALL equal `areaUpgradeCount` and `bouncyBallCount` respectively after the increment (they are the same as “times chosen” for those upgrades). For `amplify`/`nullify`/`flip`, counts SHALL equal `supply[type]` minus the initial `1` plus chosen? Actually with start `{1,1,1}`, choosing amplify once gives `supply.amplify 1→2` and `rewardChosenCounts.amplify 0→1`. So `supply = 1 + chosenCounts[amplify]`. Similar for other modifiers.
+   - The counts SHALL **persist** through death resets (`resetBall()`), `R` during play (ball reset without scoring), and hole advances (`advanceHole`/`handleNextHole`/`loadLevel(n>0)`) — those SHALL NOT reset them. Only `startNewGame`/`resetGameAfterWin`/`startNewGameFromMain`/`endRun`/new game (index 0) SHALL zero them. `clearProgress` SHALL also clear them from storage.
    - Helpers SHALL be exposed for tests: `getRewardChosenCounts():Record<string,number>`, `getRewardChosenCount(type):number`, `setRewardChosenCounts(obj)` (clamped `>=0` int). Debug via `window.__getRewardChosenCounts`, `window.__setRewardChosenCounts`.
-   - Persistence (REQ-027 extension): `getSavePayload()` SHALL include `rewardChosenCounts`, and `loadProgress()` SHALL restore it (merge with defaults for missing keys, clamp `>=0` int). If payload has no `rewardChosenCounts` (old save), initialize to `0`s and derive from existing counters where possible (amplify→supply.amplify, etc., freeShots→0) without throwing.
+   - Persistence (REQ-027 extension): `getSavePayload()` SHALL include `rewardChosenCounts`, and `loadProgress()` SHALL restore it (merge with defaults for missing keys, clamp `>=0` int). If payload has no `rewardChosenCounts` (old save), initialize to `0`s and derive from existing counters where possible (amplify→supply.amplify -1, etc., freeShots→0) without throwing.
 
 4. **Menu Rendering** in `src/render.js` / `index.html` / `style.css`:
    - **Inside canvas** via `drawPauseMenu(ctx,width,height,hovered)` called from `render()` when `pauseMenuVisible===true`, **OR** as a **DOM overlay** `#pause-overlay` centered over canvas (like `#win-overlay`). Either is acceptable if visuals meet spec and hit-testing works in logical coordinates. No white card background on green with dark text; use high-contrast white with stroke on dim `rgba(0,0,0,0.55)` (same as reward/win dim) and transparent panel background.
@@ -113,23 +113,23 @@ Players need a discoverable way to pause, inspect run progress, and restart with
 
 ## Acceptance Criteria
 
-- [ ] On fresh page load (new game, `pauseMenuVisible=false`), pressing `Escape` with no modifier selected (`selectedModifier===null`) immediately opens pause overlay: full-canvas dim `rgba(0,0,0,0.55)`, title `Paused` `700 22px` white with stroke `5px`, two centered buttons `Resume` (`140×44` white border/fill `0.12` hover `0.22`, `▶` icon) and `New Game` (`↺` red `rgba(231,76,60,0.28)`) with hover brighten and `cursor pointer`. Pressing `Escape` again or clicking `Resume` closes the menu (`pauseMenuVisible false`) and returns to `AIMING` without changing `currentHoleIndex`, `holeAttempts`, `totalAttempts`, `supply`, `secretRewardCounter`, or `modifiers`.
+- [ ] On fresh page load (new game, `pauseMenuVisible=false`, `supply={1,1,1}`, no reward menu), pressing `Escape` with no modifier selected (`selectedModifier===null`) immediately opens pause overlay: full-canvas dim `rgba(0,0,0,0.55)`, title `Paused` `700 22px` white with stroke `5px`, two centered buttons `Resume` (`140×44` white border/fill `0.12` hover `0.22`, `▶` icon) and `New Game` (`↺` red `rgba(231,76,60,0.28)`) with hover brighten and `cursor pointer`. Pressing `Escape` again or clicking `Resume` closes the menu (`pauseMenuVisible false`) and returns to `AIMING` without changing `currentHoleIndex`, `holeAttempts`, `totalAttempts`, `supply={1,1,1}`, `secretRewardCounter=0`, or `modifiers`.
 - [ ] If a modifier is selected (`selectedModifier='amplify'`), first `Escape` deselects it (`selectedModifier null`, hotbar highlight cleared) and does **not** open pause; second `Escape` then opens pause. Verified via `getSelectedModifier()===null` after first, `isPauseMenuVisible()===true` after second.
-- [ ] While `rewardMenuVisible===true`, pressing `Escape` does **not** open pause menu and does **not** close reward menu (reward blocked per REQ-021). While `WIN` overlay is shown, `Escape` does **not** open pause.
+- [ ] While `rewardMenuVisible===true` (after 5 counted shots), pressing `Escape` does **not** open pause menu and does **not** close reward menu (reward blocked per REQ-021). While `WIN` overlay is shown, `Escape` does **not** open pause.
 - [ ] While pause is visible, aiming/charging is blocked: holding `ArrowRight` does not change `getAimAngle()`, holding `Space` does not increase `charge`, clicking canvas does not place a modifier even if `1` was pressed before pausing. `gameState` remains `AIMING`/`CHARGING` (or `PAUSED`) and ball does not drift; `updateBall` not called. `handleLaunch` while pause returns without incrementing `holeAttempts`/`totalAttempts`.
 - [ ] Clicking `Resume` (hit-test inside its rect or DOM button) closes menu and resumes at same hole/attempts: `currentHoleIndex` unchanged, `holeAttempts`/`totalAttempts` unchanged, `supply`/`freeShots`/`areaUpgradeCount`/`bouncyBallCount` unchanged, modifiers still on field, `drawArrows` still shows same wind.
-- [ ] Clicking `New Game` (when pause visible) clears run state and starts at hole 1: `currentHoleIndex 0`, `holeAttempts 0`, `totalAttempts 0`, `supply {0,0,0}`, `freeShots 0`, `areaUpgradeCount 0`, `bouncyBallCount 0`, `secretRewardCounter 0`, `rewardPending false`, `firstRewardClaimed false`, `rewardMenuVisible` now `true` with new random 3-of-N offer for hole 1 (per REQ-021 initial), `modifiers []` (field cleared, arrows reflect base field), `pauseMenuVisible false`, `localStorage.getItem(STORAGE_KEY)` is `null` immediately after (cleared), next attempt creates fresh save. On holes 2/3, `New Game` also jumps back to hole 1 (not staying on current hole).
-- [ ] Bottom reward list: when pause is open, below the two buttons is a centered list of **all** reward types (6 types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%`, `Bouncy Ball +1` — or 7 if sharpshooter pool is implemented) each showing icon `»`/`∅`/`⇄`/`★`/`◯`/`◎` with correct colors (`#e67e22/#3498db/#9b59b6/#2ecc71/#f39c12/#1abc9c`) and a count `xN` (e.g., `x0` before any claim, `x2` after two claims). The count SHALL be the **times chosen** this run, not remaining inventory: verified via `getRewardChosenCounts().amplify===2` after two `Amplify` claims, `freeShots` chosen `1` shows `x1` even if `freeShots` remaining is `2` after one use, `areaUp x1` shows `1` after one `Area +20%` claim. The list SHALL persist through hole advances (e.g., `Amplify x1` still `x1` on hole 2) and after reload (e.g., reload after `Amplify x1` still shows `x1` via `loadProgress`). After `New Game`, all counts back to `x0`.
+- [ ] Clicking `New Game` (when pause visible) clears run state and starts at hole 1: `currentHoleIndex 0`, `holeAttempts 0`, `totalAttempts 0`, `supply {1,1,1}`, `freeShots 0`, `areaUpgradeCount 0`, `bouncyBallCount 0`, `secretRewardCounter 0`, `rewardPending false`, `rewardMenuVisible` remains `false` (no initial 3-of-N offer), `modifiers []` (field cleared, arrows reflect base field), `pauseMenuVisible false`, `localStorage.getItem(STORAGE_KEY)` is `null` immediately after (cleared), next attempt creates fresh save. On holes 2/3, `New Game` also jumps back to hole 1 (not staying on current hole). Hotbar shows `1` for each modifier, not `0`.
+- [ ] Bottom reward list: when pause is open, below the two buttons is a centered list of **all** reward types (6 types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%`, `Bouncy Ball +1` — or 7 if sharpshooter pool is implemented) each showing icon `»`/`∅`/`⇄`/`★`/`◯`/`◎` with correct colors (`#e67e22/#3498db/#9b59b6/#2ecc71/#f39c12/#1abc9c`) and a count `xN` (e.g., `x0` before any claim, `x1` after one claim from first reward). The count SHALL be the **times chosen** this run, not remaining inventory: verified via `getRewardChosenCounts().amplify===1` after one `Amplify` claim (supply then `2`), `freeShots` chosen `1` shows `x1` even if `freeShots` remaining is `2` after one use, `areaUp x1` shows `1` after one `Area +20%` claim. The list SHALL persist through hole advances (e.g., `Amplify x1` still `x1` on hole 2) and after reload (e.g., reload after `Amplify x1` still shows `x1` via `loadProgress`). After `New Game`, all counts back to `x0` and supply is `{1,1,1}`.
 - [ ] Counts are hidden outside pause menu: `drawHUD` still shows only `Hole: N/M` `Attempts: X` `Total: Y`, win overlay shows only hole/total, no `xN` in HUD. `window.__getRewardChosenCounts()` returns correct map.
-- [ ] Persistence: after `Amplify x1` then page reload, pause reopened shows `Amplify x1` (not `x0`). `localStorage` payload contains `rewardChosenCounts` and is versioned. Corrupt storage reloads as new game with counts `0`.
+- [ ] Persistence: after `Amplify x1` (first reward) then page reload, pause reopened shows `Amplify x1` (not `x0`). `localStorage` payload contains `rewardChosenCounts` and is versioned. Corrupt storage reloads as new game with counts `0` and supply `{1,1,1}`.
 - [ ] No 3rd-party libraries; pure vanilla JS `pauseMenuVisible` boolean, `keydown Escape` branching, `localStorage` for clear (reuse REQ-027 key), canvas or DOM rendering with high-contrast white text on dim.
 
 ## Dependencies
 
 - REQ-011 (states `AIMING`/`CHARGING`/`FLYING`/`WIN`, `resetBall`, `loadLevel`, `resetGameAfterWin`)
 - REQ-014 (attempts counters, `holeAttempts`/`totalAttempts`/`currentHoleIndex`, `drawHUD`)
-- REQ-015/REQ-020 (modifiers, `selectedModifier`, supply, hotbar)
-- REQ-021 (reward menu 3-of-N, secret counter, `claimReward`, `firstRewardClaimed`, `rewardPending`)
+- REQ-015/REQ-020 (modifiers, `selectedModifier`, supply `{1,1,1}`, hotbar)
+- REQ-021 (reward menu 3-of-N, secret counter, `claimReward`, `rewardPending` — no initial menu)
 - REQ-022/REQ-023/REQ-024 (freeShots, area, bouncy — counts derived, `addFreeShots`/`addAreaUpgrade`/`addBouncyBall`)
 - REQ-025 (reroll state, must not be affected by pause)
 - REQ-027 (localStorage `saveProgress`/`loadProgress`/`clearProgress`, extend payload with `rewardChosenCounts`)
@@ -146,15 +146,13 @@ Players need a discoverable way to pause, inspect run progress, and restart with
   function startNewGame(){
     clearProgress();
     currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-    supply={amplify:0,nullify:0,flip:0}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
-    secretRewardCounter=0; rewardPending=false; firstRewardClaimed=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
+    supply={amplify:1,nullify:1,flip:1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
+    secretRewardCounter=0; rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
     rewardChosenCounts={amplify:0,nullify:0,flip:0,freeShots:0,areaUp:0,bouncyBall:0};
     modifiers=[]; syncModifiersToField(); selectedModifier=null;
-    rewardClaimedFor=null;
     loadLevel(0); gameState="AIMING"; winOverlay.classList.add("hidden");
     updateAttemptsUI(); updateHotbarUI();
     pauseMenuVisible=false; pauseMenuHover=null;
-    maybeShowRewardMenu();
     return true;
   }
   // in claimReward(type): after add* mutation, if(type in rewardChosenCounts) rewardChosenCounts[type]++;
@@ -216,7 +214,7 @@ Players need a discoverable way to pause, inspect run progress, and restart with
 
 ## File Paths
 
-- `src/main.js:1` (pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts/getRewardChosenCount, resumeGame, startNewGame/New Game clearProgress, claimReward increment, getSavePayload/loadProgress/clearProgress extension, init resume, window keydown Escape chain, window exposure)
+- `src/main.js:1` (pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts/getRewardChosenCount, resumeGame, startNewGame/New Game clearProgress with {1,1,1}, claimReward increment, getSavePayload/loadProgress/clearProgress extension, init resume, window keydown Escape chain, window exposure)
 - `src/render.js:1` (drawPauseMenu, getPauseButtonsLayout, getRewardStatsListLayout, pause dim/title/buttons/reward list rendering)
 - `index.html:1` (optional #pause-overlay DOM structure if DOM mode chosen)
 - `style.css:1` (#pause-overlay dim, .pause-content transparent, buttons, .reward-stats list)

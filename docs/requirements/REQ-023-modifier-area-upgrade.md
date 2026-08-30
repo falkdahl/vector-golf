@@ -18,10 +18,10 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 1. **Pool Inclusion** in `src/main.js` (REQ-021 Pool):
    - The random upgrade pool `POOL` per REQ-021 SHALL be extended from four to **five** distinct types: `['amplify','nullify','flip','freeShots','areaUp']` (internal identifiers; `areaUp` MAY be alias `modifierArea` or `areaPlus20`, but SHALL be documented consistently).
    - The reward menu SHALL still display **exactly three** distinct options per trigger, now randomly chosen as `shuffle([...POOL]).slice(0,3)` (3-of-5 uniform without replacement). The excluded two types SHALL not be shown that trigger. Over many triggers all five types SHALL remain possible to appear.
-   - No change to trigger timing (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5` + very first attempt) or blocking logic; only the pool size grows.
+   - No change to trigger timing (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5`, no reward before first attempt) or blocking logic; only the pool size grows.
 
 2. **Stacking State** in `src/main.js`:
-   - SHALL include `areaUpgradeCount: number` (integer `>=0`) or `modifierAreaBonus: number` and/or `modifierRadiusMultiplier: number`, initialized to `0` (count) / `1.0` (multiplier) on **new game**: page load / `initLevel()` with `currentHoleIndex===0`, `resetGameAfterWin()` (press `R` in `WIN`/`GAME_COMPLETE`), and full page reload.
+   - SHALL include `areaUpgradeCount: number` (integer `>=0`) or `modifierAreaBonus: number` and/or `modifierRadiusMultiplier: number`, initialized to `0` (count) / `1.0` (multiplier) on **new game**: page load / `initLevel()` with `currentHoleIndex===0`, `resetGameAfterWin()` (press `R` in `WIN`/`GAME_COMPLETE`), `startNewGameFromMain()` (REQ-029), `endRun()` (REQ-029), `clearProgress()` (REQ-027), and full page reload.
    - On each acquisition of the `Area +20%` reward (`claimReward('areaUp')` when offered), `areaUpgradeCount += 1` (exactly `+1` count per selection) SHALL be executed once, and the effective multiplier SHALL be recomputed as:
      ```js
      areaMultiplier = 1 + 0.2 * areaUpgradeCount   // additive
@@ -46,7 +46,7 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 4. **Persistence & Lifecycle** per REQ-011/REQ-014/REQ-020/REQ-022:
    - `areaUpgradeCount` / `areaMultiplier` SHALL **persist** through death resets (`resetBall()` on obstacle/OOB) and through `R` during play (ball reset without scoring) — those SHALL NOT reset the count.
    - `areaUpgradeCount` SHALL **persist** across hole advances (`advanceHole()` / `handleNextHole()` / `loadLevel(n>0)`) — advancing SHALL NOT reset it (similar to `supply` and `freeShots`). Only a new game reset SHALL zero it.
-   - Deterministic per run: radius for a given count SHALL be same on reload with same sequence; randomness only affects *whether* the reward was offered (REQ-021), not the radius formula itself. No `localStorage` required.
+   - Deterministic per run: radius for a given count SHALL be same on reload with same sequence; randomness only affects *whether* the reward was offered (REQ-021), not the radius formula itself. No `localStorage` required beyond REQ-027.
 
 5. **Rendering of Upgrade Button** in `src/render.js`:
    - When `areaUp` is among the three randomly offered upgrades, its button SHALL be rendered with distinct styling for recognizability and high contrast (similar to other buttons, no white card):
@@ -60,25 +60,25 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 
 ## Acceptance Criteria
 
-- [ ] On fresh page load (new game) hidden `areaUpgradeCount===0`, `getEffectiveModifierRadius()===90` (base `MODIFIER_RADIUS`), `getAreaMultiplier()===1.0`.
-- [ ] Reward menu at `Total=0` now draws **exactly three** buttons randomly chosen from **five** possible types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%` (pool size 5). Never duplicate types in one menu, never four or two, never shows excluded types. Over 12 reloads, all five pool types appear at least once statistically (3-of-5 random). Verified by `getRewardOffered().length===3` and `new Set(offered).size===3` subset of pool.
+- [ ] On fresh page load (new game) hidden `areaUpgradeCount===0`, `getEffectiveModifierRadius()===90` (base `MODIFIER_RADIUS`), `getAreaMultiplier()===1.0`, supply is `{1,1,1}` and no reward menu is visible before first attempt.
+- [ ] Reward menu after 5 counted shots (`Total=5`) now draws **exactly three** buttons randomly chosen from **five** possible types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%` (pool size 5). Never duplicate types in one menu, never four or two, never shows excluded types. Over 12 triggers, all five pool types appear at least once statistically (3-of-5 random). Verified by `getRewardOffered().length===3` and `new Set(offered).size===3` subset of pool.
 - [ ] When `Area +20%` is among the three offered, its button shows label `Area +20%` (or `Area Up`), icon `◯` (or `⬡`/`◎`) 22-24px amber/gold `#f39c12`/`#f1c40f`, border `rgba(243,156,18,0.9)`, hint `+20% area`, key hint positional `[1]`/`[2]`/`[3]`.
-- [ ] Selecting `Area +20%` when offered (click or positional key `1`/`2`/`3`) closes the menu, increments `areaUpgradeCount` from `0` to `1`, `areaMultiplier` becomes `1.2`, `getEffectiveModifierRadius()` becomes `108` (`90*1.2`), `supply` and `freeShots` unchanged, `Total` still `0`, no `Total Attempts: N` text drawn.
+- [ ] Selecting `Area +20%` when offered (click or positional key `1`/`2`/`3`) after first trigger closes the menu, increments `areaUpgradeCount` from `0` to `1`, `areaMultiplier` becomes `1.2`, `getEffectiveModifierRadius()` becomes `108` (`90*1.2`), `supply` and `freeShots` unchanged, `Total` at that point unchanged (still `5`), no `Total Attempts: N` text drawn.
 - [ ] Placing an `Amplify` modifier **after** one `Area +20%` upgrade creates a modifier with `radius===108` (not 90). `getWindAt` inside `108px` returns modified vector (e.g., amplified), outside returns base; sampling at `95px` (previously outside base but inside boosted) now shows effect, proving larger area.
 - [ ] Existing modifiers retroactively grow: place an `Amplify` with radius `90` before any area upgrade, verify `getWindAt` at `95px` is base. Then take `Area +20%` via next reward menu, verify without moving modifier that `getWindAt` at same `95px` now returns amplified vector and `drawModifiers` circle visually larger (`126px` after second upgrade).
-- [ ] Stacking additive: take `Area +20%` a second time (next `Total=5` menu where it is again randomly offered and chosen). `areaUpgradeCount` becomes `2`, `areaMultiplier` becomes `1.4` (not `1.44`), `effectiveRadius` becomes `126` (`90*1.4`). Verify via `getEffectiveModifierRadius()===126` and sampling. Third intake gives `1.6` / `144px`.
+- [ ] Stacking additive: take `Area +20%` a second time (next `Total=10` menu where it is again randomly offered and chosen). `areaUpgradeCount` becomes `2`, `areaMultiplier` becomes `1.4` (not `1.44`), `effectiveRadius` becomes `126` (`90*1.4`). Verify via `getEffectiveModifierRadius()===126` and sampling. Third intake gives `1.6` / `144px`.
 - [ ] Additive vs multiplicative check: after two upgrades, radius is `126` ±0.5, not `129.6` (`90*1.44`). Test helper `getAreaMultiplier()===1.4` not `1.44`.
 - [ ] `Area +20%` not offered scenario: if the current random 3-set does not contain `Area +20%`, it cannot be selected and `areaUpgradeCount` stays unchanged that trigger; only modifier/free-shots upgrades are selectable.
 - [ ] Dying (`resetBall()` on obstacle/OOB) does NOT reset `areaUpgradeCount` or `effectiveRadius`; modifiers already placed keep larger radius after death, and next placed modifier still uses `126px` etc.
 - [ ] Advancing hole (`handleNextHole()` after win) does NOT reset `areaUpgradeCount`; modifiers are cleared per REQ-015 but effective radius for next hole's placements remains `126px`; `supply`/`freeShots` also persist.
-- [ ] Pressing `R` in `WIN`/`GAME_COMPLETE` (`resetGameAfterWin()`) resets `areaUpgradeCount` to `0`, `areaMultiplier` to `1.0`, `effectiveRadius` to `90`, together with `holeAttempts=0, totalAttempts=0, supply={0,0,0}, freeShots=0`, and next `0` menu again offers a new random 3-of-5.
+- [ ] Pressing `R` in `WIN`/`GAME_COMPLETE` (`resetGameAfterWin()`), `startNewGameFromMain` (REQ-029), or `endRun` (REQ-029) resets `areaUpgradeCount` to `0`, `areaMultiplier` to `1.0`, `effectiveRadius` to `90`, together with `holeAttempts=0, totalAttempts=0, supply={1,1,1}, freeShots=0`, and next menu requires 5 counted shots.
 - [ ] Preview circle while a modifier is selected and `areaUpgradeCount>0` shows dashed preview with effective radius (`108`/`126`/`144`), not base `90`, with correct color per type.
 - [ ] No 3rd-party libraries; pure vanilla JS `areaUpgradeCount`, `effectiveRadius = base * (1 + 0.2*count)`, `POOL` now size 5 with uniform `Math.random()` shuffle.
 
 ## Dependencies
 
 - REQ-015 (modifier area `MODIFIER_RADIUS=90`, circular effect, `getWindAt` hit-test)
-- REQ-021 (upgrade reward menu 3-random-of-N, trigger `secretRewardCounter` per updated spec, `rewardOffered`, `claimReward` branching)
+- REQ-021 (upgrade reward menu 3-random-of-N, trigger `secretRewardCounter` per updated spec with no initial menu, `rewardOffered`, `claimReward` branching)
 - REQ-020 (supply coexistence; area upgrade does not affect supply)
 - REQ-022 (free shots coexistence; area upgrade does not affect freeShots)
 - REQ-012 (rendering inside canvas, high-contrast buttons, no white card)
@@ -106,13 +106,12 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
       // retroactively grow existing modifiers: modifiers.forEach(m=>m.radius=getEffectiveModifierRadius());
       // or rely on effective radius getter in getWindAt/hit-test
     } else addToSupply(type,1);
-    rewardClaimedFor = totalAttempts;
     rewardMenuVisible=false; rewardOffered=[];
   }
   // placeModifier: modifiers.push({..., radius:getEffectiveModifierRadius()})
   // getWindAt/dist: use mod.radius (effective) or getEffectiveModifierRadius() if lazy
   // drawRewardMenu: def for areaUp {icon:'◯', label:'Area +20%', color:'#f39c12', border:'rgba(243,156,18,0.9)', fill:'rgba(243,156,18,0.28)', hint:'+20% area'}
-  // initLevel/resetGameAfterWin: areaUpgradeCount=0
+  // initLevel/resetGameAfterWin/startNewGameFromMain/endRun/clearProgress: areaUpgradeCount=0
   // advanceHole/resetBall: do NOT reset areaUpgradeCount
   ```
 - Visual choice for Area button: alternatives `⬢` or `◎` with amber/gold `#f39c12` ensure distinctness from Amplify orange `#e67e22`, Nullify blue `#3498db`, Flip purple `#9b59b6`, Free Shots green `#2ecc71`.
@@ -120,9 +119,8 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 
 ## File Paths
 
-- `src/main.js:1` (POOL size 5 with areaUp, areaUpgradeCount, getAreaMultiplier/getEffectiveModifierRadius/addAreaUpgrade, claimReward areaUp branch +20% additive, placeModifier effective radius, retroactive radius update, initLevel/resetGameAfterWin reset, persistence through resetBall/advanceHole)
+- `src/main.js:1` (POOL size 5 with areaUp, areaUpgradeCount, getAreaMultiplier/getEffectiveModifierRadius/addAreaUpgrade, claimReward areaUp branch +20% additive, placeModifier effective radius, retroactive radius update, initLevel/resetGameAfterWin/startNewGameFromMain/endRun/clearProgress reset, persistence through resetBall/advanceHole)
 - `src/render.js:1` (REWARD_TYPE_DEFS areaUp entry #f39c12 ◯, getRewardButtonsLayout now 3-of-5 random, drawRewardMenu draws Area +20% button when offered, preview radius uses effective radius)
 - `src/vectorField.js:1` (optional: getWindAt uses effective radius via mod.radius or imported getEffectiveModifierRadius; if radius stored per modifier no change to interpolation)
 - `index.html:1` (no DOM for area bonus)
 - `style.css:1` (no styling needed; canvas-only)
-

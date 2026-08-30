@@ -11,7 +11,7 @@
 The game SHALL persist run progress to `localStorage` **on each attempt** (every `handleLaunch` that counts as a shot) so that when the site is revisited (page reload, tab closed/reopened, browser restart) the game **resumes as it was from the last saved state** instead of starting a new game. Progress SHALL be restored automatically on load before the first frame, without requiring user interaction.
 
 ## Rationale
-As a static site (`python -m http.server`, GitHub Pages) there is no backend. `localStorage` is the only zero-dependency, synchronous, origin-scoped persistence available in pure vanilla JS. Saving on each attempt (the primary scoring and progression event per REQ-014) guarantees that the most recent counters, hole, inventory, and field shaping are not lost on accidental reload/close. Resuming exactly where the player left off preserves the multi-hole risk/reward loop (supply, `freeShots`, `areaUpgradeCount`, `bouncyBallCount`, secret reward counter) and prevents frustration on long runs. The HUD stays simple (`Hole/Attempts/Total`) while persistence is invisible.
+As a static site (`python -m http.server`, GitHub Pages) there is no backend. `localStorage` is the only zero-dependency, synchronous, origin-scoped persistence available in pure vanilla JS. Saving on each attempt (the primary scoring and progression event per REQ-014) guarantees that the most recent counters, hole, inventory, and field shaping are not lost on accidental reload/close. Resuming exactly where the player left off preserves the multi-hole risk/reward loop (supply, `freeShots`, `areaUpgradeCount`, `bouncyBallCount`, secret reward counter) and prevents frustration on long runs. The HUD stays simple (`Hole/Attempts/Total`) while persistence is invisible. Starting supply is `{1,1,1}` per REQ-020 and no initial reward is pending before first attempt per REQ-021.
 
 ## Requirements
 
@@ -33,17 +33,16 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
        sharpshooterCount: number,         // REQ-026 if present else 0
        secretRewardCounter: number,       // 0..4 REQ-021
        rewardPending: boolean,
-       firstRewardClaimed: boolean,
        rewardOffered: string[]|null,      // length 0 or 3 subset of POOL when menu pending
        rewardRerolled: boolean,           // REQ-025
-       rewardMenuVisible: boolean,        // if true, resume with menu open
+       rewardMenuVisible: boolean,        // if true, resume with menu open (only after 5 counted shots)
        modifiers: Array<{type:'amplify'|'nullify'|'flip', x:number, y:number, radius:number}>, // placed field modifiers per REQ-015
        aimAngle: number,                  // radians 0..2π, persisted per REQ-019 launch-angle persistence
        savedAt: number                    // Date.now() ms for debug/expiry
      }
      ```
    - Fields that SHALL **NOT** be persisted (transient): `ball.pos/vel/isMoving`, `gameState==="FLYING"` (resume always as `AIMING` at tee), `charging/charge/holdTime`, `mousePos/selectedModifier`, `particles`/`field` grid (field is re-created deterministically per hole via `createField`/`LEVELS[h].field`). On resume, ball SHALL be placed at current hole's tee with `vel=0`.
-   - All numbers SHALL be clamped to `>=0` and integer where required on load (same clamping as setters `setSupply`, `setFreeShots`, etc.). Missing fields from older saves SHALL default to `0/false/[]` without throwing.
+   - All numbers SHALL be clamped to `>=0` and integer where required on load (same clamping as setters `setSupply`, `setFreeShots`, etc.). Missing fields from older saves SHALL default to `0/false/[]` without throwing. `supply` missing or `0` values from old saves should be migrated to `{1,1,1}` only if `totalAttempts===0` and no save is considered new game; otherwise preserve stored values.
    - `localStorage` access SHALL be wrapped in `try{}`/`catch` (private mode / quota / disabled storage SHALL NOT crash the game). On `QuotaExceededError` or `JSON` error, silently fallback to new game.
 
 2. **Save Trigger — On Each Attempt** in `src/main.js:handleLaunch(angle,power)`:
@@ -86,17 +85,17 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
      }
      ```
    - If `loadProgress()` returns valid data and `data.currentHoleIndex` is within `0..LEVELS.length-1`:
-     - Restore: `currentHoleIndex=data.currentHoleIndex`, `holeAttempts=data.holeAttempts`, `totalAttempts=data.totalAttempts`, `supply=data.supply`, `freeShots=data.freeShots`, `areaUpgradeCount=data.areaUpgradeCount`, `bouncyBallCount=data.bouncyBallCount`, `sharpshooterCount=data.sharpshooterCount||0`, `secretRewardCounter=data.secretRewardCounter`, `rewardPending`, `firstRewardClaimed`, `rewardOffered`, `rewardRerolled`, `modifiers = (data.modifiers||[]).slice()`, `aimAngle=data.aimAngle`.
+     - Restore: `currentHoleIndex=data.currentHoleIndex`, `holeAttempts=data.holeAttempts`, `totalAttempts=data.totalAttempts`, `supply=data.supply`, `freeShots=data.freeShots`, `areaUpgradeCount=data.areaUpgradeCount`, `bouncyBallCount=data.bouncyBallCount`, `sharpshooterCount=data.sharpshooterCount||0`, `secretRewardCounter=data.secretRewardCounter`, `rewardPending`, `rewardOffered`, `rewardRerolled`, `modifiers = (data.modifiers||[]).slice()`, `aimAngle=data.aimAngle`.
      - Recompute derived: `areaMultiplier=1+0.2*areaUpgradeCount`, effective radius via `getEffectiveModifierRadius()` (which now reflects restored count), `bouncyRemaining=bouncyBallCount` (per-attempt init), `attempts=totalAttempts`.
      - Re-initialize field for the restored hole: `createField(cols,rows, level.field.strength, seed, LOGICAL_W, LOGICAL_H)` then `setModifiers(modifiers)` and `syncModifiersToField()`, so wind arrows immediately reflect restored modifiers.
      - Place ball at tee of restored hole: `physicsResetBall(tee)` (or `ball.pos={...tee}` `vel={0,0}` `isMoving=false`), `gameState="AIMING"` (never resume as `FLYING`/`WIN` even if saved while flying – ball is always at tee on resume for determinism).
-     - If `data.rewardMenuVisible && data.rewardOffered?.length===3`, set `rewardMenuVisible=true` `rewardOffered=data.rewardOffered` `rewardRerolled=!!data.rewardRerolled` so the reward menu appears immediately before the first aim (blocking input per REQ-021).
+     - If `data.rewardMenuVisible && data.rewardOffered?.length===3`, set `rewardMenuVisible=true` `rewardOffered=data.rewardOffered` `rewardRerolled=!!data.rewardRerolled` so the reward menu appears immediately before the first aim (blocking input per REQ-021). This only occurs when a reward was pending after 5 counted shots, not on fresh new game where no menu is pending.
      - Call `updateAttemptsUI()`/`updateHotbarUI()`/`drawHUD` on next frame so restored HUD `Hole: N/M Attempts: X Total: Y` is visible without an extra launch.
-   - If no saved data, corrupt JSON, wrong version, or out-of-range indices, silently start a new game (`currentHoleIndex=0`, all counters `0`, no modifiers, `secretRewardCounter=0`) and do NOT throw. An error in `loadProgress` SHALL NOT block rendering.
-   - Resume SHALL NOT re-trigger the very-first-attempt reward if `firstRewardClaimed===true` in the saved payload; it SHALL respect the saved pending state.
+   - If no saved data, corrupt JSON, wrong version, or out-of-range indices, silently start a new game (`currentHoleIndex=0`, all counters `0`, `supply={1,1,1}`, `secretRewardCounter=0`, no pending menu, no modifiers) and do NOT throw. An error in `loadProgress` SHALL NOT block rendering.
+   - Resume SHALL respect the saved pending state; on fresh new game with no save, `rewardMenuVisible` is `false` and `supply` is `{1,1,1}` with no initial reward pending. `initLevel(0)` for new game SHALL set `supply={1,1,1}`, `secretRewardCounter=0`, `rewardPending=false`, `rewardMenuVisible=false`, and SHALL NOT call `maybeShowRewardMenu()` to show an initial menu.
 
-4. **Clear on New Game** in `src/main.js:resetGameAfterWin()` / `clearProgress()`:
-   - Pressing `R` in `WIN` / `GAME_COMPLETE` (reset entire run per REQ-011/REQ-014) SHALL call `clearProgress()` which does `localStorage.removeItem(STORAGE_KEY)` and then re-initializes all run state to `0` (`currentHoleIndex=0`, `holeAttempts=0`, `totalAttempts=0`, `supply={0,0,0}`, `freeShots=0`, `areaUpgradeCount=0`, `bouncyBallCount=0`, `sharpshooterCount=0`, `secretRewardCounter=0`, `rewardPending=false`, `rewardOffered=[]`, `modifiers=[]`, `rewardRerolled=false`). The next attempt SHALL then trigger a fresh save.
+4. **Clear on New Game** in `src/main.js:resetGameAfterWin()` / `clearProgress()` / `startNewGameFromMain()` / `endRun()`:
+   - Pressing `R` in `WIN` / `GAME_COMPLETE` (reset entire run per REQ-011/REQ-014), `startNewGameFromMain` (REQ-029 main menu), or `endRun` (REQ-029 pause End Run → main menu) SHALL call `clearProgress()` which does `localStorage.removeItem(STORAGE_KEY)` and then re-initializes all run state to new-game defaults (`currentHoleIndex=0`, `holeAttempts=0`, `totalAttempts=0`, `supply={1,1,1}`, `freeShots=0`, `areaUpgradeCount=0`, `bouncyBallCount=0`, `sharpshooterCount=0`, `secretRewardCounter=0`, `rewardPending=false`, `rewardOffered=[]`, `modifiers=[]`, `rewardRerolled=false`). The next attempt SHALL then trigger a fresh save.
    - Optional: exposing `window.__clearProgress()` / `window.clearProgress()` for tests. Reloading the page SHALL NOT clear storage; only explicit new-game reset does.
 
 5. **Lifecycle & Edge Cases**:
@@ -108,23 +107,23 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
 
 ## Acceptance Criteria
 
-- [ ] On fresh play (no key), `localStorage.getItem("golfVectorField.progress.v1")` is `null`; starting a new game with `Total=0` and showing the initial reward menu does not pre-create a save until an attempt is made.
-- [ ] After a counted launch (`freeShots=0` → `holeAttempts 0→1, totalAttempts 0→1, secretRewardCounter 0→1`), `localStorage` now contains a JSON string with `version:1`, `currentHoleIndex:0`, `holeAttempts:1`, `totalAttempts:1`, `supply` as at that moment, `savedAt` within 2s of now. Reloading the page (or `location.reload()`) restores HUD to `Hole:1/M Attempts:1 Total:1` (not `0/0`), and `getSecretRewardCounter()===1`.
+- [ ] On fresh play (no key), `localStorage.getItem("golfVectorField.progress.v1")` is `null`; starting a new game shows **no reward menu** (`rewardMenuVisible===false`) and `supply={1,1,1}`; no save is created until an attempt is made (still `null` before first launch).
+- [ ] After a counted launch (`freeShots=0` → `holeAttempts 0→1, totalAttempts 0→1, secretRewardCounter 0→1`), `localStorage` now contains a JSON string with `version:1`, `currentHoleIndex:0`, `holeAttempts:1`, `totalAttempts:1`, `supply` as at that moment (`{1,1,1}` plus any claimed), `savedAt` within 2s of now. Reloading the page (or `location.reload()`) restores HUD to `Hole:1/M Attempts:1 Total:1` (not `0/0`), and `getSecretRewardCounter()===1`.
 - [ ] After a free-shot launch (`freeShots=2` → `1`, counters unchanged `Total 5→5`), `localStorage` is updated with `freeShots:1` while `totalAttempts` stays `5` and `secretRewardCounter` unchanged. Reloading restores `freeShots 1` and `Total 5`.
-- [ ] After claiming a reward (`claimReward('amplify')` when offered → `supply.amplify 0→1`), storage is updated with the new supply even before the next attempt. Reloading restores the same supply and hotbar shows `1/1` placed capability.
+- [ ] After claiming a reward after 5 counted shots (`claimReward('amplify')` when offered → `supply.amplify 1→2`), storage is updated with the new supply even before the next attempt. Reloading restores the same supply and hotbar shows `2` capability.
 - [ ] After placing an Amplify modifier with supply, `modifiers.length 0→1` is persisted. Reloading restores the modifier at the same `x,y,radius` (effective radius reflects `areaUpgradeCount`), and arrows inside the circle show amplified wind via `getWindAt`.
 - [ ] Multi-hole: clearing hole 1 (`advanceHole()` → `currentHoleIndex 0→1, holeAttempts 0, totalAttempts preserved`) saves with `currentHoleIndex:1`. Reloading shows `Hole:2/M` and `Attempts:0` for that hole, `Total` as before, with previous `supply`/`freeShots`/`area`/`bouncy` all preserved.
-- [ ] Reroll: with menu visible and `rewardRerolled=false`, pressing `0` (`rerollReward()` → `Total 0→1` cost, new `rewardOffered` 3-set, `rewardRerolled true`) persists `totalAttempts:1` and the new offer and `rewardRerolled:true`. Reloading still shows the **re-rolled** menu (same 3 new options) and the reroll button disabled, not the original offer.
-- [ ] Corruption tolerance: if `localStorage.setItem(STORAGE_KEY, "not-json")` is manually set, reloading does not throw; game starts as new game `Hole:1/M Attempts:0 Total:0` and next valid save overwrites the corrupt value.
-- [ ] New-game clear: pressing `R` in `WIN`/`GAME_COMPLETE` removes the key (`localStorage.getItem(...)===null`) and resets counters to `0`. The next launch creates a fresh save with `Hole:1/M` again.
+- [ ] Reroll: with menu visible after 5 counted shots and `rewardRerolled=false`, triggering `rerollReward()` → `Total 5→6` cost, new `rewardOffered` 3-set, `rewardRerolled true`) persists `totalAttempts:6` and the new offer and `rewardRerolled:true`. Reloading still shows the **re-rolled** menu (same 3 new options) and the reroll button disabled, not the original offer.
+- [ ] Corruption tolerance: if `localStorage.setItem(STORAGE_KEY, "not-json")` is manually set, reloading does not throw; game starts as new game `Hole:1/M Attempts:0 Total:0` with `supply={1,1,1}` and no menu, and next valid save overwrites the corrupt value.
+- [ ] New-game clear: pressing `R` in `WIN`/`GAME_COMPLETE`, `startNewGameFromMain`, or `endRun` removes the key (`localStorage.getItem(...)===null`) and resets counters to `0` with `supply={1,1,1}` and `rewardMenuVisible=false`. The next launch creates a fresh save with `Hole:1/M` again.
 - [ ] No 3rd-party libraries; pure vanilla JS `localStorage.getItem/setItem/removeItem`, `JSON.stringify/parse`, `try/catch`, `Math.max(0, ...)`, versioned payload.
 
 ## Dependencies
 
 - REQ-011 (game states, `handleLaunch`, `resetBall`, `loadLevel`, `resetGameAfterWin`)
 - REQ-014 (attempts counters `holeAttempts`, `totalAttempts`, `currentHoleIndex`, `drawHUD`)
-- REQ-015/REQ-020 (modifiers & supply)
-- REQ-021 (secret reward counter, reward menu state)
+- REQ-015/REQ-020 (modifiers & supply — now `{1,1,1}` start)
+- REQ-021 (secret reward counter, reward menu state — no initial pending)
 - REQ-022 (freeShots)
 - REQ-023 (areaUpgradeCount)
 - REQ-024 (bouncyBallCount/bouncyRemaining)
@@ -142,7 +141,7 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
       currentHoleIndex, holeAttempts, totalAttempts,
       supply:{...supply}, freeShots, areaUpgradeCount, bouncyBallCount,
       sharpshooterCount: typeof sharpshooterCount!=='undefined'? sharpshooterCount:0,
-      secretRewardCounter, rewardPending, firstRewardClaimed,
+      secretRewardCounter, rewardPending,
       rewardOffered: [...rewardOffered], rewardRerolled, rewardMenuVisible,
       modifiers: modifiers.map(m=>({type:m.type,x:m.x,y:m.y,radius:m.radius})),
       aimAngle: getAimAngle(),
@@ -164,13 +163,14 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
       totalAttempts = Math.max(0, Math.floor(d.totalAttempts||0));
       attempts = totalAttempts;
       supply = { amplify: Math.max(0, Math.floor(d.supply?.amplify||0)), nullify: Math.max(0, Math.floor(d.supply?.nullify||0)), flip: Math.max(0, Math.floor(d.supply?.flip||0)) };
+      // migrate old 0 saves to 1 if new game
+      if(totalAttempts===0 && holeAttempts===0 && supply.amplify===0 && supply.nullify===0 && supply.flip===0) supply={amplify:1,nullify:1,flip:1};
       freeShots = Math.max(0, Math.floor(d.freeShots||0));
       areaUpgradeCount = Math.max(0, Math.floor(d.areaUpgradeCount||0));
       bouncyBallCount = Math.max(0, Math.floor(d.bouncyBallCount||0));
       if(typeof sharpshooterCount!=='undefined') sharpshooterCount = Math.max(0, Math.floor(d.sharpshooterCount||0));
       secretRewardCounter = Math.max(0, Math.min(4, Math.floor(d.secretRewardCounter||0)));
       rewardPending = !!d.rewardPending;
-      firstRewardClaimed = !!d.firstRewardClaimed;
       rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length===3 ? [...d.rewardOffered] : [];
       rewardRerolled = !!d.rewardRerolled;
       rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length===3;
@@ -182,8 +182,8 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
   function clearProgress(){ try{ localStorage.removeItem(STORAGE_KEY); } catch{} }
   // handleLaunch: after launch + counters, saveProgress();
   // claimReward/rerollReward/placeModifier/removeModifier/advanceHole: after mutation, saveProgress();
-  // init(): const saved = loadProgress(); if(saved){ // restore field, setModifiers, ball at tee, AIMING, update UI } else { initLevel(0); }
-  // resetGameAfterWin(): clearProgress(); currentHoleIndex=0; holeAttempts=0; totalAttempts=0; supply={0,0,0}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; secretRewardCounter=0; modifiers=[]; ...
+  // init(): const saved = loadProgress(); if(saved){ // restore field, setModifiers, ball at tee, AIMING, update UI } else { initLevel(0); } // initLevel(0) sets supply {1,1,1}, no pending menu
+  // resetGameAfterWin/startNewGameFromMain/endRun: clearProgress(); currentHoleIndex=0; holeAttempts=0; totalAttempts=0; supply={1,1,1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; secretRewardCounter=0; modifiers=[]; rewardMenuVisible=false;
   ```
 - Call `saveProgress()` **synchronously** after each `handleLaunch` so the very last attempt before a crash/reload is not lost. Additional saves after reward/modifier changes keep resume consistent; they do not contradict “on each attempt” – attempt save is the mandatory minimum.
 - Expose for tests: `window.__saveProgress=saveProgress`, `window.__loadProgress=loadProgress`, `window.__clearProgress=clearProgress`, `window.__STORAGE_KEY=STORAGE_KEY`, `window.__getSavePayload=getSavePayload`.
@@ -191,7 +191,7 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
 
 ## File Paths
 
-- `src/main.js:1` (STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, handleLaunch save on each attempt, claimReward/rerollReward/placeModifier/removeModifier/advanceHole saves, init resume, resetGameAfterWin clear)
+- `src/main.js:1` (STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, handleLaunch save on each attempt, claimReward/rerollReward/placeModifier/removeModifier/advanceHole saves, init resume, resetGameAfterWin/startNewGameFromMain/endRun clear)
 - `src/storage.js:1` (optional helper module if extraction preferred; otherwise all in main.js)
 - `index.html:1` (no DOM for progress; pure localStorage)
 - `style.css:1` (no styling needed)
