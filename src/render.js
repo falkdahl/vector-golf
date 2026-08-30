@@ -739,7 +739,19 @@ export function getRewardButtonsLayout(width, height, offered = null) {
   });
 }
 
-export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType = null) {
+export function getRewardRerollButtonLayout(width, height) {
+  // REQ-025: re-roll centered below 3 cards, below options (options occupy cardY+75 to cardY+185) - widened to cover full text, moved down further per user request
+  const cardW = 340;
+  const cardH = 220;
+  const cardY = (height - cardH) / 2;
+  const btnW = 190; // was 110 - widened to fully cover "↻ Re-roll (1 attempt) [R]" text
+  const btnH = 30; // was 28 - slightly taller for padding
+  const x = width / 2 - btnW / 2;
+  const y = cardY + 192; // was 188, moved down ~4px further (now 7px below options bottom, was 3px)
+  return { x, y, w: btnW, h: btnH };
+}
+
+export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType = null, rerolled = false, rerollHovered = false) {
   // Backward compat: if third arg is number (old totalAttempts), use default offered
   // New signature: (ctx, width, height, offeredArray, hovered)
   let offered;
@@ -860,6 +872,45 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
 
     ctx.restore();
   }
+
+  // Re-roll button per REQ-025 - below 3 cards, once per menu, costs 1 attempt
+  const rerollRect = getRewardRerollButtonLayout(width, height);
+  const isDisabled = !!rerolled;
+  const isRerollHover = !!rerollHovered && !isDisabled;
+  ctx.save();
+  if (isRerollHover) {
+    ctx.shadowColor = "rgba(0,0,0,0.18)";
+    ctx.shadowBlur = 6;
+  }
+  ctx.fillStyle = isDisabled ? "rgba(255,255,255,0.06)" : isRerollHover ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.12)";
+  ctx.strokeStyle = isDisabled ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.85)";
+  ctx.lineWidth = 1.5;
+  const rbr = 8;
+  ctx.beginPath();
+  ctx.moveTo(rerollRect.x + rbr, rerollRect.y);
+  ctx.lineTo(rerollRect.x + rerollRect.w - rbr, rerollRect.y);
+  ctx.quadraticCurveTo(rerollRect.x + rerollRect.w, rerollRect.y, rerollRect.x + rerollRect.w, rerollRect.y + rbr);
+  ctx.lineTo(rerollRect.x + rerollRect.w, rerollRect.y + rerollRect.h - rbr);
+  ctx.quadraticCurveTo(rerollRect.x + rerollRect.w, rerollRect.y + rerollRect.h, rerollRect.x + rerollRect.w - rbr, rerollRect.y + rerollRect.h);
+  ctx.lineTo(rerollRect.x + rbr, rerollRect.y + rerollRect.h);
+  ctx.quadraticCurveTo(rerollRect.x, rerollRect.y + rerollRect.h, rerollRect.x, rerollRect.y + rerollRect.h - rbr);
+  ctx.lineTo(rerollRect.x, rerollRect.y + rbr);
+  ctx.quadraticCurveTo(rerollRect.x, rerollRect.y, rerollRect.x + rbr, rerollRect.y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "700 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = isDisabled ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.65)";
+  ctx.lineWidth = 3;
+  const rerollText = isDisabled ? "Re-rolled" : "↻ Re-roll (1 attempt) [R]";
+  ctx.strokeText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
+  ctx.fillStyle = isDisabled ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.95)";
+  ctx.fillText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
+  ctx.restore();
 
   ctx.restore();
 }

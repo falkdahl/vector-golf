@@ -19,6 +19,7 @@ import {
   drawModifierPreview,
   drawRewardMenu,
   getRewardButtonsLayout,
+  getRewardRerollButtonLayout,
   setCanvasSize,
   toggleWind as toggleWindRender,
   isWindVisible
@@ -187,10 +188,27 @@ let rewardOffered = []; // 3 distinct types randomly chosen from REWARD_POOL per
 let secretRewardCounter = 0; // hidden 0..4
 let rewardPending = false;
 let firstRewardClaimed = false;
+let rewardRerolled = false; // per-menu flag per REQ-025, false when menu freshly shown
+let rewardRerollHover = false; // hover for re-roll button
 
 function getSecretRewardCounter() { return secretRewardCounter; }
 function setSecretRewardCounter(v) { secretRewardCounter = Math.max(0, Math.floor(v)); }
 function addSecretRewardCounter(n = 1) { secretRewardCounter = Math.max(0, secretRewardCounter + Math.floor(n)); }
+function getRewardRerolled() { return rewardRerolled; }
+function rerollReward() {
+  if (!rewardMenuVisible || rewardRerolled) return false;
+  // Cost is always 1 attempt, never free shot, never secret counter per REQ-025
+  holeAttempts += 1;
+  totalAttempts += 1;
+  attempts = totalAttempts;
+  updateAttemptsUI();
+  rewardRerolled = true;
+  // New random 3-set from same 6-pool, keep menu visible
+  rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
+  rewardMenuHover = null;
+  rewardRerollHover = false;
+  return true;
+}
 
 function shuffleArray(a) {
   // Fisher-Yates with Math.random, uniform
@@ -210,6 +228,8 @@ function maybeShowRewardMenu() {
     rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
     rewardMenuVisible = true;
     rewardMenuHover = null;
+    rewardRerolled = false;
+    rewardRerollHover = false;
     updateHotbarUI();
     return;
   }
@@ -218,6 +238,8 @@ function maybeShowRewardMenu() {
     rewardMenuVisible = true;
     rewardMenuHover = null;
     rewardPending = false;
+    rewardRerolled = false;
+    rewardRerollHover = false;
     updateHotbarUI();
     return;
   }
@@ -243,6 +265,7 @@ function claimReward(type) {
   // secretRewardCounter already 0 after the 5th counted shot; keep at 0 for next cycle
   rewardMenuVisible = false;
   rewardMenuHover = null;
+  rewardRerollHover = false;
   rewardOffered = [];
   rewardPending = false;
   updateHotbarUI();
@@ -300,7 +323,7 @@ function loadLevel(index) {
 }
 
 function initLevel() {
-  // REQ-020/022/023/024 + REQ-021 secret counter: new game starts with empty supply, freeShots, areaUpgradeCount, bouncy and secret counter
+  // REQ-020/022/023/024 + REQ-021 secret counter + REQ-025 reroll: new game starts with empty supply, freeShots, areaUpgradeCount, bouncy and secret counter
   if (currentHoleIndex === 0) {
     supply = { amplify: 0, nullify: 0, flip: 0 };
     freeShots = 0;
@@ -313,6 +336,8 @@ function initLevel() {
     rewardMenuVisible = false;
     rewardClaimedFor = null;
     rewardOffered = [];
+    rewardRerolled = false;
+    rewardRerollHover = false;
   } else {
     // For non-zero start (hole advance), ensure remaining matches count, keep secret counter
     bouncyRemaining = bouncyBallCount;
@@ -494,7 +519,7 @@ function resetGameAfterWin() {
   areaUpgradeCount = 0;
   bouncyBallCount = 0;
   bouncyRemaining = 0;
-  // REQ-021: reset secret counter + reward state for new game (random offer cleared)
+  // REQ-021 + REQ-025: reset secret counter + reward state + reroll for new game (random offer cleared)
   secretRewardCounter = 0;
   rewardPending = false;
   firstRewardClaimed = false;
@@ -502,6 +527,8 @@ function resetGameAfterWin() {
   rewardClaimedFor = null;
   rewardMenuHover = null;
   rewardOffered = [];
+  rewardRerolled = false;
+  rewardRerollHover = false;
   loadLevel(currentHoleIndex);
   for (const obs of level.obstacles) {
     if (obs.type === "rect") {
@@ -700,9 +727,9 @@ function render() {
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
   }
-  // REQ-021/023/024: reward menu inside canvas (on top of HUD) - 3 random of 6
+  // REQ-021/023/024 + REQ-025: reward menu inside canvas (on top of HUD) - 3 random of 6 + re-roll
   if (rewardMenuVisible) {
-    drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover);
+    drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover, rewardRerolled, rewardRerollHover);
   }
 }
 
@@ -820,6 +847,11 @@ function init() {
       } else if (e.code === "Digit3" && rewardOffered[2]) {
         claimReward(rewardOffered[2]);
         e.preventDefault();
+      } else if (e.code === "KeyR" && !rewardRerolled) {
+        rerollReward();
+        e.preventDefault();
+      } else if (e.code === "KeyR" && rewardRerolled) {
+        e.preventDefault();
       } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4") {
         // Block aiming/charging while menu open (including Digit4 which is not used - only 3 options)
         e.preventDefault();
@@ -909,7 +941,7 @@ function init() {
 
   // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020 + REQ-021
   canvas.addEventListener("mousemove", (e) => {
-    // REQ-021: handle hover for reward menu (random 3 offered)
+    // REQ-021: handle hover for reward menu (random 3 offered) + REQ-025 re-roll
     if (rewardMenuVisible) {
       const pos = getCanvasMousePos(e);
       mousePos = pos;
@@ -922,7 +954,15 @@ function init() {
         }
       }
       rewardMenuHover = hovered;
-      canvas.style.cursor = hovered ? "pointer" : "default";
+      // Re-roll button hover
+      try {
+        const rerollRect = getRewardRerollButtonLayout(LOGICAL_W, LOGICAL_H);
+        const isRerollHover = pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h;
+        rewardRerollHover = isRerollHover && !rewardRerolled;
+      } catch { rewardRerollHover = false; }
+      if (hovered) canvas.style.cursor = "pointer";
+      else if (rewardRerollHover) canvas.style.cursor = "pointer";
+      else canvas.style.cursor = "default";
       return;
     }
     if (gameState !== "AIMING" && gameState !== "CHARGING") {
@@ -953,7 +993,7 @@ function init() {
       }
     }
   });
-  canvas.addEventListener("mouseleave", () => { mousePos = null; rewardMenuHover = null; canvas.style.cursor = "default"; });
+  canvas.addEventListener("mouseleave", () => { mousePos = null; rewardMenuHover = null; rewardRerollHover = false; canvas.style.cursor = "default"; });
   canvas.addEventListener("mousedown", (e) => {
     if (rewardMenuVisible) {
       // Block dragging while reward menu open
@@ -987,9 +1027,18 @@ function init() {
     }
   });
   canvas.addEventListener("click", (e) => {
-    // REQ-021: handle reward menu selection first (random 3 offered)
+    // REQ-021: handle reward menu selection first (random 3 offered) + REQ-025 re-roll
     if (rewardMenuVisible) {
       const pos = getCanvasMousePos(e);
+      // Check re-roll button first (REQ-025)
+      try {
+        const rerollRect = getRewardRerollButtonLayout(LOGICAL_W, LOGICAL_H);
+        if (!rewardRerolled && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
+          rerollReward();
+          e.preventDefault();
+          return;
+        }
+      } catch {}
       const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H, rewardOffered);
       for (const btn of layout) {
         if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
@@ -1112,6 +1161,11 @@ if (typeof window !== 'undefined') {
   window.__setRewardPending = (v) => { rewardPending = !!v; };
   window.__getFirstRewardClaimed = () => firstRewardClaimed;
   window.__setFirstRewardClaimed = (v) => { firstRewardClaimed = !!v; };
+  window.__getRewardRerolled = getRewardRerolled;
+  window.__setRewardRerolled = (v) => { rewardRerolled = !!v; };
+  window.__rerollReward = rerollReward;
+  window.rerollReward = rerollReward;
+  window.getRewardRerolled = getRewardRerolled;
   // Secret: exact hole select (hidden)
   window.__selectHole = selectHole;
   window.__goToHole = selectHole;
@@ -1192,6 +1246,18 @@ if (typeof window !== 'undefined') {
     get: () => firstRewardClaimed,
     set: (v) => { firstRewardClaimed = !!v; }
   });
+  Object.defineProperty(window, 'rewardRerolled', {
+    get: () => rewardRerolled,
+    set: (v) => { rewardRerolled = !!v; }
+  });
+  Object.defineProperty(window, '__rewardRerolled', {
+    get: () => rewardRerolled,
+    set: (v) => { rewardRerolled = !!v; }
+  });
+  Object.defineProperty(window, 'rewardRerollHover', {
+    get: () => rewardRerollHover,
+    set: (v) => { rewardRerollHover = !!v; }
+  });
 }
 
 // Auto-init when loaded as module via script tag
@@ -1201,4 +1267,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, totalAttempts, holeAttempts, currentHoleIndex };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex };
