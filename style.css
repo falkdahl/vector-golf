@@ -41,7 +41,7 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: rgba(0,0,0,0.55);
   border-radius: 8px;
   z-index: 10;
 }

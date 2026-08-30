@@ -916,9 +916,11 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
 }
 
 export function drawWinOverlay(ctx, width, height, holeIndex = 0, totalHoles = 1, holeAttempts = 0, totalAttempts = 0) {
-  // Victory screen - background transparent, Victory same font as "Choose an Upgrade", big yellow star
+  // Victory screen - darken play field same as reward menu, Victory same font as "Choose an Upgrade", big yellow star
   ctx.save();
-  // no dim fill - transparent background per requirement
+  // Darken play field like reward menu: rgba(0,0,0,0.55) full-canvas dim
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, width, height);
   const centerX = width / 2;
   const centerY = height / 2 - 10;
   // Big yellow star
