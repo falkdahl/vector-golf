@@ -79,7 +79,7 @@ function setFreeShots(v) { freeShots = Math.max(0, Math.floor(v)); }
 function addFreeShots(n = 1) { freeShots = Math.max(0, freeShots + Math.floor(n)); }
 
 // Modifier Area +20% per REQ-023 - additive stacking, hidden bonus
-const BASE_MODIFIER_RADIUS = MODIFIER_RADIUS; // 90 base per REQ-015
+const BASE_MODIFIER_RADIUS = MODIFIER_RADIUS; // 54 base per REQ-015 (reduced 40% from 90 = 90*0.6)
 let areaUpgradeCount = 0;
 function getAreaUpgradeCount() { return areaUpgradeCount; }
 function getAreaMultiplier() { return (5 + areaUpgradeCount) / 5; }

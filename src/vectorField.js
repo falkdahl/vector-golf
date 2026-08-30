@@ -5,7 +5,7 @@ export const DEFAULT_ROWS = 15;
 export const MAX_POWER_REF = 600; // for min force calc per REQ-003
 export const MIN_WIND_FORCE = 0.1 * MAX_POWER_REF; // 60
 
-export const MODIFIER_RADIUS = 90;
+export const MODIFIER_RADIUS = 54; // reduced 40% from 90 (90*0.6) per user request
 export let modifiers = [];
 export function setModifiers(mods) { modifiers = mods; }
 export function clearModifiers() { modifiers = []; }
