@@ -426,11 +426,12 @@ const REWARD_TYPE_DEFS = {
   nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
   freeShots: { icon: '★', label: 'Free Shots', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+3 free shots' },
-  areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' }
+  areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' },
+  bouncyBall: { icon: '◎', label: 'Bouncy Ball +1', color: '#1abc9c', border: 'rgba(26,188,156,0.9)', fill: 'rgba(26,188,156,0.28)', fillHover: 'rgba(26,188,156,0.38)', hint: '+1 bounce' }
 };
 
 export function getRewardButtonsLayout(width, height, offered = null) {
-  // REQ-021/023: 3 random of 5 pool; if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
+  // REQ-021/023/024: 3 random of 6 pool; if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
   const types = Array.isArray(offered) && offered.length === 3 ? offered : ['amplify', 'nullify', 'flip'];
   const cardW = 340;
   const cardH = 220;
@@ -553,7 +554,9 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
     ctx.shadowColor = "transparent";
 
     // Label - white with dark stroke for good contrast against green/dim
-    ctx.font = "700 13px system-ui, sans-serif";
+    // Bouncy label longer, use slightly smaller font to fit 90px button
+    const labelFont = btn.type === 'bouncyBall' ? "700 11px system-ui, sans-serif" : "700 13px system-ui, sans-serif";
+    ctx.font = labelFont;
     ctx.strokeStyle = "rgba(0,0,0,0.75)";
     ctx.lineWidth = 4;
     ctx.lineJoin = "round";

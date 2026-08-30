@@ -1,6 +1,6 @@
 import { LEVEL, LEVELS } from "./levels.js";
 import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, clearModifiers } from "./vectorField.js";
-import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS } from "./physics.js";
+import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING } from "./physics.js";
 import { checkObstacleCollision, isOutOfBounds } from "./obstacles.js";
 import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
 import {
@@ -92,8 +92,60 @@ function addAreaUpgrade(n = 1) {
   syncModifiersToField();
 }
 
-// Reward menu per REQ-021/023: every 5 totalAttempts inside canvas - 3 random of 5 pool
-const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp'];
+// Bouncy Ball +1 per REQ-024 - additive stacking, hidden per-attempt tracker
+let bouncyBallCount = 0;
+let bouncyRemaining = 0;
+function getBouncyBallCount() { return bouncyBallCount; }
+function getBouncyRemaining() { return bouncyRemaining; }
+function getBouncyCount() { return bouncyBallCount; } // alias
+function addBouncyBall(n = 1) {
+  bouncyBallCount = Math.max(0, bouncyBallCount + Math.floor(n));
+  // REQ-024: update remaining for next attempt (if in AIMING/CHARGING, reflect immediately for test)
+  bouncyRemaining = bouncyBallCount;
+}
+function setBouncyBallCount(v) { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
+function initBouncyForAttempt() { bouncyRemaining = bouncyBallCount; }
+
+function bounceBall(hit, isEdge) {
+  if (isEdge) {
+    // Edge: reflect velocity component and clamp inside
+    if (ball.pos.x - BALL_RADIUS < 0 || ball.pos.x + BALL_RADIUS > LOGICAL_W) {
+      ball.vel.x *= -BOUNCE_DAMPING;
+      ball.pos.x = Math.max(BALL_RADIUS, Math.min(LOGICAL_W - BALL_RADIUS, ball.pos.x));
+    }
+    if (ball.pos.y - BALL_RADIUS < 0 || ball.pos.y + BALL_RADIUS > LOGICAL_H) {
+      ball.vel.y *= -BOUNCE_DAMPING;
+      ball.pos.y = Math.max(BALL_RADIUS, Math.min(LOGICAL_H - BALL_RADIUS, ball.pos.y));
+    }
+    // Corner: both inverted above
+  } else if (hit) {
+    if (hit.type === 'rect') {
+      const cx = Math.max(hit.x, Math.min(ball.pos.x, hit.x + hit.w));
+      const cy = Math.max(hit.y, Math.min(ball.pos.y, hit.y + hit.h));
+      let nx = ball.pos.x - cx, ny = ball.pos.y - cy;
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len; ny /= len;
+      const dot = ball.vel.x * nx + ball.vel.y * ny;
+      ball.vel.x = (ball.vel.x - 2 * dot * nx) * BOUNCE_DAMPING;
+      ball.vel.y = (ball.vel.y - 2 * dot * ny) * BOUNCE_DAMPING;
+      ball.pos.x = cx + nx * (BALL_RADIUS + 0.5);
+      ball.pos.y = cy + ny * (BALL_RADIUS + 0.5);
+    } else if (hit.type === 'circle') {
+      let nx = ball.pos.x - hit.x, ny = ball.pos.y - hit.y;
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len; ny /= len;
+      const dot = ball.vel.x * nx + ball.vel.y * ny;
+      ball.vel.x = (ball.vel.x - 2 * dot * nx) * BOUNCE_DAMPING;
+      ball.vel.y = (ball.vel.y - 2 * dot * ny) * BOUNCE_DAMPING;
+      ball.pos.x = hit.x + nx * (hit.r + BALL_RADIUS + 0.5);
+      ball.pos.y = hit.y + ny * (hit.r + BALL_RADIUS + 0.5);
+    }
+  }
+  ball.isMoving = true;
+}
+
+// Reward menu per REQ-021/023/024: every 5 totalAttempts inside canvas - 3 random of 6 pool
+const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp', 'bouncyBall'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, null initially
 let rewardMenuHover = null; // hovered type for visual feedback
@@ -114,7 +166,7 @@ function maybeShowRewardMenu() {
   if (rewardMenuVisible) return;
   if (totalAttempts % 5 !== 0) return;
   if (rewardClaimedFor === totalAttempts) return;
-  // REQ-021/023: randomly select 3 distinct upgrades from 5 pool
+  // REQ-021/023/024: randomly select 3 distinct upgrades from 6 pool
   rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
   rewardMenuVisible = true;
   rewardMenuHover = null;
@@ -131,6 +183,8 @@ function claimReward(type) {
     addFreeShots(3); // REQ-022: Free Shots +3
   } else if (type === 'areaUp') {
     addAreaUpgrade(1); // REQ-023: Area +20% additive (addAreaUpgrade handles retroactive grow + sync)
+  } else if (type === 'bouncyBall') {
+    addBouncyBall(1); // REQ-024: Bouncy Ball +1
   } else {
     if (!(type in supply)) return false;
     addToSupply(type, 1);
@@ -188,16 +242,23 @@ function loadLevel(index) {
   const dx = level.hole.x - level.tee.x;
   const dy = level.hole.y - level.tee.y;
   setAimAngle(Math.atan2(dy, dx));
+  // REQ-024: re-init bouncy bounces for new hole attempt
+  bouncyRemaining = bouncyBallCount;
   updateHotbarUI();
 }
 
 function initLevel() {
-  // REQ-020/022/023: new game starts with empty supply, freeShots and areaUpgradeCount
+  // REQ-020/022/023/024: new game starts with empty supply, freeShots, areaUpgradeCount and bouncy
   if (currentHoleIndex === 0) {
     supply = { amplify: 0, nullify: 0, flip: 0 };
     freeShots = 0;
     areaUpgradeCount = 0;
+    bouncyBallCount = 0;
+    bouncyRemaining = 0;
     rewardOffered = [];
+  } else {
+    // For non-zero start (hole advance), ensure remaining matches count
+    bouncyRemaining = bouncyBallCount;
   }
   loadLevel(currentHoleIndex);
   updateAttemptsUI();
@@ -330,6 +391,8 @@ function resetBall() {
   // Keep aimAngle between attempts per REQ-019 - do NOT reset to tee->hole
   gameState = "AIMING";
   winOverlay.classList.add("hidden");
+  // REQ-024: re-init bouncy bounces for next attempt
+  bouncyRemaining = bouncyBallCount;
   updateForceBar();
   // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
   maybeShowRewardMenu();
@@ -368,11 +431,13 @@ function resetGameAfterWin() {
   holeAttempts = 0;
   totalAttempts = 0;
   attempts = 0;
-  // REQ-020/022/023: reset supply, freeShots and areaUpgradeCount to empty on new game
+  // REQ-020/022/023/024: reset supply, freeShots, areaUpgradeCount and bouncy to empty on new game
   supply = { amplify: 0, nullify: 0, flip: 0 };
   freeShots = 0;
   areaUpgradeCount = 0;
-  // REQ-021/023: reset reward state for new game (random offer cleared)
+  bouncyBallCount = 0;
+  bouncyRemaining = 0;
+  // REQ-021/023/024: reset reward state for new game (random offer cleared)
   rewardMenuVisible = false;
   rewardClaimedFor = null;
   rewardMenuHover = null;
@@ -402,6 +467,8 @@ function handleLaunch(angle, power) {
   if (rewardMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   launchBall(angle, power);
+  // REQ-024: init bouncy bounces for this attempt
+  bouncyRemaining = bouncyBallCount;
   // REQ-022: free shots consumed first, hidden, mutually exclusive with counting
   if (freeShots > 0) {
     freeShots = Math.max(0, freeShots - 1);
@@ -507,16 +574,19 @@ function update(dt) {
       return;
     }
 
-    // Check OOB / edge - fatal per REQ-005/REQ-008
-    if (isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H)) {
-      resetBall();
-      return;
-    }
-    // Check obstacle collision - instant reset even when drifting slowly
+    // Check OOB / edge and obstacle - bounce vs death per REQ-024
+    const outOfBounds = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
     const hit = checkObstacleCollision(ball.pos, BALL_RADIUS, level.obstacles);
-    if (hit) {
-      resetBall();
-      return;
+    if (outOfBounds || hit) {
+      if (bouncyRemaining > 0) {
+        bouncyRemaining = Math.max(0, bouncyRemaining - 1);
+        if (hit) bounceBall(hit, false);
+        else bounceBall(null, true);
+        // remain FLYING, do not reset
+      } else {
+        resetBall();
+        return;
+      }
     }
 
     // No auto-reset on rest - ball continues drifting per REQ-005
@@ -564,7 +634,7 @@ function render() {
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
   }
-  // REQ-021/023: reward menu inside canvas (on top of HUD) - 3 random of 5
+  // REQ-021/023/024: reward menu inside canvas (on top of HUD) - 3 random of 6
   if (rewardMenuVisible) {
     drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover);
   }
@@ -899,6 +969,12 @@ if (typeof window !== 'undefined') {
   window.__getAreaMultiplier = getAreaMultiplier;
   window.__getEffectiveModifierRadius = getEffectiveModifierRadius;
   window.__addAreaUpgrade = addAreaUpgrade;
+  window.__getBouncyBallCount = getBouncyBallCount;
+  window.__getBouncyRemaining = getBouncyRemaining;
+  window.__getBouncyCount = getBouncyCount;
+  window.__addBouncyBall = addBouncyBall;
+  window.__setBouncyBallCount = setBouncyBallCount;
+  window.__getBouncyBallRemaining = getBouncyRemaining;
   Object.defineProperty(window, 'freeShots', {
     get: () => freeShots,
     set: (v) => setFreeShots(v)
@@ -933,6 +1009,22 @@ if (typeof window !== 'undefined') {
       syncModifiersToField();
     }
   });
+  Object.defineProperty(window, 'bouncyBallCount', {
+    get: () => bouncyBallCount,
+    set: (v) => { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
+  });
+  Object.defineProperty(window, '__bouncyBallCount', {
+    get: () => bouncyBallCount,
+    set: (v) => { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
+  });
+  Object.defineProperty(window, 'bouncyRemaining', {
+    get: () => bouncyRemaining,
+    set: (v) => { bouncyRemaining = Math.max(0, Math.floor(v)); }
+  });
+  Object.defineProperty(window, '__bouncyRemaining', {
+    get: () => bouncyRemaining,
+    set: (v) => { bouncyRemaining = Math.max(0, Math.floor(v)); }
+  });
 }
 
 // Auto-init when loaded as module via script tag
@@ -942,4 +1034,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, totalAttempts, holeAttempts, currentHoleIndex };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, totalAttempts, holeAttempts, currentHoleIndex };
