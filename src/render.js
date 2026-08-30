@@ -958,10 +958,13 @@ export function drawWinOverlay(ctx, width, height, holeIndex = 0, totalHoles = 1
 export function getPauseButtonsLayout(width, height) {
   const btnW = 140, btnH = 44;
   const cx = width / 2, cy = height / 2 - 10;
-  return {
+  const layout = {
     resume: { x: cx - btnW / 2, y: cy - 28, w: btnW, h: btnH },
-    newGame: { x: cx - btnW / 2, y: cy + 28, w: btnW, h: btnH }
+    endRun: { x: cx - btnW / 2, y: cy + 28, w: btnW, h: btnH }
   };
+  // alias for backward compat
+  layout.newGame = layout.endRun;
+  return layout;
 }
 
 export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts = {}) {
@@ -1007,14 +1010,14 @@ export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts =
   ctx.strokeText("[Esc]", r1.x + r1.w/2, r1.y + r1.h/2 + 12);
   ctx.fillText("[Esc]", r1.x + r1.w/2, r1.y + r1.h/2 + 12);
   ctx.restore();
-  // New Game button - red distinct
-  const isNewHover = hovered === "newGame";
+  // End Run button - red distinct (was New Game)
+  const isNewHover = hovered === "endRun" || hovered === "newGame";
   ctx.save();
   if (isNewHover) { ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 6; }
   ctx.fillStyle = isNewHover ? "rgba(231,76,60,0.38)" : "rgba(231,76,60,0.28)";
   ctx.strokeStyle = "rgba(231,76,60,0.9)";
   ctx.lineWidth = 2;
-  const r2 = layout.newGame;
+  const r2 = layout.endRun || layout.newGame;
   ctx.beginPath();
   ctx.moveTo(r2.x + br, r2.y); ctx.lineTo(r2.x + r2.w - br, r2.y);
   ctx.quadraticCurveTo(r2.x + r2.w, r2.y, r2.x + r2.w, r2.y + br);
@@ -1026,8 +1029,8 @@ export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts =
   ctx.font = "700 14px system-ui, sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-  ctx.strokeText("↺ New Game", r2.x + r2.w/2, r2.y + r2.h/2);
-  ctx.fillStyle = "white"; ctx.fillText("↺ New Game", r2.x + r2.w/2, r2.y + r2.h/2);
+  ctx.strokeText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
+  ctx.fillStyle = "white"; ctx.fillText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
   ctx.restore();
   // Bottom reward list - all types with xN
   const types = ['amplify','nullify','flip','freeShots','areaUp','bouncyBall'];
@@ -1087,5 +1090,57 @@ export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts =
     ctx.fillStyle = "white"; ctx.fillText(countText, x + entryW - 6, y + 11);
     ctx.restore();
   }
+  ctx.restore();
+}
+
+export function getMainMenuButtonsLayout(width, height) {
+  const btnW = 160, btnH = 48;
+  return { newGame: { x: width / 2 - btnW / 2, y: height / 2 - 10, w: btnW, h: btnH } };
+}
+
+export function drawMainMenuBackground(ctx, width, height) {
+  // Removed per user request — no golf art on main menu
+}
+
+export function drawMainMenu(ctx, width, height, hovered = null, highScore = null) {
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, width, height);
+  // Title
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = 5; ctx.fillStyle = "white";
+  ctx.strokeText("Golf Vector Field", width / 2, height / 2 - 60);
+  ctx.fillText("Golf Vector Field", width / 2, height / 2 - 60);
+  const layout = getMainMenuButtonsLayout(width, height);
+  const r = layout.newGame;
+  const isHover = hovered === "newGame";
+  ctx.save();
+  if (isHover) { ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 6; }
+  ctx.fillStyle = isHover ? "rgba(46,204,113,0.38)" : "rgba(46,204,113,0.28)";
+  ctx.strokeStyle = "rgba(46,204,113,0.9)"; ctx.lineWidth = 2;
+  const br = 8;
+  ctx.beginPath();
+  ctx.moveTo(r.x + br, r.y); ctx.lineTo(r.x + r.w - br, r.y);
+  ctx.quadraticCurveTo(r.x + r.w, r.y, r.x + r.w, r.y + br);
+  ctx.lineTo(r.x + r.w, r.y + r.h - br); ctx.quadraticCurveTo(r.x + r.w, r.y + r.h, r.x + r.w - br, r.y + r.h);
+  ctx.lineTo(r.x + br, r.y + r.h); ctx.quadraticCurveTo(r.x, r.y + r.h, r.x, r.y + r.h - br);
+  ctx.lineTo(r.x, r.y + br); ctx.quadraticCurveTo(r.x, r.y, r.x + br, r.y);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.font = "700 14px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
+  ctx.strokeText("▶ New Game", r.x + r.w / 2, r.y + r.h / 2);
+  ctx.fillStyle = "white"; ctx.fillText("▶ New Game", r.x + r.w / 2, r.y + r.h / 2);
+  ctx.restore();
+  // High score below button
+  ctx.font = "600 13px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
+  const hsText = highScore == null ? "Current high score: —" : `Current high score: ${highScore}`;
+  ctx.strokeText(hsText, width / 2, r.y + r.h + 18);
+  ctx.fillStyle = highScore == null ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.95)";
+  ctx.fillText(hsText, width / 2, r.y + r.h + 18);
   ctx.restore();
 }
