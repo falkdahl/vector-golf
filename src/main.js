@@ -106,6 +106,39 @@ function addBouncyBall(n = 1) {
 function setBouncyBallCount(v) { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
 function initBouncyForAttempt() { bouncyRemaining = bouncyBallCount; }
 
+function selectHole(n) {
+  // Secret: 1-indexed hole number (1..LEVELS.length)
+  const idx = Math.floor(Number(n)) - 1;
+  if (!Number.isFinite(idx) || idx < 0 || idx >= LEVELS.length) return false;
+  currentHoleIndex = idx;
+  holeAttempts = 0;
+  loadLevel(currentHoleIndex);
+  gameState = "AIMING";
+  if (winOverlay) winOverlay.classList.add("hidden");
+  // Hide any win state
+  updateAttemptsUI();
+  updateForceBar();
+  // Re-init bouncy for new hole (loadLevel already does)
+  bouncyRemaining = bouncyBallCount;
+  // Check reward menu if needed for current totalAttempts
+  maybeShowRewardMenu();
+  // Update URL hash for sharing without reload (secret but visible)
+  try { history.replaceState(null, "", `#hole-${idx+1}`); } catch {}
+  return true;
+}
+
+function getSecretHoleFromURL() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    let h = params.get("hole") || params.get("level") || params.get("lvl");
+    if (h) return parseInt(h,10);
+    const hash = window.location.hash || "";
+    const m = hash.match(/hole[-_]?(\d+)/i) || hash.match(/#(\d+)$/);
+    if (m) return parseInt(m[1],10);
+  } catch {}
+  return null;
+}
+
 function bounceBall(hit, isEdge) {
   if (isEdge) {
     // Edge: reflect velocity component and clamp inside
@@ -683,9 +716,21 @@ function init() {
   hotbarEl = document.getElementById("hotbar");
 
   setupCanvas();
+  // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden)
+  const _secretHole = getSecretHoleFromURL();
+  if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
+    currentHoleIndex = _secretHole - 1;
+  }
   initLevel();
   updateForceBar();
   updateAttemptsUI();
+  // Secret: react to hash changes for direct hole jumps
+  window.addEventListener("hashchange", () => {
+    const h = getSecretHoleFromURL();
+    if (h && h >= 1 && h <= LEVELS.length && h - 1 !== currentHoleIndex) {
+      selectHole(h);
+    }
+  });
 
   initInput(
     () => rewardMenuVisible ? "REWARD" : gameState,
@@ -769,6 +814,15 @@ function init() {
       else selectedModifier = 'flip';
       updateHotbarUI();
       e.preventDefault();
+    } else if ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH")) {
+      // Secret: Ctrl+Shift+H / Ctrl+Shift+G / Alt+H → prompt for exact hole (hidden)
+      e.preventDefault();
+      const input = prompt(`Select hole (1-${LEVELS.length}):`, String(currentHoleIndex + 1));
+      if (input !== null) {
+        const n = parseInt(input, 10);
+        if (n >= 1 && n <= LEVELS.length) selectHole(n);
+        else if (input.trim() !== "") alert(`Invalid hole. Enter 1-${LEVELS.length}`);
+      }
     } else if (e.code === "Delete" || e.code === "Backspace") {
       // Remove last modifier
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
@@ -778,6 +832,48 @@ function init() {
       }
     }
   });
+
+  // Secret: hidden hole select via title triple-click (easter egg) and typing "hole"
+  const _titleEl = document.querySelector("h1");
+  if (_titleEl) {
+    let _clickCount = 0, _lastClick = 0;
+    _titleEl.title = "Golf Vector Field";
+    _titleEl.style.cursor = "pointer";
+    _titleEl.addEventListener("click", () => {
+      const now = Date.now();
+      if (now - _lastClick > 800) _clickCount = 0;
+      _clickCount++; _lastClick = now;
+      if (_clickCount >= 3) {
+        _clickCount = 0;
+        const input = prompt(`Select hole (1-${LEVELS.length}):`, String(currentHoleIndex + 1));
+        if (input !== null) {
+          const n = parseInt(input, 10);
+          if (n >= 1 && n <= LEVELS.length) selectHole(n);
+          else if (input.trim() !== "") alert(`Invalid hole. Enter 1-${LEVELS.length}`);
+        }
+      }
+    });
+  }
+  // Secret: typing "hole" quickly opens hole selector (hidden)
+  let _secretBuffer = "";
+  window.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.altKey || e.metaKey || rewardMenuVisible) return;
+    if (e.key.length === 1 && !e.repeat) {
+      _secretBuffer = (_secretBuffer + e.key.toLowerCase()).slice(-10);
+      if (_secretBuffer.endsWith("hole")) {
+        _secretBuffer = "";
+        // Allow during AIMING/CHARGING/WIN (block only FLYING to avoid accidental)
+        if (gameState === "FLYING") return;
+        const input = prompt(`Select hole (1-${LEVELS.length}):`, String(currentHoleIndex + 1));
+        if (input !== null) {
+          const n = parseInt(input, 10);
+          if (n >= 1 && n <= LEVELS.length) selectHole(n);
+          else if (input.trim() !== "") alert(`Invalid hole. Enter 1-${LEVELS.length}`);
+        }
+      }
+    }
+  });
+
   // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020 + REQ-021
   canvas.addEventListener("mousemove", (e) => {
     // REQ-021: handle hover for reward menu (random 3 offered)
@@ -975,6 +1071,16 @@ if (typeof window !== 'undefined') {
   window.__addBouncyBall = addBouncyBall;
   window.__setBouncyBallCount = setBouncyBallCount;
   window.__getBouncyBallRemaining = getBouncyRemaining;
+  // Secret: exact hole select (hidden)
+  window.__selectHole = selectHole;
+  window.__goToHole = selectHole;
+  window.__setHole = selectHole;
+  window.selectHole = selectHole;
+  window.goToHole = selectHole;
+  window.setHole = selectHole;
+  window.__getCurrentHole = () => currentHoleIndex + 1;
+  window.__getCurrentHoleIndex = () => currentHoleIndex;
+  window.__getTotalHoles = () => LEVELS.length;
   Object.defineProperty(window, 'freeShots', {
     get: () => freeShots,
     set: (v) => setFreeShots(v)
@@ -1034,4 +1140,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, totalAttempts, holeAttempts, currentHoleIndex };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, totalAttempts, holeAttempts, currentHoleIndex };
