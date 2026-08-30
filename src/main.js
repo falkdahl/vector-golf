@@ -177,12 +177,20 @@ function bounceBall(hit, isEdge) {
   ball.isMoving = true;
 }
 
-// Reward menu per REQ-021/023/024: every 5 totalAttempts inside canvas - 3 random of 6 pool
+// Reward menu per REQ-021/023/024: secret counter + very first attempt - 3 random of 6 pool
 const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp', 'bouncyBall'];
 let rewardMenuVisible = false;
-let rewardClaimedFor = null; // last totalAttempts value claimed, null initially
+let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
 let rewardMenuHover = null; // hovered type for visual feedback
 let rewardOffered = []; // 3 distinct types randomly chosen from REWARD_POOL per trigger
+// Secret hidden counter per updated REQ-021: increments only on counted (non-free) shots
+let secretRewardCounter = 0; // hidden 0..4
+let rewardPending = false;
+let firstRewardClaimed = false;
+
+function getSecretRewardCounter() { return secretRewardCounter; }
+function setSecretRewardCounter(v) { secretRewardCounter = Math.max(0, Math.floor(v)); }
+function addSecretRewardCounter(n = 1) { secretRewardCounter = Math.max(0, secretRewardCounter + Math.floor(n)); }
 
 function shuffleArray(a) {
   // Fisher-Yates with Math.random, uniform
@@ -197,21 +205,28 @@ function maybeShowRewardMenu() {
   if (gameState === "WIN") return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (rewardMenuVisible) return;
-  if (totalAttempts % 5 !== 0) return;
-  if (rewardClaimedFor === totalAttempts) return;
-  // REQ-021/023/024: randomly select 3 distinct upgrades from 6 pool
-  rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
-  rewardMenuVisible = true;
-  rewardMenuHover = null;
-  // Ensure hotbar reflects blocked state
-  updateHotbarUI();
+  // Very first attempt: show before any counted shot (secretRewardCounter==0 && totalAttempts==0 && not yet claimed)
+  if (!firstRewardClaimed && secretRewardCounter === 0 && totalAttempts === 0) {
+    rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
+    rewardMenuVisible = true;
+    rewardMenuHover = null;
+    updateHotbarUI();
+    return;
+  }
+  if (rewardPending) {
+    rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
+    rewardMenuVisible = true;
+    rewardMenuHover = null;
+    rewardPending = false;
+    updateHotbarUI();
+    return;
+  }
 }
 
 function claimReward(type) {
   if (!rewardMenuVisible) return false;
   if (!rewardOffered.includes(type)) return false;
-  // Idempotent: only once per trigger
-  if (rewardClaimedFor === totalAttempts) return false;
+  // Idempotent: only once per trigger (rewardMenuVisible guards double-click)
   if (type === 'freeShots') {
     addFreeShots(3); // REQ-022: Free Shots +3
   } else if (type === 'areaUp') {
@@ -222,10 +237,14 @@ function claimReward(type) {
     if (!(type in supply)) return false;
     addToSupply(type, 1);
   }
+  // Mark first and general claimed for backward compat
+  firstRewardClaimed = true;
   rewardClaimedFor = totalAttempts;
+  // secretRewardCounter already 0 after the 5th counted shot; keep at 0 for next cycle
   rewardMenuVisible = false;
   rewardMenuHover = null;
   rewardOffered = [];
+  rewardPending = false;
   updateHotbarUI();
   if (canvas) canvas.style.cursor = "default";
   return true;
@@ -281,21 +300,26 @@ function loadLevel(index) {
 }
 
 function initLevel() {
-  // REQ-020/022/023/024: new game starts with empty supply, freeShots, areaUpgradeCount and bouncy
+  // REQ-020/022/023/024 + REQ-021 secret counter: new game starts with empty supply, freeShots, areaUpgradeCount, bouncy and secret counter
   if (currentHoleIndex === 0) {
     supply = { amplify: 0, nullify: 0, flip: 0 };
     freeShots = 0;
     areaUpgradeCount = 0;
     bouncyBallCount = 0;
     bouncyRemaining = 0;
+    secretRewardCounter = 0;
+    rewardPending = false;
+    firstRewardClaimed = false;
+    rewardMenuVisible = false;
+    rewardClaimedFor = null;
     rewardOffered = [];
   } else {
-    // For non-zero start (hole advance), ensure remaining matches count
+    // For non-zero start (hole advance), ensure remaining matches count, keep secret counter
     bouncyRemaining = bouncyBallCount;
   }
   loadLevel(currentHoleIndex);
   updateAttemptsUI();
-  // REQ-021: show reward menu at start if totalAttempts %5==0 (initial 0) - random 3
+  // REQ-021: show reward menu on very first attempt and when secret counter reached 5
   maybeShowRewardMenu();
   // validate obstacles not overlapping tee/hole
   for (const obs of level.obstacles) {
@@ -470,7 +494,10 @@ function resetGameAfterWin() {
   areaUpgradeCount = 0;
   bouncyBallCount = 0;
   bouncyRemaining = 0;
-  // REQ-021/023/024: reset reward state for new game (random offer cleared)
+  // REQ-021: reset secret counter + reward state for new game (random offer cleared)
+  secretRewardCounter = 0;
+  rewardPending = false;
+  firstRewardClaimed = false;
   rewardMenuVisible = false;
   rewardClaimedFor = null;
   rewardMenuHover = null;
@@ -502,13 +529,19 @@ function handleLaunch(angle, power) {
   launchBall(angle, power);
   // REQ-024: init bouncy bounces for this attempt
   bouncyRemaining = bouncyBallCount;
-  // REQ-022: free shots consumed first, hidden, mutually exclusive with counting
+  // REQ-022 + REQ-021 secret counter: free shots consumed first, only counted shots increment secret counter
   if (freeShots > 0) {
     freeShots = Math.max(0, freeShots - 1);
+    // secretRewardCounter NOT incremented - free shots delay reward per REQ-021/022
   } else {
     holeAttempts += 1;
     totalAttempts += 1;
     attempts = totalAttempts;
+    secretRewardCounter++;
+    if (secretRewardCounter >= 5) {
+      secretRewardCounter = 0;
+      rewardPending = true;
+    }
   }
   updateAttemptsUI();
   gameState = "FLYING";
@@ -1071,6 +1104,14 @@ if (typeof window !== 'undefined') {
   window.__addBouncyBall = addBouncyBall;
   window.__setBouncyBallCount = setBouncyBallCount;
   window.__getBouncyBallRemaining = getBouncyRemaining;
+  window.__getSecretRewardCounter = getSecretRewardCounter;
+  window.__setSecretRewardCounter = setSecretRewardCounter;
+  window.__addSecretRewardCounter = addSecretRewardCounter;
+  window.getSecretRewardCounter = getSecretRewardCounter;
+  window.__getRewardPending = () => rewardPending;
+  window.__setRewardPending = (v) => { rewardPending = !!v; };
+  window.__getFirstRewardClaimed = () => firstRewardClaimed;
+  window.__setFirstRewardClaimed = (v) => { firstRewardClaimed = !!v; };
   // Secret: exact hole select (hidden)
   window.__selectHole = selectHole;
   window.__goToHole = selectHole;
@@ -1131,6 +1172,26 @@ if (typeof window !== 'undefined') {
     get: () => bouncyRemaining,
     set: (v) => { bouncyRemaining = Math.max(0, Math.floor(v)); }
   });
+  Object.defineProperty(window, 'secretRewardCounter', {
+    get: () => secretRewardCounter,
+    set: (v) => { secretRewardCounter = Math.max(0, Math.floor(v)); }
+  });
+  Object.defineProperty(window, '__secretRewardCounter', {
+    get: () => secretRewardCounter,
+    set: (v) => { secretRewardCounter = Math.max(0, Math.floor(v)); }
+  });
+  Object.defineProperty(window, 'rewardPending', {
+    get: () => rewardPending,
+    set: (v) => { rewardPending = !!v; }
+  });
+  Object.defineProperty(window, '__rewardPending', {
+    get: () => rewardPending,
+    set: (v) => { rewardPending = !!v; }
+  });
+  Object.defineProperty(window, 'firstRewardClaimed', {
+    get: () => firstRewardClaimed,
+    set: (v) => { firstRewardClaimed = !!v; }
+  });
 }
 
 // Auto-init when loaded as module via script tag
@@ -1140,4 +1201,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, totalAttempts, holeAttempts, currentHoleIndex };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, totalAttempts, holeAttempts, currentHoleIndex };

@@ -18,7 +18,7 @@ Instant death on obstacle/edge (REQ-008) makes later holes punishing under wind.
 1. **Pool Inclusion** in `src/main.js` (REQ-021 Pool):
    - The random upgrade pool `POOL` per REQ-021 SHALL be extended from five to **six** distinct types: `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']` (internal identifiers; `bouncyBall` MAY be alias `bouncy` or `bouncyBallPlus1`, but SHALL be documented consistently).
    - The reward menu SHALL still display **exactly three** distinct options per trigger, now randomly chosen as `shuffle([...POOL]).slice(0,3)` (3-of-6 uniform without replacement). The excluded three types SHALL not be shown that trigger. Over many triggers all six types SHALL remain possible to appear.
-   - No change to trigger timing (`totalAttempts %5===0`) or blocking logic; only the pool size grows.
+   - No change to trigger timing (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5` + very first attempt) or blocking logic; only the pool size grows.
 
 2. **Stacking State & Hidden Tracker** in `src/main.js`:
    - SHALL include `bouncyBallCount: number` (integer `>=0`, total times reward has been selected) and `bouncyRemaining: number` (integer `>=0`, per-attempt remaining bounces), initialized to `0` on **new game**: page load / `initLevel()` with `currentHoleIndex===0`, `resetGameAfterWin()` (press `R` in `WIN`/`GAME_COMPLETE`), and full page reload.

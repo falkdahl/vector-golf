@@ -18,7 +18,7 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 1. **Pool Inclusion** in `src/main.js` (REQ-021 Pool):
    - The random upgrade pool `POOL` per REQ-021 SHALL be extended from four to **five** distinct types: `['amplify','nullify','flip','freeShots','areaUp']` (internal identifiers; `areaUp` MAY be alias `modifierArea` or `areaPlus20`, but SHALL be documented consistently).
    - The reward menu SHALL still display **exactly three** distinct options per trigger, now randomly chosen as `shuffle([...POOL]).slice(0,3)` (3-of-5 uniform without replacement). The excluded two types SHALL not be shown that trigger. Over many triggers all five types SHALL remain possible to appear.
-   - No change to trigger timing (`totalAttempts %5===0`) or blocking logic; only the pool size grows.
+   - No change to trigger timing (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5` + very first attempt) or blocking logic; only the pool size grows.
 
 2. **Stacking State** in `src/main.js`:
    - SHALL include `areaUpgradeCount: number` (integer `>=0`) or `modifierAreaBonus: number` and/or `modifierRadiusMultiplier: number`, initialized to `0` (count) / `1.0` (multiplier) on **new game**: page load / `initLevel()` with `currentHoleIndex===0`, `resetGameAfterWin()` (press `R` in `WIN`/`GAME_COMPLETE`), and full page reload.
@@ -78,7 +78,7 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 ## Dependencies
 
 - REQ-015 (modifier area `MODIFIER_RADIUS=90`, circular effect, `getWindAt` hit-test)
-- REQ-021 (upgrade reward menu 3-random-of-N, trigger `totalAttempts%5`, `rewardOffered`, `claimReward` branching)
+- REQ-021 (upgrade reward menu 3-random-of-N, trigger `secretRewardCounter` per updated spec, `rewardOffered`, `claimReward` branching)
 - REQ-020 (supply coexistence; area upgrade does not affect supply)
 - REQ-022 (free shots coexistence; area upgrade does not affect freeShots)
 - REQ-012 (rendering inside canvas, high-contrast buttons, no white card)

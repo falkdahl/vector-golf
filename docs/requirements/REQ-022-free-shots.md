@@ -8,10 +8,10 @@
 - **Related Plan Section:** Game States, Attempts Tracking (REQ-014 Extension), Upgrade Reward
 
 ## Description
-The game SHALL maintain a hidden counter of free shots `freeShots: number`. When a new shot is made (`handleLaunch` on successful `launchBall`), the free shots counter SHALL decrease by one if it is greater than `0`. If the free shots counter is already at `0`, then the attempt counters (`holeAttempts` and `totalAttempts` per REQ-014) SHALL be increased by one as normal. The free shots counter is hidden — it SHALL NOT be rendered in the HUD or win overlay. The free shots counter SHALL be increased by three when the `Free Shots +3` upgrade reward is taken — this upgrade appears as one of the five possible random upgrades in the reward menu (REQ-021/REQ-023), where each menu trigger randomly shows three distinct options out of the pool `Amplify`/`Nullify`/`Flip`/`Free Shots +3`/`Area +20%`.
+The game SHALL maintain a hidden counter of free shots `freeShots: number`. When a new shot is made (`handleLaunch` on successful `launchBall`), the free shots counter SHALL decrease by one if it is greater than `0`. If the free shots counter is already at `0`, then the attempt counters (`holeAttempts` and `totalAttempts` per REQ-014) **and the secret reward counter** (per REQ-021) SHALL be increased by one as normal. The free shots counter is hidden — it SHALL NOT be rendered in the HUD or win overlay. The free shots counter SHALL be increased by three when the `Free Shots +3` upgrade reward is taken — this upgrade appears as one of the six possible random upgrades in the reward menu (REQ-021/REQ-023/REQ-024), where each menu trigger randomly shows three distinct options out of the pool `Amplify`/`Nullify`/`Flip`/`Free Shots +3`/`Area +20%`/`Bouncy Ball +1`.
 
 ## Rationale
-Free shots allow granting the player attempts that do not penalize `Attempts`/`Total` (per REQ-014) and do not advance the `totalAttempts % 5` reward schedule (REQ-021). Making the counter hidden keeps the HUD simple while preserving a deterministic deduction rule: free shots are always consumed first. Tying the `Free Shots +3` grant to the random 3-of-5 reward menu (pool now includes `Area +20%` per REQ-023) makes it a variable, non-guaranteed option — the player must adapt to the random offer, and the `+3` grant (when offered and chosen) becomes the canonical way to acquire free shots alongside debug grants.
+Free shots allow granting the player attempts that do not penalize `Attempts`/`Total` (per REQ-014) and do not increment the **secret reward counter** (per REQ-021) that drives the reward menu. Making the counter hidden keeps the HUD simple while preserving a deterministic deduction rule: free shots are always consumed first. Tying the `Free Shots +3` grant to the random 3-of-6 reward menu (pool now includes `Area +20%` per REQ-023 and `Bouncy Ball +1` per REQ-024) makes it a variable, non-guaranteed option — the player must adapt to the random offer, and the `+3` grant (when offered and chosen) becomes the canonical way to acquire free shots alongside debug grants.
 
 ## Requirements
 
@@ -39,17 +39,17 @@ Free shots allow granting the player attempts that do not penalize `Attempts`/`T
    - The decrement or increment SHALL happen **exactly once** per launch. Pressing `R` to reset without launching SHALL NOT decrement `freeShots` nor increment attempts. Dying (obstacle/edge, `resetBall()`) SHALL NOT decrement/ increment beyond the launch that caused it.
    - `freeShots` decrement and attempt increment are mutually exclusive per launch: never both on the same shot.
 
-3. **Upgrade Grant `Free Shots +3` (Random)** in `src/main.js:claimReward(type)` per REQ-021/REQ-023:
-   - The pool of possible upgrades SHALL be `['amplify','nullify','flip','freeShots','areaUp']` (five types including `Area +20%` per REQ-023). For each reward trigger (REQ-021, `totalAttempts %5===0`), three distinct types SHALL be randomly selected via `Math.random()` shuffle without duplication; only those three SHALL be displayed. The two excluded types SHALL not be grantable in that trigger.
+3. **Upgrade Grant `Free Shots +3` (Random)** in `src/main.js:claimReward(type)` per REQ-021/REQ-023/REQ-024:
+   - The pool of possible upgrades SHALL be `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']` (six types including `Area +20%` per REQ-023 and `Bouncy Ball +1` per REQ-024). For each reward trigger (REQ-021, secret counter reaching `5` and reset to `0`, plus very first attempt), three distinct types SHALL be randomly selected via `Math.random()` shuffle without duplication; only those three SHALL be displayed. The three excluded types SHALL not be grantable in that trigger.
    - When the reward menu is visible and the `Free Shots +3` option **is among the three offered** and is selected (click on its button or press its positional key `1`/`2`/`3` corresponding to its left-to-right position), the handler SHALL execute `freeShots += 3` (exactly `+3`, via `addFreeShots(3)` or `freeShots = Math.max(0, freeShots+3)`), exactly once per reward trigger. If `Free Shots +3` is not among the offered three, it SHALL not be selectable and `freeShots` SHALL not change that trigger.
    - This grant SHALL NOT affect `supply` in the same selection; the two mutation paths (modifier `+1` vs free shots `+3`) are mutually exclusive per selection and per the random offer (only one type chosen).
    - The grant SHALL respect clamping (`>=0`) and integer type. Adding `+3` to an existing `freeShots=1` SHALL result in `4`; adding to `0` SHALL result in `3`. Randomness does not affect the `+3` amount.
    - After granting (or any modifier grant), `rewardClaimedFor = totalAttempts`, `rewardMenuVisible = false`, and `rewardOffered = []` per REQ-021.
 
 4. **Interaction with Attempts & Random Reward** (REQ-014, REQ-021):
-   - `totalAttempts` SHALL only increase when `freeShots === 0` at launch time. Therefore a free shot does **not** advance the `totalAttempts % 5 === 0` reward menu schedule in REQ-021 and does not affect `drawHUD` `Total` or `Attempts` values.
+   - `totalAttempts` SHALL only increase when `freeShots === 0` at launch time. Therefore a free shot does **not** increment the **secret reward counter** (per REQ-021) nor the reward menu schedule and does not affect `drawHUD` `Total` or `Attempts` values. The secret counter is only increased on counted shots (non-free shots).
    - `holeAttempts` likewise only increases when `freeShots === 0`. Win overlay per-hole attempts SHALL reflect only counted attempts, not free shots.
-   - The `Free Shots +3` reward, when offered randomly and taken, therefore **delays** the next reward menu by 3 counted attempts (since those 3 launches are free). Because the offer is random (3-of-5), the delay is non-guaranteed — the player may not be offered free shots on a given trigger.
+   - The `Free Shots +3` reward, when offered randomly and taken, therefore **delays** the next reward menu by 3 counted attempts (since those 3 launches are free and do not increment the secret counter). Because the offer is random (3-of-6), the delay is non-guaranteed — the player may not be offered free shots on a given trigger.
 
 5. **Persistence & Lifecycle** per REQ-011/REQ-014/REQ-020:
    - `freeShots` SHALL **persist** through death resets (`resetBall()` on obstacle/OOB) and through `R` during play (ball reset without scoring) — those SHALL NOT reset `freeShots`.
@@ -76,7 +76,7 @@ Free shots allow granting the player attempts that do not penalize `Attempts`/`T
 - [ ] Advancing hole (`handleNextHole()`) does NOT reset `freeShots`: if `freeShots=1` before win, after advancing still `1`.
 - [ ] Pressing `R` in `WIN`/`GAME_COMPLETE` (`resetGameAfterWin()`) resets `freeShots` to `0` together with `holeAttempts=0, totalAttempts=0`; HUD returns to `0/0`; next `0` menu is again a new random 3-set.
 - [ ] `freeShots` is hidden: canvas top bar still shows only `Hole: N/M` `Attempts: X` `Total: Y`, win overlay shows only hole/total, no `Free Shots` text in DOM or HUD (only inside upgrade menu button when randomly offered). `window.__getFreeShots()` still returns correct value.
-- [ ] When `freeShots` consumes a shot that would have been `totalAttempts=5` if counted, the reward menu does **not** appear: e.g., `Total=4, freeShots=1`, launch → `freeShots=0, Total=4`, no menu; next counted launch → `Total=5` then menu appears with new random 3-set.
+ - [ ] When `freeShots` consumes a shot that would have been a counted shot toward the secret counter, the reward menu does **not** appear and the secret counter does **not** increment: e.g., `secretRewardCounter=4, Total=4, freeShots=1`, launch (free) → `freeShots=0, secretRewardCounter stays 4, Total=4`, no menu; next counted launch → `secretRewardCounter 4→5 → reset to 0, Total=5` then menu appears with new random 3-set at next `AIMING`.
 - [ ] `freeShots` never negative: launch at `0` stays `0`; `addFreeShots(-5)` or `setFreeShots(-3)` clamps to `0`.
 - [ ] No 3rd-party libraries; pure vanilla JS `Math.random()` shuffle for 3-of-5 offer, `freeShots` integer and branching.
 
@@ -98,26 +98,42 @@ Free shots allow granting the player attempts that do not penalize `Attempts`/`T
   function setFreeShots(v){ freeShots = Math.max(0, Math.floor(v)); }
   function addFreeShots(n=1){ freeShots = Math.max(0, freeShots + Math.floor(n)); }
 
-  const POOL = ['amplify','nullify','flip','freeShots','areaUp']; // now 5 with Area +20%
+  const POOL = ['amplify','nullify','flip','freeShots','areaUp','bouncyBall']; // now 6 with Area +20% and Bouncy Ball per REQ-023/REQ-024
   let rewardOffered = [];
+  let secretRewardCounter = 0; // hidden 0..4 per REQ-021, not rendered
+  let rewardPending = false;
+  function getSecretRewardCounter(){ return secretRewardCounter; }
   function maybeShowRewardMenu(){
-    if(totalAttempts%5!==0 || rewardClaimedFor===totalAttempts || gameState!=='AIMING' || rewardMenuVisible) return;
-    rewardOffered = [...POOL].sort(()=>Math.random()-0.5).slice(0,3); // or Fisher-Yates, 3-of-5
-    rewardMenuVisible = true;
+    if(rewardMenuVisible) return;
+    if(gameState!=='AIMING' && gameState!=='CHARGING') return;
+    if(rewardPending){
+      rewardOffered = [...POOL].sort(()=>Math.random()-0.5).slice(0,3); // 3-of-6
+      rewardMenuVisible = true; rewardPending = false;
+      return;
+    }
+    // Very first attempt handled separately in initLevel (firstRewardClaimed flag)
   }
   function handleLaunch(angle, power){
     if(rewardMenuVisible) return;
     if(gameState!=="AIMING" && gameState!=="CHARGING") return;
     launchBall(angle,power);
-    if(freeShots > 0) freeShots = Math.max(0, freeShots -1);
-    else { holeAttempts+=1; totalAttempts+=1; attempts=totalAttempts; }
+    if(freeShots > 0){
+      freeShots = Math.max(0, freeShots - 1);
+      // secretRewardCounter NOT incremented - free shots delay reward
+    } else {
+      holeAttempts+=1; totalAttempts+=1; attempts=totalAttempts;
+      secretRewardCounter++;
+      if(secretRewardCounter >= 5){ secretRewardCounter = 0; rewardPending = true; }
+    }
     updateAttemptsUI(); gameState="FLYING"; resetCharge(); updateForceBar();
   }
   function claimReward(type){
     if(!rewardMenuVisible || !rewardOffered.includes(type)) return;
     if(type==='freeShots') addFreeShots(3);
+    else if(type==='areaUp') addAreaUpgrade(1);
+    else if(type==='bouncyBall') addBouncyBall(1);
     else addToSupply(type,1);
-    rewardClaimedFor = totalAttempts; rewardMenuVisible=false; rewardOffered=[];
+    rewardMenuVisible=false; rewardOffered=[];
   }
   // Keyboard 1→rewardOffered[0], 2→rewardOffered[1], 3→rewardOffered[2]
   // getRewardButtonsLayout(W,H, offered) returns 3 rects for offered
