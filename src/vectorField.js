@@ -1,9 +1,9 @@
-// Tunable constants at top per REQ-003 - high acceleration per updated requirement
-export const WIND_STRENGTH = 90;
+// Tunable constants at top per REQ-003 - very high acceleration (faster wind per user request)
+export const WIND_STRENGTH = 180;
 export const DEFAULT_COLS = 20;
 export const DEFAULT_ROWS = 15;
 export const MAX_POWER_REF = 600; // for min force calc per REQ-003
-export const MIN_WIND_FORCE = 0.1 * MAX_POWER_REF; // 60
+export const MIN_WIND_FORCE = 80; // increased from 60 for faster drift (13% of max power)
 
 export const MODIFIER_RADIUS = 54; // reduced 40% from 90 (90*0.6) per user request
 
@@ -12,7 +12,7 @@ export const DEFAULT_SOURCES = 1;
 export const DEFAULT_SINKS = 1;
 export const DEFAULT_DOUBLETS = 1;
 export const DEFAULT_VORTEXES = 1;
-export const SOFTENING_A = 40; // softening radius for singularities
+export const SOFTENING_A = 28; // reduced from 30 for even stronger near-field
 
 export let modifiers = [];
 export function setModifiers(mods) { modifiers = mods; }
@@ -98,12 +98,24 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
     if (typeof nVortexes === 'number') vortexes = Math.max(0, Math.floor(nVortexes));
   }
 
-  // Enforce mandatory constraints: at least one vortex or doublet inside, at least one source and one sink at edge
-  // Coerce counts if needed (still deterministic, no extra randomness beyond PRNG)
+  // Enforce mandatory constraints: at least one vortex or doublet inside (except Level 1 tutorial 1,1,0,0), at least one source and one sink at edge
+  // Save originals before coercion to distinguish Level 1 (1,1,0,0) from all-zero
+  const origSourcesRaw = (typeof nSources === 'object' && nSources !== null) ? (nSources.sources ?? nSources.nSources) : nSources;
+  const origSinksRaw = (typeof nSources === 'object' && nSources !== null) ? (nSources.sinks ?? nSources.nSinks) : nSinks;
+  const origDoubletsRaw = (typeof nSources === 'object' && nSources !== null) ? (nSources.doublets ?? nSources.nDoublets) : nDoublets;
+  const origVortexesRaw = (typeof nSources === 'object' && nSources !== null) ? (nSources.vortexes ?? nSources.nVortexes ?? nSources.vortex) : nVortexes;
+  const isLevel1Tutorial = (sources === 1 && sinks === 1 && doublets === 0 && vortexes === 0);
+  const allZero = (typeof origSourcesRaw === 'number' && origSourcesRaw===0 && typeof origSinksRaw==='number' && origSinksRaw===0 && typeof origDoubletsRaw==='number' && origDoubletsRaw===0 && typeof origVortexesRaw==='number' && origVortexesRaw===0);
   if (sources === 0) sources = 1;
   if (sinks === 0) sinks = 1;
   if (vortexes === 0 && doublets === 0) {
-    vortexes = 1; // create one vortex inside
+    if (isLevel1Tutorial) {
+      // Level 1 exception: allow 0 interior for simple source->sink cross-breeze
+    } else if (allZero) {
+      vortexes = 1; // 0,0,0,0 -> 1,1,0,1
+    } else {
+      vortexes = 1; // any other 0 interior (e.g., 2,2,0,0) -> add vortex
+    }
   }
 
   cols = c;
@@ -117,19 +129,31 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   const eps = SOFTENING_A * SOFTENING_A;
 
   // Generate random singularities - edge sources/sinks, inside vortexes/doublets
+  // Level 1 tutorial exception: first source left edge (x=0), first sink right edge (x=width) for left-to-right flow
+  const isLevel1EdgeCase = (sources === 1 && sinks === 1 && doublets === 0 && vortexes === 0);
   const srcList = [];
   _lastSourcePositions = [];
   for (let i = 0; i < sources; i++) {
-    const pos = sampleOnEdge(canvasW, canvasH, rand);
-    const sigma = 0.7 + rand() * 0.7; // 0.7-1.4
+    let pos;
+    if (isLevel1EdgeCase && i === 0) {
+      pos = { x: 0, y: rand() * canvasH };
+    } else {
+      pos = sampleOnEdge(canvasW, canvasH, rand);
+    }
+    const sigma = 1.2 + rand() * 1.0; // 1.2-2.2 even stronger
     srcList.push({ x: pos.x, y: pos.y, s: sigma });
     _lastSourcePositions.push({ x: pos.x, y: pos.y, s: sigma });
   }
   const sinkList = [];
   _lastSinkPositions = [];
   for (let i = 0; i < sinks; i++) {
-    const pos = sampleOnEdge(canvasW, canvasH, rand);
-    const sigma = 0.7 + rand() * 0.7;
+    let pos;
+    if (isLevel1EdgeCase && i === 0) {
+      pos = { x: canvasW, y: rand() * canvasH };
+    } else {
+      pos = sampleOnEdge(canvasW, canvasH, rand);
+    }
+    const sigma = 1.2 + rand() * 1.0; // 1.2-2.2
     sinkList.push({ x: pos.x, y: pos.y, s: sigma });
     _lastSinkPositions.push({ x: pos.x, y: pos.y, s: sigma });
   }
@@ -137,7 +161,7 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   _lastDoubletPositions = [];
   for (let i = 0; i < doublets; i++) {
     const pos = sampleInside(canvasW, canvasH, rand, 20);
-    const mu = 0.6 + rand() * 0.7; // 0.6-1.3
+    const mu = 1.2 + rand() * 1.0; // 1.2-2.2
     const theta = rand() * Math.PI * 2;
     doubletList.push({ x: pos.x, y: pos.y, mu, theta, cosT: Math.cos(theta), sinT: Math.sin(theta) });
     _lastDoubletPositions.push({ x: pos.x, y: pos.y, mu, theta });
@@ -146,7 +170,7 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   _lastVortexPositions = [];
   for (let i = 0; i < vortexes; i++) {
     const pos = sampleInside(canvasW, canvasH, rand, 20);
-    let gamma = 0.8 + rand() * 0.8; // 0.8-1.6
+    let gamma = 1.4 + rand() * 1.2; // 1.4-2.6 stronger
     if (rand() < 0.5) gamma = -gamma;
     vortexList.push({ x: pos.x, y: pos.y, g: gamma });
     _lastVortexPositions.push({ x: pos.x, y: pos.y, g: gamma });
@@ -215,9 +239,9 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
     }
   }
 
-  // Post-process to enforce min force, varying strength, high acceleration
-  const minMagnitude = MIN_WIND_FORCE / (strength || WIND_STRENGTH); // e.g., 60/90=0.667
-  const desiredRange = 1.2; // maps normalized raw to [min, min+1.2] => max ~1.867 for ws90 => force 168
+  // Post-process to enforce min force, varying strength, very high acceleration - faster wind
+  const minMagnitude = MIN_WIND_FORCE / (strength || WIND_STRENGTH); // e.g., 80/180=0.444
+  const desiredRange = 2.4; // maps normalized raw to [min, min+2.4] => max ~3.3 for ws180 => force ~590, very fast
   let fieldOut = [];
   // Fallback for uniform zero field (should not happen with mandatory elements, but handle)
   const isZeroField = maxRaw < 1e-6 || !isFinite(minRaw) || !isFinite(maxRaw);

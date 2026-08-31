@@ -1,8 +1,8 @@
 import { isInsideNullify } from "./vectorField.js";
 
-// Tunable constants at top per REQ-005 - tuned for high wind acceleration
+// Tunable constants at top per REQ-005 - tuned for very high wind acceleration - fast
 export const BALL_RADIUS = 6;
-export const FRICTION = 0.7;
+export const FRICTION = 0.35;
 export const STOP_THRESHOLD = 5; // px/s
 export const STOP_TIME = 0.4; // seconds
 export const BOUNCE_DAMPING = 0.7;

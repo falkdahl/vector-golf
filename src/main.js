@@ -1,4 +1,4 @@
-import { LEVEL, LEVELS } from "./levels.js";
+import { LEVEL, LEVELS, generateLevels } from "./levels.js";
 import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, clearModifiers } from "./vectorField.js";
 import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING } from "./physics.js";
 import { checkObstacleCollision, isOutOfBounds } from "./obstacles.js";
@@ -259,6 +259,8 @@ function resumeGame() {
 }
 function startNewGame() {
   clearProgress();
+  // Generate fresh 18 levels with increasing difficulty per REQ-010
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1 };
   freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
@@ -321,6 +323,7 @@ function syncMainMenu() {
 function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {
   clearProgress();
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1 }; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
@@ -787,6 +790,7 @@ function advanceHole() {
 
 function resetGameAfterWin() {
   clearProgress();
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0;
   holeAttempts = 0;
   totalAttempts = 0;
