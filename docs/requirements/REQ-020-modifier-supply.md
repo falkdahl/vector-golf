@@ -29,10 +29,11 @@ Unlimited placement (REQ-015 §2.5) removes strategic scarcity. An inventory mod
    - Hotbar selection MAY still be allowed when supply is exhausted, but placement preview SHALL indicate insufficiency (e.g., preview not shown, or shown in red/gray, slot visually disabled with opacity `0.45` and `cursor: not-allowed`). Alternatively selection SHALL be blocked/disabled when `activeCount >= supply[type]`. Either approach satisfies the limit, but UI MUST communicate why placement does not occur.
 
 3. **Hotbar UI** in `index.html` / `style.css` and `src/main.js:updateHotbarUI()` / `src/render.js`:
-   - Each hotbar slot SHALL display its current supply count and active usage, e.g., `Amplify x2 (1/2 placed)` or simply remaining `Amplify: 1`, `Nullify: 1`, `Flip: 1`. At minimum, the slot label SHALL show the supply counter value (`supply[type]`) and be `1` on new game for each type.
+   - Each hotbar slot SHALL display its current supply count and active usage, e.g., `Amplify x2 (1/2 placed)` or simply remaining `Amplify: 1`, `Nullify: 1`, `Flip: 1`. At minimum, the slot label SHALL show the supply counter value (`supply[type]`) and be `1` on new game for each type. Slots SHALL use **same style as pause menu** per REQ-015 (`background rgba(255,255,255,0.06)` `border 1px rgba(255,255,255,0.18)` `600 11px` white with stroke, icon `14px` color, count `700 12px`) so the lower field stays visible and hotbar matches `.reward-stats`.
    - When `activeCount >= supply[type]`, the slot SHALL appear disabled (e.g., `opacity 0.45`, `filter: grayscale(0.6)`, no highlight on click) and tooltip/title SHALL explain "No supply remaining" or "Limit reached (supply: N)".
-   - When supply > activeCount, slot SHALL appear enabled with normal colors (`#e67e22` amplify, `#3498db` nullify, `#9b59b6` flip) and selection highlight per REQ-015 still applies.
+   - When supply > activeCount, slot SHALL appear enabled with type-colored icon (`#e67e22` amplify, `#3498db` nullify, `#9b59b6` flip) and selection highlight per REQ-015 pause-menu style still applies (type-tinted `rgba(...,0.28)` `border rgba(...,0.9)` `scale 1.04`).
    - Preview circle (`drawModifierPreview`) SHALL NOT be shown if supply insufficient for the selected type (or SHALL be shown in desaturated/red dashed variant to signal blocked placement).
+   - **Transparent & Collapsible preservation**: Supply badges and disabled styling SHALL work in the **transparent overlay** hotbar per REQ-015 pause-menu style. When the hotbar is **collapsed** (REQ-015 collapsible pill), slots are hidden so supply counts are not visible until expanded — `updateHotbarUI()` SHALL still update the underlying slot DOM (badge text `xN` / `N/M`) so expanding immediately shows correct counts. The toggle pill itself MAY show a compact summary (e.g., `≡` with dot indicators for supply exhausted) but is not required. Collapsed state SHALL NOT affect supply enforcement (`canPlace` still checks `activeCount < supply[type]`); **placement and hotkeys remain available while collapsed** via `1`/`2`/`3` (selection persists, preview visible, canvas click places), so supply counts are still enforced even though slots are hidden. Expanding restores full supply-aware UI with updated counts.
 
 4. **Interaction with Existing Modifier Rules** (REQ-015/016/017/018):
    - Supersedes REQ-015 §2.5 "any number of modifiers" and slot text "Amplify x5 infinite": the effective maximum per type is now `supply[type]`, and global maximum is `sum(supply)`. If `supply` is `{1,1,1}`, one of each can be placed (1 amplify, 1 nullify, 1 flip) for 3 total.
@@ -54,6 +55,8 @@ Unlimited placement (REQ-015 §2.5) removes strategic scarcity. An inventory mod
 - [ ] Advancing to next hole (`handleNextHole`) clears `modifiers` (no circles visible) but supply remains `{amplify:1,...}` (not reset to `{1,1,1}` again). Hotbar still shows `Amplify 1` enabled for next hole; player can place one amplify on new hole.
 - [ ] Pressing `R` in `WIN` / `GAME_COMPLETE` (`resetGameAfterWin`), `startNewGameFromMain` (REQ-029), `endRun` (REQ-029), or reloading page resets supply to `{amplify:1, nullify:1, flip:1}` and hotbar shows all `1` again, no modifiers on field, no selection.
 - [ ] `getWindAt` inside amplify still `5×`, nullify `0`, flip `-1×` as per REQ-016/017/018; supply limit does not alter effect math, only whether placement is allowed.
+- [ ] Transparent hotbar still shows supply correctly: container `rgba(0,0,0,0.35-0.45)` + slots pause-menu style (`rgba(255,255,255,0.06)` `1px rgba(255,255,255,0.18)` `600 11px` white with stroke, icon `14px` `#e67e22/#3498db/#9b59b6`), field visible underneath; badges `1`/`1/1` remain readable with dark stroke/shadow.
+- [ ] Collapsible hotbar preserves supply: clicking `#hotbar-toggle` collapses to minimal pill (no slots visible) → expanding again still shows same `Amplify 1` badges and disabled states (if a type was exhausted before collapse, it remains disabled after expand). While collapsed, supply counts are still enforced and **hotkeys `1`/`2`/`3` still work** to select (selection persists, preview visible, canvas click places even while collapsed per updated REQ-015).
 - [ ] No 3rd-party libraries; pure vanilla JS `supply` object and `modifiers` array length check.
 
 ## Dependencies
@@ -85,9 +88,9 @@ Unlimited placement (REQ-015 §2.5) removes strategic scarcity. An inventory mod
 
 ## File Paths
 
-- `src/main.js:1` (supply state, canPlace, placeModifier guard, addToSupply, resetGameAfterWin, loadLevel/advanceHole persistence)
+- `src/main.js:1` (supply state, canPlace, placeModifier guard, addToSupply, resetGameAfterWin, loadLevel/advanceHole persistence, collapsed state does not affect supply)
 - `src/vectorField.js:1` (unchanged; optional `getSupply` export if supply moved there)
-- `src/render.js:1` (drawHotbar badge, disabled styling, preview blocked state)
-- `src/input.js:1` (selection blocked feedback when supply insufficient, optional)
-- `index.html:30` (hotbar slot count badges)
-- `style.css:1` (disabled slot opacity/grayscale, count badge)
+- `src/render.js:1` (drawHotbar badge, disabled styling, preview blocked state, transparent slots)
+- `src/input.js:1` (selection blocked feedback when supply insufficient, optional, collapse toggle `M`/`B`)
+- `index.html:30` (hotbar slot count badges, `#hotbar-toggle` transparent pill)
+- `style.css:1` (transparent hotbar `rgba(0,0,0,0.35-0.45)` + `backdrop-filter`, disabled slot opacity/grayscale, count badge, collapsed `.collapsed`)

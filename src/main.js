@@ -45,13 +45,39 @@ let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
 
-// Modifier system per REQ-015 + REQ-020 (supply-limited)
+// Modifier system per REQ-015 + REQ-020 (supply-limited) + transparent/collapsible per REQ-012/015/020
 let modifiers = [];
 let selectedModifier = null;
 let mousePos = null;
 let hotbarEl = null;
+let hotbarToggleEl = null;
 let draggingIdx = -1;
 let isDragging = false;
+let isHotbarCollapsed = false;
+function isHotbarCollapsedState() { return isHotbarCollapsed; }
+function syncHotbarCollapsedUI() {
+  if (!hotbarEl) return;
+  hotbarEl.classList.toggle("collapsed", isHotbarCollapsed);
+  if (hotbarToggleEl) {
+    hotbarToggleEl.textContent = isHotbarCollapsed ? "▴" : "▾";
+    const label = isHotbarCollapsed ? "Expand modifiers" : "Collapse modifiers";
+    hotbarToggleEl.setAttribute("aria-label", label);
+    hotbarToggleEl.title = label;
+  }
+}
+function toggleHotbar() {
+  // Only meaningful during AIMING/CHARGING and when not hidden by FLYING/WIN/reward/pause/mainMenu
+  // Still allow toggle even if hidden — will be visible on next AIMING entry as collapsed state is ephemeral
+  isHotbarCollapsed = !isHotbarCollapsed;
+  // Do NOT deselect active modifier when collapsing — selection persists per updated REQ-015
+  syncHotbarCollapsedUI();
+  updateHotbarUI();
+  return isHotbarCollapsed;
+}
+function resetHotbarCollapsed() {
+  isHotbarCollapsed = false;
+  syncHotbarCollapsedUI();
+}
 
 // Supply per REQ-020: per-type inventory, starts with one of each on new game
 let supply = { amplify: 1, nullify: 1, flip: 1 };
@@ -542,6 +568,8 @@ function loadLevel(index) {
   setAimAngle(Math.atan2(dy, dx));
   // REQ-024: re-init bouncy bounces for new hole attempt
   bouncyRemaining = bouncyBallCount;
+  // REQ-015 collapsible: reset to expanded on new hole
+  resetHotbarCollapsed();
   updateHotbarUI();
 }
 
@@ -1061,6 +1089,15 @@ function init() {
   winTitle = document.getElementById("win-title");
   nextHoleButton = document.getElementById("next-hole-button");
   hotbarEl = document.getElementById("hotbar");
+  hotbarToggleEl = document.getElementById("hotbar-toggle");
+  if (hotbarToggleEl) {
+    hotbarToggleEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // Don't toggle when hidden by FLYING/WIN/reward/pause/mainMenu — toggleHotbar still works but hotbar is hidden anyway
+      toggleHotbar();
+    });
+    syncHotbarCollapsedUI();
+  }
 
   setupCanvas();
   // REQ-027: try resume from localStorage before new game init
@@ -1087,6 +1124,7 @@ function init() {
     gameState = "AIMING";
     mainMenuVisible = false;
     if (winOverlay) winOverlay.classList.add("hidden");
+    resetHotbarCollapsed();
     updateAttemptsUI();
     updateHotbarUI();
     syncMainMenu();
@@ -1116,6 +1154,7 @@ function init() {
     freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
     rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
     secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false; rewardOffered = []; rewardRerolled = false;
+    resetHotbarCollapsed();
     updateAttemptsUI(); updateHotbarUI(); updateForceBar();
     syncMainMenu(); syncPauseOverlay();
   }
@@ -1155,7 +1194,7 @@ function init() {
     }
   );
 
-  // Hotbar selection per REQ-015 - updated for deselection via escape / same hotkey / same button
+  // Hotbar selection per REQ-015 - updated for deselection via escape / same hotkey / same button + collapsible (clicks hidden when collapsed, but hotkeys still work)
   if (hotbarEl) {
     hotbarEl.querySelectorAll(".hotbar-slot").forEach(slot => {
       slot.addEventListener("click", () => {
@@ -1163,6 +1202,7 @@ function init() {
         if (rewardMenuVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
+        // When collapsed slots are display:none so click won't fire; no extra block needed but keep functional if called programmatically
         if (selectedModifier === slot.dataset.type) {
           selectedModifier = null;
         } else {
@@ -1172,6 +1212,7 @@ function init() {
       });
     });
     updateHotbarUI();
+    syncHotbarCollapsedUI();
   }
   if (nextHoleButton) {
     nextHoleButton.addEventListener("click", handleNextHole);
@@ -1253,6 +1294,14 @@ function init() {
     if (pauseMenuVisible) {
       e.preventDefault();
       return;
+    }
+    // REQ-015 collapsible: M / B toggles hotbar transparency/collapse, Escape stays deselect-only
+    if ((e.code === "KeyM" || e.code === "KeyB") && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (!rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && (gameState === "AIMING" || gameState === "CHARGING")) {
+        toggleHotbar();
+        e.preventDefault();
+        return;
+      }
     }
     if (e.code === "Digit1") {
       if (selectedModifier === 'amplify') selectedModifier = null;
@@ -1762,6 +1811,13 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'mainMenuVisible', { get: () => mainMenuVisible, set: (v) => { mainMenuVisible = !!v; } });
   Object.defineProperty(window, '__mainMenuVisible', { get: () => mainMenuVisible, set: (v) => { mainMenuVisible = !!v; } });
   Object.defineProperty(window, 'HIGH_SCORE_KEY', { get: () => HIGH_SCORE_KEY });
+  // REQ-015 collapsible hotbar helpers
+  window.__isHotbarCollapsed = isHotbarCollapsedState;
+  window.__toggleHotbar = toggleHotbar;
+  window.__resetHotbarCollapsed = resetHotbarCollapsed;
+  window.toggleHotbar = toggleHotbar;
+  Object.defineProperty(window, 'isHotbarCollapsed', { get: () => isHotbarCollapsed, set: (v) => { isHotbarCollapsed = !!v; syncHotbarCollapsedUI(); updateHotbarUI(); } });
+  Object.defineProperty(window, '__hotbarCollapsed', { get: () => isHotbarCollapsed, set: (v) => { isHotbarCollapsed = !!v; syncHotbarCollapsedUI(); updateHotbarUI(); } });
 }
 
 // Auto-init when loaded as module via script tag
@@ -1771,4 +1827,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI };
