@@ -12,7 +12,7 @@ export const LEVELS = [
       { type: "rect", x: 650, y: 80, w: 20, h: 180 },
       { type: "circle", x: 430, y: 140, r: 30 },
     ],
-    field: { cols: 20, rows: 15, strength: 90, seed: 42 },
+    field: { cols: 20, rows: 15, strength: 90, seed: 42, sources: 2, sinks: 2, doublets: 1, vortexes: 2},
   },
   {
     id: "hole-2",
@@ -27,7 +27,7 @@ export const LEVELS = [
       { type: "rect", x: 650, y: 180, w: 20, h: 220 },
       { type: "circle", x: 300, y: 360, r: 28 },
     ],
-    field: { cols: 20, rows: 15, strength: 90, seed: 133 },
+    field: { cols: 20, rows: 15, strength: 90, seed: 133, sources: 2, sinks: 2, doublets: 2, vortexes: 3},
   },
   {
     id: "hole-3",
@@ -43,7 +43,7 @@ export const LEVELS = [
       { type: "rect", x: 700, y: 80, w: 20, h: 180 },
       { type: "circle", x: 480, y: 250, r: 25 },
     ],
-    field: { cols: 20, rows: 15, strength: 90, seed: 77 },
+    field: { cols: 20, rows: 15, strength: 90, seed: 77, sources: 3, sinks: 3, doublets: 1, vortexes: 2},
   },
   {
     id: "hole-4",
@@ -59,7 +59,7 @@ export const LEVELS = [
       { type: "circle", x: 400, y: 420, r: 30 },
       { type: "rect", x: 150, y: 360, w: 120, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 92, seed: 101 },
+    field: { cols: 20, rows: 15, strength: 92, seed: 101, sources: 3, sinks: 3, doublets: 1, vortexes: 2},
   },
   {
     id: "hole-5",
@@ -75,7 +75,7 @@ export const LEVELS = [
       { type: "circle", x: 380, y: 200, r: 32 },
       { type: "rect", x: 700, y: 320, w: 120, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 95, seed: 102 },
+    field: { cols: 20, rows: 15, strength: 95, seed: 102, sources: 1, sinks: 1, doublets: 0, vortexes: 1},
   },
   {
     id: "hole-6",
@@ -92,7 +92,7 @@ export const LEVELS = [
       { type: "circle", x: 300, y: 400, r: 30 },
       { type: "rect", x: 680, y: 100, w: 20, h: 200 },
     ],
-    field: { cols: 20, rows: 15, strength: 96, seed: 103 },
+    field: { cols: 20, rows: 15, strength: 96, seed: 103, sources: 2, sinks: 2, doublets: 2, vortexes: 3},
   },
   {
     id: "hole-7",
@@ -109,7 +109,7 @@ export const LEVELS = [
       { type: "rect", x: 650, y: 80, w: 20, h: 200 },
       { type: "rect", x: 250, y: 300, w: 120, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 98, seed: 104 },
+    field: { cols: 20, rows: 15, strength: 98, seed: 104, sources: 3, sinks: 3, doublets: 1, vortexes: 2},
   },
   {
     id: "hole-8",
@@ -127,7 +127,7 @@ export const LEVELS = [
       { type: "rect", x: 500, y: 80, w: 20, h: 160 },
       { type: "circle", x: 300, y: 360, r: 26 },
     ],
-    field: { cols: 20, rows: 15, strength: 100, seed: 105 },
+    field: { cols: 20, rows: 15, strength: 100, seed: 105, sources: 1, sinks: 1, doublets: 0, vortexes: 1},
   },
   {
     id: "hole-9",
@@ -145,7 +145,7 @@ export const LEVELS = [
       { type: "rect", x: 500, y: 120, w: 20, h: 180 },
       { type: "circle", x: 700, y: 380, r: 28 },
     ],
-    field: { cols: 20, rows: 15, strength: 100, seed: 106 },
+    field: { cols: 20, rows: 15, strength: 100, seed: 106, sources: 2, sinks: 2, doublets: 2, vortexes: 3},
   },
   {
     id: "hole-10",
@@ -164,7 +164,7 @@ export const LEVELS = [
       { type: "circle", x: 600, y: 380, r: 28 },
       { type: "rect", x: 150, y: 400, w: 100, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 105, seed: 107 },
+    field: { cols: 20, rows: 15, strength: 105, seed: 107, sources: 3, sinks: 3, doublets: 1, vortexes: 2},
   },
   {
     id: "hole-11",
@@ -183,7 +183,7 @@ export const LEVELS = [
       { type: "circle", x: 300, y: 200, r: 26 },
       { type: "rect", x: 700, y: 150, w: 120, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 105, seed: 108 },
+    field: { cols: 20, rows: 15, strength: 105, seed: 108, sources: 1, sinks: 1, doublets: 0, vortexes: 1},
   },
   {
     id: "hole-12",
@@ -203,7 +203,7 @@ export const LEVELS = [
       { type: "circle", x: 600, y: 150, r: 30 },
       { type: "rect", x: 250, y: 250, w: 100, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 110, seed: 109 },
+    field: { cols: 20, rows: 15, strength: 110, seed: 109, sources: 2, sinks: 2, doublets: 2, vortexes: 3},
   },
   {
     id: "hole-13",
@@ -223,7 +223,7 @@ export const LEVELS = [
       { type: "rect", x: 680, y: 340, w: 120, h: 20 },
       { type: "rect", x: 320, y: 200, w: 120, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 110, seed: 110 },
+    field: { cols: 20, rows: 15, strength: 110, seed: 110, sources: 3, sinks: 3, doublets: 1, vortexes: 2},
   },
   {
     id: "hole-14",
@@ -244,7 +244,7 @@ export const LEVELS = [
       { type: "rect", x: 250, y: 220, w: 100, h: 20 },
       { type: "circle", x: 700, y: 420, r: 24 },
     ],
-    field: { cols: 20, rows: 15, strength: 115, seed: 111 },
+    field: { cols: 20, rows: 15, strength: 115, seed: 111, sources: 1, sinks: 1, doublets: 0, vortexes: 1},
   },
   {
     id: "hole-15",
@@ -265,7 +265,7 @@ export const LEVELS = [
       { type: "circle", x: 600, y: 380, r: 26 },
       { type: "rect", x: 250, y: 180, w: 100, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 115, seed: 112 },
+    field: { cols: 20, rows: 15, strength: 115, seed: 112, sources: 2, sinks: 2, doublets: 2, vortexes: 3},
   },
   {
     id: "hole-16",
@@ -287,7 +287,7 @@ export const LEVELS = [
       { type: "circle", x: 700, y: 180, r: 26 },
       { type: "rect", x: 400, y: 240, w: 80, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 120, seed: 113 },
+    field: { cols: 20, rows: 15, strength: 120, seed: 113, sources: 3, sinks: 3, doublets: 1, vortexes: 2},
   },
   {
     id: "hole-17",
@@ -309,7 +309,7 @@ export const LEVELS = [
       { type: "rect", x: 400, y: 300, w: 120, h: 20 },
       { type: "circle", x: 700, y: 380, r: 28 },
     ],
-    field: { cols: 20, rows: 15, strength: 120, seed: 114 },
+    field: { cols: 20, rows: 15, strength: 120, seed: 114, sources: 1, sinks: 1, doublets: 0, vortexes: 1},
   },
   {
     id: "hole-18",
@@ -332,7 +332,7 @@ export const LEVELS = [
       { type: "rect", x: 650, y: 260, w: 100, h: 20 },
       { type: "rect", x: 250, y: 260, w: 80, h: 20 },
     ],
-    field: { cols: 20, rows: 15, strength: 125, seed: 115 },
+    field: { cols: 20, rows: 15, strength: 125, seed: 115, sources: 2, sinks: 2, doublets: 2, vortexes: 3},
   },
 ];
 

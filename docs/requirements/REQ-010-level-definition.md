@@ -29,9 +29,12 @@ User chose "Single hole MVP" scope. A data-driven level in `src/levels.js` isola
         {type:'circle', x:550, y:180, r:40},
         // ... 4-6 total
       ],
-      field: {cols:20, rows:15, strength:30, seed:42}
+      field: {cols:20, rows:15, strength:90, seed:42, sources:1, sinks:1, doublets:1, vortexes:1}
+      // field MAY also be specified via seed + counts per REQ-003: createField(cols,rows,strength,seed,width,height,sources,sinks,doublets,vortexes)
+      // No unaryFlow: fields are pure superposition. Sources and sinks are at the edge, at least one vortex or doublet is strictly inside.
     }
     ```
+   Field `field` SHALL support the REQ-003 superposition parameters `seed`, `sources`, `sinks`, `doublets`, `vortexes` (all `integer >=0`) in addition to `cols`, `rows`, `strength`; if counts are omitted, `createField` defaults (`seed=42, sources=1, sinks=1, doublets=1, vortexes=1`) SHALL apply and the mandatory edge/inside constraints (≥1 source at edge, ≥1 sink at edge, ≥1 vortex/doublet inside) are coerced. **No `unaryFlow`** SHALL be present; `field` MUST NOT contain `unary`/`unaryFlow` keys (any such key, if present, SHALL be ignored per REQ-003).
 2. `src/main.js` SHALL track `currentHoleIndex` and load `LEVELS[currentHoleIndex]` on init and on hole advance; pass its data to `createField`, obstacle store, and ball/hole spawns. Total holes `LEVELS.length` drives hole counter `Hole: N/M`.
 3. The level's obstacles SHALL create at least two distinct viable paths to the hole that require wind compensation; direct straight shot must be blocked or heavily wind-deflected.
 4. Tee and hole SHALL be at least 600px apart horizontally to require meaningful power.

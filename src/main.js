@@ -555,7 +555,7 @@ function loadLevel(index) {
   currentHoleIndex = index;
   level = LEVELS[currentHoleIndex];
   windStrength = level.field.strength ?? WIND_STRENGTH;
-  createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H);
+  createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
   // Clear modifiers for new hole per REQ-015 (persist through death, cleared on hole advance)
   // REQ-020: supply persists across hole advances, do NOT reset supply here
   modifiers = [];
@@ -1115,7 +1115,7 @@ function init() {
     // Resume saved run — re-create field/ball for saved hole, keep persisted counters/inventory
     level = LEVELS[currentHoleIndex];
     windStrength = level.field.strength ?? WIND_STRENGTH;
-    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H);
+    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
     syncModifiersToField();
     initParticles(80, LOGICAL_W, LOGICAL_H);
     createBall(level.tee);
@@ -1136,7 +1136,7 @@ function init() {
     currentHoleIndex = 0;
     level = LEVELS[0];
     windStrength = level.field.strength ?? WIND_STRENGTH;
-    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H);
+    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
     modifiers = []; syncModifiersToField();
     initParticles(80, LOGICAL_W, LOGICAL_H);
     createBall(level.tee);
