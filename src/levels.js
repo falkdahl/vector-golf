@@ -168,7 +168,7 @@ function _generateLevelsInternal(seed = 42, count = 18) {
     if (levelNum === 1) {
       sources = 1; sinks = 1; doublets = 0; vortexes = 0; obsCount = 0;
     } else if (levelNum === 2) {
-      sources = 1; sinks = 1; doublets = 0; vortexes = 0; obsCount = 2;
+      sources = 1; sinks = 1; doublets = 0; vortexes = 1; obsCount = 1;
     } else if (levelNum === 3) {
       sources = 1; sinks = 1; doublets = 0; vortexes = 1; obsCount = 2;
     } else if (levelNum === 4) {
