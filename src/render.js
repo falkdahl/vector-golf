@@ -207,126 +207,87 @@ export function drawObstacles(ctx, obstacles) {
     const obs = obstacles[idx];
     ctx.save();
     if (obs.type === "rect") {
-      // Randomly water or sand texture per square obstacle (deterministic per obstacle)
-      const isWater = ((obs.x * 374761393 + obs.y * 668265261 + obs.w * 127 + obs.h * 31 + idx * 91138233) & 1) === 0;
-      if (isWater) {
-        // Water texture - blue base
-        ctx.fillStyle = "#2A7BD5";
-        ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
-        // inner darker border
-        ctx.fillStyle = "rgba(0,40,120,0.18)";
-        ctx.fillRect(obs.x, obs.y, obs.w, Math.min(4, obs.h));
-        // wave lines - horizontal wavy pattern clipped to rect
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(obs.x, obs.y, obs.w, obs.h);
-        ctx.clip();
-        ctx.strokeStyle = "rgba(255,255,255,0.28)";
-        ctx.lineWidth = 1.4;
-        ctx.lineCap = "round";
-        // horizontal waves
-        for (let wy = obs.y + 8; wy < obs.y + obs.h - 4; wy += 10) {
-          const amp = 3 + ((obs.x + wy) % 7) * 0.3;
-          ctx.beginPath();
-          const startX = obs.x + 4;
-          const endX = obs.x + obs.w - 4;
-          const midX1 = obs.x + obs.w * 0.33;
-          const midX2 = obs.x + obs.w * 0.66;
-          ctx.moveTo(startX, wy);
-          // wavy bezier
-          ctx.bezierCurveTo(midX1, wy - amp, midX2, wy + amp, endX, wy);
-          ctx.stroke();
+      // Reddish brick texture - all rects share brick appearance per user request
+      // Base brick fill with subtle variation per obstacle for identity without breaking theme
+      const brickBase = "#A63A2A"; // primary reddish brick
+      const brickDark = "#7F2E1F"; // mortar shadow / inner shade
+      const mortarColor = "rgba(232,215,195,0.88)"; // light beige mortar
+      const highlight = "rgba(255,230,210,0.12)";
+      ctx.fillStyle = brickBase;
+      ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+      // Slight vertical gradient for depth (top lighter)
+      const topH = Math.min(10, obs.h * 0.22);
+      const grad = ctx.createLinearGradient(obs.x, obs.y, obs.x, obs.y + topH);
+      grad.addColorStop(0, "rgba(255,255,255,0.10)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(obs.x, obs.y, obs.w, topH);
+      // Brick pattern clipped to rect
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(obs.x, obs.y, obs.w, obs.h);
+      ctx.clip();
+      // Brick dimensions - tuned to look good at typical obstacle sizes (20x~200)
+      const brickH = 10;
+      const brickW = 22;
+      const mortar = 2;
+      // Fill individual bricks with slight color jitter for realism (deterministic per obstacle)
+      for (let row = 0; row * brickH < obs.h; row++) {
+        const y0 = obs.y + row * brickH;
+        const y1 = Math.min(y0 + brickH - mortar, obs.y + obs.h);
+        const bh = y1 - y0;
+        if (bh <= 0) continue;
+        const offset = (row % 2) * (brickW / 2);
+        for (let col = -1; col * brickW - offset < obs.w + brickW; col++) {
+          const x0 = obs.x + col * brickW - offset + mortar / 2;
+          const x1 = Math.min(x0 + brickW - mortar, obs.x + obs.w);
+          const bw = x1 - x0;
+          if (bw <= 2) continue;
+          // deterministic shade variation per brick
+          const seed = (obs.x * 17 + obs.y * 31 + row * 71 + col * 37 + idx * 19) % 7;
+          if (seed === 0) ctx.fillStyle = "#B04A32"; // slightly lighter
+          else if (seed === 1) ctx.fillStyle = "#963925";
+          else if (seed === 2) ctx.fillStyle = "#A8432E";
+          else if (seed === 3) ctx.fillStyle = "#8D3526";
+          else ctx.fillStyle = brickBase;
+          ctx.fillRect(x0, y0, bw, bh);
+          // subtle highlight top edge of each brick
+          ctx.fillStyle = highlight;
+          ctx.fillRect(x0, y0, bw, 1.2);
         }
-        // vertical subtle ripples for larger waters
-        if (obs.w > 30 && obs.h > 30) {
-          ctx.strokeStyle = "rgba(180,220,255,0.18)";
-          ctx.lineWidth = 1;
-          for (let wx = obs.x + 8; wx < obs.x + obs.w -4; wx += 14) {
-            ctx.beginPath();
-            ctx.moveTo(wx, obs.y + 6);
-            ctx.bezierCurveTo(wx - 2, obs.y + obs.h * 0.4, wx + 2, obs.y + obs.h * 0.6, wx, obs.y + obs.h - 6);
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-        // specular highlight top edge
-        ctx.fillStyle = "rgba(255,255,255,0.12)";
-        ctx.fillRect(obs.x, obs.y, obs.w, 3);
-        // outline
-        ctx.strokeStyle = "#143A6B";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
-        // inner highlight stroke
-        ctx.strokeStyle = "rgba(255,255,255,0.18)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(obs.x + 1.5, obs.y + 1.5, obs.w - 3, obs.h - 3);
-      } else {
-        // Sand texture - more yellow, heavily dotted
-        ctx.fillStyle = "#E9C96A"; // warm sandy yellow
-        ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
-        // subtle gradient highlight top
-        ctx.fillStyle = "rgba(255,235,160,0.22)";
-        ctx.fillRect(obs.x, obs.y, obs.w, Math.min(6, obs.h * 0.35));
-        // sand grain - dense dotted pattern deterministic
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(obs.x, obs.y, obs.w, obs.h);
-        ctx.clip();
-        // dense grains - step 5 for highly dotted
-        for (let sx = obs.x + 2; sx < obs.x + obs.w - 1; sx += 5) {
-          for (let sy = obs.y + 2; sy < obs.y + obs.h - 1; sy += 5) {
-            const h = (sx * 13 + sy * 17 + idx * 23) % 13;
-            if (h < 7) { // ~54% density - very dotted
-              if (h < 2) ctx.fillStyle = "rgba(160,120,30,0.32)"; // dark golden grain
-              else if (h < 4) ctx.fillStyle = "rgba(210,180,70,0.38)"; // mid yellow grain
-              else if (h < 6) ctx.fillStyle = "rgba(255,240,150,0.42)"; // light yellow highlight grain
-              else ctx.fillStyle = "rgba(110,80,20,0.22)"; // deep shadow grain
-              const r = h % 3 === 0 ? 1.4 : h % 3 === 1 ? 1.0 : 0.7;
-              ctx.beginPath();
-              // deterministic jitter for natural look
-              const jx = ((sx * 7 + sy * 13 + idx * 5) % 5) - 2;
-              const jy = ((sy * 11 + sx * 17 + idx * 7) % 5) - 2;
-              ctx.arc(sx + jx * 0.6, sy + jy * 0.6, r, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          }
-        }
-        // larger pebbles sparsely
-        for (let px = obs.x + 6; px < obs.x + obs.w - 6; px += 18) {
-          for (let py = obs.y + 6; py < obs.y + obs.h - 6; py += 18) {
-            const v = (px * 29 + py * 31 + idx * 37) % 7;
-            if (v === 0) {
-              ctx.fillStyle = "rgba(140,110,30,0.20)";
-              ctx.beginPath();
-              ctx.arc(px + ((py * 3) % 3) - 1, py + ((px * 5) % 3) - 1, 2.2, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.fillStyle = "rgba(255,248,180,0.35)";
-              ctx.beginPath();
-              ctx.arc(px - 1, py - 1, 0.9, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          }
-        }
-        // subtle wind-blown streaks
-        ctx.strokeStyle = "rgba(180,150,50,0.14)";
-        ctx.lineWidth = 1;
-        for (let i = 0; i < 3; i++) {
-          const yline = obs.y + 5 + ((idx * 19 + i * 23) % (obs.h - 10));
-          ctx.beginPath();
-          ctx.moveTo(obs.x + 3, yline);
-          // wavy streak
-          ctx.bezierCurveTo(obs.x + obs.w * 0.35, yline - 1, obs.x + obs.w * 0.65, yline + 1, obs.x + obs.w - 3, yline);
-          ctx.stroke();
-        }
-        ctx.restore();
-        // outline - deeper sand border
-        ctx.strokeStyle = "#B89A3B";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
-        ctx.strokeStyle = "rgba(255,240,160,0.28)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(obs.x + 1.5, obs.y + 1.5, obs.w - 3, obs.h - 3);
       }
+      // Mortar lines - horizontal
+      ctx.strokeStyle = mortarColor;
+      ctx.lineWidth = mortar;
+      ctx.lineCap = "square";
+      for (let y = obs.y + brickH; y < obs.y + obs.h; y += brickH) {
+        ctx.beginPath();
+        ctx.moveTo(obs.x, y - mortar / 2);
+        ctx.lineTo(obs.x + obs.w, y - mortar / 2);
+        ctx.stroke();
+      }
+      // Mortar lines - vertical (offset every other row)
+      for (let row = 0; row * brickH < obs.h; row++) {
+        const y0 = obs.y + row * brickH;
+        const y1 = Math.min(y0 + brickH, obs.y + obs.h);
+        const offset = (row % 2) * (brickW / 2);
+        for (let x = obs.x + brickW - offset; x < obs.x + obs.w; x += brickW) {
+          ctx.beginPath();
+          ctx.moveTo(x - mortar / 2, y0);
+          ctx.lineTo(x - mortar / 2, y1);
+          ctx.stroke();
+        }
+      }
+      // Edge mortar - ensure border mortar visible
+      ctx.strokeRect(obs.x + mortar / 2, obs.y + mortar / 2, obs.w - mortar, obs.h - mortar);
+      ctx.restore();
+      // Outer outline - dark brick shadow
+      ctx.strokeStyle = "#5A1F14";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+      ctx.strokeStyle = "rgba(255,230,210,0.18)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(obs.x + 1.5, obs.y + 1.5, obs.w - 3, obs.h - 3);
     } else if (obs.type === "circle") {
       // Tree texture for circular obstacles
       const x = obs.x, y = obs.y, r = obs.r;

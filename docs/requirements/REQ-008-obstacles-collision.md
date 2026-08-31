@@ -27,9 +27,9 @@ User requirement: "There should be static obstacles that when touched destroys t
    - Immediately call `resetBall()` (REQ-011) - ball position reset to tee, velocity zero, state -> `AIMING`, charge reset.
    - No explosion animation beyond optional 1-frame flash (must feel instant per spec).
    - No lives decrement; infinite retries.
-4. Rendering in `src/render.js:60`:
-   - Rects: filled `#2c3e50` or `#444` with 2px border, drawn before ball.
-   - Circles: same style.
+4. Rendering in `src/render.js:204`:
+   - Rects: rendered as **reddish brick texture** (base `#A63A2A` with per-brick variation `#B04A32/#963925/#A8432E/#8D3526`, brick size `22×10` with `2px` light mortar `rgba(232,215,195,0.88)`, offset every other row, outer stroke `#5A1F14` `2px` + inner `rgba(255,230,210,0.18)` `1px`), drawn before ball — no water/sand distinction for rects.
+   - Circles: tree texture (shadow, trunk `#6B3A2A`, canopy `#1E7A34` etc.) as before.
 5. Obstacles SHALL NOT overlap tee or hole spawn areas (minimum 30px clearance).
 6. Out-of-bounds / Edge: ball center touching or leaving canvas bounds (`pos.x - radius < 0` or `pos.x + radius > canvasW` or same for y, or `pos` outside `canvas + radius*2`) SHALL also trigger instant death/reset (treated as obstacle). Edge is fatal; no bounce.
 
