@@ -164,13 +164,7 @@ function _generateLevelsInternal(seed = 42, count = 18) {
     let sources = 1, sinks = 1, doublets = 0, vortexes = 0;
     let obsCount = 0;
     let strength;
-    if (levelNum <= 6) {
-      strength = 80 + (levelNum - 1) * 5;
-    } else {
-      strength = 105 + Math.floor((levelNum - 6) / 2) * 2 + (levelNum % 2 === 1 ? 2 : 0);
-      if (strength > 125) strength = 125;
-    }
-
+    strength = 125;
     if (levelNum === 1) {
       sources = 1; sinks = 1; doublets = 0; vortexes = 0; obsCount = 0;
     } else if (levelNum === 2) {
