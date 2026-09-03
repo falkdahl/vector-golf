@@ -747,14 +747,14 @@ function bounceBall(hit, isEdge) {
   ball.isMoving = true;
 }
 
-// Reward menu per REQ-021/023/024: secret counter (every 5 counted shots) - 3 random of 6 pool, no award before first attempt
+// Reward menu per REQ-021/023/024: secret counter per-hole (reset to 0 on each hole advance, reward before first attempt on holes >0) - 3 random of 6 pool
 const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp', 'bouncyBall'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
 let rewardMenuHover = null; // hovered type for visual feedback
 let rewardOffered = []; // 3 distinct types randomly chosen from REWARD_POOL per trigger
-// Secret hidden counter per updated REQ-021: increments only on counted (non-free) shots, first reward after 5
-let secretRewardCounter = 0; // hidden 0..4
+// Secret hidden counter per-hole per updated REQ-021: increments only on counted (non-free) shots, first reward on hole 1 after 5, subsequent holes reward before first attempt with counter 0 at entry
+let secretRewardCounter = 0; // hidden 0..4 per-hole
 let rewardPending = false;
 let firstRewardClaimed = false; // kept for backward compat but no longer triggers initial menu
 let rewardRerolled = false; // per-menu flag per REQ-025, false when menu freshly shown
@@ -795,7 +795,7 @@ function maybeShowRewardMenu() {
   if (mainMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (rewardMenuVisible) return;
-  // No reward before first attempt — first reward only after 5 counted shots via rewardPending
+  // REQ-021 per-hole: no reward before first attempt on hole 1, reward before first attempt on holes >0 via rewardPending set on hole entry
   if (rewardPending) {
     rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
     rewardMenuVisible = true;
@@ -902,13 +902,32 @@ function loadLevel(index) {
   setAimAngle(Math.atan2(dy, dx));
   // REQ-024: re-init bouncy bounces for new hole attempt
   bouncyRemaining = bouncyBallCount;
+  // REQ-021 per-hole: reset secret counter and queue reward before first attempt on holes >0
+  if (index > 0) {
+    secretRewardCounter = 0;
+    rewardPending = true;
+    rewardMenuVisible = false;
+    rewardOffered = [];
+    rewardRerolled = false;
+    rewardMenuHover = null;
+    rewardRerollHover = false;
+  } else {
+    // Hole 1: no pre-attempt reward, ensure counter 0 and no pending
+    secretRewardCounter = 0;
+    rewardPending = false;
+    rewardMenuVisible = false;
+    rewardOffered = [];
+    rewardRerolled = false;
+    rewardMenuHover = null;
+    rewardRerollHover = false;
+  }
   // REQ-015 collapsible: reset to expanded on new hole
   resetHotbarCollapsed();
   updateHotbarUI();
 }
 
 function initLevel() {
-  // REQ-020/022/023/024 + REQ-021 secret counter + REQ-025 reroll + REQ-028 pause stats: new game starts with one of each modifier, no award before first attempt
+  // REQ-020/022/023/024 + REQ-021 per-hole secret counter + REQ-025 reroll + REQ-028 pause stats: hole 1 no award before first attempt, holes >0 reward before first attempt with counter reset
   if (currentHoleIndex === 0) {
     supply = { amplify: 1, nullify: 1, flip: 1 };
     freeShots = 0;
@@ -929,12 +948,12 @@ function initLevel() {
     const pauseOverlay = document.getElementById("pause-overlay");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
   } else {
-    // For non-zero start (hole advance), ensure remaining matches count, keep secret counter
+    // For non-zero start (hole advance per-hole), counter will be reset in loadLevel and reward queued before first attempt
     bouncyRemaining = bouncyBallCount;
   }
   loadLevel(currentHoleIndex);
   updateAttemptsUI();
-  // REQ-021: show reward menu on very first attempt and when secret counter reached 5
+  // REQ-021 per-hole: hole 1 after 5 counted, holes >0 before first attempt + every 5 within hole
   maybeShowRewardMenu();
   // validate obstacles not overlapping tee/hole
   for (const obs of level.obstacles) {

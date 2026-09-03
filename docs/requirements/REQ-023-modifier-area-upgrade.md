@@ -18,7 +18,7 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 1. **Pool Inclusion** in `src/main.js` (REQ-021 Pool):
    - The random upgrade pool `POOL` per REQ-021 SHALL be extended from four to **five** distinct types: `['amplify','nullify','flip','freeShots','areaUp']` (internal identifiers; `areaUp` MAY be alias `modifierArea` or `areaPlus20`, but SHALL be documented consistently).
    - The reward menu SHALL still display **exactly three** distinct options per trigger, now randomly chosen as `shuffle([...POOL]).slice(0,3)` (3-of-5 uniform without replacement). The excluded two types SHALL not be shown that trigger. Over many triggers all five types SHALL remain possible to appear.
-   - No change to trigger timing (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5`, no reward before first attempt) or blocking logic; only the pool size grows.
+   - No change to trigger timing during a hole (now **secret counter** per updated REQ-021: increment on counted shots, reset at `5`, no reward before first attempt on the first hole; reward before first attempt on each subsequent hole with counter reset to `0` on hole advance) or blocking logic; only the pool size grows.
 
 2. **Stacking State** in `src/main.js`:
    - SHALL include `areaUpgradeCount: number` (integer `>=0`) or `modifierAreaBonus: number` and/or `modifierRadiusMultiplier: number`, initialized to `0` (count) / `1.0` (multiplier) on **new game**: page load / `initLevel()` with `currentHoleIndex===0`, `resetGameAfterWin()` (press `R` in `WIN`/`GAME_COMPLETE`), `startNewGameFromMain()` (REQ-029), `endRun()` (REQ-029), `clearProgress()` (REQ-027), and full page reload.
@@ -60,7 +60,7 @@ Modifier area directly controls puzzle influence (REQ-015 `MODIFIER_RADIUS=90`).
 
 ## Acceptance Criteria
 
-- [ ] On fresh page load (new game) hidden `areaUpgradeCount===0`, `getEffectiveModifierRadius()===90` (base `MODIFIER_RADIUS`), `getAreaMultiplier()===1.0`, supply is `{1,1,1}` and no reward menu is visible before first attempt.
+- [ ] On fresh page load (new game) hidden `areaUpgradeCount===0`, `getEffectiveModifierRadius()===90` (base `MODIFIER_RADIUS`), `getAreaMultiplier()===1.0`, supply is `{1,1,1}` and no reward menu is visible before first attempt on hole 1 (hole 2+ shows reward before first attempt with `secretRewardCounter===0`).
 - [ ] Reward menu after 5 counted shots (`Total=5`) now draws **exactly three** buttons randomly chosen from **five** possible types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%` (pool size 5). Never duplicate types in one menu, never four or two, never shows excluded types. Over 12 triggers, all five pool types appear at least once statistically (3-of-5 random). Verified by `getRewardOffered().length===3` and `new Set(offered).size===3` subset of pool.
 - [ ] When `Area +20%` is among the three offered, its button shows label `Area +20%` (or `Area Up`), icon `◯` (or `⬡`/`◎`) 22-24px amber/gold `#f39c12`/`#f1c40f`, border `rgba(243,156,18,0.9)`, hint `+20% area`, key hint positional `[1]`/`[2]`/`[3]`.
 - [ ] Selecting `Area +20%` when offered (click or positional key `1`/`2`/`3`) after first trigger closes the menu, increments `areaUpgradeCount` from `0` to `1`, `areaMultiplier` becomes `1.2`, `getEffectiveModifierRadius()` becomes `108` (`90*1.2`), `supply` and `freeShots` unchanged, `Total` at that point unchanged (still `5`), no `Total Attempts: N` text drawn.
