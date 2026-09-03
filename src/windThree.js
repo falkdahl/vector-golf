@@ -32,11 +32,23 @@ function isInsideAnyModifier(x, y) {
   }
   return false;
 }
-function randomPointInUnion() {
-  if (!currentModifiers.length) return null;
-  // Compute bounding box of union
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+function isInsideNullify(x, y) {
   for (const m of currentModifiers) {
+    if (m.type !== 'nullify') continue;
+    const r = m.radius ?? 54;
+    if (Math.hypot(x - m.x, y - m.y) < r) return true;
+  }
+  return false;
+}
+function getNonNullifyModifiers() {
+  return currentModifiers.filter(m => m.type !== 'nullify');
+}
+function randomPointInUnion() {
+  const mods = getNonNullifyModifiers();
+  if (!mods.length) return null;
+  // Compute bounding box of union of non-nullify modifiers only
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const m of mods) {
     const r = m.radius ?? 54;
     minX = Math.min(minX, m.x - r);
     maxX = Math.max(maxX, m.x + r);
@@ -49,23 +61,42 @@ function randomPointInUnion() {
   for (let attempt = 0; attempt < 40; attempt++) {
     const x = minX + Math.random() * (maxX - minX);
     const y = minY + Math.random() * (maxY - minY);
-    if (isInsideAnyModifier(x, y)) return { x, y };
+    // ensure inside non-nullify union and outside nullify
+    let inside = false;
+    for (const m of mods) {
+      const r = m.radius ?? 54;
+      if (Math.hypot(x - m.x, y - m.y) < r) { inside = true; break; }
+    }
+    if (inside && !isInsideNullify(x, y)) return { x, y };
   }
-  // Fallback: pick random modifier and random point inside it (still uniform per modifier but ensures point inside union)
-  const m = currentModifiers[Math.floor(Math.random() * currentModifiers.length)];
-  const r = Math.sqrt(Math.random()) * (m.radius ?? 54);
-  const ang = Math.random() * Math.PI * 2;
-  return { x: m.x + r * Math.cos(ang), y: m.y + r * Math.sin(ang) };
+  // Fallback: pick random non-nullify modifier and random point inside it (outside nullify)
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const m = mods[Math.floor(Math.random() * mods.length)];
+    const r = Math.sqrt(Math.random()) * (m.radius ?? 54);
+    const ang = Math.random() * Math.PI * 2;
+    const x = m.x + r * Math.cos(ang);
+    const y = m.y + r * Math.sin(ang);
+    if (!isInsideNullify(x, y)) return { x, y };
+  }
+  return null;
 }
 function getRespawnPositionPreferInside() {
-  // Constantly spawn inside modifiers if they exist, but don't double-count overlapping area (union sampling)
-  // Reduced to ~42% inside (half of previous 85%) per user request
-  if (currentModifiers.length) {
+  // Constantly spawn inside non-nullify modifiers if they exist, but don't double-count overlapping area (union sampling)
+  // Reduced to ~42% inside (half of previous 85%) per user request — never inside nullify per new requirement
+  const nonNullify = getNonNullifyModifiers();
+  if (nonNullify.length) {
     if (Math.random() < 0.42) {
       const p = randomPointInUnion();
       if (p) return p;
     }
   }
+  // Outside nullify: fallback uniform random outside nullify
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const x = Math.random() * LOGICAL_W;
+    const y = Math.random() * LOGICAL_H;
+    if (!isInsideNullify(x, y)) return { x, y };
+  }
+  // Fallback if map heavily covered by nullify (rare) — return last attempt even if inside
   return { x: Math.random() * LOGICAL_W, y: Math.random() * LOGICAL_H };
 }
 
@@ -223,8 +254,13 @@ function createParticles() {
   const sizes = new Float32Array(totalTrailPoints);
   particleData = [];
   for (let i = 0; i < PARTICLE_COUNT; i++) {
-    const x = Math.random() * LOGICAL_W;
-    const y = Math.random() * LOGICAL_H;
+    let x, y;
+    // Do not spawn inside nullify
+    for (let attempt = 0; attempt < 50; attempt++) {
+      x = Math.random() * LOGICAL_W;
+      y = Math.random() * LOGICAL_H;
+      if (!isInsideNullify(x, y)) break;
+    }
     const life = Math.random() * PARTICLE_LIFE;
     const trail = [];
     for (let t = 0; t < TRAIL_LENGTH; t++) {
@@ -403,6 +439,17 @@ export function updateWindUniforms(dt, getWindAt) {
         p.trail[t].y = p.y;
       }
     }
+    // Never stay inside nullify — immediately respawn outside per new requirement
+    if (!respawned && isInsideNullify(p.x, p.y)) {
+      const np = getRespawnPositionPreferInside();
+      p.x = np.x; p.y = np.y;
+      p.life = PARTICLE_LIFE;
+      for (let t = 0; t < TRAIL_LENGTH; t++) {
+        p.trail[t].x = p.x;
+        p.trail[t].y = p.y;
+      }
+      respawned = true;
+    }
     // Despawn once they hit modifier boundary (any modifier) and respawn inside union - ensures inside flow is visible
     // If two modifiers overlap, union sampling prevents double density
     if (!respawned && currentModifiers.length) {
@@ -475,8 +522,22 @@ export function setWindUniformsFromField(components, modifiers, windStrength) {
   // Keep JS copy for particle edge despawn checks and inside spawning (union, no double for overlap)
   const prevCount = currentModifiers.length;
   currentModifiers = (modifiers || []).map(m => ({ ...m }));
-  // Immediately seed some particles inside newly placed modifiers so flow inside is instantly visible
-  if (currentModifiers.length && particleData.length && currentModifiers.length !== prevCount) {
+  // Immediately clear any particles that are now inside nullify per new requirement
+  if (particleData.length) {
+    for (const p of particleData) {
+      if (isInsideNullify(p.x, p.y)) {
+        const np = getRespawnPositionPreferInside();
+        p.x = np.x; p.y = np.y;
+        p.life = PARTICLE_LIFE;
+        for (let t = 0; t < TRAIL_LENGTH; t++) {
+          p.trail[t].x = p.x;
+          p.trail[t].y = p.y;
+        }
+      }
+    }
+  }
+  // Immediately seed some particles inside newly placed non-nullify modifiers so flow inside is instantly visible
+  if (getNonNullifyModifiers().length && particleData.length && currentModifiers.length !== prevCount) {
     const seedCount = Math.min(6, particleData.length);
     for (let i = 0; i < seedCount; i++) {
       const idx = Math.floor(Math.random() * particleData.length);

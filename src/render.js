@@ -1,3 +1,5 @@
+import { isInsideNullify as vfIsInsideNullify } from "./vectorField.js";
+
 export const PARTICLE_COUNT = 80;
 
 let particles = [];
@@ -62,14 +64,29 @@ export function toggleWind() {
   showWind = !showWind;
 }
 
+function isInsideNullify(x, y) {
+  try { return vfIsInsideNullify(x, y); } catch { return false; }
+}
+
+function randomSpawnOutsideNullify() {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const x = Math.random() * canvasW;
+    const y = Math.random() * canvasH;
+    if (!isInsideNullify(x, y)) return { x, y };
+  }
+  // Fallback if map is mostly covered — return last attempt even if inside (avoid infinite loop)
+  return { x: Math.random() * canvasW, y: Math.random() * canvasH };
+}
+
 export function initParticles(count = PARTICLE_COUNT, width = 1280, height = 720) {
   canvasW = width;
   canvasH = height;
   particles = [];
   for (let i = 0; i < count; i++) {
+    const pos = randomSpawnOutsideNullify();
     particles.push({
-      x: Math.random() * canvasW,
-      y: Math.random() * canvasH,
+      x: pos.x,
+      y: pos.y,
       life: Math.random() * 2,
       maxLife: 2
     });
@@ -88,11 +105,21 @@ export function updateParticles(dt, getWindAt) {
     if (p.x > canvasW) p.x = 0;
     if (p.y < 0) p.y = canvasH;
     if (p.y > canvasH) p.y = 0;
+    // Do not stay inside nullify per new requirement — immediately respawn outside
+    if (isInsideNullify(p.x, p.y)) {
+      const pos = randomSpawnOutsideNullify();
+      p.x = pos.x;
+      p.y = pos.y;
+      p.life = 2;
+      p.maxLife = 2;
+      continue;
+    }
     p.life -= dt;
     if (p.life <= 0) {
-      // Fade-die after 2s per REQ-004, respawn uniformly random across whole map
-      p.x = Math.random() * canvasW;
-      p.y = Math.random() * canvasH;
+      // Fade-die after 2s per REQ-004, respawn uniformly random across whole map but outside nullify
+      const pos = randomSpawnOutsideNullify();
+      p.x = pos.x;
+      p.y = pos.y;
       p.life = 2;
       p.maxLife = 2;
     }
