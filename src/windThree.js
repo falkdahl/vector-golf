@@ -25,6 +25,50 @@ let showWind = true;
 let containerEl = null;
 let canvasEl = null;
 
+function isInsideAnyModifier(x, y) {
+  for (const m of currentModifiers) {
+    const r = m.radius ?? 54;
+    if (Math.hypot(x - m.x, y - m.y) < r) return true;
+  }
+  return false;
+}
+function randomPointInUnion() {
+  if (!currentModifiers.length) return null;
+  // Compute bounding box of union
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const m of currentModifiers) {
+    const r = m.radius ?? 54;
+    minX = Math.min(minX, m.x - r);
+    maxX = Math.max(maxX, m.x + r);
+    minY = Math.min(minY, m.y - r);
+    maxY = Math.max(maxY, m.y + r);
+  }
+  minX = Math.max(0, minX); maxX = Math.min(LOGICAL_W, maxX);
+  minY = Math.max(0, minY); maxY = Math.min(LOGICAL_H, maxY);
+  if (maxX <= minX || maxY <= minY) return null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const x = minX + Math.random() * (maxX - minX);
+    const y = minY + Math.random() * (maxY - minY);
+    if (isInsideAnyModifier(x, y)) return { x, y };
+  }
+  // Fallback: pick random modifier and random point inside it (still uniform per modifier but ensures point inside union)
+  const m = currentModifiers[Math.floor(Math.random() * currentModifiers.length)];
+  const r = Math.sqrt(Math.random()) * (m.radius ?? 54);
+  const ang = Math.random() * Math.PI * 2;
+  return { x: m.x + r * Math.cos(ang), y: m.y + r * Math.sin(ang) };
+}
+function getRespawnPositionPreferInside() {
+  // Constantly spawn inside modifiers if they exist, but don't double-count overlapping area (union sampling)
+  // Reduced to ~42% inside (half of previous 85%) per user request
+  if (currentModifiers.length) {
+    if (Math.random() < 0.42) {
+      const p = randomPointInUnion();
+      if (p) return p;
+    }
+  }
+  return { x: Math.random() * LOGICAL_W, y: Math.random() * LOGICAL_H };
+}
+
 const MAX_SOURCES = 4;
 const MAX_SINKS = 4;
 const MAX_VORTICES = 4;
@@ -341,45 +385,57 @@ export function updateWindUniforms(dt, getWindAt) {
     p.life -= dt * (1.0 - speedNorm * 0.50);
     let respawned = false;
     if (p.life <= 0) {
-      p.x = Math.random() * LOGICAL_W;
-      p.y = Math.random() * LOGICAL_H;
+      const np = getRespawnPositionPreferInside();
+      p.x = np.x; p.y = np.y;
       p.life = PARTICLE_LIFE;
       respawned = true;
-      // Reset trail on respawn
       for (let t = 0; t < TRAIL_LENGTH; t++) {
         p.trail[t].x = p.x;
         p.trail[t].y = p.y;
       }
     }
     if (!respawned && (p.x < 0 || p.x > LOGICAL_W || p.y < 0 || p.y > LOGICAL_H)) {
-      p.x = Math.random() * LOGICAL_W;
-      p.y = Math.random() * LOGICAL_H;
+      const np = getRespawnPositionPreferInside();
+      p.x = np.x; p.y = np.y;
       p.life = PARTICLE_LIFE;
       for (let t = 0; t < TRAIL_LENGTH; t++) {
         p.trail[t].x = p.x;
         p.trail[t].y = p.y;
       }
     }
-    // Despawn if stuck on flip modifier edge - prevents oscillation at discontinuity
+    // Despawn once they hit modifier boundary (any modifier) and respawn inside union - ensures inside flow is visible
+    // If two modifiers overlap, union sampling prevents double density
     if (!respawned && currentModifiers.length) {
-      for (const m of currentModifiers) {
-        if (m.type !== 'flip') continue;
-        const rad = m.radius ?? 54;
-        const dist = Math.hypot(p.x - m.x, p.y - m.y);
-        const prevDist = Math.hypot(prevX - m.x, prevY - m.y);
-        const edgeDist = Math.abs(dist - rad);
-        const crossed = (prevDist < rad && dist >= rad) || (prevDist >= rad && dist < rad);
-        if (edgeDist < 7 || crossed) {
-          // Despawn instead of getting stuck
-          p.x = Math.random() * LOGICAL_W;
-          p.y = Math.random() * LOGICAL_H;
-          p.life = PARTICLE_LIFE;
-          for (let t = 0; t < TRAIL_LENGTH; t++) {
-            p.trail[t].x = p.x;
-            p.trail[t].y = p.y;
+      const wasInside = isInsideAnyModifier(prevX, prevY);
+      const nowInside = isInsideAnyModifier(p.x, p.y);
+      if (wasInside && !nowInside) {
+        const np = getRespawnPositionPreferInside();
+        p.x = np.x; p.y = np.y;
+        p.life = PARTICLE_LIFE;
+        for (let t = 0; t < TRAIL_LENGTH; t++) {
+          p.trail[t].x = p.x;
+          p.trail[t].y = p.y;
+        }
+        respawned = true;
+      } else if (!wasInside && nowInside) {
+        // Entering is fine - let it continue to show inside flow
+      } else {
+        // Also handle stuck on flip edge (near edge without clear exit due to reversed wind)
+        for (const m of currentModifiers) {
+          if (m.type !== 'flip') continue;
+          const rad = m.radius ?? 54;
+          const dist = Math.hypot(p.x - m.x, p.y - m.y);
+          if (Math.abs(dist - rad) < 6) {
+            const np = getRespawnPositionPreferInside();
+            p.x = np.x; p.y = np.y;
+            p.life = PARTICLE_LIFE;
+            for (let t = 0; t < TRAIL_LENGTH; t++) {
+              p.trail[t].x = p.x;
+              p.trail[t].y = p.y;
+            }
+            respawned = true;
+            break;
           }
-          respawned = true;
-          break;
         }
       }
     }
@@ -416,8 +472,26 @@ export function updateWindUniforms(dt, getWindAt) {
 }
 
 export function setWindUniformsFromField(components, modifiers, windStrength) {
-  // Keep JS copy for particle edge despawn checks (flip)
+  // Keep JS copy for particle edge despawn checks and inside spawning (union, no double for overlap)
+  const prevCount = currentModifiers.length;
   currentModifiers = (modifiers || []).map(m => ({ ...m }));
+  // Immediately seed some particles inside newly placed modifiers so flow inside is instantly visible
+  if (currentModifiers.length && particleData.length && currentModifiers.length !== prevCount) {
+    const seedCount = Math.min(6, particleData.length);
+    for (let i = 0; i < seedCount; i++) {
+      const idx = Math.floor(Math.random() * particleData.length);
+      const p = particleData[idx];
+      const np = randomPointInUnion();
+      if (np) {
+        p.x = np.x; p.y = np.y;
+        p.life = PARTICLE_LIFE;
+        for (let t = 0; t < TRAIL_LENGTH; t++) {
+          p.trail[t].x = p.x;
+          p.trail[t].y = p.y;
+        }
+      }
+    }
+  }
   if (!uniforms) return;
   try {
     if (windStrength != null) uniforms.uWindStrength.value = windStrength;
