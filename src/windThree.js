@@ -43,6 +43,29 @@ function isInsideNullify(x, y) {
 function getNonNullifyModifiers() {
   return currentModifiers.filter(m => m.type !== 'nullify');
 }
+function isInsideNonNullify(x, y) {
+  for (const m of getNonNullifyModifiers()) {
+    const r = m.radius ?? 54;
+    if (Math.hypot(x - m.x, y - m.y) < r) return true;
+  }
+  return false;
+}
+function isInsideFlip(x, y) {
+  for (const m of currentModifiers) {
+    if (m.type !== 'flip') continue;
+    const r = m.radius ?? 54;
+    if (Math.hypot(x - m.x, y - m.y) < r) return true;
+  }
+  return false;
+}
+function isInsideAmplify(x, y) {
+  for (const m of currentModifiers) {
+    if (m.type !== 'amplify') continue;
+    const r = m.radius ?? 54;
+    if (Math.hypot(x - m.x, y - m.y) < r) return true;
+  }
+  return false;
+}
 function randomPointInUnion() {
   const mods = getNonNullifyModifiers();
   if (!mods.length) return null;
@@ -81,22 +104,13 @@ function randomPointInUnion() {
   return null;
 }
 function getRespawnPositionPreferInside() {
-  // Constantly spawn inside non-nullify modifiers if they exist, but don't double-count overlapping area (union sampling)
-  // Reduced to ~42% inside (half of previous 85%) per user request — never inside nullify per new requirement
-  const nonNullify = getNonNullifyModifiers();
-  if (nonNullify.length) {
-    if (Math.random() < 0.42) {
-      const p = randomPointInUnion();
-      if (p) return p;
-    }
-  }
-  // Outside nullify: fallback uniform random outside nullify
+  // Per new requirement: do not spawn particles inside modifiers at all — only outside
   for (let attempt = 0; attempt < 50; attempt++) {
     const x = Math.random() * LOGICAL_W;
     const y = Math.random() * LOGICAL_H;
-    if (!isInsideNullify(x, y)) return { x, y };
+    if (!isInsideAnyModifier(x, y)) return { x, y };
   }
-  // Fallback if map heavily covered by nullify (rare) — return last attempt even if inside
+  // Fallback if map heavily covered (rare) — return last attempt even if inside
   return { x: Math.random() * LOGICAL_W, y: Math.random() * LOGICAL_H };
 }
 
@@ -255,11 +269,11 @@ function createParticles() {
   particleData = [];
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     let x, y;
-    // Do not spawn inside nullify
+    // Do not spawn inside modifiers at all per new requirement
     for (let attempt = 0; attempt < 50; attempt++) {
       x = Math.random() * LOGICAL_W;
       y = Math.random() * LOGICAL_H;
-      if (!isInsideNullify(x, y)) break;
+      if (!isInsideAnyModifier(x, y)) break;
     }
     const life = Math.random() * PARTICLE_LIFE;
     const trail = [];
@@ -439,53 +453,41 @@ export function updateWindUniforms(dt, getWindAt) {
         p.trail[t].y = p.y;
       }
     }
-    // Never stay inside nullify — immediately respawn outside per new requirement
-    if (!respawned && isInsideNullify(p.x, p.y)) {
-      const np = getRespawnPositionPreferInside();
-      p.x = np.x; p.y = np.y;
-      p.life = PARTICLE_LIFE;
-      for (let t = 0; t < TRAIL_LENGTH; t++) {
-        p.trail[t].x = p.x;
-        p.trail[t].y = p.y;
-      }
-      respawned = true;
-    }
-    // Despawn once they hit modifier boundary (any modifier) and respawn inside union - ensures inside flow is visible
-    // If two modifiers overlap, union sampling prevents double density
-    if (!respawned && currentModifiers.length) {
-      const wasInside = isInsideAnyModifier(prevX, prevY);
-      const nowInside = isInsideAnyModifier(p.x, p.y);
-      if (wasInside && !nowInside) {
-        const np = getRespawnPositionPreferInside();
-        p.x = np.x; p.y = np.y;
-        p.life = PARTICLE_LIFE;
-        for (let t = 0; t < TRAIL_LENGTH; t++) {
-          p.trail[t].x = p.x;
-          p.trail[t].y = p.y;
-        }
-        respawned = true;
-      } else if (!wasInside && nowInside) {
-        // Entering is fine - let it continue to show inside flow
-      } else {
-        // Also handle stuck on flip edge (near edge without clear exit due to reversed wind)
+    // For flip: despawn on hitting and spawn behind flip per new requirement
+    if (!respawned) {
+      const wasInsideFlip = isInsideFlip(prevX, prevY);
+      const nowInsideFlip = isInsideFlip(p.x, p.y);
+      if (!wasInsideFlip && nowInsideFlip) {
+        let hitFlip = null;
         for (const m of currentModifiers) {
-          if (m.type !== 'flip') continue;
-          const rad = m.radius ?? 54;
-          const dist = Math.hypot(p.x - m.x, p.y - m.y);
-          if (Math.abs(dist - rad) < 6) {
-            const np = getRespawnPositionPreferInside();
-            p.x = np.x; p.y = np.y;
-            p.life = PARTICLE_LIFE;
-            for (let t = 0; t < TRAIL_LENGTH; t++) {
-              p.trail[t].x = p.x;
-              p.trail[t].y = p.y;
-            }
-            respawned = true;
-            break;
+          if (m.type === 'flip' && Math.hypot(p.x - m.x, p.y - m.y) < (m.radius ?? 54)) { hitFlip = m; break; }
+        }
+        if (hitFlip) {
+          const r = hitFlip.radius ?? 54;
+          const dx = p.x - hitFlip.x;
+          const dy = p.y - hitFlip.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = dx / len;
+          const ny = dy / len;
+          const behindDist = r + 16 + Math.random() * 12;
+          let np = { x: hitFlip.x - nx * behindDist, y: hitFlip.y - ny * behindDist };
+          np.x = Math.max(2, Math.min(LOGICAL_W - 2, np.x));
+          np.y = Math.max(2, Math.min(LOGICAL_H - 2, np.y));
+          if (isInsideAnyModifier(np.x, np.y)) {
+            const fallback = getRespawnPositionPreferInside();
+            np.x = fallback.x; np.y = fallback.y;
           }
+          p.x = np.x; p.y = np.y;
+          p.life = PARTICLE_LIFE;
+          for (let t = 0; t < TRAIL_LENGTH; t++) {
+            p.trail[t].x = p.x;
+            p.trail[t].y = p.y;
+          }
+          respawned = true;
         }
       }
     }
+    // For other modifiers (amplify/nullify): do not despawn — just not draw while inside, reappear when outside
     // Shift trail: move history back, insert current head
     if (!respawned) {
       for (let t = TRAIL_LENGTH - 1; t > 0; t--) {
@@ -508,9 +510,17 @@ export function updateWindUniforms(dt, getWindAt) {
       const ndcY = 1 - (tp.y / LOGICAL_H) * 2;
       posAttr.array[idx * 3 + 0] = ndcX;
       posAttr.array[idx * 3 + 1] = ndcY;
+      // Per new requirement: do not draw particle/trail points while inside any modifier — just hide, reappear when outside
+      if (isInsideAnyModifier(tp.x, tp.y)) {
+        alphaAttr.array[idx] = 0;
+        sizeAttr.array[idx] = 0;
+        continue;
+      }
       const trailFade = 1.0 - (t / TRAIL_LENGTH) * fadeFactor;
-      alphaAttr.array[idx] = lifeAlpha * trailFade * 0.92;
-      sizeAttr.array[idx] = 9.0 * (1.0 - t / TRAIL_LENGTH * sizeFadeFactor);
+      let a = lifeAlpha * trailFade * 0.92;
+      let s = 9.0 * (1.0 - t / TRAIL_LENGTH * sizeFadeFactor);
+      alphaAttr.array[idx] = a;
+      sizeAttr.array[idx] = s;
     }
   }
   posAttr.needsUpdate = true;
@@ -522,37 +532,8 @@ export function setWindUniformsFromField(components, modifiers, windStrength) {
   // Keep JS copy for particle edge despawn checks and inside spawning (union, no double for overlap)
   const prevCount = currentModifiers.length;
   currentModifiers = (modifiers || []).map(m => ({ ...m }));
-  // Immediately clear any particles that are now inside nullify per new requirement
-  if (particleData.length) {
-    for (const p of particleData) {
-      if (isInsideNullify(p.x, p.y)) {
-        const np = getRespawnPositionPreferInside();
-        p.x = np.x; p.y = np.y;
-        p.life = PARTICLE_LIFE;
-        for (let t = 0; t < TRAIL_LENGTH; t++) {
-          p.trail[t].x = p.x;
-          p.trail[t].y = p.y;
-        }
-      }
-    }
-  }
-  // Immediately seed some particles inside newly placed non-nullify modifiers so flow inside is instantly visible
-  if (getNonNullifyModifiers().length && particleData.length && currentModifiers.length !== prevCount) {
-    const seedCount = Math.min(6, particleData.length);
-    for (let i = 0; i < seedCount; i++) {
-      const idx = Math.floor(Math.random() * particleData.length);
-      const p = particleData[idx];
-      const np = randomPointInUnion();
-      if (np) {
-        p.x = np.x; p.y = np.y;
-        p.life = PARTICLE_LIFE;
-        for (let t = 0; t < TRAIL_LENGTH; t++) {
-          p.trail[t].x = p.x;
-          p.trail[t].y = p.y;
-        }
-      }
-    }
-  }
+  // Per new requirement: do not respawn particles that are now inside modifiers — they will be hidden while inside and reappear when outside
+  // No immediate clear/seed
   if (!uniforms) return;
   try {
     if (windStrength != null) uniforms.uWindStrength.value = windStrength;

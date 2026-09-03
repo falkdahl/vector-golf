@@ -17,6 +17,7 @@ import {
   getRewardRerollButtonLayout,
   drawPauseMenu,
   getPauseButtonsLayout,
+  drawArrowsInModifiers,
   setCanvasSize,
 } from "./render.js";
 import {
@@ -1457,6 +1458,8 @@ function render() {
   // Wind is rendered on separate transparent Three.js overlay (#wind-canvas) via fragment shader + particles, not here
   // Background is on BOTTOM canvas (tiled grass via redrawBottom), not drawn here
   drawModifiers(ctx, modifiers);
+  // Per new requirement: show field direction and strength as arrows inside modifiers, no particles inside
+  try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH); } catch {}
   drawObstacles(ctx, level.obstacles);
   drawHole(ctx, level.hole);
   drawBall(ctx, ball);

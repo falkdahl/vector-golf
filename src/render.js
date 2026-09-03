@@ -1,4 +1,4 @@
-import { isInsideNullify as vfIsInsideNullify } from "./vectorField.js";
+import { modifiers as vfModifiers, isInsideNullify as vfIsInsideNullify } from "./vectorField.js";
 
 export const PARTICLE_COUNT = 80;
 
@@ -67,12 +67,29 @@ export function toggleWind() {
 function isInsideNullify(x, y) {
   try { return vfIsInsideNullify(x, y); } catch { return false; }
 }
+function isInsideAnyModifier(x, y) {
+  try {
+    for (const m of vfModifiers) {
+      if (Math.hypot(x - m.x, y - m.y) < (m.radius ?? 54)) return true;
+    }
+  } catch {}
+  return false;
+}
+function isInsideFlip(x, y) {
+  try {
+    for (const m of vfModifiers) {
+      if (m.type !== 'flip') continue;
+      if (Math.hypot(x - m.x, y - m.y) < (m.radius ?? 54)) return true;
+    }
+  } catch {}
+  return false;
+}
 
 function randomSpawnOutsideNullify() {
   for (let attempt = 0; attempt < 50; attempt++) {
     const x = Math.random() * canvasW;
     const y = Math.random() * canvasH;
-    if (!isInsideNullify(x, y)) return { x, y };
+    if (!isInsideAnyModifier(x, y)) return { x, y };
   }
   // Fallback if map is mostly covered — return last attempt even if inside (avoid infinite loop)
   return { x: Math.random() * canvasW, y: Math.random() * canvasH };
@@ -96,6 +113,7 @@ export function initParticles(count = PARTICLE_COUNT, width = 1280, height = 720
 export function updateParticles(dt, getWindAt) {
   if (!showWind) return;
   for (const p of particles) {
+    const prevX = p.x, prevY = p.y;
     const wind = getWindAt(p.x, p.y);
     const speed = 50; // particleSpeed
     p.x += wind.x * speed * dt;
@@ -105,15 +123,35 @@ export function updateParticles(dt, getWindAt) {
     if (p.x > canvasW) p.x = 0;
     if (p.y < 0) p.y = canvasH;
     if (p.y > canvasH) p.y = 0;
-    // Do not stay inside nullify per new requirement — immediately respawn outside
-    if (isInsideNullify(p.x, p.y)) {
-      const pos = randomSpawnOutsideNullify();
-      p.x = pos.x;
-      p.y = pos.y;
-      p.life = 2;
-      p.maxLife = 2;
-      continue;
+    // For flip: despawn on hitting and spawn behind flip
+    const wasInsideFlip = isInsideFlip(prevX, prevY);
+    const nowInsideFlip = isInsideFlip(p.x, p.y);
+    if (!wasInsideFlip && nowInsideFlip) {
+      let hitFlip = null;
+      for (const m of vfModifiers) {
+        if (m.type === 'flip' && Math.hypot(p.x - m.x, p.y - m.y) < (m.radius ?? 54)) { hitFlip = m; break; }
+      }
+      if (hitFlip) {
+        const r = hitFlip.radius ?? 54;
+        const dx = p.x - hitFlip.x;
+        const dy = p.y - hitFlip.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = dx / len, ny = dy / len;
+        const behindDist = r + 14 + Math.random() * 10;
+        let nxPos = hitFlip.x - nx * behindDist;
+        let nyPos = hitFlip.y - ny * behindDist;
+        nxPos = Math.max(2, Math.min(canvasW - 2, nxPos));
+        nyPos = Math.max(2, Math.min(canvasH - 2, nyPos));
+        if (isInsideAnyModifier(nxPos, nyPos)) {
+          const pos = randomSpawnOutsideNullify();
+          nxPos = pos.x; nyPos = pos.y;
+        }
+        p.x = nxPos; p.y = nyPos;
+        p.life = 2; p.maxLife = 2;
+        continue;
+      }
     }
+    // Per new requirement: do not despawn when inside amplify/nullify — just not draw while inside (handled in drawParticles)
     p.life -= dt;
     if (p.life <= 0) {
       // Fade-die after 2s per REQ-004, respawn uniformly random across whole map but outside nullify
@@ -263,10 +301,79 @@ export function drawArrows(ctx, fieldOrGetWindAt, cols, rows, cellW, cellH) {
   ctx.restore();
 }
 
+export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH) {
+  if (!showWind) return;
+  if (!modifiers || !modifiers.length) return;
+  if (typeof getWindAt !== 'function') return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const MIN_MAG = 0.66;
+  const MAX_MAG_RANGE = 1.5;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const cx = col * cellW + cellW / 2;
+      const cy = row * cellH + cellH / 2;
+      // Only draw inside any modifier per new requirement — find which modifier to color accordingly
+      let insideMod = null;
+      for (const m of modifiers) {
+        if (Math.hypot(cx - m.x, cy - m.y) < (m.radius ?? 54)) { insideMod = m; break; }
+      }
+      if (!insideMod) continue;
+      const vec = getWindAt(cx, cy);
+      const mag = Math.hypot(vec.x, vec.y);
+      const angle = Math.atan2(vec.y, vec.x);
+      const normalizedMag = Math.max(0, Math.min(1, (mag - MIN_MAG) / MAX_MAG_RANGE));
+      const len = 10 + normalizedMag * 4;
+      const alpha = 0.55 + normalizedMag * 0.40;
+      const headSize = 4.5 + normalizedMag * 2;
+      // Do not draw any arrows for nullify per new requirement
+      if (insideMod.type === 'nullify') continue;
+      // White arrows for amplify/flip per latest request (good contrast on tinted modifier)
+      const arrowColor = `rgba(255,255,245,${alpha})`;
+      const outlineColor = `rgba(0,0,0,0.55)`;
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = 3.2;
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx - Math.cos(angle) * len * 0.4, cy - Math.sin(angle) * len * 0.4);
+      ctx.lineTo(cx + Math.cos(angle) * len * 0.6, cy + Math.sin(angle) * len * 0.6);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = arrowColor;
+      ctx.lineWidth = 2.1;
+      ctx.beginPath();
+      ctx.moveTo(cx - Math.cos(angle) * len * 0.4, cy - Math.sin(angle) * len * 0.4);
+      ctx.lineTo(cx + Math.cos(angle) * len * 0.6, cy + Math.sin(angle) * len * 0.6);
+      ctx.stroke();
+      const hx = cx + Math.cos(angle) * len * 0.6;
+      const hy = cy + Math.sin(angle) * len * 0.6;
+      ctx.fillStyle = outlineColor;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(hx - Math.cos(angle - 0.45) * (headSize + 1.2), hy - Math.sin(angle - 0.45) * (headSize + 1.2));
+      ctx.lineTo(hx - Math.cos(angle + 0.45) * (headSize + 1.2), hy - Math.sin(angle + 0.45) * (headSize + 1.2));
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = arrowColor;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(hx - Math.cos(angle - 0.45) * headSize, hy - Math.sin(angle - 0.45) * headSize);
+      ctx.lineTo(hx - Math.cos(angle + 0.45) * headSize, hy - Math.sin(angle + 0.45) * headSize);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawParticles(ctx) {
   if (!showWind) return;
   ctx.save();
   for (const p of particles) {
+    // Per new requirement: do not draw while inside any modifier — reappear when outside
+    if (isInsideAnyModifier(p.x, p.y)) continue;
     // Fade over 2s per REQ-004: alpha = life / maxLife
     const alpha = Math.max(0, Math.min(1, p.life / (p.maxLife || 2))) * 0.65;
     ctx.fillStyle = `rgba(180,220,255,${alpha})`;
