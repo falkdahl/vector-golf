@@ -517,7 +517,7 @@ function renderCourseList() {
     deleteBtn.title = 'Delete course';
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete course "${course.name}"? This cannot be undone.`)) return;
+      if (!confirm(`Delete course "${course.name}"?`)) return;
       const idx = courses.findIndex(c => c.id === course.id);
       if (idx !== -1) {
         const wasActive = activeCourseId === course.id || (activeCourse && activeCourse.id === course.id);
@@ -529,22 +529,13 @@ function renderCourseList() {
           } else {
             activeCourse = null;
             activeCourseId = null;
+            // Keep LEVELS as is until next course creation/play; no auto-create default here per updated REQ-031
+            try { LEVELS.length = 0; } catch {}
           }
         }
-        if (!courses.length) {
-          try {
-            const def = generateCourse(18, Date.now());
-            courses.push(def);
-            if (!activeCourse) setActiveCourse(def);
-          } catch {}
-        }
+        // Allow empty collection per updated REQ-031 — persist [] and show empty list
         saveCourses();
         renderCourseList();
-        // If deleted active course while in game, keep current run but next End Run will go to new active
-        if (wasActive && !mainMenuVisible && activeCourse) {
-          // Switch LEVELS to new active course's holes for next load, but keep current run's level until next hole?
-          // No immediate action - current hole continues with old level data until next course play
-        }
       }
     });
     row.appendChild(playBtn);
@@ -868,6 +859,7 @@ let winHoleTotal;
 let winTotalValue;
 let winTitle;
 let nextHoleButton;
+let continueButton;
 
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -965,13 +957,8 @@ function updateAttemptsUI() {
   if (winAttemptsValue) winAttemptsValue.textContent = String(holeAttempts);
   if (winTotalValue) winTotalValue.textContent = String(totalAttempts);
   if (winTitle) {
-    // Victory menu per new requirement - always Victory, with Game Complete on final hole
-    if (gameState === "WIN") {
-      if (currentHoleIndex === LEVELS.length - 1) {
-        winTitle.textContent = "Victory";
-      } else {
-        winTitle.textContent = "Victory";
-      }
+    if (gameState === "WIN" && currentHoleIndex === LEVELS.length - 1) {
+      winTitle.textContent = "Game Complete!";
     } else {
       winTitle.textContent = "Victory";
     }
@@ -981,10 +968,17 @@ function updateAttemptsUI() {
     if (gameState === "WIN" && hasMoreHoles) {
       nextHoleButton.classList.remove("hidden");
       nextHoleButton.textContent = "Next";
-    } else if (gameState === "WIN" && !hasMoreHoles) {
-      nextHoleButton.classList.add("hidden");
     } else {
       nextHoleButton.classList.add("hidden");
+    }
+  }
+  if (continueButton) {
+    const isFinalWin = gameState === "WIN" && currentHoleIndex === LEVELS.length - 1;
+    if (isFinalWin) {
+      continueButton.classList.remove("hidden");
+      continueButton.textContent = "Continue";
+    } else {
+      continueButton.classList.add("hidden");
     }
   }
 }
@@ -1134,7 +1128,71 @@ function advanceHole() {
   }
 }
 
+function returnToMainMenu() {
+  // REQ-009/011 final-hole: clear run, keep COURSES_KEY/bestTotal, show splash
+  // Ensure per-course bestTotal already saved via maybeUpdateHighScore before calling
+  clearProgress();
+  currentHoleIndex = 0;
+  holeAttempts = 0;
+  totalAttempts = 0;
+  attempts = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1 };
+  freeShots = 0;
+  areaUpgradeCount = 0;
+  bouncyBallCount = 0;
+  bouncyRemaining = 0;
+  secretRewardCounter = 0;
+  rewardPending = false;
+  firstRewardClaimed = false;
+  rewardMenuVisible = false;
+  rewardClaimedFor = null;
+  rewardMenuHover = null;
+  rewardOffered = [];
+  rewardRerolled = false;
+  rewardRerollHover = false;
+  pauseMenuVisible = false;
+  pauseMenuHover = null;
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
+  modifiers = []; syncModifiersToField(); selectedModifier = null;
+  const pauseOverlay2 = document.getElementById("pause-overlay");
+  if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
+  mainMenuVisible = true;
+  gameState = "AIMING";
+  // Load hole 1 layout behind splash for next run (not visible until course play)
+  try {
+    if (LEVELS.length) {
+      level = LEVELS[0];
+      windStrength = level.field.strength ?? WIND_STRENGTH;
+      createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+      syncModifiersToField();
+      createBall(level.tee);
+      const dx = level.hole.x - level.tee.x;
+      const dy = level.hole.y - level.tee.y;
+      setAimAngle(Math.atan2(dy, dx));
+    } else {
+      // No courses — create dummy level to keep loop stable (hidden behind main menu splash)
+      level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
+      createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+      syncModifiersToField();
+      createBall(level.tee);
+    }
+  } catch {}
+  bouncyRemaining = bouncyBallCount;
+  resetHotbarCollapsed();
+  if (winOverlay) winOverlay.classList.add("hidden");
+  syncPauseOverlay();
+  syncMainMenu();
+  updateAttemptsUI();
+  updateHotbarUI();
+  updateForceBar();
+}
+
 function resetGameAfterWin() {
+  // REQ-009: on final hole, route to main menu instead of resetting to hole 1
+  const isFinalWin = currentHoleIndex === LEVELS.length - 1 && gameState === "WIN";
+  if (isFinalWin) {
+    return returnToMainMenu();
+  }
   clearProgress();
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0;
@@ -1222,7 +1280,7 @@ function checkWin() {
     gameState = "WIN";
     updateAttemptsUI();
     winOverlay.classList.remove("hidden");
-    // Ensure Next button visibility reflects if more holes remain
+    // Ensure buttons reflect if more holes remain: Next for non-final, Continue for final
     if (nextHoleButton) {
       if (currentHoleIndex < LEVELS.length - 1) {
         nextHoleButton.classList.remove("hidden");
@@ -1230,7 +1288,14 @@ function checkWin() {
         nextHoleButton.classList.add("hidden");
       }
     }
-    // REQ-029: update high score on final hole win
+    if (continueButton) {
+      if (currentHoleIndex === LEVELS.length - 1) {
+        continueButton.classList.remove("hidden");
+      } else {
+        continueButton.classList.add("hidden");
+      }
+    }
+    // REQ-029: update high score on final hole win (per-course bestTotal)
     maybeUpdateHighScore();
     return true;
   }
@@ -1262,8 +1327,8 @@ function handleNextHole() {
     maybeShowRewardMenu();
     saveProgress();
   } else {
-    // Final hole - Next should not be visible, but if pressed, do nothing or reset game
-    resetGameAfterWin();
+    // REQ-009 final hole: return to main menu, not reset to hole 1 via generateLevels
+    returnToMainMenu();
   }
 }
 
@@ -1444,6 +1509,7 @@ function init() {
   winTotalValue = document.getElementById("win-total-value");
   winTitle = document.getElementById("win-title");
   nextHoleButton = document.getElementById("next-hole-button");
+  continueButton = document.getElementById("continue-button");
   hotbarEl = document.getElementById("hotbar");
   hotbarToggleEl = document.getElementById("hotbar-toggle");
   if (hotbarToggleEl) {
@@ -1551,10 +1617,9 @@ function init() {
   setupCanvas();
   // REQ-031: load courses collection before progress (so courseId can be resolved)
   try { loadCourses(); } catch (e) { console.warn('loadCourses failed', e); }
-  if (!courses.length) {
-    try { const c = generateCourse(18, Date.now()); courses = [c]; saveCourses(); } catch {}
-  }
-  // Ensure activeCourse defaults to first course if not yet set
+  // No immediate auto-create if courses empty — allow empty per updated REQ-031 (persist [])
+  // loadCourses already created default on first ever missing key; empty from delete stays empty
+  // Ensure activeCourse defaults to first course if available
   if (!activeCourse && courses.length) {
     setActiveCourse(courses[0]);
   }
@@ -1607,14 +1672,23 @@ function init() {
     // No saved run — show main menu (REQ-029) instead of immediately starting
     // Do not call initLevel() which would show reward menu; just load hole 1 layout behind menu
     currentHoleIndex = 0;
-    level = LEVELS[0];
-    windStrength = level.field.strength ?? WIND_STRENGTH;
-    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
-    modifiers = []; syncModifiersToField();
-    createBall(level.tee);
-    const dx0 = level.hole.x - level.tee.x;
-    const dy0 = level.hole.y - level.tee.y;
-    setAimAngle(Math.atan2(dy0, dx0));
+    if (LEVELS.length) {
+      level = LEVELS[0];
+      windStrength = level.field.strength ?? WIND_STRENGTH;
+      createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+      modifiers = []; syncModifiersToField();
+      createBall(level.tee);
+      const dx0 = level.hole.x - level.tee.x;
+      const dy0 = level.hole.y - level.tee.y;
+      setAimAngle(Math.atan2(dy0, dx0));
+    } else {
+      // No courses yet (empty after delete per REQ-031) — dummy level hidden behind main menu splash
+      level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
+      createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+      modifiers = []; syncModifiersToField();
+      createBall(level.tee);
+      setAimAngle(0);
+    }
     bouncyRemaining = bouncyBallCount;
     gameState = "AIMING";
     mainMenuVisible = true;
@@ -1649,7 +1723,7 @@ function init() {
         if (mainMenuVisible) return;
         if (gameState === "WIN") {
           if (currentHoleIndex === LEVELS.length - 1) {
-            resetGameAfterWin();
+            returnToMainMenu();
           } else {
             handleNextHole();
           }
@@ -1688,6 +1762,9 @@ function init() {
   }
   if (nextHoleButton) {
     nextHoleButton.addEventListener("click", handleNextHole);
+  }
+  if (continueButton) {
+    continueButton.addEventListener("click", returnToMainMenu);
   }
   // REQ-028: pause overlay DOM wiring (now End Run)
   const pauseOverlayDom = document.getElementById("pause-overlay");
@@ -2280,6 +2357,13 @@ if (typeof window !== 'undefined') {
   window.toggleHotbar = toggleHotbar;
   Object.defineProperty(window, 'isHotbarCollapsed', { get: () => isHotbarCollapsed, set: (v) => { isHotbarCollapsed = !!v; syncHotbarCollapsedUI(); updateHotbarUI(); } });
   Object.defineProperty(window, '__hotbarCollapsed', { get: () => isHotbarCollapsed, set: (v) => { isHotbarCollapsed = !!v; syncHotbarCollapsedUI(); updateHotbarUI(); } });
+  // REQ-009/011 final win -> main menu
+  window.returnToMainMenu = returnToMainMenu;
+  window.__returnToMainMenu = returnToMainMenu;
+  window.handleNextHole = handleNextHole;
+  window.__handleNextHole = handleNextHole;
+  window.resetGameAfterWin = resetGameAfterWin;
+  window.__resetGameAfterWin = resetGameAfterWin;
 }
 
 // Auto-init when loaded as module via script tag
@@ -2289,4 +2373,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, secretRewardCounter, getSecretRewardCounter, setSecretRewardCounter, addSecretRewardCounter, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, handleNextHole, resetGameAfterWin };

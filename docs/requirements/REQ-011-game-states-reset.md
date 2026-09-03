@@ -19,7 +19,7 @@ User selected "Instant reset" for failure. A clear state machine prevents input 
    - `AIMING`: ball at tee, `vel=0`, accept Left/Right aim input, Space to enter `CHARGING`.
    - `CHARGING`: Space held, update force bar, angle still adjustable? Decision: allow angle adjustment while charging? For MVP, lock angle during charging (document). Release Space -> `launch()` -> `FLYING`.
    - `FLYING`: ball moving/drifting, physics updates, wind applied always (even when slow), collision/edge/hole checked each tick. No aiming/charging input. This state persists while ball drifts; there is no automatic transition to rest.
-   - `WIN`: ball entered hole (distance < radius-2), overlay shown, physics paused, wait for `R` -> `reset()` and increment attempts handling per REQ-014.
+   - `WIN`: ball entered hole (distance < radius-2), overlay shown, physics paused. If more holes remain, wait for `R`/`Next` -> `advanceHole()`; if final hole, wait for `R`/`Continue` -> `returnToMainMenu()` (`clearProgress()` + `mainMenuVisible=true`, per REQ-009 new requirement) and increment per-course `bestTotal` per REQ-031.
 2. `resetBall()` function SHALL:
    - Set `ball.pos = {...tee}`, `ball.vel = {0,0}`, `ball.isMoving=false`.
    - **Keep `aimAngle` unchanged** (persisted between attempts per REQ-019); do NOT reset to tee->hole direction.

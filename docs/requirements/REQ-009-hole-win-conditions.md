@@ -26,10 +26,10 @@ User requirement: "If the ball does not land in the hole player restarts from th
    - Ball drifting indefinitely without hitting obstacle/edge/hole does NOT auto-reset; it continues until one of those events.
 4. Rendering in `src/render.js`:
    - Hole as dark circle `radius` filled `#111` with inner shadow, outer rim `2px #333`, optionally small flag pole/marker offset.
-   - When win, show **Victory menu** centered in middle of canvas: overlay with title `Victory`, attempts used (`Attempts this hole: X, Total: Y`), and if more holes remain, a button `Next` to load next hole. On final hole, button says `Next` is hidden and overlay shows `Game Complete!` with total.
-5. Win state SHALL be terminal until player presses `Next` button (or `R` as fallback) to load next hole; during win, physics/input paused, ball frozen. Attempts counter SHALL be displayed on win overlay and during play (REQ-014).
+   - When win, show **Victory menu** centered in middle of canvas: overlay with title `Victory`, attempts used (`Attempts this hole: X, Total: Y`), and if more holes remain, a button `Next` to load next hole. On final hole, overlay shows `Game Complete!` with total and a button `Continue`/`Main Menu` (label `Continue` or `Back to Menu` acceptable) that returns to main menu.
+5. Win state SHALL be terminal until player presses `Next` button (or `R` as fallback) to load next hole; on final hole, pressing `Continue`/`Main Menu` (or `R`/`Next` fallback) SHALL take the player back to the **main menu** (`mainMenuVisible=true`, active run cleared via `clearProgress()` but per-course `bestTotal` already saved per REQ-031, bottom canvas shows splash). During win, physics/input paused, ball frozen. Attempts counter SHALL be displayed on win overlay and during play (REQ-014).
 6. Attempts counter (REQ-014) SHALL increment on each launch and be shown in UI. **Hole info SHALL be updated accordingly** when next hole is loaded (hole counter `N/M`, per-hole attempts reset to 0, total kept).
-7. **Hole Progression via Next Button**: When `Next` is pressed, next hole SHALL be loaded via `loadLevel(currentHoleIndex+1)`, `holeAttempts` reset to `0` but `totalAttempts` kept, hole counter updated (`2/3`, etc.), ball at new tee, and `gameState` set to `AIMING`. Victory menu hidden. If no more holes, `Next` hidden and `R` resets game.
+7. **Hole Progression via Next Button**: When `Next` is pressed and more holes remain, next hole SHALL be loaded via `loadLevel(currentHoleIndex+1)`, `holeAttempts` reset to `0` but `totalAttempts` kept, hole counter updated (`2/3`, etc.), ball at new tee, and `gameState` set to `AIMING`. Victory menu hidden. **If no more holes (final hole), pressing `Continue`/`Main Menu` (or `Next`/`R` fallback) SHALL NOT reset to hole 1 via `resetGameAfterWin`; instead it SHALL `clearProgress()` and set `mainMenuVisible=true` (return to main menu per new requirement), keeping `COURSES_KEY` and per-course `bestTotal` intact. `handleNextHole()` / `resetGameAfterWin()` on final hole SHALL route to main menu.**
 
 ## Acceptance Criteria
 
@@ -40,7 +40,7 @@ User requirement: "If the ball does not land in the hole player restarts from th
 - [ ] Ball drifting slowly into hole still counts as win and stops.
 - [ ] Ball destroyed by obstacle mid-flight never triggers win, even if obstacle overlaps hole (obstacles must not overlap hole).
 - [ ] Hitting screen edge triggers instant reset, even when drifting slowly.
-- [ ] Victory menu shows `Victory`, attempts used, and if more holes remain, a `Next` button. Pressing `Next` loads next hole, resets `Attempts this hole` to `0` but keeps `Total`, updates hole counter `N/M`, and hides menu. On final hole, `Next` hidden, `R` resets game.
+- [ ] Victory menu shows `Victory`, attempts used, and if more holes remain, a `Next` button. Pressing `Next` loads next hole, resets `Attempts this hole` to `0` but keeps `Total`, updates hole counter `N/M`, and hides menu. On final hole, overlay shows `Game Complete!` and a `Continue`/`Main Menu` button; pressing it (or `R`/`Next` fallback) takes you back to the **main menu** (`mainMenuVisible=true`, `STORAGE_KEY` cleared, `COURSES_KEY`/`bestTotal` kept, splash shown), not a reset to hole 1 via `resetGameAfterWin`.
 - [ ] Hole info inside canvas top (REQ-012/014) updates correctly after `Next` (e.g., from `1/3` to `2/3`).
 
 ## Dependencies

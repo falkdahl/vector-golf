@@ -72,7 +72,6 @@ export function loadCourses() {
         console.warn("Discarding invalid course", c, e);
       }
     }
-    if (valid.length === 0) throw new Error("no valid courses");
     return valid;
   } catch (e) {
     const def = generateCourse(18, Date.now());
