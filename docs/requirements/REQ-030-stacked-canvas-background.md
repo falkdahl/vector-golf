@@ -8,7 +8,7 @@
 - **Related Plan Section:** Rendering / Layout / Assets (REQ-002/REQ-012/REQ-013 Extension)
 
 ## Description
-The game SHALL render in **landscape 16:9** centered on screen, **maximizing canvas area** using **two stacked canvases**: a bottom opaque canvas that renders **only** background imagery, and a top transparent canvas that renders all dynamic game elements. When drawing a **level** (`mainMenuVisible===false`) the bottom canvas SHALL tile the seamless texture `img/grass_seamless.webp` across the entire logical area. When on the **main menu** (`mainMenuVisible===true`) the bottom canvas SHALL show `img/gfg-splash.png` (tolerate typo `img/gfg-spash.png` asFallback) centered and aspect-covered. The top canvas SHALL be transparent and cleared every frame; it SHALL never draw background.
+The game SHALL render in **landscape 16:9** centered on screen, **maximizing canvas area** using **three stacked layers**: a bottom opaque `2D` canvas that renders **only** background imagery, a middle transparent `2D` canvas that renders all dynamic game elements, and a top transparent `Three.js` overlay (`#wind-canvas`) that renders wind streaks + particles (REQ-004). When drawing a **level** (`mainMenuVisible===false`) the bottom canvas SHALL tile the seamless texture `img/grass_seamless.webp` across the entire logical area. When on the **main menu** (`mainMenuVisible===true`) the bottom canvas SHALL show `img/gfg-splash.png` (tolerate typo `img/gfg-spash.png` asFallback) centered and aspect-covered. The top 2D canvas and wind overlay SHALL be transparent and cleared every frame; they SHALL never draw background.
 
 ## Rationale
 16:9 landscape matches modern monitors and gives maximal play area. A tiled grass texture gives richer fairway than solid `#3a9d23` without GPU cost, while a branded splash on the main menu distinguishes idle vs play. Stacking isolates static image work (bottom, redraw only on mode/resize) from per-frame dynamic work (top, `clearRect` every frame) and avoids background overdraw or canvas-white flash.
@@ -34,25 +34,28 @@ The game SHALL render in **landscape 16:9** centered on screen, **maximizing can
      }
      ```
      This centers the 16:9 stack both axes and **maximizes** it: width is limited by viewport width or by viewport height×16/9, whichever is smaller; height analogously. No canvas or overlay SHALL exceed this container or cause scroll.
-   - Inside container SHALL be exactly **two** canvases stacked:
-     ```html
-     <div id="game-container">
-       <canvas id="bg-canvas" width="1280" height="720"></canvas>
-       <canvas id="game" width="1280" height="720"></canvas>
-       <div id="hotbar">...</div>
-       <div id="win-overlay" class="hidden">...</div>
-       <div id="pause-overlay" class="hidden">...</div>
-       <div id="main-menu-overlay" class="hidden">...</div>
-     </div>
-     ```
-     Ids MAY be `bg`/`background` or `fg`/`foreground` as alias if documented, but both MUST be present, share the **same logical size** (16:9, e.g., `1280×720` or `1600×900`), and be stacked:
-     ```css
-     #game-container canvas { position:absolute; inset:0; width:100%; height:100%; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
-     #bg-canvas { z-index:1; background:#3a9d23; /* fallback */ }
-     #game { z-index:2; background:transparent; pointer-events:auto; }
-     #bg-canvas { pointer-events:none; }
-     #hotbar, #win-overlay, #pause-overlay, #main-menu-overlay { position:absolute; z-index:5-12; }
-     ```
+   - Inside container SHALL be exactly **two 2D canvases plus one transparent wind overlay** stacked:
+      ```html
+      <div id="game-container">
+        <canvas id="bg-canvas" width="1280" height="720"></canvas>
+        <canvas id="game" width="1280" height="720"></canvas>
+        <canvas id="wind-canvas"></canvas> <!-- Three.js wind shader + particles, transparent, z-index:3 -->
+        <div id="hotbar">...</div>
+        <div id="win-overlay" class="hidden">...</div>
+        <div id="pause-overlay" class="hidden">...</div>
+        <div id="main-menu-overlay" class="hidden">...</div>
+      </div>
+      ```
+      `id="wind-canvas"` MAY be `wind-container`/`wind-overlay` as alias if documented, but the wind element MUST be present, share the **same logical size** (16:9, e.g., `1280×720` or `1600×900`), and be stacked:
+      ```css
+      #game-container canvas, #wind-canvas { position:absolute; inset:0; width:100%; height:100%; border-radius:8px; }
+      #bg-canvas { z-index:1; background:#3a9d23; /* fallback */ box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+      #game { z-index:2; background:transparent; pointer-events:auto; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+      #wind-canvas { z-index:3; background:transparent; pointer-events:none; border:none; box-shadow:none; }
+      #bg-canvas, #wind-canvas { pointer-events:none; }
+      #hotbar, #win-overlay, #pause-overlay, #main-menu-overlay { position:absolute; z-index:5-12; }
+      ```
+      The wind element SHALL be created by Three.js (`THREE.WebGLRenderer` `alpha:true`, `setClearColor(0,0)`) inside `src/windThree.js` (REQ-004) and have `pointer-events:none` so it never blocks input.
    - Logical size SHALL be **16:9** (`W/H == 16/9`). Default `LOGICAL_W=1280, LOGICAL_H=720` (or `1600×900`) — tunable but ratio MUST be 16:9. All `levels.js` `canvas`, `tee`, `hole`, `field cols/rows`, and `getWindAt` bounds SHALL use this logical size, not `900×600`. `900×600` references SHALL be considered deprecated and replaced.
    - The stack as a whole SHALL be centered and maximized; no separate `h1` or instructions panel SHALL break centering outside the flex column (they are above/below but container remains flex-centered).
 
@@ -111,12 +114,15 @@ The game SHALL render in **landscape 16:9** centered on screen, **maximizing can
    - A helper `drawBackground(bgCtx, W, H, mode)` with `mode ∈ {'grass','splash'}` SHALL be exported from `src/render.js` and called from `src/main.js` on mode switch and resize.
 
 3. **Top Canvas Rendering — Transparent, Dynamic Only** in `src/render.js` / `src/main.js`:
-   - Top canvas `game` SHALL have `background:transparent` (CSS `background:transparent` and never `fillStyle='#3a9d23'` as background). Its context `fgCtx` SHALL be cleared every frame via `fgCtx.clearRect(0,0,W,H)` or `fgCtx.setTransform(dpr,0,0,dpr,0,0); fgCtx.clearRect(0,0,W,H)` at DPR scale.
-   - It SHALL render **only** dynamic elements (no background): arrow grid, particles, obstacles, hole/flag, ball, aim orbit/line, modifier circles/preview, force bar, HUD, reward menu canvas overlay (if canvas mode for reward/pause), but NOT grass or splash.
-   - Input (mouse move/click for `getCanvasMousePos`, drag, placement) SHALL be attached to the **top canvas only** (`game.addEventListener(...)`), using `game.getBoundingClientRect()` scaled to logical `W/H`. Bottom canvas SHALL have `pointer-events:none` so it never intercepts.
-   - Performance: clearing/drawing top only each frame keeps ≥55fps; bottom not redrawn per frame saves fill cost.
+   - Top 2D canvas `game` SHALL have `background:transparent` (CSS `background:transparent` and never `fillStyle='#3a9d23'` as background). Its context `fgCtx` SHALL be cleared every frame via `fgCtx.clearRect(0,0,W,H)` or `fgCtx.setTransform(dpr,0,0,dpr,0,0); fgCtx.clearRect(0,0,W,H)` at DPR scale.
+   - It SHALL render **only** 2D dynamic elements (no background, no wind): obstacles, hole/flag, ball, aim orbit/line, modifier circles/preview, force bar, HUD, reward menu canvas overlay (if canvas mode for reward/pause), but NOT grass/splash and NOT the wind streaks/particles (wind is on its own transparent Three.js element, REQ-004).
+   - Input (mouse move/click for `getCanvasMousePos`, drag, placement) SHALL be attached to the **game canvas only** (`game.addEventListener(...)`), using `game.getBoundingClientRect()` scaled to logical `W/H`. Bottom canvas and wind overlay SHALL have `pointer-events:none` so they never intercept.
+   - Performance: clearing/drawing top only each frame keeps ≥55fps; bottom not redrawn per frame saves fill cost; wind overlay is GPU-rendered via Three.js at `alpha:0` clear.
 
-4. **HiDPI & Resize for Both Canvases** in `src/main.js:setupCanvas()` (extends REQ-013):
+4. **Wind Overlay — Transparent Three.js Element on Top of Game Canvas** (REQ-004, see REQ-004 for shader/particle spec):
+   - The wind element `#wind-canvas` SHALL be `position:absolute; inset:0; width:100%; height:100%; pointer-events:none; background:transparent; z-index:3` (above `game` `z-index:2` but below UI overlays `z-index:5-12`). It SHALL be created and driven by `src/windThree.js` (`THREE.WebGLRenderer` `alpha:true`, `setClearColor(0x000000,0)`), sharing the same logical `W×H` and DPR handling as the other two layers. It SHALL be fully transparent where no streak/particle exists so game/ball remain visible.
+
+5. **HiDPI & Resize for All Canvases + Wind Overlay** in `src/main.js:setupCanvas()` / `src/windThree.js` (extends REQ-013):
    - A single `setupCanvases()` SHALL configure **both** canvases:
      ```js
      const LOGICAL_W = 1280, LOGICAL_H = 720; // 16:9
@@ -135,7 +141,7 @@ The game SHALL render in **landscape 16:9** centered on screen, **maximizing can
      ```
      Called on load and `window.addEventListener('resize', ...)` debounced 100-200ms. Both canvases SHALL always have identical `width/height` attributes and identical `getBoundingClientRect()`.
 
-5. **Main Menu HTML — Centered Over Canvas, Not Overflowing** (normative cross-ref to REQ-029):
+6. **Main Menu HTML — Centered Over Canvas, Not Overflowing** (normative cross-ref to REQ-029):
    - `#main-menu-overlay` SHALL be inside `#game-container` with `position:absolute; inset:0; display:flex; align-items:center; justify-content:center; width:100%; height:100%;` so its box equals the 16:9 canvas area — never larger. Content `.main-menu-content` SHALL have `max-width:90%; max-height:90%;` to prevent overflow at small viewports.
    - No canvas `drawMainMenu` SHALL be rendered while HTML menu is visible; HTML is the sole menu. Bottom splash is visible through the overlay’s semi-transparent `background:rgba(0,0,0,0.35)`.
 

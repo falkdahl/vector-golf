@@ -4,10 +4,6 @@ import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall
 import { checkObstacleCollision, isOutOfBounds } from "./obstacles.js";
 import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
 import {
-  initParticles,
-  updateParticles,
-  drawArrows,
-  drawParticles,
   drawObstacles,
   drawHole,
   drawBall,
@@ -22,9 +18,19 @@ import {
   drawPauseMenu,
   getPauseButtonsLayout,
   setCanvasSize,
-  toggleWind as toggleWindRender,
-  isWindVisible
 } from "./render.js";
+import {
+  initWindOverlay,
+  updateWindUniforms,
+  setWindUniformsFromField,
+  setWindVisible,
+  toggleWind as toggleWindThree,
+  isWindVisible as isWindThreeVisible,
+  renderWind,
+  resizeWindOverlay,
+  getWindUniforms,
+} from "./windThree.js";
+import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -408,6 +414,8 @@ function syncMainMenu() {
   }
   // Ensure bottom background reflects mode (splash vs grass) per REQ-030
   redrawBottom();
+  // Wind overlay should be hidden on main menu (splash), visible on level per REQ-004
+  try { setWindVisible(!mainMenuVisible); } catch {}
   updateHotbarUI();
 }
 function isMainMenuVisible() { return mainMenuVisible; }
@@ -667,7 +675,7 @@ function loadLevel(index) {
   modifiers = [];
   syncModifiersToField();
   // Keep canvas size consistent per REQ-010 16:9 (1280×720); if varying, would re-setup canvas
-  initParticles(80, LOGICAL_W, LOGICAL_H);
+  // Wind particles now handled by Three.js overlay (REQ-004), not canvas initParticles
   createBall(level.tee);
   const dx = level.hole.x - level.tee.x;
   const dy = level.hole.y - level.tee.y;
@@ -790,6 +798,13 @@ function updateHotbarUI() {
 
 function syncModifiersToField() {
   setModifiers(modifiers);
+  syncWindFieldToShader();
+}
+function syncWindFieldToShader() {
+  try {
+    const comps = getFieldComponents();
+    setWindUniformsFromField(comps, modifiers, windStrength);
+  } catch {}
 }
 
 function syncPauseOverlay() {
@@ -1025,10 +1040,12 @@ function handleNextHole() {
 }
 
 function update(dt) {
-  // REQ-021: when reward menu visible, block aiming/charging but still update particles
+  // REQ-004: wind shader + particles advance even when menu is blocking ball physics
+  const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {} };
+  // REQ-021: when reward menu visible, block aiming/charging but still animate wind
   if (rewardMenuVisible) {
-    // Still allow particles animation, but block ball physics and charging transition
-    updateParticles(dt, getWindAt);
+    // Still allow wind animation, but block ball physics and charging transition
+    tickWind();
     updateHotbarUI();
     // Ensure we stay in AIMING and not charging, and don't process input drift
     if (charging) {
@@ -1040,7 +1057,7 @@ function update(dt) {
   }
   // REQ-028: when pause menu visible, pause physics like reward/win
   if (pauseMenuVisible) {
-    updateParticles(dt, getWindAt);
+    tickWind();
     updateHotbarUI();
     if (charging) {
       resetCharge();
@@ -1050,7 +1067,7 @@ function update(dt) {
   }
   // REQ-029: when main menu visible, pause like pause
   if (mainMenuVisible) {
-    updateParticles(dt, getWindAt);
+    tickWind();
     updateHotbarUI();
     if (charging) {
       resetCharge();
@@ -1074,7 +1091,7 @@ function update(dt) {
   }
 
   if (gameState === "FLYING") {
-    updateParticles(dt, getWindAt);
+    try { updateWindUniforms(dt, getWindAt); } catch {}
     updateBall(dt, getWindAt, windStrength, LOGICAL_W, LOGICAL_H);
 
     // Check win every tick - immediate, regardless of speed (REQ-009)
@@ -1100,11 +1117,11 @@ function update(dt) {
     // No auto-reset on rest - ball continues drifting per REQ-005
 
   } else if (gameState === "WIN") {
-    // paused physics, still update particles for visual
-    updateParticles(dt, getWindAt);
+    // paused physics, still animate wind
+    try { updateWindUniforms(dt, getWindAt); } catch {}
   } else {
-    // AIMING/CHARGING - update particles anyway
-    updateParticles(dt, getWindAt);
+    // AIMING/CHARGING - animate wind anyway
+    try { updateWindUniforms(dt, getWindAt); } catch {}
   }
 }
 
@@ -1124,10 +1141,9 @@ function render() {
     return;
   }
 
-  // Draw order on TOP canvas (transparent): arrows -> particles -> obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers
+  // Draw order on TOP canvas (transparent): obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers
+  // Wind is rendered on separate transparent Three.js overlay (#wind-canvas) via fragment shader + particles, not here
   // Background is on BOTTOM canvas (tiled grass via redrawBottom), not drawn here
-  drawArrows(ctx, getWindAt, cols, rows, cellW, cellH);
-  drawParticles(ctx);
   drawModifiers(ctx, modifiers);
   drawObstacles(ctx, level.obstacles);
   drawHole(ctx, level.hole);
@@ -1154,6 +1170,8 @@ function render() {
     drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover, rewardRerolled, rewardRerollHover);
   }
   // REQ-028: pause menu is DOM-only (#pause-overlay) to avoid duplicate rendering; canvas pause draw disabled
+  // Render wind overlay (Three.js shader lines + particles) on top of game canvas, transparent
+  try { renderWind(); } catch {}
 }
 
 function loop(now) {
@@ -1210,6 +1228,14 @@ function init() {
   }
 
   setupCanvas();
+  // REQ-004: init Three.js wind overlay (transparent shader + particles) on top of game canvas
+  try {
+    const container = document.getElementById('game-container');
+    initWindOverlay(container);
+    // Feed initial field (will be updated again after level load)
+    syncWindFieldToShader();
+    resizeWindOverlay();
+  } catch (e) { console.warn('wind overlay init failed', e); }
   // REQ-027: try resume from localStorage before new game init
   let _loaded = null;
   try { _loaded = loadProgress(); } catch {}
@@ -1227,7 +1253,6 @@ function init() {
     windStrength = level.field.strength ?? WIND_STRENGTH;
     createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
     syncModifiersToField();
-    initParticles(80, LOGICAL_W, LOGICAL_H);
     createBall(level.tee);
     // aimAngle already restored via loadProgress
     bouncyRemaining = bouncyBallCount;
@@ -1248,7 +1273,6 @@ function init() {
     windStrength = level.field.strength ?? WIND_STRENGTH;
     createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
     modifiers = []; syncModifiersToField();
-    initParticles(80, LOGICAL_W, LOGICAL_H);
     createBall(level.tee);
     const dx0 = level.hole.x - level.tee.x;
     const dy0 = level.hole.y - level.tee.y;
@@ -1299,7 +1323,7 @@ function init() {
         if (rewardMenuVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
-        toggleWindRender();
+        toggleWindThree();
       }
     }
   );
@@ -1342,8 +1366,16 @@ function init() {
   if (mainNewGameBtn) mainNewGameBtn.addEventListener("click", () => startNewGameFromMain());
   syncMainMenu();
   window.addEventListener("keydown", (e) => {
-    // REQ-029: main menu blocks all inputs except New Game click
+    // REQ-029: main menu blocks all inputs except New Game click - but never block browser shortcuts like F5
     if (mainMenuVisible) {
+      // Allow browser navigation/refresh/devtools shortcuts to pass through
+      const isRefresh = e.key === "F5" || e.code === "F5" || e.keyCode === 116
+        || ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === "r")
+        || e.key === "F12" || e.code === "F12"
+        || e.key === "F11" || e.code === "F11"
+        || ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.code === "KeyI" || e.code === "KeyJ" || e.code === "KeyC"))
+        || (e.ctrlKey && e.code === "KeyU");
+      if (isRefresh) return;
       e.preventDefault();
       return;
     }
@@ -1678,12 +1710,13 @@ function init() {
     removeModifierAt(pos.x, pos.y);
   });
 
-  // Resize handling debounced
+  // Resize handling debounced (all three layers)
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       setupCanvas();
+      try { resizeWindOverlay(); } catch {}
     }, 200);
   });
 

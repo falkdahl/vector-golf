@@ -50,8 +50,16 @@ h1 {
   pointer-events: none;
 }
 
-#game {
+#wind-canvas {
   z-index: 2;
+  background: transparent;
+  pointer-events: none;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+#game {
+  z-index: 3;
   background: transparent;
   pointer-events: auto;
 }

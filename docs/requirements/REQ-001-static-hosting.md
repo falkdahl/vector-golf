@@ -16,7 +16,7 @@ User requirement: "only use html5 canvas and pure javascript without any 3rd par
 ## Requirements
 
 1. The project SHALL include an `index.html` at the repository root that loads all assets via relative paths.
-2. The project SHALL use only HTML5, CSS, and vanilla JavaScript (ECMAScript modules via `<script type="module">`). No npm packages, CDN imports, or bundled third-party libraries SHALL be used.
+2. The project SHALL use only HTML5, CSS, and vanilla JavaScript (ECMAScript modules via `<script type="module">`). No npm packages or bundled third-party libraries SHALL be used, **except** the `three` (Three.js) library for wind visualization (REQ-004), which SHALL be loaded via an import map / CDN import (`https://unpkg.com/three@0.160.0/build/three.module.js` or equivalent `https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js`) or a local `vendor/three.module.js` copy. No other CDN/third-party downloads SHALL be required.
 3. The project SHALL NOT require a build tool (webpack, vite, etc.) to run.
 4. All JavaScript SHALL be organized under `src/` (e.g., `src/main.js`, `src/physics.js`, etc.) and imported via relative ESM imports.
 5. The site SHALL run when served as static files (`python3 -m http.server 8000` from repo root serves `index.html` correctly).
@@ -27,7 +27,7 @@ User requirement: "only use html5 canvas and pure javascript without any 3rd par
 
 - [ ] `index.html` exists at repo root, references `style.css` and `src/main.js` with relative paths.
 - [ ] Opening the site via `npx serve .` or `python3 -m http.server` loads the game without 404s in browser console.
-- [ ] No `<script src="https://...">` or `import ... from "https://...">` or `node_modules/` present.
+- [ ] No `<script src="https://...">` or `import ... from "https://...">` or `node_modules/` present, **except** a single allowed `three` import via import map (`three` → `https://unpkg.com/three@0.160.0/build/three.module.js`) per REQ-004.
 - [ ] `npm install` is NOT required to run.
 - [ ] Deploying the repo contents to GitHub Pages (branch `main` / `docs` or root) renders the game.
 

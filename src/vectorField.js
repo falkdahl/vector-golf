@@ -42,6 +42,15 @@ export function getSourcePositions() { return _lastSourcePositions.map(p => ({ .
 export function getSinkPositions() { return _lastSinkPositions.map(p => ({ ...p })); }
 export function getVortexPositions() { return _lastVortexPositions.map(p => ({ ...p })); }
 export function getDoubletPositions() { return _lastDoubletPositions.map(p => ({ ...p })); }
+export function getFieldComponents() {
+  return {
+    sources: getSourcePositions(),
+    sinks: getSinkPositions(),
+    vortices: getVortexPositions(),
+    vortexes: getVortexPositions(),
+    doublets: getDoubletPositions(),
+  };
+}
 
 // Deterministic pseudo-random (mulberry32)
 function mulberry32(a) {

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Golf Vector Field</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 </head>
 <body>
   <h1>Golf Vector Field</h1>
@@ -12,6 +14,7 @@
   <div id="game-container">
     <canvas id="bg-canvas" width="1280" height="720"></canvas>
     <canvas id="game" width="1280" height="720"></canvas>
+    <canvas id="wind-canvas"></canvas>
     <div id="hotbar">
       <div class="hotbar-slot" data-type="amplify" title="Amplify x5 (1)"><span class="hotbar-icon">»</span><span class="hotbar-label">Amplify</span><span class="hotbar-count">0/0</span><span class="hotbar-key">1</span></div>
       <div class="hotbar-slot" data-type="nullify" title="Nullify (2)"><span class="hotbar-icon">∅</span><span class="hotbar-label">Nullify</span><span class="hotbar-count">0/0</span><span class="hotbar-key">2</span></div>

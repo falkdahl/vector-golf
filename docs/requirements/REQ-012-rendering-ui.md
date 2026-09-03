@@ -24,23 +24,25 @@ Separating opaque background (image-tiled grass or splash) from transparent dyna
    - **Top canvas `#game`** SHALL be transparent (`background:transparent; clearRect` each frame) and SHALL NOT draw background — only dynamic content (see §2). Its `clearRect(0,0,W,H)` SHALL NOT erase the bottom canvas underneath (stacked `z-index` keeps bottom visible through transparency).
 
 2. **Draw Order** split across layers:
-   - **Bottom layer (`bgCtx` on `#bg-canvas`)**, drawn on demand:
+   - **Bottom layer (`bgCtx` on `#bg-canvas`, `z-index:1`)**, drawn on demand:
      1. Background image: tiled grass (level) OR splash cover (main menu) per §1 — single operation.
-   - **Top layer (`fgCtx` on `#game`)**, drawn every `render()` after `clearRect`:
-     1. Arrow grid (REQ-004) — using `getWindAt` including modifiers
-     2. Particles (REQ-004)
-     3. Obstacles (REQ-008)
-     4. Hole + flag (REQ-009)
-     5. Ball (REQ-005)
-     6. Aim orbit + line + indicator (REQ-006) when `AIMING`/`CHARGING`
-     7. Modifier circles + preview (REQ-015)
-     8. Force bar under ball (REQ-007) when `CHARGING`
-     9. HUD `Hole/Attempts/Total` (REQ-014) via `drawHUD` on top layer
-     10. Reward menu `drawRewardMenu` (REQ-021) when `rewardMenuVisible`
-     11. Pause `drawPauseMenu` if canvas mode used (otherwise DOM overlay) — still on top layer
-     12. Win dim handled as DOM `#win-overlay` over container (not canvas), but top layer MAY also dim when `WIN`.
-   - `render()` SHALL accept two contexts `render(bgCtx, fgCtx, W, H)` or call `drawBackground(bgCtx,...)` then `drawDynamic(fgCtx,...)`. Bottom is not cleared per frame unless background mode switched.
-   - Z-order within top layer remains as above; bottom background is always behind (z-index 1 vs 2).
+   - **Middle layer (`fgCtx` on `#game`, `z-index:2`, transparent)**, drawn every `render()` after `clearRect`:
+     1. Obstacles (REQ-008)
+     2. Hole + flag (REQ-009)
+     3. Ball (REQ-005)
+     4. Aim orbit + line + indicator (REQ-006) when `AIMING`/`CHARGING`
+     5. Modifier circles + preview (REQ-015)
+     6. Force bar under ball (REQ-007) when `CHARGING`
+     7. HUD `Hole/Attempts/Total` (REQ-014) via `drawHUD` on top layer
+     8. Reward menu `drawRewardMenu` (REQ-021) when `rewardMenuVisible`
+     9. Pause `drawPauseMenu` if canvas mode used (otherwise DOM overlay) — still on top layer
+     10. Win dim handled as DOM `#win-overlay` over container (not canvas), but top layer MAY also dim when `WIN`.
+   - **Top wind layer (`windRenderer` on `#wind-canvas`, `z-index:3`, transparent, `pointer-events:none`)**, drawn every frame by Three.js (REQ-004):
+     1. Fragment-shader wind streaks/lines (animated via `uTime`, reconstructed from field components + modifiers)
+     2. Wind-blown particles (spawned uniformly, advected by same field, fade `life 2s → 0`)
+     This layer is **separate from the 2D game canvas** and SHALL be `background:transparent` so grass (bottom) and game elements (middle) remain visible through it. It SHALL be above the game canvas but below UI overlays (`#hotbar` `z-index:5`, `#pause-overlay`/`#win-overlay` `z-index:10-12`).
+   - `render()` SHALL accept two 2D contexts `render(bgCtx, fgCtx, W, H)` plus call `windRenderer.render(windScene, windCamera)` for the wind overlay. Bottom is not cleared per frame unless background mode switched; middle is cleared per frame; wind is cleared by Three.js (`alpha:0`).
+   - Z-order: `bg-canvas (1, opaque)` → `game (2, transparent)` → `wind-canvas (3, transparent, shader+particles)` → `hotbar (5)` → `overlays (10-12)`.
 
 3. **UI** in `index.html` / `style.css` and **Canvas HUD** in `src/render.js`:
      - Title `<h1>Golf Vector Field</h1>` above `#game-container` (outside the 16:9 stack, not inside).
@@ -52,7 +54,7 @@ Separating opaque background (image-tiled grass or splash) from transparent dyna
      - Instructions panel: "Arrows: Aim | Space: Shoot | R: Reset | H: Toggle Wind" (DOM below container).
 
 4. **Styling** in `style.css`:
-    - `#game-container` 16:9 maximized centered (REQ-013), `canvas {position:absolute; inset:0; width:100%; height:100%; border:3px solid #222; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.5);}` with `#bg-canvas {z-index:1} #game {z-index:2; background:transparent}`. Overlays `z-index:10-12` inside container.
+    - `#game-container` 16:9 maximized centered (REQ-013), `canvas, #wind-canvas {position:absolute; inset:0; width:100%; height:100%; border-radius:8px;}` with `#bg-canvas {z-index:1; background:#3a9d23}` `#game {z-index:2; background:transparent; pointer-events:auto; border:3px solid #222; box-shadow:0 4px 20px rgba(0,0,0,0.5)}` `#wind-canvas {z-index:3; background:transparent; pointer-events:none; border:none; box-shadow:none}`. Overlays `z-index:10-12` inside container. `canvas` border is on `#game` only; wind canvas has no border.
     - Body centered flex as in REQ-013.
 
 5. **No external fonts** beyond system fonts; images limited to the two in `img/` per REQ-001/REQ-030.
@@ -61,13 +63,14 @@ Separating opaque background (image-tiled grass or splash) from transparent dyna
 
 - [ ] On level play (`mainMenuVisible false`), **bottom canvas** shows tiled `grass_seamless.webp` covering the entire 16:9 area without visible seams, scaled for DPR; inspecting `bgCanvas.getContext('2d').getImageData` shows non-uniform grass texels, not solid `#3a9d23`. Top canvas has transparent background (computed `backgroundColor rgba(0,0,0,0)`), and `clearRect` each frame does not erase bottom image (visible through).
 - [ ] On main menu (`mainMenuVisible true`), bottom canvas instead shows `gfg-splash.png` (or `gfg-spash.png` fallback) aspect-covered centered (covers entire canvas, no letterboxing, no tiling), with no grass visible. Switching `mainMenuVisible` toggles bottom layer between tiled grass and splash without affecting top layer’s `clearRect`.
-- [ ] Draw order verified: top layer renders arrows→particles→obstacles→hole→ball→aim→modifiers→HUD in correct z-order above the background image; bottom image is always behind (visually bottom layer is beneath all dynamic elements).
+- [ ] Draw order verified: middle `game` layer renders obstacles→hole→ball→aim→modifiers→HUD; **top `wind-canvas` transparent layer renders shader streaks + particles above game but below UI** (or at `z-index:2.5` with low alpha if chosen). Bottom image is always behind. Streaks do not obscure ball/hole (alpha ≤0.65). `wind-canvas` has `pointer-events:none` and `background:transparent`.
 - [ ] Title `<h1>` is outside `#game-container`; HUD/hotbar/overlays are inside container and never overflow canvas bounds (overlay `getBoundingClientRect()` contained within container).
 - [ ] No layout shift when force bar charges; Lighthouse shows no 404s for `img/grass_seamless.webp` and `img/gfg-splash.png` (fallback to `gfg-spash.png` tolerated, but at least one splash loads).
 
 ## Dependencies
-- REQ-002 (dual canvas DOM)
-- REQ-004, REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, REQ-014, REQ-015
+- REQ-002 (dual canvas + wind overlay DOM)
+- REQ-003/REQ-004 (wind field + Three.js shader overlay)
+- REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, REQ-014, REQ-015
 - REQ-030 (background image tiling/splash)
 - REQ-029 (main menu HTML over canvas)
 
@@ -77,6 +80,7 @@ Separating opaque background (image-tiled grass or splash) from transparent dyna
 - Splash cover via aspect-cover math: `scale = Math.max(W/img.width, H/img.height); drawImage(img, (W-img.width*scale)/2, (H-img.height*scale)/2, img.width*scale, img.height*scale)`.
 
 ## File Paths
-- `src/render.js:1` (drawBackground on bgCtx, drawDynamic on fgCtx, image preloading)
-- `index.html:1` (#bg-canvas + #game inside #game-container, overlays inside container)
-- `style.css:1` (stacked canvas, container 16:9, overlay bounds)
+- `src/render.js:1` (drawBackground on bgCtx, drawDynamic on fgCtx, image preloading — no longer draws wind)
+- `src/windThree.js:1` (Three.js wind overlay, shader lines + particles)
+- `index.html:1` (#bg-canvas + #game + #wind-canvas inside #game-container, overlays inside container, import map for three)
+- `style.css:1` (stacked canvases + wind overlay, container 16:9, overlay bounds)
