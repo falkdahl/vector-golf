@@ -35,6 +35,7 @@
         <h2>Paused</h2>
         <button id="resume-button">▶ Resume</button>
         <button id="end-run-button">✕ End Run</button>
+        <button id="pause-export-button" class="course-export-button">⎙ Export Course</button>
         <div class="reward-stats">
           <div data-type="amplify"><span class="icon">»</span> Amplify <span class="count">x0</span></div>
           <div data-type="nullify"><span class="icon">∅</span> Nullify <span class="count">x0</span></div>
@@ -47,11 +48,29 @@
     </div>
     <div id="main-menu-overlay" class="hidden">
       <div class="main-menu-content">
-        <h2>Golf Vector Field</h2>
-        <button id="main-new-game-button">▶ New Game</button>
-        <p class="high-score">Current high score: —</p>
+        <p class="subtitle">Choose a Course</p>
+        <div id="course-list" class="course-list"></div>
+        <div id="main-menu-footer">
+          <button id="new-course-button">+ New Course</button>
+          <button id="import-course-button">⤵ Import Course</button>
+        </div>
+        <div id="new-course-choices" class="hidden">
+          <p>Choose holes:</p>
+          <button data-holes="3">3 Holes</button>
+          <button data-holes="9">9 Holes</button>
+          <button data-holes="18">18 Holes</button>
+          <button id="new-course-cancel">Cancel</button>
+        </div>
+        <div id="import-area" class="hidden">
+          <p class="import-help">Paste the string exported from another game</p>
+          <textarea id="import-input" placeholder="Paste base64 string here"></textarea>
+          <button id="import-confirm">Import</button>
+          <button id="import-cancel">Cancel</button>
+          <p id="import-error" class="hidden"></p>
+        </div>
       </div>
     </div>
+    <div id="toast" class="hidden">copied to clipboard</div>
   </div>
 
   <div id="instructions">

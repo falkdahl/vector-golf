@@ -31,6 +31,7 @@ import {
   getWindUniforms,
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
+import { COURSES_KEY, generateCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse } from "./courses.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -142,6 +143,46 @@ let holeAttempts = 0;
 let totalAttempts = 0;
 let attempts = 0; // alias for totalAttempts for backward compat
 
+// Course collection per REQ-031
+let courses = [];
+let activeCourse = null;
+let activeCourseId = null;
+
+function getActiveCourse() { return activeCourse; }
+function setActiveCourse(course) {
+  activeCourse = course;
+  activeCourseId = course ? course.id : null;
+  if (course && Array.isArray(course.holes)) {
+    // Sync global LEVELS to active course holes for backward compat
+    try {
+      LEVELS.length = 0;
+      for (const h of course.holes) LEVELS.push(h);
+      // Also update LEVEL alias to first hole
+      Object.assign(LEVEL, LEVELS[0] || {});
+      if (LEVELS[0]) {
+        LEVEL.canvas = LEVELS[0].canvas;
+        LEVEL.tee = LEVELS[0].tee;
+        LEVEL.hole = LEVELS[0].hole;
+        LEVEL.obstacles = LEVELS[0].obstacles;
+        LEVEL.field = LEVELS[0].field;
+      }
+    } catch {}
+  }
+}
+function loadCourses() {
+  try {
+    courses = loadCoursesFromStorage();
+  } catch (e) {
+    courses = loadCoursesFromStorage();
+  }
+  // Ensure activeCourse is set if we have a saved courseId later via loadProgress
+  return courses;
+}
+function saveCourses() {
+  try { saveCoursesToStorage(courses); } catch {}
+}
+function findCourseById(id) { return courses.find(c => c.id === id) || null; }
+
 // Modifier system per REQ-015 + REQ-020 (supply-limited) + transparent/collapsible per REQ-012/015/020
 let modifiers = [];
 let selectedModifier = null;
@@ -242,6 +283,7 @@ function getSavePayload() {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterVal = sharpshooterCount; } catch {}
   return {
     version: 1,
+    courseId: activeCourseId || (activeCourse ? activeCourse.id : null),
     currentHoleIndex,
     holeAttempts,
     totalAttempts,
@@ -274,8 +316,19 @@ function loadProgress() {
     if (!raw) return null;
     const d = JSON.parse(raw);
     if (!d || d.version !== 1) return null;
+    // REQ-031: course binding - verify courseId exists
+    if (d.courseId) {
+      const found = findCourseById(d.courseId);
+      if (!found) return null;
+      setActiveCourse(found);
+    } else if (courses.length > 0) {
+      // Legacy save without courseId - bind to first course
+      setActiveCourse(courses[0]);
+    }
+    const maxHole = activeCourse ? activeCourse.holes.length : LEVELS.length;
     // clamp & validate — missing fields default to 0/false/[]
-    currentHoleIndex = Math.max(0, Math.min(LEVELS.length - 1, Math.floor(d.currentHoleIndex || 0)));
+    currentHoleIndex = Math.max(0, Math.min(maxHole - 1, Math.floor(d.currentHoleIndex || 0)));
+    activeCourseId = d.courseId || (activeCourse ? activeCourse.id : null);
     holeAttempts = Math.max(0, Math.floor(d.holeAttempts || 0));
     totalAttempts = Math.max(0, Math.floor(d.totalAttempts || 0));
     attempts = totalAttempts;
@@ -396,18 +449,193 @@ function setHighScore(n) {
 }
 function clearHighScore() { try { localStorage.removeItem(HIGH_SCORE_KEY); } catch {} }
 function maybeUpdateHighScore() {
-  if (currentHoleIndex !== LEVELS.length - 1 || gameState !== "WIN") return;
+  if (!activeCourse) return;
+  if (currentHoleIndex !== activeCourse.holes.length - 1 || gameState !== "WIN") return;
+  // Legacy global high score (migration)
   const prev = getHighScore();
   if (prev == null || totalAttempts < prev) setHighScore(totalAttempts);
+  // Per-course bestTotal per REQ-031
+  if (activeCourse.bestTotal == null || totalAttempts < activeCourse.bestTotal) {
+    activeCourse.bestTotal = totalAttempts;
+    try { saveCourses(); } catch {}
+    // Re-render course list to show new record
+    try { renderCourseList(); } catch {}
+  }
 }
+function maybeUpdateCourseRecord() { return maybeUpdateHighScore(); }
+function getCourseRecord(courseId) {
+  const c = findCourseById(courseId);
+  return c ? c.bestTotal : null;
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    const container = document.getElementById('game-container');
+    if (container) container.appendChild(t); else document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(() => t.classList.add('hidden'), 2000);
+}
+
+function renderCourseList() {
+  const list = document.getElementById('course-list');
+  if (!list) return;
+  list.innerHTML = '';
+  for (const course of courses) {
+    const row = document.createElement('div');
+    row.className = 'course-row';
+    row.dataset.courseId = course.id;
+    const playBtn = document.createElement('button');
+    playBtn.className = 'course-play-button';
+    const record = course.bestTotal == null ? '—' : String(course.bestTotal);
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'course-name';
+    nameSpan.textContent = course.name;
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'course-meta';
+    metaSpan.textContent = `${course.holeCount} holes \u2003 Record: ${record}`;
+    playBtn.appendChild(nameSpan);
+    playBtn.appendChild(metaSpan);
+    playBtn.title = `Play ${course.name} (${course.holeCount} holes)`;
+    playBtn.addEventListener('click', () => handleCoursePlay(course.id));
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'course-export-button';
+    exportBtn.textContent = '⎙ Export';
+    exportBtn.title = 'Export course';
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportCourseById(course.id);
+    });
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'course-delete-button';
+    deleteBtn.textContent = '🗑 Delete';
+    deleteBtn.title = 'Delete course';
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete course "${course.name}"? This cannot be undone.`)) return;
+      const idx = courses.findIndex(c => c.id === course.id);
+      if (idx !== -1) {
+        const wasActive = activeCourseId === course.id || (activeCourse && activeCourse.id === course.id);
+        courses.splice(idx, 1);
+        if (wasActive) {
+          clearProgress();
+          if (courses.length) {
+            setActiveCourse(courses[0]);
+          } else {
+            activeCourse = null;
+            activeCourseId = null;
+          }
+        }
+        if (!courses.length) {
+          try {
+            const def = generateCourse(18, Date.now());
+            courses.push(def);
+            if (!activeCourse) setActiveCourse(def);
+          } catch {}
+        }
+        saveCourses();
+        renderCourseList();
+        // If deleted active course while in game, keep current run but next End Run will go to new active
+        if (wasActive && !mainMenuVisible && activeCourse) {
+          // Switch LEVELS to new active course's holes for next load, but keep current run's level until next hole?
+          // No immediate action - current hole continues with old level data until next course play
+        }
+      }
+    });
+    row.appendChild(playBtn);
+    row.appendChild(exportBtn);
+    row.appendChild(deleteBtn);
+    list.appendChild(row);
+  }
+}
+
+function handleCoursePlay(courseId) {
+  const course = findCourseById(courseId);
+  if (!course) return;
+  setActiveCourse(course);
+  clearProgress();
+  currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1 }; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
+  secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
+  rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null;
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
+  modifiers = []; syncModifiersToField(); selectedModifier = null;
+  loadLevel(0); gameState = "AIMING";
+  if (winOverlay) winOverlay.classList.add("hidden");
+  syncPauseOverlay(); syncMainMenu();
+  updateAttemptsUI(); updateHotbarUI();
+  maybeShowRewardMenu();
+  saveProgress();
+}
+
+function exportCourseById(courseId) {
+  const course = findCourseById(courseId) || activeCourse;
+  if (!course) return;
+  try {
+    const b64 = exportCourse(course);
+    // Try clipboard
+    let done = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(b64).then(() => {
+        showToast('copied to clipboard');
+      }).catch(() => {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = b64;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch {}
+        document.body.removeChild(ta);
+        showToast('copied to clipboard');
+      });
+      done = true;
+      // Also expose for tests
+      window.__lastExported = b64;
+      if (!done) showToast('copied to clipboard');
+      return b64;
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = b64;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch {}
+      document.body.removeChild(ta);
+      window.__lastExported = b64;
+      showToast('copied to clipboard');
+      return b64;
+    }
+  } catch (e) {
+    console.warn('export failed', e);
+    showToast('Copy failed');
+  }
+}
+
+function createNewCourseWithHoles(holeCount) {
+  try {
+    const c = generateCourse(holeCount, Date.now());
+    courses.push(c);
+    saveCourses();
+    renderCourseList();
+    showToast('Course created');
+    return c;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function syncMainMenu() {
   const el = document.getElementById("main-menu-overlay");
   if (el) {
-    const hs = getHighScore();
-    const hse = el.querySelector(".high-score");
-    if (hse) hse.textContent = hs == null ? "Current high score: —" : `Current high score: ${hs}`;
     if (mainMenuVisible) {
       el.classList.remove("hidden");
+      try { renderCourseList(); } catch {}
     } else {
       el.classList.add("hidden");
     }
@@ -1227,7 +1455,117 @@ function init() {
     syncHotbarCollapsedUI();
   }
 
+  // REQ-031: course list UI handlers
+  const newCourseBtn = document.getElementById('new-course-button');
+  const newCourseChoices = document.getElementById('new-course-choices');
+  const newCourseCancel = document.getElementById('new-course-cancel');
+  const importCourseBtn = document.getElementById('import-course-button');
+  const importArea = document.getElementById('import-area');
+  const importInput = document.getElementById('import-input');
+  const importConfirm = document.getElementById('import-confirm');
+  const importCancel = document.getElementById('import-cancel');
+  const importError = document.getElementById('import-error');
+  const mainMenuFooter = document.getElementById('main-menu-footer');
+  if (newCourseBtn && newCourseChoices) {
+    newCourseBtn.addEventListener('click', () => {
+      if (mainMenuFooter) mainMenuFooter.classList.add('hidden');
+      newCourseChoices.classList.remove('hidden');
+      if (importArea) importArea.classList.add('hidden');
+    });
+  }
+  if (newCourseCancel && newCourseChoices) {
+    newCourseCancel.addEventListener('click', () => {
+      newCourseChoices.classList.add('hidden');
+      if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+    });
+  }
+  if (newCourseChoices) {
+    newCourseChoices.querySelectorAll('button[data-holes]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hc = parseInt(btn.dataset.holes, 10);
+        if ([3,9,18].includes(hc)) {
+          createNewCourseWithHoles(hc);
+          newCourseChoices.classList.add('hidden');
+          if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+        }
+      });
+    });
+  }
+  if (importCourseBtn && importArea) {
+    importCourseBtn.addEventListener('click', () => {
+      importArea.classList.remove('hidden');
+      if (newCourseChoices) newCourseChoices.classList.add('hidden');
+      if (mainMenuFooter) mainMenuFooter.classList.add('hidden');
+      if (importError) { importError.textContent = ''; importError.classList.add('hidden'); }
+      if (importInput) importInput.value = '';
+    });
+  }
+  if (importCancel && importArea) {
+    importCancel.addEventListener('click', () => {
+      importArea.classList.add('hidden');
+      if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+      if (importError) { importError.textContent = ''; importError.classList.add('hidden'); }
+    });
+  }
+  if (importConfirm && importInput) {
+    importConfirm.addEventListener('click', () => {
+      const b64 = importInput.value.trim();
+      if (!b64) {
+        if (importError) { importError.textContent = 'Invalid course data'; importError.classList.remove('hidden'); }
+        return;
+      }
+      try {
+        const imported = importCourse(b64);
+        // Do not carry over record from another game - reset bestTotal per REQ-031 notes
+        imported.bestTotal = null;
+        // Check duplicate id
+        const existing = findCourseById(imported.id);
+        if (existing) {
+          // Generate new uuid to avoid collision
+          try {
+            imported.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});
+          } catch {}
+          imported.name = imported.name + ' (Import)';
+        }
+        courses.push(imported);
+        saveCourses();
+        renderCourseList();
+        importArea.classList.add('hidden');
+        if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+        if (importError) { importError.textContent = ''; importError.classList.add('hidden'); }
+        showToast('Course imported');
+      } catch (e) {
+        if (importError) { importError.textContent = 'Invalid course data'; importError.classList.remove('hidden'); }
+      }
+    });
+  }
+  const pauseExportBtn = document.getElementById('pause-export-button');
+  if (pauseExportBtn) {
+    pauseExportBtn.addEventListener('click', () => {
+      const cid = activeCourseId || (activeCourse ? activeCourse.id : null);
+      if (cid) exportCourseById(cid);
+      else if (courses.length) exportCourseById(courses[0].id);
+    });
+  }
+
   setupCanvas();
+  // REQ-031: load courses collection before progress (so courseId can be resolved)
+  try { loadCourses(); } catch (e) { console.warn('loadCourses failed', e); }
+  if (!courses.length) {
+    try { const c = generateCourse(18, Date.now()); courses = [c]; saveCourses(); } catch {}
+  }
+  // Ensure activeCourse defaults to first course if not yet set
+  if (!activeCourse && courses.length) {
+    setActiveCourse(courses[0]);
+  }
+  // Migration: legacy HIGH_SCORE_KEY -> first course bestTotal
+  try {
+    const legacy = getHighScore();
+    if (legacy != null && courses.length && courses[0].bestTotal == null) {
+      courses[0].bestTotal = legacy;
+      saveCourses();
+    }
+  } catch {}
   // REQ-004: init Three.js wind overlay (transparent shader + particles) on top of game canvas
   try {
     const container = document.getElementById('game-container');
@@ -1361,9 +1699,6 @@ function init() {
   const newGameBtnDom = document.getElementById("new-game-button");
   if (newGameBtnDom) newGameBtnDom.addEventListener("click", () => endRun());
   syncPauseOverlay();
-  // REQ-029: main menu wiring
-  const mainNewGameBtn = document.getElementById("main-new-game-button");
-  if (mainNewGameBtn) mainNewGameBtn.addEventListener("click", () => startNewGameFromMain());
   syncMainMenu();
   window.addEventListener("keydown", (e) => {
     // REQ-029: main menu blocks all inputs except New Game click - but never block browser shortcuts like F5

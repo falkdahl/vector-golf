@@ -15,14 +15,15 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
 
 ## Requirements
 
-1. **Storage Key, Format & Versioning** in `src/main.js` (and optionally `src/storage.js`):
-   - Key SHALL be a single namespaced key, e.g., `STORAGE_KEY = "golfVectorField.progress.v1"` (or `"golf.save.v1"`). Only one key SHALL be used; do not scatter multiple keys.
-   - Value SHALL be a JSON string `JSON.stringify(payload)` with explicit `version: 1` field to allow future migration. `localStorage.setItem(STORAGE_KEY, json)` SHALL be the only write path.
-   - Payload SHALL include at minimum the **restorable run state**:
+1. **Storage Keys, Format & Versioning** in `src/main.js` / `src/courses.js` (and optionally `src/storage.js`):
+   - **Active-run key**: `STORAGE_KEY = "golfVectorField.progress.v1"` (or `"golf.save.v1"`). Value SHALL be JSON string `JSON.stringify(payload)` with `version: 1`. `localStorage.setItem(STORAGE_KEY, json)` SHALL be the write path for active run.
+   - **Courses collection key** per REQ-031: `COURSES_KEY = "golfVectorField.courses.v1"` with payload `{version:1, courses: Course[]}` where each `Course` is per REQ-031 (`id`, `name`, `holes`, `holeCount`, `seed`, `createdAt`, `bestTotal`). This is a second namespaced key, so the game now uses **two** keys: one for active run, one for course collection (plus legacy `HIGH_SCORE_KEY` for migration). Do not scatter other keys.
+   - Payload for `STORAGE_KEY` SHALL include at minimum the **restorable run state** plus **`courseId`** linking to the active course:
      ```js
      {
        version: 1,
-       currentHoleIndex: number,          // 0..LEVELS.length-1
+       courseId: string,                  // UUID of active Course per REQ-031
+       currentHoleIndex: number,          // 0..course.holes.length-1
        holeAttempts: number,              // >=0 int
        totalAttempts: number,             // >=0 int, alias attempts
        supply: {amplify:number, nullify:number, flip:number},
@@ -84,8 +85,9 @@ As a static site (`python -m http.server`, GitHub Pages) there is no backend. `l
        } catch { return null; }
      }
      ```
-   - If `loadProgress()` returns valid data and `data.currentHoleIndex` is within `0..LEVELS.length-1`:
-     - Restore: `currentHoleIndex=data.currentHoleIndex`, `holeAttempts=data.holeAttempts`, `totalAttempts=data.totalAttempts`, `supply=data.supply`, `freeShots=data.freeShots`, `areaUpgradeCount=data.areaUpgradeCount`, `bouncyBallCount=data.bouncyBallCount`, `sharpshooterCount=data.sharpshooterCount||0`, `secretRewardCounter=data.secretRewardCounter`, `rewardPending`, `rewardOffered`, `rewardRerolled`, `modifiers = (data.modifiers||[]).slice()`, `aimAngle=data.aimAngle`.
+   - If `loadProgress()` returns valid data and `data.courseId` exists in the courses collection (`loadCourses().find(c=>c.id===data.courseId)`) and `data.currentHoleIndex` is within `0..course.holes.length-1` (where `LEVELS` is now `course.holes` of the active course per REQ-031):
+     - Resolve active course via `courseId`; set `LEVELS = course.holes` (or `activeCourse.holes`) before using `currentHoleIndex`.
+     - Restore: `currentHoleIndex=data.currentHoleIndex`, `holeAttempts=data.holeAttempts`, `totalAttempts=data.totalAttempts`, `supply=data.supply`, `freeShots=data.freeShots`, `areaUpgradeCount=data.areaUpgradeCount`, `bouncyBallCount=data.bouncyBallCount`, `sharpshooterCount=data.sharpshooterCount||0`, `secretRewardCounter=data.secretRewardCounter`, `rewardPending`, `rewardOffered`, `rewardRerolled`, `modifiers = (data.modifiers||[]).slice()`, `aimAngle=data.aimAngle`, and `courseId` (kept as `activeCourseId` for `saveProgress`).
      - Recompute derived: `areaMultiplier=1+0.2*areaUpgradeCount`, effective radius via `getEffectiveModifierRadius()` (which now reflects restored count), `bouncyRemaining=bouncyBallCount` (per-attempt init), `attempts=totalAttempts`.
      - Re-initialize field for the restored hole: `createField(cols,rows, level.field.strength, seed, LOGICAL_W, LOGICAL_H)` then `setModifiers(modifiers)` and `syncModifiersToField()`, so wind arrows immediately reflect restored modifiers.
      - Place ball at tee of restored hole: `physicsResetBall(tee)` (or `ball.pos={...tee}` `vel={0,0}` `isMoving=false`), `gameState="AIMING"` (never resume as `FLYING`/`WIN` even if saved while flying – ball is always at tee on resume for determinism).

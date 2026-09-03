@@ -111,6 +111,9 @@ Players need a discoverable way to pause, inspect run progress, and restart with
    - No new HUD element outside the menu. The reward counts are only visible inside the pause menu bottom list, not in `drawHUD` or win overlay (hidden stats, like `freeShots`/`areaUpgradeCount`).
    - Counts SHALL be persisted via `saveProgress`/`loadProgress` (REQ-027 payload extension) so the bottom list shows correct `xN` after reload (e.g., `Amplify x2` still `x2` after revisit). `clearProgress` SHALL reset them to `0`.
 
+7. **Export Course in Pause Menu (REQ-031)**:
+   - Inside `#pause-overlay .pause-content`, below `Resume`/`End Run` and above the reward stats list, there SHALL be an **Export Course** button (`id="pause-export-button"` `class="course-export-button"`, label `⎙ Export Course` or `Export Course`, style `background:rgba(255,255,255,0.10)` `border:1px solid rgba(255,255,255,0.25)` white with stroke, similar to per-course export in main menu). It SHALL export the **active course** (the `Course` whose `id === courseId` from `STORAGE_KEY` / `activeCourse`) via `exportCourse(activeCourse)` → `btoa(JSON.stringify(activeCourse))` → `navigator.clipboard.writeText` (with `execCommand` fallback) and show the same **toast “copied to clipboard”** (`#toast` `copied to clipboard` `2000ms`) as main-menu export per REQ-031 §4, without closing the pause menu or ending the run. If no active course (should not happen when pause is visible), the button SHALL be hidden/disabled and do nothing. This satisfies REQ-031’s “beside each course button, and in the pause menu, there should be a button to export course”.
+
 ## Acceptance Criteria
 
 - [ ] On fresh page load (new game, `pauseMenuVisible=false`, `supply={1,1,1}`, no reward menu), pressing `Escape` with no modifier selected (`selectedModifier===null`) immediately opens pause overlay: full-canvas dim `rgba(0,0,0,0.55)`, title `Paused` `700 22px` white with stroke `5px`, two centered buttons `Resume` (`140×44` white border/fill `0.12` hover `0.22`, `▶` icon) and `New Game` (`↺` red `rgba(231,76,60,0.28)`) with hover brighten and `cursor pointer`. Pressing `Escape` again or clicking `Resume` closes the menu (`pauseMenuVisible false`) and returns to `AIMING` without changing `currentHoleIndex`, `holeAttempts`, `totalAttempts`, `supply={1,1,1}`, `secretRewardCounter=0`, or `modifiers`.
@@ -122,6 +125,7 @@ Players need a discoverable way to pause, inspect run progress, and restart with
 - [ ] Bottom reward list: when pause is open, below the two buttons is a centered list of **all** reward types (6 types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%`, `Bouncy Ball +1` — or 7 if sharpshooter pool is implemented) each showing icon `»`/`∅`/`⇄`/`★`/`◯`/`◎` with correct colors (`#e67e22/#3498db/#9b59b6/#2ecc71/#f39c12/#1abc9c`) and a count `xN` (e.g., `x0` before any claim, `x1` after one claim from first reward). The count SHALL be the **times chosen** this run, not remaining inventory: verified via `getRewardChosenCounts().amplify===1` after one `Amplify` claim (supply then `2`), `freeShots` chosen `1` shows `x1` even if `freeShots` remaining is `2` after one use, `areaUp x1` shows `1` after one `Area +20%` claim. The list SHALL persist through hole advances (e.g., `Amplify x1` still `x1` on hole 2) and after reload (e.g., reload after `Amplify x1` still shows `x1` via `loadProgress`). After `New Game`, all counts back to `x0` and supply is `{1,1,1}`.
 - [ ] Counts are hidden outside pause menu: `drawHUD` still shows only `Hole: N/M` `Attempts: X` `Total: Y`, win overlay shows only hole/total, no `xN` in HUD. `window.__getRewardChosenCounts()` returns correct map.
 - [ ] Persistence: after `Amplify x1` (first reward) then page reload, pause reopened shows `Amplify x1` (not `x0`). `localStorage` payload contains `rewardChosenCounts` and is versioned. Corrupt storage reloads as new game with counts `0` and supply `{1,1,1}`.
+- [ ] **Pause Export (REQ-031)**: pause overlay shows an additional `Export Course` button (`#pause-export-button` `⎙ Export Course`) below `Resume`/`End Run`; clicking it copies the active course’s base64 (same string as main-menu export for that course) via `navigator.clipboard.writeText` and shows toast `copied to clipboard` for ~2s without closing pause or ending run; if no active course, button is hidden/disabled.
 - [ ] No 3rd-party libraries; pure vanilla JS `pauseMenuVisible` boolean, `keydown Escape` branching, `localStorage` for clear (reuse REQ-027 key), canvas or DOM rendering with high-contrast white text on dim.
 
 ## Dependencies
@@ -133,6 +137,7 @@ Players need a discoverable way to pause, inspect run progress, and restart with
 - REQ-022/REQ-023/REQ-024 (freeShots, area, bouncy — counts derived, `addFreeShots`/`addAreaUpgrade`/`addBouncyBall`)
 - REQ-025 (reroll state, must not be affected by pause)
 - REQ-027 (localStorage `saveProgress`/`loadProgress`/`clearProgress`, extend payload with `rewardChosenCounts`)
+- REQ-031 (courses collection, per-course export via base64 + toast)
 
 ## Notes
 
