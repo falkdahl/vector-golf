@@ -6,7 +6,6 @@ import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, res
 import {
   initParticles,
   updateParticles,
-  drawBackground,
   drawArrows,
   drawParticles,
   drawObstacles,
@@ -22,19 +21,111 @@ import {
   getRewardRerollButtonLayout,
   drawPauseMenu,
   getPauseButtonsLayout,
-  drawMainMenu,
-  getMainMenuButtonsLayout,
   setCanvasSize,
   toggleWind as toggleWindRender,
   isWindVisible
 } from "./render.js";
 
-const LOGICAL_W = LEVEL.canvas.width;
-const LOGICAL_H = LEVEL.canvas.height;
+const LOGICAL_W = 1280;
+const LOGICAL_H = 720;
 const FIXED_DT = 1 / 60;
 
 let canvas;
 let ctx;
+let bgCanvas;
+let bgCtx;
+// Background images for REQ-030: tiled grass (level) vs splash (main menu)
+const grassImg = new Image();
+grassImg.src = './img/grass_seamless.webp';
+const splashImg = new Image();
+splashImg.src = './img/gfg-splash.png';
+splashImg.onerror = () => {
+  // Fallback typo file in repo is gfg-spash.png
+  if (splashImg.src.includes('gfg-splash.png')) {
+    splashImg.src = './img/gfg-spash.png';
+  }
+};
+const GRASS_SCALE = 0.38; // scale down grass so strands appear smaller (1024 -> ~389)
+let grassPattern = null;
+let grassPatternScaledCanvas = null;
+function ensureGrassPattern() {
+  try {
+    if (grassImg.complete && grassImg.naturalWidth && bgCtx) {
+      const sw = Math.max(1, Math.round(grassImg.naturalWidth * GRASS_SCALE));
+      const sh = Math.max(1, Math.round(grassImg.naturalHeight * GRASS_SCALE));
+      const off = document.createElement('canvas');
+      off.width = sw;
+      off.height = sh;
+      const octx = off.getContext('2d');
+      octx.imageSmoothingEnabled = true;
+      octx.imageSmoothingQuality = 'high';
+      octx.drawImage(grassImg, 0, 0, sw, sh);
+      grassPatternScaledCanvas = off;
+      grassPattern = bgCtx.createPattern(off, 'repeat');
+    }
+  } catch {}
+}
+if (typeof window !== 'undefined') {
+  grassImg.onload = () => { ensureGrassPattern(); redrawBottom(); };
+  splashImg.onload = () => { redrawBottom(); };
+  splashImg.onerror = () => { /* try fallback already */ setTimeout(() => redrawBottom(), 50); };
+}
+function redrawBottom() {
+  if (!bgCanvas || !bgCtx) return;
+  // Ensure pattern exists
+  if (!grassPattern) ensureGrassPattern();
+  const dpr = window.devicePixelRatio || 1;
+  // Use helper from render if available, else fallback
+  try {
+    // drawBackground is imported from render.js — but to avoid circular deps we handle inline
+    // Use logical W/H with DPR transform already set in setupCanvases
+    bgCtx.save();
+    bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (mainMenuVisible) {
+      // splash cover
+      bgCtx.fillStyle = '#1a1a1a';
+      bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      if (splashImg.complete && splashImg.naturalWidth) {
+        const scale = Math.max(LOGICAL_W / splashImg.naturalWidth, LOGICAL_H / splashImg.naturalHeight);
+        const w = splashImg.naturalWidth * scale;
+        const h = splashImg.naturalHeight * scale;
+        const x = (LOGICAL_W - w) / 2;
+        const y = (LOGICAL_H - h) / 2;
+        bgCtx.drawImage(splashImg, x, y, w, h);
+      } else {
+        bgCtx.fillStyle = '#2c3e50';
+        bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      }
+    } else {
+      // grass tiled scaled down so strands appear smaller
+      if (!grassPattern) ensureGrassPattern();
+      if (grassPattern) {
+        bgCtx.fillStyle = grassPattern;
+        bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      } else if (grassImg.complete && grassImg.naturalWidth) {
+        // fallback manual tiled scaled
+        try {
+          const iw = Math.round(grassImg.naturalWidth * GRASS_SCALE);
+          const ih = Math.round(grassImg.naturalHeight * GRASS_SCALE);
+          bgCtx.fillStyle = '#3a9d23';
+          bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+          for (let y = 0; y < LOGICAL_H; y += ih) {
+            for (let x = 0; x < LOGICAL_W; x += iw) {
+              bgCtx.drawImage(grassImg, x, y, iw, ih);
+            }
+          }
+        } catch {
+          bgCtx.fillStyle = '#3a9d23';
+          bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+        }
+      } else {
+        bgCtx.fillStyle = '#3a9d23';
+        bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      }
+    }
+    bgCtx.restore();
+  } catch {}
+}
 let gameState = "AIMING"; // AIMING, CHARGING, FLYING, WIN
 let accumulator = 0;
 let lastTime = 0;
@@ -305,20 +396,19 @@ function maybeUpdateHighScore() {
 }
 function syncMainMenu() {
   const el = document.getElementById("main-menu-overlay");
-  const cvs = document.getElementById("game");
-  const title = document.querySelector("h1");
-  const help = document.getElementById("instructions");
-  // Main menu is now canvas-only per user request: keep DOM overlay hidden, keep canvas/title/help visible
-  if (el) el.classList.add("hidden");
-  if (cvs) cvs.style.visibility = "";
-  if (title) title.style.display = "";
-  if (help) help.style.display = "";
-  // High score is rendered inside canvas via drawMainMenu; still update DOM text for tests that query it if needed
   if (el) {
     const hs = getHighScore();
     const hse = el.querySelector(".high-score");
     if (hse) hse.textContent = hs == null ? "Current high score: —" : `Current high score: ${hs}`;
+    if (mainMenuVisible) {
+      el.classList.remove("hidden");
+    } else {
+      el.classList.add("hidden");
+    }
   }
+  // Ensure bottom background reflects mode (splash vs grass) per REQ-030
+  redrawBottom();
+  updateHotbarUI();
 }
 function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {
@@ -545,14 +635,27 @@ let nextHoleButton;
 
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = LOGICAL_W * dpr;
-  canvas.height = LOGICAL_H * dpr;
-  canvas.style.width = LOGICAL_W + "px";
-  canvas.style.height = LOGICAL_H + "px";
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.imageSmoothingEnabled = true;
+  // Both canvases share same logical 16:9 and same backing store DPR
+  for (const c of [bgCanvas, canvas].filter(Boolean)) {
+    c.width = LOGICAL_W * dpr;
+    c.height = LOGICAL_H * dpr;
+    // CSS size is 100% of the 16:9 container (style.css handles width/height via 100%)
+    c.style.width = '100%';
+    c.style.height = '100%';
+    const cctx = c.getContext('2d');
+    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cctx.imageSmoothingEnabled = true;
+  }
+  if (ctx) ctx.imageSmoothingEnabled = true;
+  if (bgCtx) bgCtx.imageSmoothingEnabled = true;
   setCanvasSize(LOGICAL_W, LOGICAL_H);
+  // Invalidate grass pattern so it is recreated for new DPR/context (scaled)
+  grassPattern = null;
+  grassPatternScaledCanvas = null;
+  // Redraw bottom layer for current mode after DPR change
+  redrawBottom();
 }
+function setupCanvases() { return setupCanvas(); }
 
 function loadLevel(index) {
   currentHoleIndex = index;
@@ -563,7 +666,7 @@ function loadLevel(index) {
   // REQ-020: supply persists across hole advances, do NOT reset supply here
   modifiers = [];
   syncModifiersToField();
-  // Keep canvas size consistent per REQ-010 (all levels 900x600); if varying, would re-setup canvas
+  // Keep canvas size consistent per REQ-010 16:9 (1280×720); if varying, would re-setup canvas
   initParticles(80, LOGICAL_W, LOGICAL_H);
   createBall(level.tee);
   const dx = level.hole.x - level.tee.x;
@@ -708,7 +811,7 @@ function syncPauseOverlay() {
 function getCanvasMousePos(e) {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  // Use logical coordinates (900x600)
+  // Use logical coordinates (1280×720 16:9)
   const scaleX = LOGICAL_W / rect.width;
   const scaleY = LOGICAL_H / rect.height;
   const x = (e.clientX - rect.left) * scaleX;
@@ -1010,18 +1113,19 @@ function updateForceBar() {
 }
 
 function render() {
-  // clear (use logical coords due to transform)
-  ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+  // Top canvas is transparent; clear every frame with DPR transform
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-  // Main menu is canvas-only, no playing field per user request
+  // Main menu: HTML overlay handles menu; top canvas stays transparent so bottom splash is visible through
   if (mainMenuVisible) {
-    drawMainMenu(ctx, LOGICAL_W, LOGICAL_H, mainMenuHover, getHighScore());
+    // No game elements drawn on top while main menu is visible (bottom shows splash, HTML overlay is centered)
     return;
   }
 
-  // Draw order: background -> arrows -> particles -> obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers (on top)
-  drawBackground(ctx, LOGICAL_W, LOGICAL_H);
+  // Draw order on TOP canvas (transparent): arrows -> particles -> obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers
+  // Background is on BOTTOM canvas (tiled grass via redrawBottom), not drawn here
   drawArrows(ctx, getWindAt, cols, rows, cellW, cellH);
   drawParticles(ctx);
   drawModifiers(ctx, modifiers);
@@ -1079,12 +1183,14 @@ function loop(now) {
 }
 
 function init() {
+  bgCanvas = document.getElementById("bg-canvas");
   canvas = document.getElementById("game");
-  if (!canvas) {
-    console.error("Canvas #game not found");
+  if (!canvas || !bgCanvas) {
+    console.error("Canvas #game or #bg-canvas not found");
     return;
   }
   ctx = canvas.getContext("2d");
+  bgCtx = bgCanvas.getContext("2d");
   winOverlay = document.getElementById("win-overlay");
   winAttemptsValue = document.getElementById("win-attempts-value");
   winHoleValue = document.getElementById("win-hole-value");
@@ -1386,14 +1492,8 @@ function init() {
   // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020 + REQ-021
   canvas.addEventListener("mousemove", (e) => {
     if (mainMenuVisible) {
-      const pos = getCanvasMousePos(e);
-      try {
-        const ml = getMainMenuButtonsLayout(LOGICAL_W, LOGICAL_H);
-        const btn = ml.newGame;
-        const over = pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h;
-        mainMenuHover = over ? "newGame" : null;
-        canvas.style.cursor = over ? "pointer" : "default";
-      } catch { mainMenuHover = null; }
+      // Main menu is HTML overlay bounded to canvas (REQ-029/030) — no canvas hit-testing; cursor handled by HTML
+      canvas.style.cursor = "default";
       return;
     }
     // REQ-028: handle hover for pause menu
@@ -1507,18 +1607,8 @@ function init() {
     }
   });
   canvas.addEventListener("click", (e) => {
-    // REQ-029: main menu first
+    // REQ-029/030: main menu is HTML overlay bounded to canvas — canvas clicks while menu visible are ignored (HTML button handles New Game)
     if (mainMenuVisible) {
-      const pos = getCanvasMousePos(e);
-      try {
-        const ml = getMainMenuButtonsLayout(LOGICAL_W, LOGICAL_H);
-        const btn = ml.newGame;
-        if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
-          startNewGameFromMain();
-          e.preventDefault();
-          return;
-        }
-      } catch {}
       e.preventDefault();
       return;
     }

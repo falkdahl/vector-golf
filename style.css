@@ -6,6 +6,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   font-family: system-ui, -apple-system, sans-serif;
   background: #1a1a1a;
   color: #eee;
@@ -18,21 +19,41 @@ h1 {
   margin: 10px 0 8px;
   font-size: 1.8rem;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 
 #game-container {
   position: relative;
-  display: inline-block;
+  width: min(95vw, calc(95vh * 16 / 9));
+  height: min(95vh, calc(95vw * 9 / 16));
+  aspect-ratio: 16 / 9;
+  margin: auto;
+  display: block;
+  flex-shrink: 0;
 }
 
-canvas {
+#game-container canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
   border: 3px solid #222;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  max-width: 95vw;
-  height: auto;
+  max-width: none;
+}
+
+#bg-canvas {
+  z-index: 1;
   background: #3a9d23;
+  pointer-events: none;
+}
+
+#game {
+  z-index: 2;
+  background: transparent;
+  pointer-events: auto;
 }
 
 #win-overlay {
@@ -183,10 +204,12 @@ canvas {
 #main-menu-overlay {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,0.35);
   border-radius: 8px;
   z-index: 12;
 }
@@ -203,6 +226,9 @@ canvas {
   align-items: center;
   gap: 12px;
   position: relative;
+  max-width: 90%;
+  max-height: 90%;
+  overflow: hidden;
 }
 .main-menu-content h2 {
   margin: 0 0 4px;

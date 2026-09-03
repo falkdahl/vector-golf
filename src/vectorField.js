@@ -1,7 +1,7 @@
 // Tunable constants at top per REQ-003 - very high acceleration (faster wind per user request)
 export const WIND_STRENGTH = 180;
-export const DEFAULT_COLS = 20;
-export const DEFAULT_ROWS = 15;
+export const DEFAULT_COLS = 32;
+export const DEFAULT_ROWS = 18;
 export const MAX_POWER_REF = 600; // for min force calc per REQ-003
 export const MIN_WIND_FORCE = 80; // increased from 60 for faster drift (13% of max power)
 
@@ -30,8 +30,8 @@ export let cols = DEFAULT_COLS;
 export let rows = DEFAULT_ROWS;
 export let cellW = 0;
 export let cellH = 0;
-let canvasW = 900;
-let canvasH = 600;
+let canvasW = 1280;
+let canvasH = 720;
 
 // For testing edge/inside invariants
 let _lastSourcePositions = [];
@@ -74,7 +74,7 @@ function sampleInside(width, height, rand, margin = 20) {
   return { x, y };
 }
 
-export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_STRENGTH, seed = 42, width = 900, height = 600, nSources, nSinks, nDoublets, nVortexes, _ignoredUnary) {
+export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_STRENGTH, seed = 42, width = 1280, height = 720, nSources, nSinks, nDoublets, nVortexes, _ignoredUnary) {
   // Flexible signature: support options object as 7th param
   // createField(cols, rows, strength, seed, width, height, {sources, sinks, doublets, vortexes})
   // or createField(cols, rows, strength, seed, width, height, nSources, nSinks, nDoublets, nVortexes)

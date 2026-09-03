@@ -7,7 +7,7 @@ function mulberry32(a) {
   };
 }
 
-function generateObstacles(count, tee, hole, rand, width = 900, height = 600) {
+function generateObstacles(count, tee, hole, rand, width = 1280, height = 720) {
   const obstacles = [];
   let attempts = 0;
   while (obstacles.length < count && attempts < 800) {
@@ -149,17 +149,20 @@ function segmentsIntersect(a, b, c, d) {
   return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
 }
 
+const LOGICAL_W = 1280;
+const LOGICAL_H = 720;
 function _generateLevelsInternal(seed = 42, count = 18) {
   const rand = mulberry32(seed);
   const levels = [];
   for (let i = 0; i < count; i++) {
     const levelNum = i + 1;
-    const teeX = Math.floor(rand() * 80) + 40;
-    const teeY = Math.floor(rand() * 440) + 80;
-    const tee = { x: Math.max(40, Math.min(140, teeX)), y: teeY };
-    const holeX = Math.floor(rand() * 80) + 760;
-    const holeY = Math.floor(rand() * 440) + 80;
-    const hole = { x: Math.max(760, Math.min(860, holeX)), y: holeY, radius: 14 };
+    // 16:9 scaled: tee left 3-14% of width, hole right 86-97% of width, y in [80, H-80]
+    const teeX = Math.floor(rand() * 100) + 40;
+    const teeY = Math.floor(rand() * (LOGICAL_H - 160)) + 80;
+    const tee = { x: Math.max(40, Math.min(180, teeX)), y: teeY };
+    const holeX = Math.floor(rand() * 100) + (LOGICAL_W - 140);
+    const holeY = Math.floor(rand() * (LOGICAL_H - 160)) + 80;
+    const hole = { x: Math.max(LOGICAL_W - 180, Math.min(LOGICAL_W - 40, holeX)), y: holeY, radius: 14 };
 
     let sources = 1, sinks = 1, doublets = 0, vortexes = 0;
     let obsCount = 0;
@@ -204,15 +207,15 @@ function _generateLevelsInternal(seed = 42, count = 18) {
     }
     obsCount = Math.min(12, obsCount);
     const fieldSeed = seed + i * 9973 + levelNum * 101;
-    const obstacles = generateObstacles(obsCount, tee, hole, rand, 900, 600);
+    const obstacles = generateObstacles(obsCount, tee, hole, rand, LOGICAL_W, LOGICAL_H);
     levels.push({
       id: `hole-${levelNum}`,
       name: `Hole ${levelNum}`,
-      canvas: { width: 900, height: 600 },
+      canvas: { width: LOGICAL_W, height: LOGICAL_H },
       tee,
       hole,
       obstacles,
-      field: { cols: 20, rows: 15, strength, seed: fieldSeed, sources, sinks, doublets, vortexes }
+      field: { cols: 32, rows: 18, strength, seed: fieldSeed, sources, sinks, doublets, vortexes }
     });
   }
   return levels;

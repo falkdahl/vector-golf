@@ -32,9 +32,9 @@ User explicitly selected "Both" (arrows + particles) when asked how wind should 
    - Render as 2px dots/ticks `rgba(180,220,255, alpha*0.65)` with alpha from fade, optionally with short trail whose opacity also fades.
    - Particle count SHALL be capped to maintain 60fps; tunable constant `PARTICLE_COUNT`.
 
-3. Both layers SHALL be drawn behind ball/obstacles but above background (z-order: background -> arrows -> particles -> obstacles -> hole -> ball -> aim line).
+3. Both layers SHALL be drawn **on the top transparent canvas** (`#game`) behind ball/obstacles but above the bottom background (z-order: bottom background image (grass/splash) -> [top canvas] arrows -> particles -> obstacles -> hole -> ball -> aim line). They SHALL be visible through the transparent top canvas over the bottom tiled grass (REQ-030).
 4. A toggle key `H` SHALL hide/show wind visualization for performance/clarity (optional but recommended).
-5. Visualization SHALL be pure canvas drawing, no images.
+5. Visualization SHALL be pure canvas drawing, no images (background images per REQ-030 are excluded from this rule; they are rendered only on the bottom canvas).
 
 ## Acceptance Criteria
 
@@ -46,7 +46,7 @@ User explicitly selected "Both" (arrows + particles) when asked how wind should 
 - [ ] Each particle fades from opaque to transparent over 2s (`alpha = life/2.0`) and dies exactly at 2s, then respawns uniformly random across the whole map (not at edge cluster). No particle is visible longer than 2s without fading.
 - [ ] Particle wrapping/respawn maintains even whole-map coverage: no accumulation at edges, continuous flow over 10 seconds observation with particles always visible across entire screen, with constant fading cycle.
 - [ ] Toggling `H` hides/shows both layers without affecting physics.
-- [ ] FPS stays >=55 on Chrome with 80 particles + 300 arrows on 900x600 canvas (measured via DevTools).
+- [ ] FPS stays >=55 on Chrome with 80 particles + 300 arrows on `1280×720` 16:9 canvas (or `32×18` grid) with stacked canvases (measured via DevTools). Legacy `900×600` reference is deprecated per REQ-002/REQ-030.
 
 ## Dependencies
 - REQ-003 (field must exist)

@@ -21,6 +21,7 @@ User requirement: "only use html5 canvas and pure javascript without any 3rd par
 4. All JavaScript SHALL be organized under `src/` (e.g., `src/main.js`, `src/physics.js`, etc.) and imported via relative ESM imports.
 5. The site SHALL run when served as static files (`python3 -m http.server 8000` from repo root serves `index.html` correctly).
 6. The repository SHALL include a `README.md` with run and deploy instructions.
+7. The project MAY include static image assets under `img/` (specifically `img/grass_seamless.webp` and `img/gfg-splash.png` per REQ-030). These SHALL be referenced via relative paths (`./img/...`) and served as static files with no external CDN. No other third-party downloads SHALL be required.
 
 ## Acceptance Criteria
 

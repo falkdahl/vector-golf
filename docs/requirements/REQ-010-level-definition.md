@@ -18,22 +18,23 @@ On start of a **new game**, the game SHALL **procedurally generate exactly 18 le
 1. **Generation entry point in `src/levels.js`**:
    - SHALL export `LEVELS: Level[]` (length `18` after generation) and a function `generateLevels(seed?: number, count?: number): Level[]` (or `createLevels`, `generateProceduralLevels`) that (re)creates the 18 levels. `src/main.js` SHALL call this on **new game start** (`startNewGame()`, `startNewGameFromMain()`, `resetGameAfterWin()`, and initial load with no save) before `loadLevel(0)`. The seed MAY be `Date.now()` or `Math.floor(Math.random()*1e9)` for fresh games, or a fixed debug seed if `?seed=` is present; generation MUST be deterministic for a given seed (same PRNG sequence yields same 18).
    - `LEVELS` after generation SHALL have `length === 18`, each element as:
-     ```js
-     {
-       id: "hole-1" … "hole-18",
-       name: `Hole ${i+1}`,
-       canvas: {width:900, height:600},
-       tee: {x:number, y:number},
-       hole: {x:number, y:number, radius:14},
-       obstacles: Array<{type:'rect',x,y,w,h} | {type:'circle',x,y,r}>,
-       field: {cols:20, rows:15, strength:number, seed:number, sources:number, sinks:number, doublets:number, vortexes:number}
-     }
-     ```
+      ```js
+      {
+        id: "hole-1" … "hole-18",
+        name: `Hole ${i+1}`,
+        canvas: {width:LOGICAL_W, height:LOGICAL_H}, // 16:9 e.g., 1280×720 per REQ-002/REQ-030, not 900×600
+        tee: {x:number, y:number},
+        hole: {x:number, y:number, radius:14},
+        obstacles: Array<{type:'rect',x,y,w,h} | {type:'circle',x,y,r}>,
+        field: {cols:32, rows:18, strength:number, seed:number, sources:number, sinks:number, doublets:number, vortexes:number} // 32×18 for 1280×720 square cells; 20×15 legacy tolerated if scaled to 16:9
+      }
+      ```
+      `LOGICAL_W×LOGICAL_H` SHALL be 16:9 (`1280×720` default per REQ-002/REQ-030, `width/height=1.777`). All `tee.x/hole.x/y` ranges SHALL be scaled to this logical size (see §2).
 
-2. **Tee left / hole right, random height**:
-   - For every level `i`, `tee.x ∈ [40, 140]` (left side, default `80`) and `hole.x ∈ [760, 860]` (right side, default `820`), guaranteeing `hole.x - tee.x ≥ 600` (REQ-010:4).
-   - `tee.y` and `hole.y` SHALL be sampled **randomly** per hole via the seeded PRNG (`rand()*(height-160)+80`, i.e., `y∈[80,520]` with `20px` margin from top/bottom), **deterministically** from the generation seed (so same seed → same heights). The two heights MAY be independent (different `rand()` calls) to create varied up/down shots.
-   - No hard-coded `y` (e.g., `300`) for all holes; heights MUST vary across the 18 (verify at least `≥10` distinct `tee.y` and `≥10` distinct `hole.y` values).
+2. **Tee left / hole right, random height** (scaled to 16:9 logical per REQ-002/REQ-030, e.g., `LOGICAL_W=1280, LOGICAL_H=720`):
+    - For every level `i`, `tee.x ∈ [40, 180]` scaled to `LOGICAL_W` (e.g., `≈3-14%` of W, default `≈80` at 1280) on left side and `hole.x ∈ [LOGICAL_W-180, LOGICAL_W-40]` on right side, guaranteeing `hole.x - tee.x ≥ LOGICAL_W*0.6` (e.g., `≥ 768` at `1280`). Legacy `40,140 / 760,860` for `900×600` SHALL be mapped proportionally to new `W`.
+    - `tee.y` and `hole.y` SHALL be sampled **randomly** per hole via the seeded PRNG (`rand()*(LOGICAL_H-160)+80`, i.e., `y∈[80, LOGICAL_H-80]` with `20px` margin from top/bottom), **deterministically** from the generation seed (so same seed → same heights). The two heights MAY be independent (different `rand()` calls) to create varied up/down shots.
+    - No hard-coded `y` (e.g., `300`) for all holes; heights MUST vary across the 18 (verify at least `≥10` distinct `tee.y` and `≥10` distinct `hole.y` values).
 
 3. **Field progression — sources/sinks/doublets/vortexes per REQ-003** (edge sources/sinks, interior vortex/doublet, no unary):
    - **Level 1 (hole-1)**: `field = {cols:20, rows:15, strength:80-90, seed, sources:1, sinks:1, doublets:0, vortexes:0}` with the single source **exactly on the left edge** (`x==0`, `y∈[0,height]` sampled uniformly along left side) and the single sink **exactly on the right edge** (`x==width`, `y∈[0,height]`). This satisfies REQ-003 mandatory edge + no interior vortex/doublet is coerced, but for level 1 the coercion SHALL be **overridden** to allow `0` vortex/doublet so the first field is just source→sink cross-breeze for tutorial. If the generic `createField` would coerce a vortex, level 1 SHALL explicitly pass `0,0` and the generator SHALL bypass the coercion for this level (or the field SHALL be documented as the single exception with `0` interior).
@@ -124,7 +125,7 @@ On start of a **new game**, the game SHALL **procedurally generate exactly 18 le
       if(levelNum<=6) strength = 80 + (levelNum-1)*5; // 80,85,90,95,100,105
       else strength = 105 + Math.floor((levelNum-6)/2)*2 + (levelNum>6 && levelNum%2===1 ? 2 : 0); // 105,107,109...
       if(strength>125) strength=125;
-      levels.push({id:`hole-${levelNum}`, name:`Hole ${levelNum}`, canvas:{width:900,height:600}, tee, hole, obstacles, field:{cols:20,rows:15,strength, seed: seed + i*9973 + levelNum*101, sources, sinks, doublets, vortexes}});
+       levels.push({id:`hole-${levelNum}`, name:`Hole ${levelNum}`, canvas:{width:LOGICAL_W,height:LOGICAL_H}, tee, hole, obstacles, field:{cols:32,rows:18,strength, seed: seed + i*9973 + levelNum*101, sources, sinks, doublets, vortexes}}); // LOGICAL 16:9 e.g., 1280×720; cols/rows 32×18 keeps square cells
     }
     return levels;
   }
