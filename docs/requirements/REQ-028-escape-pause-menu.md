@@ -1,225 +1,138 @@
-# REQ-028: Escape Pause Menu — Resume / New Game + Reward Stats
+# REQ-028: Escape/P Shows Main Menu With Backdrop — Works Even In Flight, Continue Resumes, End Run Abandons, Never New Game
 
 - **ID:** REQ-028
-- **Title:** Pause Menu via Escape — Resume & New Game + Reward Counts (xN)
-- **Priority:** Should Have
+- **Title:** Escape or P During Level Shows Main Menu Buttons With Backdrop Shadowing Field — Works In Flight, Continue Hides Overlay To Resume, End Run Clears Storage Without Record, Never New Game
+- **Priority:** Must Have
 - **Type:** Functional + UI
 - **Status:** Draft
-- **Related Plan Section:** Game States / UI (REQ-011/REQ-014 Extension)
+- **Related Plan Section:** Game States / UI / Persistence (REQ-011/REQ-027/REQ-029 Extension)
 
 ## Description
-The game SHALL provide a pause menu accessible with the **Escape** key. The menu SHALL have two buttons: **Resume** which simply closes the menu and resumes play, and **New Game** which clears the current run state and starts over at hole 1 with supply `{1,1,1}` and no pending reward. In the bottom of the menu SHALL be a list of all reward types with a count `xN` showing how many times the player has chosen that reward in the current run (e.g., `Amplify x5` means amplify was chosen 5 times this run).
+While the player is **currently in a level** (a run is active: `mainMenuVisible===false`, `activeCourse` set, `STORAGE_KEY` has a `courseId`, regardless of `gameState` being `AIMING`, `CHARGING`, `FLYING`, or even `WIN` — but **`Escape` or `P` SHALL work even if a ball is in flight**), pressing **either `Escape` (`e.code==="Escape"`) or `P` (`e.code==="KeyP"`)** SHALL show the **main menu buttons `Continue`, `Help`, plus an extra `End Run`** **with a backdrop shadowing the playing field** (semi-transparent dim) — **never `New Game`**. This is the same HTML overlay as the entry main menu (REQ-029) but in **in-level pause mode with backdrop** (vs splash entry mode without backdrop, which never shows `End Run` and does show `New Game`). Pressing **Continue** (or `Escape`/`P` again) SHALL simply **hide the overlay and resume the game** at the exact state it was paused (ball position/velocity preserved if it was in flight). Pressing **`End Run`** SHALL **end the current run**, **remove it from `localStorage`** (`STORAGE_KEY` cleared), reset to entry main menu (splash, no backdrop) and **shall NOT count toward the per-course record** (`bestTotal` unchanged). The **pause menu while inside a level SHALL never show the button "New Game"** (even though entry does).
 
 ## Rationale
-Players need a discoverable way to pause, inspect run progress, and restart without waiting for a win. Escape is the standard PC pause affordance and is already partially used to deselect modifiers (REQ-015). Centralizing `Resume`/`New Game` in a single overlay avoids hidden `R`-only resets and makes the new `localStorage` persistence (REQ-027) understandable — `New Game` explicitly clears the saved run. Showing reward counts `xN` at the bottom gives immediate feedback on build (how many times each upgrade was taken), which is otherwise invisible (counters are hidden per REQ-022/023/024), and helps players plan future rerolls without opening storage. New games start with one of each modifier (`{1,1,1}`) per REQ-020 and no initial reward pending per REQ-021.
+Players need standard pause affordances (`Escape` and `P` for `Pause`) that work at any time, including mid-flight, without losing progress. Reusing the main menu buttons (minus `New Game` to avoid starting a second course while paused) keeps the HUD minimal. A backdrop shadowing the field distinguishes pause (field is visible but dimmed) from the splash entry (field not visible). `End Run` gives an explicit abandon path that clears the persisted run without polluting leaderboards.
 
 ## Requirements
 
-1. **Trigger & State** in `src/main.js`:
-   - State SHALL include `pauseMenuVisible: boolean` (default `false`), and optionally `pauseMenuHover: string|null` for button hover.
-   - `pauseMenuVisible` SHALL be `false` on **new game** (`initLevel` with `currentHoleIndex===0`, `resetGameAfterWin`/`newGame()` via `New Game`, page reload with no saved progress).
-   - **Opening:** While `gameState` is `AIMING` or `CHARGING` and `rewardMenuVisible===false` and `gameState!=="WIN"` and `gameState!=="FLYING"`:
-     - If `selectedModifier !== null`, pressing `Escape` SHALL first **deselect** the modifier (set `selectedModifier=null`, `updateHotbarUI()`) and **not** open the pause menu (preserves REQ-015 deselection). A second press of `Escape` with `selectedModifier===null` SHALL set `pauseMenuVisible=true`.
-     - If `selectedModifier===null`, pressing `Escape` SHALL immediately set `pauseMenuVisible=true`.
-   - **Closing via key:** While `pauseMenuVisible===true`, pressing `Escape` again SHALL set `pauseMenuVisible=false` (i.e., `Resume`).
-   - **Blocking:** While `rewardMenuVisible===true` or `gameState==="WIN"`/`"GAME_COMPLETE"` or `gameState==="FLYING"`, pressing `Escape` SHALL **not** open the pause menu (reward menu has priority and blocks, WIN uses its own overlay). Specifically, `Escape` while `rewardMenuVisible` SHALL remain blocked per REQ-021 (no pause behind reward).
-   - **Focus:** While `pauseMenuVisible===true`, the existing pause path in `update(dt)` SHALL pause physics (like `WIN`/`rewardMenuVisible`): still call `updateParticles(dt, getWindAt)` and render, but do NOT advance `ball` physics, do not allow `handleLaunch()` or modifier placement/drag. `gameState` MAY stay `AIMING`/`CHARGING` or be a dedicated `PAUSED` state — either is acceptable if `update()` is blocked and `render()` still draws.
-   - `pauseMenuVisible` SHALL be reset to `false` on `resetGameAfterWin()`/`newGame()` and on `loadLevel`/`advanceHole` if it was open when advancing (advance only via `New Game` or `Resume` then `handleNextHole`, not while paused).
+1. **Trigger & State — Escape or P Works Even In Flight, Never New Game** in `src/main.js`:
+   - State SHALL reuse `mainMenuVisible: boolean` (REQ-029) for the overlay, with `isInLevelPause: boolean` to distinguish **splash entry mode** (no backdrop, never `End Run`) vs **in-level pause mode** (with backdrop, never `New Game`).
+   - **When in a level** (`activeCourse !== null` or `STORAGE_KEY` has `courseId`, and `!mainMenuVisible` before press, regardless of `gameState`):
+     - Pressing **either `Escape` or `P`** SHALL set `mainMenuVisible = true`, `isInLevelPause = true`, `courseMenuVisible = false`, `helpVisible = false`, show `#main-menu-overlay` **with backdrop** (`with-backdrop` class `background: rgba(0,0,0,0.55)`), and pause the game (see §4). This SHALL work when `gameState === "FLYING"` (ball in flight), `AIMING`, `CHARGING`, or even `WIN` (though `WIN` already has its own overlay, `WIN` MAY take priority — document choice, but `FLYING` MUST be supported).
+     - Both `e.code === "Escape"` and `e.code === "KeyP"` SHALL be treated identically for opening the pause; tests SHALL verify pressing `KeyP` while `AIMING` or `FLYING` shows the same overlay with backdrop as `Escape`.
+     - No `selectedModifier` deselection priority SHALL block the pause in this mode.
+   - **Closing via Continue or Escape/P:**
+     - While the in-level pause overlay is visible (`mainMenuVisible===true` && `isInLevelPause===true`), pressing **either `Escape` or `P`** again **or** clicking **`Continue`** SHALL simply **hide the overlay** (`mainMenuVisible=false`, `isInLevelPause=false`, remove backdrop) and **resume the game** at the exact paused state. No state reset, no `clearProgress`, no `loadProgress` re-parse.
+     - `Continue` text SHALL be exactly `"Continue"`, `id="continue-button"`, opaque `background:#2ecc71`. It SHALL be **visible whenever an active run exists** (which it does in this context).
+   - **Never New Game on pause:** While `isInLevelPause===true`, `New Game` (`#new-game-button`) SHALL be **hidden** (`hidden` class) — the pause menu never shows `New Game` (tests SHALL verify `document.getElementById('new-game-button').classList.contains('hidden')` is true when `isInLevelPause` with backdrop). `Help` and `End Run` remain visible per §2.
+   - **Blocking while paused:**
+     - While the in-level pause overlay is visible, `update()` SHALL pause ball physics (no `updateBall`) but SHALL still call `updateWindUniforms`. `handleLaunch()` (Space) and placement/drag/hotkeys SHALL be no-op, `maybeShowRewardMenu` blocked, hotbar hidden.
+     - `R` while paused SHALL be blocked; only `Continue`/`Escape`/`P` and `End Run`/`Help` apply.
 
-2. **Resume vs New Game Actions** in `src/main.js`:
-   - **Resume** (button or `Escape`):
+2. **Extra Button — End Run (Abandon Without Record, Never on Splash)** in `src/main.js` / `index.html` / `style.css`:
+   - The in-level pause overlay SHALL contain **`End Run`** (`id="end-run-button"` inside `#main-menu-root` — tests check text `"End Run"`), **in addition to** `Continue` and `Help`, **but never `New Game`**. On splash entry (no active run or after End Run, `!isInLevelPause`), `End Run` SHALL be **hidden** (the main menu with the splash screen never shows `End Run` — even if `hasRestorableSave()` would be true, entry hides it).
+   - The pause menu SHALL **never** show `New Game`; the entry menu SHALL **never** show `End Run`. This is a strict split: entry shows `Continue`/`New Game`/`Help`; pause shows `Continue`/`Help`/`End Run`.
+   - Clicking `End Run` SHALL:
      ```js
-     function resumeGame(){
-       if(!pauseMenuVisible) return;
-       pauseMenuVisible=false;
-       pauseMenuHover=null;
-       if(canvas) canvas.style.cursor="default";
-     }
-     ```
-     SHALL simply close the menu, leave all run state untouched (`currentHoleIndex`, `holeAttempts`, `totalAttempts`, `supply`, `freeShots`, `areaUpgradeCount`, `bouncyBallCount`, `secretRewardCounter`, `modifiers`, `aimAngle`, `rewardStats` if tracked). SHALL NOT clear `localStorage` or reset counters. After resuming, next frame SHALL be `AIMING`/`CHARGING` with HUD/hotbar visible, and if the reward was pending but not shown due to pause, `maybeShowRewardMenu()` MAY be evaluated on next `AIMING` entry.
-   - **New Game** (button):
-     ```js
-     function startNewGame(){
-       clearProgress(); // REQ-027 localStorage remove
+     function endRun(){
+       clearProgress(); // remove STORAGE_KEY
+       // reset run state to entry defaults without touching COURSES_KEY or bestTotal
        currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-       supply={amplify:1,nullify:1,flip:1};
-       freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
-       // if sharpshooterCount exists -> 0
-       secretRewardCounter=0; rewardPending=false;
+       supply={amplify:1,nullify:1,flip:1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
+       secretRewardCounter=0; rewardPending=false; firstRewardClaimed=false;
        rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
-       pauseMenuVisible=false;
-       // REQ-028 stats
        rewardChosenCounts={amplify:0,nullify:0,flip:0,freeShots:0,areaUp:0,bouncyBall:0};
-       modifiers=[]; syncModifiersToField();
-       selectedModifier=null;
-       loadLevel(0); // recreates field, ball at tee, aim toward hole
-       gameState="AIMING";
-       winOverlay.classList.add("hidden");
-       updateAttemptsUI(); updateHotbarUI();
-       // no initial reward menu: maybeShowRewardMenu() will keep menu hidden until 5 counted shots
+       modifiers=[]; syncModifiersToField(); selectedModifier=null;
+       // show entry main menu (splash, no backdrop, never End Run)
+       mainMenuVisible=true; isInLevelPause=false; courseMenuVisible=false; helpVisible=false;
+       // do NOT call maybeUpdateHighScore / maybeUpdateCourseRecord
      }
      ```
-     SHALL be executable **any time the pause menu is visible**, even mid-run on hole 2/3. SHALL clear `localStorage` via `clearProgress()` (REQ-027), reset all run state as above (equivalent to `resetGameAfterWin` but callable outside `WIN` — new supply is `{1,1,1}` and no pending reward), reset `bouncyRemaining`, clear `rewardChosenCounts`, close the pause menu, and start at hole 1 in `AIMING` at its tee with hotbar showing `1` for each modifier. It SHALL NOT require `WIN` state and SHALL NOT show an initial reward menu.
-   - Both actions SHALL be idempotent and SHALL set `pauseMenuHover=null` and cursor to `default`.
+     - **Remove from storage:** `localStorage.removeItem(STORAGE_KEY)`. `COURSES_KEY` SHALL be preserved.
+     - **Record shall NOT count:** `bestTotal` unchanged. Only full course completion updates `bestTotal`.
+     - **UI after End Run:** hide backdrop, show entry menu over splash (`background:transparent`, `Continue` hidden because no active run now, `New Game`/`Help` visible, `End Run` never visible), bottom canvas splash.
+   - `End Run` SHALL be styled distinct (red): `background:#e74c3c` opaque `border:1px solid #c0392b`, white text, hover `#c0392b`.
 
-3. **Reward Stats Tracking** in `src/main.js` (shared with REQ-021/022/023/024):
-   - State SHALL include `rewardChosenCounts: Record<string,number>` with keys matching the pool `['amplify','nullify','flip','freeShots','areaUp','bouncyBall']` (and `'sharpshooter'` if pool is 7). Initialized to `0` for all keys on new game (`initLevel` index 0, `resetGameAfterWin`, `startNewGame`, `startNewGameFromMain`, `endRun`, page reload with no save). If `sharpshooter` pool exists, include it; otherwise 6 keys.
-   - On each successful `claimReward(type)` (exactly once per menu trigger after 5 counted shots, `rewardMenuVisible` guard), the corresponding counter SHALL increment by `1`:
-     ```js
-     // inside claimReward after the existing supply/freeShots/area/bouncy mutation
-     if(type in rewardChosenCounts) rewardChosenCounts[type] = Math.max(0, (rewardChosenCounts[type]||0)+1);
-     // for freeShots: also addFreeShots(3) already, but chosen count is separate from remaining freeShots
-     saveProgress(); // also persist counts per REQ-027 (extend payload)
+3. **Menu Rendering — Main Menu Buttons With Backdrop Shadowing Field, No New Game on Pause** in `index.html` / `style.css` / `src/main.js`:
+   - The overlay used for Escape/P-in-level SHALL be **the same `#main-menu-overlay`** as entry (REQ-029), not a separate `#pause-overlay` (legacy `#pause-overlay` SHALL be removed or kept hidden; tests SHALL verify the pause-triggered menu is `#main-menu-overlay`, not `#pause-overlay`). When shown via Escape/P during a level, it SHALL have a **backdrop**:
+     ```css
+     #main-menu-overlay { background: transparent; }
+     #main-menu-overlay.with-backdrop { background: rgba(0,0,0,0.55); }
      ```
-     - For `freeShots`, the count is **times chosen**, not remaining `freeShots` (e.g., choosing freeShots twice → `freeShots` remaining may be `3` after using some, but `rewardChosenCounts.freeShots ===2` and bottom list shows `Free Shots x2`).
-     - For `areaUp` and `bouncyBall`, the counts SHALL equal `areaUpgradeCount` and `bouncyBallCount` respectively after the increment (they are the same as “times chosen” for those upgrades). For `amplify`/`nullify`/`flip`, counts SHALL equal `supply[type]` minus the initial `1` plus chosen? Actually with start `{1,1,1}`, choosing amplify once gives `supply.amplify 1→2` and `rewardChosenCounts.amplify 0→1`. So `supply = 1 + chosenCounts[amplify]`. Similar for other modifiers.
-   - The counts SHALL **persist** through death resets (`resetBall()`), `R` during play (ball reset without scoring), and hole advances (`advanceHole`/`handleNextHole`/`loadLevel(n>0)`) — those SHALL NOT reset them. Only `startNewGame`/`resetGameAfterWin`/`startNewGameFromMain`/`endRun`/new game (index 0) SHALL zero them. `clearProgress` SHALL also clear them from storage.
-   - Helpers SHALL be exposed for tests: `getRewardChosenCounts():Record<string,number>`, `getRewardChosenCount(type):number`, `setRewardChosenCounts(obj)` (clamped `>=0` int). Debug via `window.__getRewardChosenCounts`, `window.__setRewardChosenCounts`.
-   - Persistence (REQ-027 extension): `getSavePayload()` SHALL include `rewardChosenCounts`, and `loadProgress()` SHALL restore it (merge with defaults for missing keys, clamp `>=0` int). If payload has no `rewardChosenCounts` (old save), initialize to `0`s and derive from existing counters where possible (amplify→supply.amplify -1, etc., freeShots→0) without throwing.
+     Tests SHALL verify: when `mainMenuVisible` is shown via Escape/P during a level, `getComputedStyle(mainMenuOverlay).backgroundColor` is `rgba(0, 0, 0, 0.55)`, not `transparent`; when shown as entry over splash, it is `transparent`.
+   - The overlay SHALL be centered over the canvas with content `.main-menu-content` `max-width:90%; max-height:90%`. All visible buttons SHALL be **opaque** (`#2ecc71` for Continue/Help, `#e74c3c` for End Run), not semi-transparent. `New Game` SHALL be `hidden` on pause.
+   - **Continue button behavior:** clicking `Continue` SHALL simply hide the overlay (`mainMenuVisible=false`, remove `with-backdrop`) and resume the game loop (unpause). No reload, no `loadProgress`. If the ball was in flight (`FLYING` with `ball.vel` non-zero), after Continue the ball **shall continue its flight** from the exact preserved position/velocity.
 
-4. **Menu Rendering** in `src/render.js` / `index.html` / `style.css`:
-   - **Inside canvas** via `drawPauseMenu(ctx,width,height,hovered)` called from `render()` when `pauseMenuVisible===true`, **OR** as a **DOM overlay** `#pause-overlay` centered over canvas (like `#win-overlay`). Either is acceptable if visuals meet spec and hit-testing works in logical coordinates. No white card background on green with dark text; use high-contrast white with stroke on dim `rgba(0,0,0,0.55)` (same as reward/win dim) and transparent panel background.
-   - Layout (example, 340×320 centered, but sizes tunable):
-     - Full-canvas dim `rgba(0,0,0,0.55)` behind menu (same as reward menu and win dim per updated style).
-     - Title `Paused` 22px `700 system-ui` white `rgba(255,255,255,1)` with `stroke rgba(0,0,0,0.75) 5px` centered at top of panel (same font as `Choose an Upgrade` per REQ-021 and `Victory`).
-     - Two buttons centered vertically, `140×44` each, gap `12px`:
-       - **Resume** — border `rgba(255,255,255,0.85)` 2px, fill `rgba(255,255,255,0.12)` (hover `0.22`), label `Resume` 14px `700` white with stroke `rgba(0,0,0,0.65) 3px`, icon `▶` 14px (optional), key hint `Esc` 10px. On hover brighten, `cursor pointer`.
-       - **New Game** — border `rgba(231,76,60,0.9)` 2px, fill `rgba(231,76,60,0.28)` (hover `0.38`), label `New Game` 14px `700` white with stroke, icon `↺` 14px. Distinct red to signal reset. Hover brightens.
-     - **Bottom reward list:** centered below buttons, inside same dim panel, `width ~320px`, `y = panelY + 200` (or below buttons `+24px`), layout as 3×2 grid or single row wrapped (depending on pool size 6→ 3 columns ×2 rows, 7→ 4+3). Each entry `48×48` or `80×20` showing icon+label+count:
-       - Icon matching reward menu: `» #e67e22` amplify, `∅ #3498db` nullify, `⇄ #9b59b6` flip, `★ #2ecc71` freeShots, `◯ #f39c12` areaUp, `◎ #1abc9c` bouncyBall (and `🎯 #e74c3c` sharpshooter if present).
-       - Label 11px white with stroke `rgba(0,0,0,0.65) 3px`, count `xN` 12px `700` white with stroke, e.g., `Amplify x2`, `Free Shots x1`, `Area +20% x0`. Count SHALL be `0` when never chosen this run, not hidden.
-       - Entries SHALL be laid out with `gap 8px`, centered. Background for each entry transparent or `rgba(255,255,255,0.06)` rounded, not white card.
-     - All text SHALL use high-contrast white with dark stroke/shadow for readability on dim over green, same as reward menu. No solid white card `fill #fff` SHALL be drawn.
-   - Hit-testing for canvas mode: helpers `getPauseButtonsLayout(width,height)` returning `Rect`s for Resume and New Game (e.g., `{resume:{x,y,w,h}, newGame:{x,y,w,h}}`) and optionally `getRewardStatsListLayout`. Click inside Resume → `resumeGame()`, inside New Game → `startNewGame()`. Keyboard while pause visible: `Escape` → Resume, `N`/`Enter` MAY also trigger New Game but not required; `1`/`2`/`3` SHALL be ignored (not selecting rewards).
-   - For DOM mode: `index.html` SHALL contain `#pause-overlay.hidden > .pause-content` with two `button`s and a `.reward-stats` container of 6/7 `div`s each with icon+label+`xN`. Same dim and transparent styles as `#win-overlay` per updated style. Click handlers mirror canvas logic.
+4. **Pause Semantics — Continue Resumes Exactly** in `src/main.js`:
+   - While the in-level pause overlay is visible, `update(dt)` SHALL NOT advance `ball` physics (`ball.pos`/`ball.vel` frozen), but SHALL still call `updateWindUniforms` and `render()` (wind shader animates and field remains visible dimmed behind backdrop). `render()` SHALL still draw the level behind the dimmed overlay.
+   - On `Continue` (or `Escape`/`P` to close), the next `update(FIXED_DT)` SHALL resume from the frozen state. For `FLYING`, ball continues with same velocity; for `CHARGING`, charge is preserved or reset to `AIMING` as documented.
+   - No `saveProgress()` side-effect on `Continue`.
 
-5. **Interaction & Blocking** in `src/main.js`:
-   - While `pauseMenuVisible===true`:
-     - `update()` SHALL pause ball physics (no `updateBall`, no wind drift) but SHALL still call `updateParticles`.
-     - Input for aiming (`ArrowLeft`/`Right`/`KeyA`/`KeyD`), charging (`Space`), modifier placement (`click`, `1`/`2`/`3`), and launching SHALL be ignored. `handleLaunch` blocked (return early if `pauseMenuVisible`).
-     - Hotbar SHALL be hidden (like `FLYING`/`WIN`/`rewardMenuVisible`).
-     - `R` key while pause visible SHALL be blocked (do not `resetBall`/`handleNextHole`); only `Escape`/`Resume` and `New Game` apply.
-   - **Escape priority chain** (single `window keydown` handler order):
-     1. If `rewardMenuVisible`, block and handle reward `1`/`2`/`3`/`0` only.
-     2. Else if `pauseMenuVisible`, `Escape` → `resumeGame()`.
-     3. Else if `gameState==="WIN"`, `Escape` ignored (win has its own `R`/`Next`).
-     4. Else if `selectedModifier!==null`, `Escape` → deselect only.
-     5. Else → open pause menu.
-   - Pressing `Escape` rapidly SHALL toggle pause (open/close) but SHALL NOT create multiple overlays. `resumeGame()` and `startNewGame()` SHALL each be callable via click or key and SHALL return `true/false` for tests.
+5. **Interaction & Priority** in `src/main.js`:
+   - **Escape/P priority chain when in a level:**
+     1. If `rewardMenuVisible` is true, Escape/P SHALL be **blocked** (reward has priority) — do not open pause behind reward.
+     2. Else if `gameState==="WIN"` (win overlay visible), Escape/P SHALL be **ignored** (win uses `R`/`Next`).
+     3. Else if `mainMenuVisible` is already true (`isInLevelPause===true`), Escape/P SHALL close it (same as Continue).
+     4. Else (in `AIMING`/`CHARGING`/`FLYING` with no reward/win), **either `Escape` or `P`** SHALL open the in-level pause overlay (with backdrop, never New Game).
+   - While pause is visible, `R`, `Space`, `Arrow`, `1`/`2`/`3`, `click` SHALL be blocked. Only `Continue`/`Escape`/`P`, `End Run`, `Help` → help overlay, and `Back` shall work. `Help` shall keep the backdrop.
+   - The legacy `#pause-overlay` SHALL be removed or kept hidden; the Escape/P path SHALL show `#main-menu-overlay` with `with-backdrop`.
 
-6. **No HUD Change & Persistence**:
-   - No new HUD element outside the menu. The reward counts are only visible inside the pause menu bottom list, not in `drawHUD` or win overlay (hidden stats, like `freeShots`/`areaUpgradeCount`).
-   - Counts SHALL be persisted via `saveProgress`/`loadProgress` (REQ-027 payload extension) so the bottom list shows correct `xN` after reload (e.g., `Amplify x2` still `x2` after revisit). `clearProgress` SHALL reset them to `0`.
-
-7. **Export Course in Pause Menu (REQ-031)**:
-   - Inside `#pause-overlay .pause-content`, below `Resume`/`End Run` and above the reward stats list, there SHALL be an **Export Course** button (`id="pause-export-button"` `class="course-export-button"`, label `⎙ Export Course` or `Export Course`, style `background:rgba(255,255,255,0.10)` `border:1px solid rgba(255,255,255,0.25)` white with stroke, similar to per-course export in main menu). It SHALL export the **active course** (the `Course` whose `id === courseId` from `STORAGE_KEY` / `activeCourse`) via `exportCourse(activeCourse)` → `btoa(JSON.stringify(activeCourse))` → `navigator.clipboard.writeText` (with `execCommand` fallback) and show the same **toast “copied to clipboard”** (`#toast` `copied to clipboard` `2000ms`) as main-menu export per REQ-031 §4, without closing the pause menu or ending the run. If no active course (should not happen when pause is visible), the button SHALL be hidden/disabled and do nothing. This satisfies REQ-031’s “beside each course button, and in the pause menu, there should be a button to export course”.
+6. **No Duplicate Pause Overlay:**
+   - The legacy `#pause-overlay` SHALL be **removed** or kept permanently `hidden` and never shown; the Escape/P path SHALL show `#main-menu-overlay` (with `with-backdrop` class) instead. Tests SHALL verify `document.getElementById('pause-overlay')` is either `null` or `hidden` when Escape/P pause is visible, and `#main-menu-overlay` is visible with backdrop.
 
 ## Acceptance Criteria
 
-- [ ] On fresh page load (new game, `pauseMenuVisible=false`, `supply={1,1,1}`, no reward menu), pressing `Escape` with no modifier selected (`selectedModifier===null`) immediately opens pause overlay: full-canvas dim `rgba(0,0,0,0.55)`, title `Paused` `700 22px` white with stroke `5px`, two centered buttons `Resume` (`140×44` white border/fill `0.12` hover `0.22`, `▶` icon) and `New Game` (`↺` red `rgba(231,76,60,0.28)`) with hover brighten and `cursor pointer`. Pressing `Escape` again or clicking `Resume` closes the menu (`pauseMenuVisible false`) and returns to `AIMING` without changing `currentHoleIndex`, `holeAttempts`, `totalAttempts`, `supply={1,1,1}`, `secretRewardCounter=0`, or `modifiers`.
-- [ ] If a modifier is selected (`selectedModifier='amplify'`), first `Escape` deselects it (`selectedModifier null`, hotbar highlight cleared) and does **not** open pause; second `Escape` then opens pause. Verified via `getSelectedModifier()===null` after first, `isPauseMenuVisible()===true` after second.
-- [ ] While `rewardMenuVisible===true` (after 5 counted shots), pressing `Escape` does **not** open pause menu and does **not** close reward menu (reward blocked per REQ-021). While `WIN` overlay is shown, `Escape` does **not** open pause.
-- [ ] While pause is visible, aiming/charging is blocked: holding `ArrowRight` does not change `getAimAngle()`, holding `Space` does not increase `charge`, clicking canvas does not place a modifier even if `1` was pressed before pausing. `gameState` remains `AIMING`/`CHARGING` (or `PAUSED`) and ball does not drift; `updateBall` not called. `handleLaunch` while pause returns without incrementing `holeAttempts`/`totalAttempts`.
-- [ ] Clicking `Resume` (hit-test inside its rect or DOM button) closes menu and resumes at same hole/attempts: `currentHoleIndex` unchanged, `holeAttempts`/`totalAttempts` unchanged, `supply`/`freeShots`/`areaUpgradeCount`/`bouncyBallCount` unchanged, modifiers still on field, `drawArrows` still shows same wind.
-- [ ] Clicking `New Game` (when pause visible) clears run state and starts at hole 1: `currentHoleIndex 0`, `holeAttempts 0`, `totalAttempts 0`, `supply {1,1,1}`, `freeShots 0`, `areaUpgradeCount 0`, `bouncyBallCount 0`, `secretRewardCounter 0`, `rewardPending false`, `rewardMenuVisible` remains `false` (no initial 3-of-N offer), `modifiers []` (field cleared, arrows reflect base field), `pauseMenuVisible false`, `localStorage.getItem(STORAGE_KEY)` is `null` immediately after (cleared), next attempt creates fresh save. On holes 2/3, `New Game` also jumps back to hole 1 (not staying on current hole). Hotbar shows `1` for each modifier, not `0`.
-- [ ] Bottom reward list: when pause is open, below the two buttons is a centered list of **all** reward types (6 types `Amplify`, `Nullify`, `Flip`, `Free Shots +3`, `Area +20%`, `Bouncy Ball +1` — or 7 if sharpshooter pool is implemented) each showing icon `»`/`∅`/`⇄`/`★`/`◯`/`◎` with correct colors (`#e67e22/#3498db/#9b59b6/#2ecc71/#f39c12/#1abc9c`) and a count `xN` (e.g., `x0` before any claim, `x1` after one claim from first reward). The count SHALL be the **times chosen** this run, not remaining inventory: verified via `getRewardChosenCounts().amplify===1` after one `Amplify` claim (supply then `2`), `freeShots` chosen `1` shows `x1` even if `freeShots` remaining is `2` after one use, `areaUp x1` shows `1` after one `Area +20%` claim. The list SHALL persist through hole advances (e.g., `Amplify x1` still `x1` on hole 2) and after reload (e.g., reload after `Amplify x1` still shows `x1` via `loadProgress`). After `New Game`, all counts back to `x0` and supply is `{1,1,1}`.
-- [ ] Counts are hidden outside pause menu: `drawHUD` still shows only `Hole: N/M` `Attempts: X` `Total: Y`, win overlay shows only hole/total, no `xN` in HUD. `window.__getRewardChosenCounts()` returns correct map.
-- [ ] Persistence: after `Amplify x1` (first reward) then page reload, pause reopened shows `Amplify x1` (not `x0`). `localStorage` payload contains `rewardChosenCounts` and is versioned. Corrupt storage reloads as new game with counts `0` and supply `{1,1,1}`.
-- [ ] **Pause Export (REQ-031)**: pause overlay shows an additional `Export Course` button (`#pause-export-button` `⎙ Export Course`) below `Resume`/`End Run`; clicking it copies the active course’s base64 (same string as main-menu export for that course) via `navigator.clipboard.writeText` and shows toast `copied to clipboard` for ~2s without closing pause or ending run; if no active course, button is hidden/disabled.
-- [ ] No 3rd-party libraries; pure vanilla JS `pauseMenuVisible` boolean, `keydown Escape` branching, `localStorage` for clear (reuse REQ-027 key), canvas or DOM rendering with high-contrast white text on dim.
+- [ ] While in a level (after starting a course via `New Game` → course play on entry, at `Hole:1` `AIMING`, `STORAGE_KEY` has `courseId`), pressing **`Escape` or `P` (`KeyP`)** shows **main menu overlay** (`#main-menu-overlay` `!hidden`) **with backdrop** (`getComputedStyle(mainMenuOverlay).backgroundColor === "rgba(0, 0, 0, 0.55)"` or `0.5-0.6`, not `transparent`), containing buttons **Continue** (`#continue-button` text `Continue` visible, opaque), **Help** (`#help-button`), and **End Run** (`#end-run-button` text `End Run` visible, red), **but never `New Game`** (`#new-game-button` `hidden` when `isInLevelPause===true`). The playing field (grass, obstacles, ball, HUD) is still rendered behind the dimmed backdrop (not cleared to splash). Pressing `Escape` or `P` again **or** clicking `Continue` hides the overlay (`hidden` true, `mainMenuVisible false`), removes the backdrop, and the game resumes in the same `gameState`.
+- [ ] **Entry never shows End Run:** on fresh load with no run, and also after reload with an active save when the overlay is shown over splash with `background:transparent` (entry mode, `!isInLevelPause`), `document.getElementById('end-run-button').classList.contains('hidden')` is true (End Run never visible on splash), even though `Continue` may be visible when a save exists. `New Game` is visible on entry.
+- [ ] **Pause never shows New Game:** while paused via `Escape`/`P` at any hole, `document.getElementById('new-game-button').classList.contains('hidden')` is true, while `document.getElementById('end-run-button').classList.contains('hidden')` is false. On entry, the opposite.
+- [ ] **Both Escape and P work even if a ball is in flight:** launch a ball (`Space` charge → shoot, `gameState==="FLYING"`, `ball.isMoving true`), while it is still moving, press `Escape` **and separately test `P`** — each shows the main menu overlay with backdrop and freezes the ball (`ball.pos` unchanged over 500ms while paused). Clicking `Continue` unfreezes and the ball continues its trajectory (not teleported to tee).
+- [ ] **End Run:** while the pause is visible, clicking `End Run` clears `localStorage.getItem(STORAGE_KEY)` (`null`), hides the pause menu, shows the **entry main menu** over splash (`background:transparent` without backdrop, `Continue` hidden because no active run, `New Game`/`Help` visible, `End Run` never visible on splash), bottom canvas shows splash (not grass), and the per-course `bestTotal` for the active course is **unchanged** (if it was `null` or `12`, it stays `null`/`12`, not updated to `totalAttempts` of the abandoned run). Reloading after End Run still shows entry menu with `Continue` hidden.
+- [ ] **Continue simply resumes:** while paused via `Escape`/`P` at `Hole:2` `holeAttempts=1` `totalAttempts=5` with a modifier placed (`modifiers.length=1`), clicking `Continue` hides the overlay and the next frame still shows `Hole:2` `Attempts:1` `Total:5` with the same modifier on the field (`getWindAt` unchanged) and `supply` unchanged; no `clearProgress` or `loadProgress` side-effect, `STORAGE_KEY` still has the same `courseId` and counters.
+- [ ] **Backdrop distinction:** on fresh entry over splash has `background:transparent`; on Escape/P-in-level pause has `background:rgba(0,0,0,0.55)` (or `with-backdrop` class). Toggling `End Run` switches from `0.55` back to `transparent`.
+- [ ] No legacy pause overlay is shown: `document.getElementById('pause-overlay')` is `null` or `hidden` when Escape/P pause is visible; the visible overlay is `#main-menu-overlay` with `with-backdrop`/`data-mode="pause"`.
+- [ ] While the pause is visible, input is blocked: holding `ArrowRight` does not change `getAimAngle()`, holding `Space` does not increase `charge`, clicking does not place a modifier. `updateBall` is not called while paused (ball frozen), but `updateWindUniforms` still runs (wind animation visible behind backdrop).
 
 ## Dependencies
 
-- REQ-011 (states `AIMING`/`CHARGING`/`FLYING`/`WIN`, `resetBall`, `loadLevel`, `resetGameAfterWin`)
-- REQ-014 (attempts counters, `holeAttempts`/`totalAttempts`/`currentHoleIndex`, `drawHUD`)
-- REQ-015/REQ-020 (modifiers, `selectedModifier`, supply `{1,1,1}`, hotbar)
-- REQ-021 (reward menu 3-of-N, secret counter, `claimReward`, `rewardPending` — no initial menu)
-- REQ-022/REQ-023/REQ-024 (freeShots, area, bouncy — counts derived, `addFreeShots`/`addAreaUpgrade`/`addBouncyBall`)
-- REQ-025 (reroll state, must not be affected by pause)
-- REQ-027 (localStorage `saveProgress`/`loadProgress`/`clearProgress`, extend payload with `rewardChosenCounts`)
-- REQ-031 (courses collection, per-course export via base64 + toast)
+- REQ-002 (16:9 dual canvases, centered)
+- REQ-012 (rendering split, HUD on top canvas)
+- REQ-013 (responsive)
+- REQ-027 (STORAGE_KEY, save on attempt, clear on End Run, no record on abandon)
+- REQ-029 (main menu HTML, Continue/New Game/Help vs Continue/Help/End Run split, never End Run on splash / never New Game on pause)
+- REQ-030 (grass vs splash, backdrop shadowing field when paused)
+- REQ-031 (courses, bestTotal only on full completion)
 
 ## Notes
 
-- Implementation sketch in `src/main.js`:
+- Implementation sketch `src/main.js`:
   ```js
-  let pauseMenuVisible = false;
-  let pauseMenuHover = null;
-  let rewardChosenCounts = { amplify:0, nullify:0, flip:0, freeShots:0, areaUp:0, bouncyBall:0 };
-  function getRewardChosenCounts(){ return {...rewardChosenCounts}; }
-  function resumeGame(){ if(!pauseMenuVisible) return false; pauseMenuVisible=false; pauseMenuHover=null; if(canvas) canvas.style.cursor="default"; return true; }
-  function startNewGame(){
-    clearProgress();
-    currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-    supply={amplify:1,nullify:1,flip:1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; bouncyRemaining=0;
-    secretRewardCounter=0; rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
-    rewardChosenCounts={amplify:0,nullify:0,flip:0,freeShots:0,areaUp:0,bouncyBall:0};
-    modifiers=[]; syncModifiersToField(); selectedModifier=null;
-    loadLevel(0); gameState="AIMING"; winOverlay.classList.add("hidden");
-    updateAttemptsUI(); updateHotbarUI();
-    pauseMenuVisible=false; pauseMenuHover=null;
-    return true;
-  }
-  // in claimReward(type): after add* mutation, if(type in rewardChosenCounts) rewardChosenCounts[type]++;
-  // else if(type==='freeShots') rewardChosenCounts.freeShots++;
-  // else if(type==='areaUp') rewardChosenCounts.areaUp++;
-  // else if(type==='bouncyBall') rewardChosenCounts.bouncyBall++;
-  // saveProgress also persists rewardChosenCounts
-  // in window keydown:
-  // if(rewardMenuVisible){ /* existing reward 1/2/3/0 handling */ return; }
-  // if(pauseMenuVisible){ if(e.code==="Escape"){ resumeGame(); e.preventDefault(); return; } /* clicks */ return; }
-  // if(gameState==="WIN"){ return; }
-  // if(e.code==="Escape"){
-  //   if(selectedModifier!==null){ selectedModifier=null; updateHotbarUI(); e.preventDefault(); return; }
-  //   pauseMenuVisible=true; e.preventDefault(); return;
+  // In window keydown handler:
+  // if (mainMenuVisible && isInLevelPause) { if (e.code==="Escape"||e.code==="KeyP") { mainMenuVisible=false; isInLevelPause=false; syncMainMenu(); return; } }
+  // else if (!mainMenuVisible && (gameState==="AIMING"||gameState==="CHARGING"||gameState==="FLYING") && !rewardMenuVisible && gameState!=="WIN") {
+  //   if (e.code==="Escape"||e.code==="KeyP") {
+  //     mainMenuVisible=true; isInLevelPause = !!activeCourse;
+  //     if (isInLevelPause) mainMenuOverlay.classList.add('with-backdrop');
+  //     syncMainMenu(); return;
+  //   }
   // }
-  // saveProgress payload extension: add rewardChosenCounts:{...rewardChosenCounts}
-  // loadProgress: restore rewardChosenCounts with defaults and clamping
-  // window exposure: window.__getRewardChosenCounts, window.__setRewardChosenCounts, window.__resumeGame, window.__startNewGame, window.isPauseMenuVisible, window.getRewardChosenCounts
+  // function renderMainMenuRootVisibility(){
+  //   const isPause = isInLevelPause;
+  //   document.getElementById('continue-button').classList.toggle('hidden', !hasRestorableSave());
+  //   document.getElementById('end-run-button').classList.toggle('hidden', !isPause || !hasRestorableSave());
+  //   document.getElementById('new-game-button').classList.toggle('hidden', !!isPause);
+  // }
   ```
-- Visual for pause menu (`src/render.js:drawPauseMenu`):
-  ```js
-  export function getPauseButtonsLayout(width,height){
-    const btnW=140, btnH=44, gap=12;
-    const cx=width/2, cy=height/2 -10;
-    return {
-      resume:{x:cx-btnW/2, y:cy-28, w:btnW, h:btnH},
-      newGame:{x:cx-btnW/2, y:cy+28, w:btnW, h:btnH}
-    };
-  }
-  export function drawPauseMenu(ctx,width,height,hovered, rewardCounts){
-    ctx.save();
-    ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillRect(0,0,width,height);
-    ctx.font="700 22px system-ui, sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.lineJoin="round"; ctx.strokeStyle="rgba(0,0,0,0.75)"; ctx.lineWidth=5; ctx.fillStyle="white";
-    ctx.strokeText("Paused", width/2, height/2-80); ctx.fillText("Paused", width/2, height/2-80);
-    const layout=getPauseButtonsLayout(width,height);
-    // Resume button white, New Game red - same rounded rect + hover 0.22/0.38
-    // draw buttons...
-    // Bottom reward list: 6 icons in row, gap 8, y = height/2+90
-    // for each type in POOL: icon/color/label + ` x${rewardCounts[type]||0}`
-    ctx.restore();
-  }
+- CSS for backdrop:
+  ```css
+  #main-menu-overlay { background: transparent; }
+  #main-menu-overlay.with-backdrop { background: rgba(0,0,0,0.55); }
   ```
-- DOM alternative for pause menu (`index.html`):
-  ```html
-  <div id="pause-overlay" class="hidden">
-    <div class="pause-content">
-      <h2>Paused</h2>
-      <button id="resume-button">▶ Resume</button>
-      <button id="new-game-button">↺ New Game</button>
-      <div class="reward-stats">
-        <div data-type="amplify"><span class="icon">»</span> Amplify <span class="count">x0</span></div>
-        <!-- ... 5 more -->
-      </div>
-    </div>
-  </div>
-  ```
-  styled like `#win-overlay` with `background:rgba(0,0,0,0.55)` and transparent `.pause-content`, buttons matching canvas colors, `.reward-stats` grid `display:flex; gap:8px; flex-wrap:wrap; justify-content:center;` counts white with stroke.
+- Keep `rewardMenuVisible` and `WIN` priority: Escape/P behind those overlays is ignored.
 
 ## File Paths
 
-- `src/main.js:1` (pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts/getRewardChosenCount, resumeGame, startNewGame/New Game clearProgress with {1,1,1}, claimReward increment, getSavePayload/loadProgress/clearProgress extension, init resume, window keydown Escape chain, window exposure)
-- `src/render.js:1` (drawPauseMenu, getPauseButtonsLayout, getRewardStatsListLayout, pause dim/title/buttons/reward list rendering)
-- `index.html:1` (optional #pause-overlay DOM structure if DOM mode chosen)
-- `style.css:1` (#pause-overlay dim, .pause-content transparent, buttons, .reward-stats list)
+- `src/main.js:1` (Escape and P handlers even in FLYING, mainMenuVisible with isInLevelPause/with-backdrop, handleContinue simply hides overlay to resume preserving ball state, endRun clears STORAGE_KEY without maybeUpdateHighScore, renderMainMenuRootVisibility with never End Run on splash / never New Game on pause)
+- `index.html:1` (#main-menu-overlay contains Continue/New Game/Help/End Run buttons, #pause-overlay removed or hidden)
+- `style.css:1` (#main-menu-overlay transparent by default, .with-backdrop rgba(0,0,0,0.55) shadowing field, opaque buttons)
+- `docs/requirements/REQ-028-escape-pause-menu.md:1` (this file)
+

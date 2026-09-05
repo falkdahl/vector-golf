@@ -198,12 +198,12 @@ body {
   paint-order: stroke fill;
 }
 #resume-button:hover { background: rgba(255,255,255,0.22); }
-#end-run-button {
+#end-run-button, #pause-end-run-button {
   padding: 10px 24px;
   font: 700 14px system-ui, sans-serif;
   color: white;
-  background: rgba(231,76,60,0.28);
-  border: 2px solid rgba(231,76,60,0.9);
+  background: #e74c3c;
+  border: 2px solid #c0392b;
   border-radius: 8px;
   cursor: pointer;
   min-width: 140px;
@@ -211,7 +211,7 @@ body {
   -webkit-text-stroke: 2px rgba(0,0,0,0.65);
   paint-order: stroke fill;
 }
-#end-run-button:hover { background: rgba(231,76,60,0.38); }
+#end-run-button:hover, #pause-end-run-button:hover { background: #c0392b; }
 
 #main-menu-overlay {
   position: absolute;
@@ -224,6 +224,9 @@ body {
   background: transparent;
   border-radius: 8px;
   z-index: 12;
+}
+#main-menu-overlay.with-backdrop {
+  background: rgba(0,0,0,0.55);
 }
 #main-menu-overlay.hidden { display: none; }
 .main-menu-content {
@@ -265,6 +268,14 @@ body {
 .main-menu-button:hover { background: #27ae60; }
 .main-menu-button.hidden { display: none !important; }
 #continue-button.hidden { display: none !important; }
+#end-run-button.hidden { display: none !important; }
+#main-menu-root #end-run-button {
+  background: #e74c3c;
+  border: 2px solid #c0392b;
+  min-width: 180px;
+  padding: 12px 28px;
+}
+#main-menu-root #end-run-button:hover { background: #c0392b; }
 
 #course-menu {
   display: flex;

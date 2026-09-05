@@ -112,8 +112,8 @@ function redrawBottom() {
     // Use logical W/H with DPR transform already set in setupCanvases
     bgCtx.save();
     bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (mainMenuVisible) {
-      // splash cover
+    if (mainMenuVisible && !isInLevelPause) {
+      // splash cover only for entry menu (no active run or after End Run); in-level pause keeps grass
       bgCtx.fillStyle = '#1a1a1a';
       bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
       if (splashImg.complete && splashImg.naturalWidth) {
@@ -454,11 +454,12 @@ function startNewGame() {
 }
 function isPauseMenuVisible() { return pauseMenuVisible; }
 
-// Main Menu per REQ-029 — Continue (conditional) / New Game / Help, New Game -> course submenu, Help -> help overlay, no backdrop
+// Main Menu per REQ-029 — Continue (conditional) / New Game / Help / End Run, no backdrop over splash, backdrop over paused field (REQ-028)
 let mainMenuVisible = false;
 let mainMenuHover = null;
 let courseMenuVisible = false;
 let helpVisible = false;
+let isInLevelPause = false;
 function hasRestorableSave() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -469,9 +470,16 @@ function hasRestorableSave() {
   } catch { return false; }
 }
 function renderMainMenuRootVisibility() {
-  const btn = document.getElementById('continue-button');
-  if (!btn) return;
-  btn.classList.toggle('hidden', !hasRestorableSave());
+  const contBtn = document.getElementById('continue-button');
+  const endBtn = document.getElementById('end-run-button');
+  const newGameBtn = document.getElementById('new-game-button');
+  const showSave = hasRestorableSave();
+  const isPause = !!isInLevelPause;
+  if (contBtn) contBtn.classList.toggle('hidden', !showSave);
+  // Splash never shows End Run, even if save exists; pause shows End Run only if save exists
+  if (endBtn) endBtn.classList.toggle('hidden', !isPause || !showSave);
+  // Pause never shows New Game, entry always shows New Game
+  if (newGameBtn) newGameBtn.classList.toggle('hidden', !!isPause);
 }
 function showMainMenuRoot() {
   courseMenuVisible = false;
@@ -496,6 +504,8 @@ function showMainMenuRoot() {
   renderMainMenuRootVisibility();
 }
 function showCourseMenu() {
+  // Pause never shows New Game / course list — guard
+  if (isInLevelPause) return;
   courseMenuVisible = true;
   helpVisible = false;
   const root = document.getElementById('main-menu-root');
@@ -526,6 +536,17 @@ function showHelpOverlay() {
   if (hm) hm.classList.remove('hidden');
 }
 function handleContinue() {
+  // In-level pause (Escape during active run): simply hide overlay and resume preserving ball
+  if (isInLevelPause && mainMenuVisible) {
+    mainMenuVisible = false;
+    courseMenuVisible = false;
+    helpVisible = false;
+    isInLevelPause = false;
+    syncMainMenu();
+    syncPauseOverlay();
+    return true;
+  }
+  // Entry resume (after reload, no in-memory run): load from storage
   if (!hasRestorableSave()) return false;
   const data = loadProgress();
   if (!data) return false;
@@ -533,6 +554,7 @@ function handleContinue() {
   mainMenuVisible = false;
   courseMenuVisible = false;
   helpVisible = false;
+  isInLevelPause = false;
   // loadProgress put us in correct course/level but we need to set up field/ball
   try {
     level = LEVELS[currentHoleIndex];
@@ -551,6 +573,21 @@ function handleContinue() {
     // draw grass now
     redrawBottom();
   } catch (e) { console.warn('continue resume failed', e); return false; }
+  return true;
+}
+function openInLevelPause() {
+  // Show main menu with backdrop shadowing field, works even in FLYING
+  if (rewardMenuVisible || gameState === "WIN") return false;
+  // Only if a run is active (has course and not already showing menu)
+  if (mainMenuVisible) return false;
+  if (!activeCourse && !hasRestorableSave()) return false;
+  // If no activeCourse but hasRestorableSave, set activeCourse from storage courseId for display purposes? Keep current level's course
+  // Show overlay with backdrop
+  isInLevelPause = true;
+  mainMenuVisible = true;
+  courseMenuVisible = false;
+  helpVisible = false;
+  syncMainMenu();
   return true;
 }
 const HIGH_SCORE_KEY = "golfVectorField.highScore.v1";
@@ -669,7 +706,7 @@ function handleCoursePlay(courseId) {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
-  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
@@ -740,6 +777,9 @@ function syncMainMenu() {
   if (el) {
     if (mainMenuVisible) {
       el.classList.remove("hidden");
+      // Backdrop: transparent over splash (entry), dim over paused field (Escape in level)
+      el.classList.toggle("with-backdrop", !!isInLevelPause);
+      el.dataset.mode = isInLevelPause ? "pause" : "entry";
       // Sync sub-views (help-overlay is sibling of .main-menu-content)
       const mmc = document.querySelector('.main-menu-content');
       const root = document.getElementById('main-menu-root');
@@ -770,12 +810,14 @@ function syncMainMenu() {
       }
     } else {
       el.classList.add("hidden");
+      el.classList.remove("with-backdrop");
+      el.dataset.mode = "";
     }
   }
-  // Ensure bottom background reflects mode (splash vs grass) per REQ-030
+  // Ensure bottom background reflects mode (splash vs grass, entry vs pause) per REQ-030
   redrawBottom();
-  // Wind overlay should be hidden on main menu (splash), visible on level per REQ-004
-  try { setWindVisible(!mainMenuVisible); } catch {}
+  // Wind overlay: hidden on entry splash, visible on level and also while paused with backdrop (field dimmed but wind still animates)
+  try { const showWind = !mainMenuVisible || isInLevelPause; setWindVisible(showWind); } catch {}
   updateHotbarUI();
 }
 function isMainMenuVisible() { return mainMenuVisible; }
@@ -787,7 +829,7 @@ function startNewGameFromMain() {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
-  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
@@ -798,7 +840,8 @@ function startNewGameFromMain() {
   return true;
 }
 function endRun() {
-  if (!pauseMenuVisible) return false;
+  // Allow End Run from either legacy pause or new in-level pause (main menu with backdrop)
+  if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1 }; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
@@ -807,12 +850,12 @@ function endRun() {
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
-  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden");
   syncPauseOverlay(); syncMainMenu();
   updateAttemptsUI(); updateHotbarUI();
-  // Do NOT call maybeShowRewardMenu — main menu blocks it; will show after New Game from main
+  // Do NOT call maybeShowRewardMenu and do NOT update bestTotal — abandoned run shall not count toward record
   return true;
 }
 
@@ -1316,7 +1359,7 @@ function returnToMainMenu() {
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
-  mainMenuVisible = true; courseMenuVisible = false; helpVisible = false;
+  mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
   // Load hole 1 layout behind splash for next run (not visible until course play)
   try {
@@ -1588,11 +1631,12 @@ function render() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-  // Main menu: HTML overlay handles menu; top canvas stays transparent so bottom splash is visible through
-  if (mainMenuVisible) {
-    // No game elements drawn on top while main menu is visible (bottom shows splash, HTML overlay is centered)
+  // Main menu: entry over splash (no field) vs in-level pause with backdrop (field visible behind dim)
+  if (mainMenuVisible && !isInLevelPause) {
+    // Entry mode: no game elements drawn (bottom shows splash)
     return;
   }
+  // When isInLevelPause true, we fall through and draw the field so it is visible behind the backdrop
 
   // Draw order on TOP canvas (transparent): obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers
   // Wind is rendered on separate transparent Three.js overlay (#wind-canvas) via fragment shader + particles, not here
@@ -1925,21 +1969,23 @@ function init() {
   if (continueButton) {
     continueButton.addEventListener("click", returnToMainMenu);
   }
-  // REQ-028: pause overlay DOM wiring (now End Run)
+  // REQ-028: pause overlay DOM wiring (legacy pause now hidden) + main menu End Run
   const pauseOverlayDom = document.getElementById("pause-overlay");
   const resumeBtnDom = document.getElementById("resume-button");
-  const endRunBtnDom = document.getElementById("end-run-button");
+  const mainEndRunBtnDom = document.getElementById("end-run-button");
+  const pauseEndRunBtnDom = document.getElementById("pause-end-run-button");
   if (resumeBtnDom) resumeBtnDom.addEventListener("click", () => resumeGame());
-  if (endRunBtnDom) endRunBtnDom.addEventListener("click", () => endRun());
+  if (mainEndRunBtnDom) mainEndRunBtnDom.addEventListener("click", () => endRun());
+  if (pauseEndRunBtnDom) pauseEndRunBtnDom.addEventListener("click", () => endRun());
   // legacy alias
   const newGameBtnDom = document.getElementById("new-game-button");
-  if (newGameBtnDom) newGameBtnDom.addEventListener("click", () => endRun());
+  if (newGameBtnDom) newGameBtnDom.addEventListener("click", () => { /* New Game shows course list, not End Run */ });
   syncPauseOverlay();
   syncMainMenu();
   window.addEventListener("keydown", (e) => {
-    // REQ-029: main menu blocks all inputs except New Game click - but never block browser shortcuts like F5
+    // REQ-029/028: main menu / in-level pause blocks, but Escape to close when isInLevelPause
     if (mainMenuVisible) {
-      // Allow browser navigation/refresh/devtools shortcuts to pass through
+      // Allow browser shortcuts
       const isRefresh = e.key === "F5" || e.code === "F5" || e.keyCode === 116
         || ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === "r")
         || e.key === "F12" || e.code === "F12"
@@ -1947,6 +1993,28 @@ function init() {
         || ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.code === "KeyI" || e.code === "KeyJ" || e.code === "KeyC"))
         || (e.ctrlKey && e.code === "KeyU");
       if (isRefresh) return;
+      if (e.code === "Escape" || e.code === "KeyP") {
+        // In-level pause (Escape/P during level, with backdrop): Escape/P closes or goes back
+        if (isInLevelPause) {
+          if (helpVisible || courseMenuVisible) {
+            showMainMenuRoot();
+            syncMainMenu();
+          } else {
+            // Root pause: simply resume (like Continue)
+            mainMenuVisible = false;
+            isInLevelPause = false;
+            courseMenuVisible = false;
+            helpVisible = false;
+            syncMainMenu();
+          }
+          e.preventDefault();
+          return;
+        }
+        // Entry menu (no active run): Escape ignored
+        e.preventDefault();
+        return;
+      }
+      // For other keys while any main menu visible, block
       e.preventDefault();
       return;
     }
@@ -1975,29 +2043,29 @@ function init() {
       }
       return;
     }
-    if (e.code === "Escape") {
-      // REQ-028 Escape priority chain: reward already handled above
+    if (e.code === "Escape" || e.code === "KeyP") {
+      // REQ-028/029 Escape/P in level shows main menu with backdrop, works even in FLYING
+      if (gameState === "WIN" || rewardMenuVisible) {
+        e.preventDefault();
+        return;
+      }
+      // If already in in-level pause is handled above (mainMenuVisible block), but legacy pause
       if (pauseMenuVisible) {
         resumeGame();
         e.preventDefault();
         return;
       }
-      if (gameState === "WIN") {
+      // Open in-level pause if currently in a level (active run), regardless of AIMING/CHARGING/FLYING
+      const inLevel = !!activeCourse || hasRestorableSave();
+      if (inLevel && !rewardMenuVisible && gameState !== "WIN") {
+        // Allow Escape to open main menu with backdrop even if modifier selected or ball in flight
+        openInLevelPause();
         e.preventDefault();
         return;
       }
+      // Not in level (entry menu hidden?): handle deselection
       if (selectedModifier !== null) {
         selectedModifier = null;
-        updateHotbarUI();
-        e.preventDefault();
-        return;
-      }
-      // Open pause only in AIMING/CHARGING and not FLYING/WIN/reward
-      if ((gameState === "AIMING" || gameState === "CHARGING") && !rewardMenuVisible) {
-        pauseMenuVisible = true;
-        pauseMenuHover = null;
-        if (canvas) canvas.style.cursor = "default";
-        syncPauseOverlay();
         updateHotbarUI();
         e.preventDefault();
         return;
@@ -2511,6 +2579,8 @@ if (typeof window !== 'undefined') {
   window.showCourseMenu = showCourseMenu;
   window.showHelpOverlay = showHelpOverlay;
   window.showMainMenuRoot = showMainMenuRoot;
+  window.openInLevelPause = openInLevelPause;
+  window.__openInLevelPause = openInLevelPause;
   window.getHighScore = getHighScore;
   window.isMainMenuVisible = isMainMenuVisible;
   window.startNewGameFromMain = startNewGameFromMain;
@@ -2524,6 +2594,8 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, '__courseMenuVisible', { get: () => courseMenuVisible, set: (v) => { courseMenuVisible = !!v; } });
   Object.defineProperty(window, 'helpVisible', { get: () => helpVisible, set: (v) => { helpVisible = !!v; } });
   Object.defineProperty(window, '__helpVisible', { get: () => helpVisible, set: (v) => { helpVisible = !!v; } });
+  Object.defineProperty(window, 'isInLevelPause', { get: () => isInLevelPause, set: (v) => { isInLevelPause = !!v; } });
+  Object.defineProperty(window, '__isInLevelPause', { get: () => isInLevelPause, set: (v) => { isInLevelPause = !!v; } });
   // REQ-015 collapsible hotbar helpers
   window.__isHotbarCollapsed = isHotbarCollapsedState;
   window.__toggleHotbar = toggleHotbar;
