@@ -23,11 +23,28 @@ function makeUUID() {
   });
 }
 
-export function generateCourse(holeCount = 18, seed = Date.now()) {
-  if (![3,9,18].includes(holeCount)) throw new Error("holeCount must be 3, 9 or 18");
+export function generateCourse(holeCount = 18, seed = Date.now(), options = {}) {
+  // Allow overload: generateCourse(3, {difficulty:'hard'}) or generateCourse(3, seed, {difficulty})
+  if (typeof seed === 'object' && seed !== null && !Array.isArray(seed) && holeCount !== undefined) {
+    // generateCourse(3, {difficulty:'hard'})
+    options = seed;
+    seed = Date.now();
+  }
+  if (typeof holeCount === 'object' && holeCount !== null) {
+    options = holeCount;
+    holeCount = 18;
+    seed = Date.now();
+  }
+  if (![3,6,9,18].includes(holeCount)) throw new Error("holeCount must be 3, 6, 9 or 18");
   const id = makeUUID();
   const name = randomName();
-  const holes = generateLevels(seed, holeCount);
+  let difficulty = null;
+  if (options && typeof options === 'object' && options.difficulty && ['easy','medium','hard'].includes(options.difficulty)) {
+    difficulty = options.difficulty;
+  } else if (typeof options === 'string' && ['easy','medium','hard'].includes(options)) {
+    difficulty = options;
+  }
+  const holes = (holeCount === 3 && difficulty) ? generateLevels(seed, holeCount, { difficulty }) : generateLevels(seed, holeCount);
   // Deep clone holes to avoid reference sharing with global LEVELS
   const holesCopy = JSON.parse(JSON.stringify(holes));
   return {
@@ -45,7 +62,7 @@ export function validateCourse(c) {
   if (!c || typeof c !== 'object') throw new Error("Invalid course data");
   if (typeof c.id !== 'string' || c.id.length < 8) throw new Error("Invalid course data");
   if (typeof c.name !== 'string' || !c.name.trim()) throw new Error("Invalid course data");
-  if (!Array.isArray(c.holes) || ![3,9,18].includes(c.holes.length)) throw new Error("Invalid course data");
+  if (!Array.isArray(c.holes) || ![3,6,9,18].includes(c.holes.length)) throw new Error("Invalid course data");
   for (const h of c.holes) {
     if (!h || typeof h.tee !== 'object' || typeof h.hole !== 'object' || !Array.isArray(h.obstacles) || typeof h.field !== 'object') {
       throw new Error("Invalid course data");

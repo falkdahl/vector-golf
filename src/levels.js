@@ -152,29 +152,17 @@ const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
 
 // Helpers for REQ-034: tier distribution and shape generation
-function getTierForHole(levelNum, count) {
-  // For 18 holes: 1-6 easy, 7-12 medium, 13-18 hard
-  // For 9 holes: 1-3 easy, 4-6 medium, 7-9 hard
-  // For 3 holes: 1 easy, 1 medium, 1 hard
-  if (count === 18) {
-    if (levelNum <= 6) return 'easy';
-    if (levelNum <= 12) return 'medium';
-    return 'hard';
-  } else if (count === 9) {
-    if (levelNum <= 3) return 'easy';
-    if (levelNum <= 6) return 'medium';
-    return 'hard';
-  } else if (count === 3) {
-    if (levelNum === 1) return 'easy';
-    if (levelNum === 2) return 'medium';
-    return 'hard';
-  } else {
-    // Generic: distribute 30%/40%/30%
-    const ratio = (levelNum - 1) / Math.max(1, count - 1);
-    if (ratio < 0.33) return 'easy';
-    if (ratio < 0.66) return 'medium';
-    return 'hard';
+function getTierForHole(levelNum, count, difficulty) {
+  // For 3-hole courses: uniform difficulty selected by player
+  if (count === 3 && difficulty && ['easy','medium','hard'].includes(difficulty)) {
+    return difficulty;
   }
+  // Linear scaling for 6,9,18 (hole 1 easy -> last hard): tierIdx = floor((levelNum-1)/count *3)
+  // 18: 1-6 easy,7-12 medium,13-18 hard; 9:1-3/4-6/7-9; 6:1-2/3-4/5-6; fallback for other counts
+  const tierIdx = Math.floor((levelNum - 1) / count * 3);
+  if (tierIdx <= 0) return 'easy';
+  if (tierIdx === 1) return 'medium';
+  return 'hard';
 }
 
 function generateFairwayShape(tier, tee, hole, rand) {
@@ -282,12 +270,26 @@ function getEdgeName(pos, width, height) {
   return 'bottom';
 }
 
-function _generateLevelsInternal(seed = 42, count = 18) {
+function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
+  // Handle overload: generateLevels(seed, {difficulty:'easy'}) or count as options
+  let difficulty = null;
+  if (typeof count === 'object' && count !== null && !Array.isArray(count)) {
+    options = count;
+    count = 18;
+  }
+  if (typeof options === 'string' && ['easy','medium','hard'].includes(options)) {
+    difficulty = options;
+  } else if (options && typeof options === 'object' && options.difficulty && ['easy','medium','hard'].includes(options.difficulty)) {
+    difficulty = options.difficulty;
+  }
+  // Validate count
+  if (![3,6,9,18].includes(count)) count = 18;
+  // For 3-hole courses with difficulty, ensure difficulty is respected (already extracted)
   const rand = mulberry32(seed);
   const levels = [];
   for (let i = 0; i < count; i++) {
     const levelNum = i + 1;
-    const tier = getTierForHole(levelNum, count);
+    const tier = getTierForHole(levelNum, count, difficulty);
     // Tee left / Hole right with random height
     const teeX = Math.floor(rand() * 100) + 40;
     const teeY = Math.floor(rand() * (LOGICAL_H - 160)) + 80;
@@ -751,7 +753,7 @@ function _generateLevelsInternal(seed = 42, count = 18) {
     const finalTier = calculatedTier; // could also be the picked tier (tier), but use calculated for validation
     const score = shapeTier + fieldTier + treeTier + waterTier;
 
-    const difficulty = {
+    const levelDifficulty = {
       shape,
       shapeTier,
       fieldComponents,
@@ -772,7 +774,7 @@ function _generateLevelsInternal(seed = 42, count = 18) {
       waterHazards,
       terrain,
       field: fieldMeta,
-      difficulty,
+      difficulty: levelDifficulty,
       treesOnFairwayCount: treesOnFairway,
       waterOnFairwayCount: waterOnFairway,
     });
@@ -780,8 +782,8 @@ function _generateLevelsInternal(seed = 42, count = 18) {
   return levels;
 }
 
-export function generateLevels(seed = 42, count = 18) {
-  const lvls = _generateLevelsInternal(seed, count);
+export function generateLevels(seed = 42, count = 18, options = {}) {
+  const lvls = _generateLevelsInternal(seed, count, options);
   LEVELS.length = 0;
   for (const l of lvls) LEVELS.push(l);
   Object.assign(LEVEL, LEVELS[0]);

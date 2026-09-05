@@ -410,7 +410,7 @@ body {
 }
 #course-menu-back:hover, #help-back-button:hover { background: #27ae60; }
 
-#new-course-choices, #import-area {
+#new-course-choices, #new-course-choices-difficulty, #import-area {
   width: 100%;
   max-width: 360px;
   display: flex;
@@ -418,8 +418,8 @@ body {
   gap: 8px;
   align-items: center;
 }
-#new-course-choices.hidden, #import-area.hidden, #import-error.hidden, #toast.hidden { display: none !important; }
-#new-course-choices button, #import-area button {
+#new-course-choices.hidden, #new-course-choices-difficulty.hidden, #import-area.hidden, #import-error.hidden, #toast.hidden { display: none !important; }
+#new-course-choices button, #new-course-choices-difficulty button, #import-area button {
   width: 100%;
   padding: 8px 12px;
   font: 600 12px system-ui, sans-serif;
@@ -429,11 +429,11 @@ body {
   border-radius: 6px;
   cursor: pointer;
 }
-#new-course-choices button[data-holes] {
+#new-course-choices button[data-holes], #new-course-choices-difficulty button[data-difficulty] {
   background: #2ecc71;
   border-color: #27ae60;
 }
-#new-course-choices button[data-holes]:hover { background: #27ae60; }
+#new-course-choices button[data-holes]:hover, #new-course-choices-difficulty button[data-difficulty]:hover { background: #27ae60; }
 #import-input {
   width: 100%;
   min-height: 64px;

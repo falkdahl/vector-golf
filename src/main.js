@@ -518,10 +518,12 @@ function showMainMenuRoot() {
   if (hm) hm.classList.add('hidden');
   // Reset course submenu inner states when returning to root
   const ncc = document.getElementById('new-course-choices');
+  const nccDiff = document.getElementById('new-course-choices-difficulty');
   const ia = document.getElementById('import-area');
   const cmf = document.getElementById('course-menu-footer');
   const ie = document.getElementById('import-error');
   if (ncc) ncc.classList.add('hidden');
+  if (nccDiff) nccDiff.classList.add('hidden');
   if (ia) ia.classList.add('hidden');
   if (cmf) cmf.classList.remove('hidden');
   if (ie) { ie.textContent = ''; ie.classList.add('hidden'); }
@@ -542,10 +544,12 @@ function showCourseMenu() {
   if (hm) hm.classList.add('hidden');
   // Ensure inner choices hidden and footer visible when entering course menu
   const ncc = document.getElementById('new-course-choices');
+  const nccDiff = document.getElementById('new-course-choices-difficulty');
   const ia = document.getElementById('import-area');
   const cmf = document.getElementById('course-menu-footer');
   const ie = document.getElementById('import-error');
   if (ncc) ncc.classList.add('hidden');
+  if (nccDiff) nccDiff.classList.add('hidden');
   if (ia) ia.classList.add('hidden');
   if (cmf) cmf.classList.remove('hidden');
   if (ie) { ie.textContent = ''; ie.classList.add('hidden'); }
@@ -783,9 +787,10 @@ function exportCourseById(courseId) {
   }
 }
 
-function createNewCourseWithHoles(holeCount) {
+function createNewCourseWithHoles(holeCount, difficulty) {
   try {
-    const c = generateCourse(holeCount, Date.now());
+    const opts = difficulty && ['easy','medium','hard'].includes(difficulty) ? { difficulty } : {};
+    const c = (holeCount === 3 && difficulty) ? generateCourse(holeCount, Date.now(), opts) : generateCourse(holeCount, Date.now(), opts);
     courses.push(c);
     saveCourses();
     renderCourseList();
@@ -820,9 +825,11 @@ function syncMainMenu() {
           if (cm) cm.classList.remove('hidden');
           // Ensure inner choices hidden when showing course menu via direct flag
           const ncc2 = document.getElementById('new-course-choices');
+          const nccDiff2 = document.getElementById('new-course-choices-difficulty');
           const ia2 = document.getElementById('import-area');
           const cmf2 = document.getElementById('course-menu-footer');
           if (ncc2) ncc2.classList.add('hidden');
+          if (nccDiff2) nccDiff2.classList.add('hidden');
           if (ia2) ia2.classList.add('hidden');
           if (cmf2) cmf2.classList.remove('hidden');
           try { renderCourseList(); } catch {}
@@ -1788,10 +1795,12 @@ function init() {
     helpBackBtn.addEventListener('click', () => showMainMenuRoot());
   }
 
-  // REQ-031: course submenu UI handlers (inside #course-menu)
+  // REQ-031: course submenu UI handlers (inside #course-menu) - supports 3,6,9,18 and difficulty chooser for 3
   const newCourseBtn = document.getElementById('new-course-button');
   const newCourseChoices = document.getElementById('new-course-choices');
+  const newCourseChoicesDifficulty = document.getElementById('new-course-choices-difficulty');
   const newCourseCancel = document.getElementById('new-course-cancel');
+  const newCourseDifficultyCancel = document.getElementById('new-course-difficulty-cancel');
   const importCourseBtn = document.getElementById('import-course-button');
   const importArea = document.getElementById('import-area');
   const importInput = document.getElementById('import-input');
@@ -1803,21 +1812,50 @@ function init() {
     newCourseBtn.addEventListener('click', () => {
       if (courseMenuFooter) courseMenuFooter.classList.add('hidden');
       newCourseChoices.classList.remove('hidden');
+      if (newCourseChoicesDifficulty) newCourseChoicesDifficulty.classList.add('hidden');
       if (importArea) importArea.classList.add('hidden');
     });
   }
   if (newCourseCancel && newCourseChoices) {
     newCourseCancel.addEventListener('click', () => {
       newCourseChoices.classList.add('hidden');
+      if (newCourseChoicesDifficulty) newCourseChoicesDifficulty.classList.add('hidden');
       if (courseMenuFooter) courseMenuFooter.classList.remove('hidden');
+    });
+  }
+  if (newCourseDifficultyCancel && newCourseChoicesDifficulty) {
+    newCourseDifficultyCancel.addEventListener('click', () => {
+      newCourseChoicesDifficulty.classList.add('hidden');
+      newCourseChoices.classList.remove('hidden');
     });
   }
   if (newCourseChoices) {
     newCourseChoices.querySelectorAll('button[data-holes]').forEach(btn => {
       btn.addEventListener('click', () => {
         const hc = parseInt(btn.dataset.holes, 10);
-        if ([3,9,18].includes(hc)) {
-          createNewCourseWithHoles(hc);
+        if ([3,6,9,18].includes(hc)) {
+          if (hc === 3 && newCourseChoicesDifficulty) {
+            // For 3-hole courses, show difficulty chooser per REQ-031/010/034
+            newCourseChoices.classList.add('hidden');
+            newCourseChoicesDifficulty.classList.remove('hidden');
+            if (courseMenuFooter) courseMenuFooter.classList.add('hidden');
+          } else {
+            createNewCourseWithHoles(hc);
+            newCourseChoices.classList.add('hidden');
+            if (newCourseChoicesDifficulty) newCourseChoicesDifficulty.classList.add('hidden');
+            if (courseMenuFooter) courseMenuFooter.classList.remove('hidden');
+          }
+        }
+      });
+    });
+  }
+  if (newCourseChoicesDifficulty) {
+    newCourseChoicesDifficulty.querySelectorAll('button[data-difficulty]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const diff = btn.dataset.difficulty;
+        if (['easy','medium','hard'].includes(diff)) {
+          createNewCourseWithHoles(3, diff);
+          newCourseChoicesDifficulty.classList.add('hidden');
           newCourseChoices.classList.add('hidden');
           if (courseMenuFooter) courseMenuFooter.classList.remove('hidden');
         }
@@ -1828,6 +1866,7 @@ function init() {
     importCourseBtn.addEventListener('click', () => {
       importArea.classList.remove('hidden');
       if (newCourseChoices) newCourseChoices.classList.add('hidden');
+      if (newCourseChoicesDifficulty) newCourseChoicesDifficulty.classList.add('hidden');
       if (courseMenuFooter) courseMenuFooter.classList.add('hidden');
       if (importError) { importError.textContent = ''; importError.classList.add('hidden'); }
       if (importInput) importInput.value = '';
