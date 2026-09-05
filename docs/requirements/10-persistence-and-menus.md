@@ -33,47 +33,47 @@
 
 - `clearProgress() => localStorage.removeItem(STORAGE_KEY)` and reset run state to `currentHoleIndex=0, holeAttempts=0, totalAttempts=0, maxAttempts=10, supply={1,1,1}, areaUpgradeCount=0, secretRewardCounter=0, rewardPending=false, rewardOffered=[], modifiers=[]…` without touching `COURSES_KEY`. Called on `resetGameAfterWin` (`R` in `WIN`/`GAME_COMPLETE`), `startNewGameFromMain` (course play), `endRun` (see §6) **and on `Game Over → Return to Main Menu`** (see §7). Only **full completion** updates `bestTotal` (see §5), `End Run` and `Game Over` do not.
 
-## 2. Course Model `src/courses.js`
+## 2. Course Model `src/courses.js` — Staged Unlocking (3 → 6 → 9 → 18)
 
-- `Course = { id:string (UUID v4 via crypto.randomUUID fallback), name:string ("Adjective Noun"), holes:Level[], holeCount:3|6|9|18, seed:number, createdAt:number, bestTotal:number|null }`.
+- `Course = { id:string (UUID v4 via crypto.randomUUID fallback), name:string ("Adjective Noun"), holes:Level[], holeCount:3|6|9|18, seed:number, createdAt:number, bestTotal:number|null, stage:number }`.
 - `name` via two lists `ADJECTIVES` (≥10 wind/weather e.g. `Breezy,Gusty,Stormy,Misty,Blustery,Whispering,Howling,Calm,Sunny,Zephyr`) + `NOUNS` (≥10 golf e.g. `Fairway,Greens,Links,Meadow,Dunes,Valley,Hollow,Pines`) random `"Adjective Noun"` via `Math.random`.
-- `holes` via `generateCourse(holeCount, seed, options?)` wrapping `generateLevels(seed,holeCount,{difficulty})` per `08-level-generation.md` (for `3` uniform `difficulty` from player choice; `6`/`9`/`18` linear `easy→hard`).
-- **Collection persistence**: `loadCourses()` at `init()` parses `COURSES_KEY`; on corrupt/missing/wrong version auto-create one default `18`-hole course and `saveCourses()`. Validate each course (`id` string, `name` string, `holes.length` `3|6|9|18`, each hole with `tee/hole/obstacles/field`); discard invalid with `console.warn`. Allow empty array `[]` after user deletes all (no auto-create until next reload with missing key). `saveCourses(courses)` on every mutation: New Course, Import, delete, `bestTotal` improve.
-- **Active-run binding**: `STORAGE_KEY` payload's `courseId` ties to a `Course.id`; on load verify it still exists else treat as no saved run.
+- `holes` via `generateCourse(holeCount, seed, options?)` wrapping `generateLevels(seed,holeCount,{difficulty})` per `08-level-generation.md` (for `3` uniform `easy`; for `6`/`9`/`18` linear `easy→hard`).
+- **Stages & Unlocking**: Stages are fixed ordered `STAGES = [3,6,9,18]`. Fresh player (no `COURSES_KEY`) starts with **only one course**: `3-hole easy` (`holeCount=3, difficulty='easy'`, unlocked). Next stage is **locked** until previous stage is **cleared** (`bestTotal !== null`, i.e. completed at least once). When a stage is cleared, the **next stage auto-generates** (if not already exists) via `generateCourse(nextHoleCount)` and `saveCourses()`. Example: clear `3` → auto-generates `6`; clear `6` → auto-generates `9`; clear `9` → auto-generates `18`. No manual “New Course” for new stage; auto-generation only. `isStageUnlocked(holeCount)` returns `true` if `holeCount===3` or previous stage's course `bestTotal !== null`.
+- **Collection persistence**: `loadCourses()` at `init()` parses `COURSES_KEY`; on corrupt/missing/wrong version auto-create **only the 3-hole easy stage** (not 18) and `saveCourses()`. Migrates old saves that have arbitrary courses: if `COURSES_KEY` contains courses not matching staged model (e.g. multiple 18s, missing 3), it normalizes to staged order: keep first course per `holeCount` in `STAGES` order, discard extras, and fill missing unlocked stages up to current unlock point. Validate each course (`id` string, `name` string, `holes.length` `3|6|9|18`, each hole with `tee/hole/obstacles/field`); discard invalid with `console.warn`. Never allow empty array for fresh player — at least `3` exists. `saveCourses(courses)` on every mutation: stage unlock/generation, `bestTotal` improve, edit regenerate/replace via import, and stage delete is **not allowed** (delete removed; use Edit → Regenerate to replace).
+- **Active-run binding**: `STORAGE_KEY` payload's `courseId` ties to a `Course.id`; on load verify it still exists and its stage is unlocked else treat as no saved run. `play` on a locked stage is disabled.
 
-## 3. Main Menu — Single HTML Overlay, Two Modes (Entry vs In-Level Pause)
+## 3. Main Menu and Pause Menu — Logically Separate Overlays
 
-State `mainMenuVisible:boolean` + `isInLevelPause:boolean` (or `with-backdrop` class / `dataset.mode`).
+State `mainMenuVisible:boolean` for **Main Menu** (`#main-menu-overlay`) and `pauseMenuVisible:boolean` for **Pause Menu** (`#pause-overlay`) — **logically separate**, not two modes of one overlay. `isInLevelPause` is deprecated (kept for compat, mirrors `pauseMenuVisible`).
 
-- **Entry mode** (over splash, no backdrop `background:transparent`): shown on fresh load, after `End Run`, or when no run active; root shows **Continue** (conditional), **New Game**, **Help** — **never `End Run`**.
-- **In-level pause mode** (over playing field, with backdrop `background:rgba(0,0,0,0.55)` / `with-backdrop`): triggered **while in a level** (`activeCourse!==null`, regardless of `AIMING`/`CHARGING`/`FLYING`) by **`Escape` or `P` (`KeyP`)** — both work identically even in `FLYING` (freeze ball `pos`/`vel`). Pauses `updateBall` but `updateWindUniforms` still runs and field stays rendered dimmed behind backdrop. Root shows **Continue**, **Help**, **End Run** — **never `New Game`**. Pressing `Escape`/`P` again or clicking **Continue** simply hides overlay, removes `with-backdrop`, and **resumes at exact paused state** (ball continues flight, no `loadProgress` re-parse). Entry Continue (after reload) restores from `loadProgress` and switches to grass; pause Continue just unpauses.
+- **Main Menu** (`#main-menu-overlay`, over splash, no backdrop `background:transparent`): shown on fresh load, after `End Run`/`Game Over` return, or when no run active; shows **Continue** (conditional, `hasRestorableSave()`), **staged courses list** (`#staged-course-list` with 3/6/9/18 rows) and **Help** as round `?` top-left (`#help-button.help-corner-button` `36×36` `border-radius:50%` `?`). **Never `End Run`**, `New Game` hidden (staged auto-generate). Pressing `Help` shows help overlay (see §8). `Continue` restores from `loadProgress` and switches to grass.
 
-DOM `index.html` (single `#main-menu-overlay` inside `#game-container`):
+- **Pause Menu** (`#pause-overlay`, over playing field, with backdrop `background:rgba(0,0,0,0.55)`): **logically separate** from Main Menu, triggered **while in a level** (`activeCourse!==null`, regardless of `AIMING`/`CHARGING`/`FLYING`) by **`Escape` or `P` (`KeyP`)** — both work identically even in `FLYING` (freeze ball `pos`/`vel`). Pauses `updateBall` but `updateWindUniforms` still runs and field stays rendered dimmed behind backdrop. **Pause shows only `Continue` and `End Run` plus `Help` corner `?`** — **never the levels list** (no `#staged-course-list` inside pause). `Help` in pause is a separate button `#pause-help-button.help-corner-button` (also `?` top-left) that shows same help overlay. Pressing `Escape`/`P` again or clicking **Continue** simply hides `pauseOverlay`, and **resumes at exact paused state** (ball continues flight, no `loadProgress` re-parse).
+
+DOM `index.html` (two separate overlays inside `#game-container`):
 ```html
 <div id="main-menu-overlay" class="hidden">
+  <button id="help-button" class="help-corner-button" title="Help">?</button>
   <div class="main-menu-content">
     <div id="main-menu-root">
       <button id="continue-button" class="main-menu-button hidden">Continue</button>
-      <button id="new-game-button" class="main-menu-button">New Game</button>
-      <button id="help-button" class="main-menu-button">Help</button>
-      <button id="end-run-button" class="main-menu-button hidden">End Run</button>
+      <button id="new-game-button" class="main-menu-button hidden">New Game</button>
+      <div id="staged-course-list" class="course-list"></div>
     </div>
-    <div id="course-menu" class="hidden">
-      <div id="course-list" class="course-list"></div>
-      <div id="course-menu-footer">
-        <button id="new-course-button">New Course</button>
-        <button id="import-course-button">Import</button>
-      </div>
-      <div id="new-course-choices" class="hidden">...</div>
-      <div id="import-area" class="hidden">...</div>
-      <button id="course-menu-back">Back</button>
-    </div>
+    <div id="course-menu" class="hidden">...</div>
   </div>
-  <div id="help-overlay" class="hidden"><div class="help-card">…<button id="help-back-button">Back</button></div></div>
 </div>
+<div id="pause-overlay" class="hidden">
+  <button id="pause-help-button" class="help-corner-button" title="Help">?</button>
+  <div class="pause-content">
+    <button id="resume-button" class="main-menu-button">Continue</button>
+    <button id="pause-end-run-button" class="main-menu-button" style="background:#e74c3c">End Run</button>
+  </div>
+</div>
+<div id="help-overlay" class="hidden"><div class="help-card">…<button id="help-back-button">Back</button></div></div>
 <div id="toast" class="hidden">copied to clipboard</div>
 ```
-No `<h2>Golf Vector Field</h2>` inside overlay required; outside `#game-container` no `h1`/`#instructions`. `#pause-overlay` legacy shall be removed or permanently `hidden`; the visible pause surface is `#main-menu-overlay`.
+No `<h2>Golf Vector Field</h2>` inside overlay required; outside `#game-container` no `h1`/`#instructions`. Main menu and pause are **separate** overlays with separate state.
 
 - CSS: `#main-menu-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:transparent;border-radius:8px;z-index:12}` `.with-backdrop{background:rgba(0,0,0,0.55)}` `.hidden{display:none}` `.main-menu-content{max-width:90%;max-height:90%;overflow:hidden;flex-direction:column;gap:14px;background:transparent}` `.main-menu-button{min-width:180px;padding:12px 28px;font:700 14px system-ui;background:#2ecc71;border:2px solid #27ae60;border-radius:8px;color:white}` (opaque, not `rgba(...,0.28)`). End Run red `background:#e74c3c` `border:1px solid #c0392b`.
 
@@ -81,18 +81,21 @@ No `<h2>Golf Vector Field</h2>` inside overlay required; outside `#game-containe
 
 - **Blocking**: while `mainMenuVisible===true` (any sub-view) `updateBall` frozen, `handleLaunch`/placement/drag/hotkeys ignored, `maybeShowRewardMenu` blocked, hotbar hidden. Legacy `WIN`/`rewardMenuVisible` take priority over pause open.
 
-## 4. New Game → Course Submenu (behind `New Game`, not in root)
+## 4. Main Menu — Unlocked Courses List + Edit per Stage (replaces New Game → Course Submenu)
 
-- `New Game` (visible only in entry) → show `#course-menu` (hide `#main-menu-root`) while `mainMenuVisible===true` still on splash, no backdrop.
-- **Scrollable list** `#course-list` bounded to canvas (`getBoundingClientRect()` inside container at `375px`): `max-height: min(42vh,320px)` or `≈45%` overlay, `overflow-y:auto; overscroll-behavior:contain; display:flex; gap:8px`.
-- **Per-row** `.course-row[data-course-id]`:
-  - **Course play button** `.course-play-button` (opaque `background:#2ecc71` `border:2px solid #27ae60`, `flex:1; flex-direction:column; gap:2px`) with two rows: `span.course-name` `700 13px` white with stroke (course `name`, ellipsis), `span.course-meta` `500 11px` smaller (`getComputedStyle(meta).fontSize < name.fontSize`) showing `"<holeCount> holes   Record: <best|—>"` (e.g. `"9 holes  Record: 42"` or `"18 holes  Record: —"` when `bestTotal===null`).
-  - **Delete button** `.course-delete-button` to the right `flex:0 0 auto; padding:6px 10px; font:600 11px; background:#e74c3c; border:1px solid #c0392b; color:white` with **visible text exactly `🗑`** (or `🗑️`), no alphabetic `Delete` in `textContent` (`title="Delete course"` allowed). Does NOT start game; `confirm("Delete course \"<name>\"?")` → remove from `courses`, `saveCourses()`, re-render; if deleted `id===active courseId` also `clearProgress()` (Continue disappears). Deleting all is allowed (`courses:[]` → `{"version":1,"courses":[]}`; empty scrollable list with New Course/Import still visible; no auto-create until reload with missing key). Tests verify per-row Export does NOT exist (`querySelector('.course-export-button')===null` in `#course-menu`).
-  - Clicking the **play button** starts new run on that course: `activeCourse=course; LEVELS=course.holes; currentHoleIndex=0; holeAttempts=0; totalAttempts=0; supply={1,1,1}; /* etc. full run reset without touching courses */ loadLevel(0); gameState="AIMING"; mainMenuVisible=false; hide overlays; drawBackground('grass'); saveProgress(courseId)`.
-
-- **Footer** `#course-menu-footer` below list: `New Course` (`#new-course-button` text `New Course`, opaque) and `Import` (`#import-course-button` text exactly `Import`, opaque). Bounded to canvas.
-  - **New Course flow**: → show `#new-course-choices` with HTML buttons `data-holes="3"/"6"/"9"/"18"` ("3 Holes" etc.) + `Cancel`. Selecting `6`/`9`/`18` generates `createCourse(holeCount)` linearly `easy→hard`; selecting `3` shows secondary difficulty chooser `#new-course-choices-difficulty` `data-difficulty="easy"/"medium"/"hard"` (all `3` holes uniform that tier per `08-level-generation.md`); `Cancel` hides choices; push/save/re-render, stay in submenu (not auto-start).
-  - **Import flow**: → `#import-area` with `<p class="import-help">Paste the string exported from another game</p>` `<textarea id="import-input">` `Import` confirm + `Cancel` `Invalid course data` error `p#import-error`. Decode `atob(trim) → JSON.parse`, validate as `Course` (same checks as load; `holes.length` `3|6|9|18`); on duplicate `id` generate new UUID (suffix name `" (Import)"`), push/save/re-render. Invalid → show `Invalid course data`, no crash, no add. All bounded to canvas.
+- **Main menu root** (entry, over splash, `background:transparent`) now directly shows the **unlocked courses list** (not hidden behind `New Game`). `New Game` button is **removed** (courses auto-generate on stage clear; manual New Course via footer is removed). Root still has `Continue` (conditional) and `Help`, plus the stages list.
+- **Stages list** `#course-list` (now inside `#main-menu-root` or `#main-menu-content`, not behind `#course-menu`) bounded to canvas (`max-height: min(42vh,320px)`, `overflow-y:auto`, `display:flex; gap:8px`, `flex-direction:column`). For each `holeCount` in `STAGES=[3,6,9,18]` in order:
+  - If **locked** (`!isStageUnlocked(holeCount)`): row `.course-row.locked[data-holes="6"]` shows `🔒 6 Holes — Locked (clear 3 Holes)` disabled, no play/edit, `opacity 0.55`, `cursor not-allowed`. `Expand` not needed; locked rows are not playable even via direct `handleCoursePlay`.
+  - If **unlocked**: row `.course-row[data-course-id][data-holes="3"]` with:
+    - **Course play button** `.course-play-button` (opaque `background:#2ecc71` `border:2px solid #27ae60`, `flex:1; flex-direction:column; gap:2px`) showing `span.course-name` (`700 13px` white, course `name`) and `span.course-meta` (`500 11px` smaller) `"<holeCount> holes   Record: <best|—>"` (e.g. `"3 holes   Record: 12"` or `"6 holes   Record: —"`).
+    - **Edit button** `.course-edit-button` to the right `flex:0 0 auto; padding:6px 10px; font:600 12px; background:#3498db; border:1px solid #2980b9; color:white` with **visible text exactly `✎` (or `✎ Edit`) and `title="Edit course"`**. Clicking Edit toggles an **edit menu** for that stage: a small popover/row below the course row with three options (all bounded to canvas, `position:relative`):
+      - **Regenerate** `button.course-regenerate-button` text `Regenerate` (or `New Version`): `confirm("Generate new 6-hole course? This replaces the current one.")` → `newCourse = generateCourse(holeCount)` (for `3` always `easy`, for `6`/`9`/`18` linear `easy→hard`), replace `courses[idx]` where `idx` matches `holeCount` (keep same stage order), `saveCourses()`, re-render list, `clearProgress()` if `activeCourseId` was that stage. No `bestTotal` carried over (`null`).
+      - **Export** `button.course-export-button` text `Export` (or `⎙ Export`): `btoa(JSON.stringify(course))` + `navigator.clipboard.writeText` + toast `copied to clipboard` (same as §6 pause export, but per stage). Does not close edit menu.
+      - **Import** `button.course-import-button` text `Import`: shows inline `#import-area-stage` (or reuses global `#import-area`) with `textarea#stage-import-input` + `Import` confirm + `Cancel`, help `Paste the string exported from another game`. On confirm, `atob` → `JSON.parse` → `validateCourse(c)` → **only if `c.holeCount === stageHoleCount`** (same number of holes) then replace: `c.id = existing.id` (keep stage id) or generate new `id` but keep `holeCount`, `courses[idx]=validCourse` (deep clone), `saveCourses()`, re-render, hide import area. If `c.holeCount !== stageHoleCount` → show `Invalid course data` / `Wrong hole count — import must be X holes` and do not replace, no crash. `Cancel` hides import area.
+    - Clicking the **play button** (not edit) starts new run on that stage's course: same as before `activeCourse=course; LEVELS=course.holes; currentHoleIndex=0; holeAttempts=0; totalAttempts=0; maxAttempts=10; supply={1,1,1}; loadLevel(0); gameState="AIMING"; mainMenuVisible=false; saveProgress(courseId)`.
+  - The list is always in stage order `3,6,9,18` (locked ones at bottom). Fresh save: only `3` row unlocked with generated `3-easy` course; `6/9/18` locked. After `3` `bestTotal` becomes not-null, `6` auto-generates and becomes unlocked on next menu render (see §5).
+- **Legacy `#course-menu` behind `New Game` is removed/hidden**: `New Game` button and `#course-menu` (including `#new-course-button`/`#import-course-button` footer) shall be `hidden` or removed; tests shall verify `document.getElementById('new-game-button')` is either hidden or not required, and `document.getElementById('course-menu')` is hidden. The unlocked list is now on root, not behind `New Game`.
+- **Delete is removed**: per-row `🗑` delete is removed; only `Edit → Regenerate` replaces. `confirm("Delete course ...")` is no longer used for stages (edit regenerate handles replacement). `saveCourses` still handles `bestTotal` updates.
 
 ## 5. Best Score Per Course (replaces global `HIGH_SCORE_KEY`)
 
@@ -116,13 +119,19 @@ No `<h2>Golf Vector Field</h2>` inside overlay required; outside `#game-containe
 - **Content** (short, ≤400 words): Rules must contain `wind` + `hole`/`course` + `attempt`/`stroke`/`fewest`; controls must contain `arrow`/`aim` + `space`/`charge`/`shoot` + `click`/`place`; plus mention modifiers-before-shoot, attempts tracking, per-course `bestTotal` saved. Controls list rows `Arrow keys — Aim`, `Space — Hold to charge, release to shoot`, `Click — Place modifier`, `Right-click — Remove`, `1/2/3`, `H`, `R`, `Escape/P` pause (core three `Arrow/Space/Click` mandatory).
 - **Back** `#help-back-button` text `Back` opaque; returns to root without side effects. Bounded to canvas; no page scroll. While help visible game is paused (same blocking as §3).
 
-## Acceptance Criteria
+## Acceptance Criteria — Staged Unlocking (3→6→9→18)
 
-- [ ] Fresh load: splash visible, `#loading-screen` black→hidden after decode, `localStorage` has `COURSES_KEY` with one `18`-hole course `id` UUID, `name` `"Adjective Noun"`; menu root has `New Game`/`Help`, `Continue` hidden when no run, `End Run` never visible on entry; buttons opaque; all bounding rects inside container.
-- [ ] With save: `Continue` visible on entry (but `End Run` still hidden on entry); clicking `Continue` (entry) or `New Game`→course play→reload→`Continue` (pause case) behavior per §3/§4 resumes/restarts correctly and `STORAGE_KEY` has `courseId`.
-- [ ] `Escape`/`P` even in `FLYING` freezes ball, shows pause with backdrop and `Continue`/`Help`/`End Run` (never `New Game`); `Continue`/`Escape`/`P` unfreezes and ball continues; `End Run` clears `STORAGE_KEY`, restores entry menu over splash.
-- [ ] Course submenu behind `New Game` only: scrollable `#course-list`, per-row two-row play button + `🗑` delete (no per-row export), footer `New Course`/`Import` exact texts; `New Course` `3/6/9/18` + `3`-difficulty chooser; `Import` help text + `atob` validation; export only in pause via `#pause-export-button` with toast `copied to clipboard`; reloading preserves courses per `COURSES_KEY`.
-- [ ] Full course completion updates `bestTotal` (lower is better), ties keep, `End Run` never updates. Help overlay shows required keywords, is scrollable, card opaque, overlay transparent, Back returns to correct root (entry vs pause backdrop preserved).
+- [ ] Fresh load: splash visible, `#loading-screen` black→hidden after decode, `localStorage` has `COURSES_KEY` with **only one `3`-hole easy course** (`id` UUID, `name` `"Adjective Noun"`, `holeCount 3, difficulty easy`), not `18`; menu root **directly shows unlocked courses list** (`#course-list` inside `#main-menu-root`): `3 Holes` row unlocked with play + `✎ Edit` (not `🗑`), `6/9/18` rows locked `🔒 6 Holes — Locked (clear 3 Holes)` etc., `Continue` hidden when no run, `End Run` never visible on entry; `New Game` button hidden/removed; buttons opaque; all bounding rects inside container. `loadCourses()` on corrupt/missing creates only `3-easy`.
+- [ ] With `3` cleared (`bestTotal` not `null`): next load shows `3` and `6` unlocked ( `6` auto-generated `6` linear, `holeCount 6` ), `9/18` still locked. After clearing `6`, `9` unlocks auto-generated; after clearing `9`, `18` unlocks. `isStageUnlocked(6)` is `courses.find(c=>c.holeCount===3).bestTotal !== null`, etc. Clearing is via `maybeUpdateHighScore` on final hole `WIN`.
+- [ ] Main menu unlocked list: scrollable `#course-list` shows `4` rows in order `3,6,9,18` with locked/unlocked states as above; unlocked rows have play button (two-row `course-name` + `course-meta` `X holes   Record: —/N`) + `✎ Edit` button (`title="Edit course"`, text `✎`); locked rows have no play/edit, show `🔒`. Clicking play on unlocked stage starts new run on that stage's course (`activeCourse=course` per holeCount, `loadLevel(0)` etc., `saveProgress(courseId)`). `New Game`/`#course-menu` behind `New Game` is hidden/removed.
+- [ ] Edit per stage: clicking `✎ Edit` on unlocked row toggles edit menu (popover/row below) with three options (all bounded to canvas):
+  - **Regenerate** (`button.course-regenerate-button` text `Regenerate`/`New Version`): `confirm("Generate new 6-hole course? This replaces the current one.")` → `newCourse = generateCourse(holeCount)` (for `3` always `easy`, for `6/9/18` linear), replace `courses[idx]` where `holeCount` matches stage, `saveCourses()`, re-render list, `clearProgress()` if `activeCourseId` was that stage. `bestTotal` reset to `null`.
+  - **Export** (`button.course-export-button` text `Export`): `btoa(JSON.stringify(course))` + `clipboard` + toast `copied to clipboard` (same as §6 pause export but per stage, not global).
+  - **Import** (`button.course-import-button` text `Import`): shows `textarea#stage-import-input` + `Import` confirm + help `Paste the string exported from another game`. On confirm, `atob`→`JSON`→`validateCourse` **only if `c.holeCount === stageHoleCount`** then replace `courses[idx]=validCourse` (keep stage `id` or new `id` but `holeCount` must match), `saveCourses()`, re-render. If `c.holeCount !== stageHoleCount` → show `Invalid course data` / `Wrong hole count — import must be X holes` and do not replace, no crash. `Cancel` hides import area.
+- [ ] With save: `Continue` visible on entry (but `End Run` still hidden on entry); clicking `Continue` (entry) or playing an unlocked stage → reload → `Continue` behavior per §3 resumes correctly and `STORAGE_KEY` has `courseId` of that stage.
+- [ ] `Escape`/`P` even in `FLYING` freezes ball, shows pause with backdrop and **only `Continue` + `End Run`** (plus `Help` round `?` top-left) — **never `New Game` and never the levels list** (`#staged-course-list` hidden when `isInLevelPause`); `Continue`/`Escape`/`P` unfreezes and ball continues; `End Run` clears `STORAGE_KEY`, restores entry menu over splash.
+- [ ] Full course completion updates `bestTotal` for that stage's course (lower is better), ties keep, and **auto-generates next stage** if locked (e.g. clearing `3` with `bestTotal 12` creates `6` and `saveCourses()`; `isStageUnlocked(6)` becomes true). `End Run`/`Game Over` never updates `bestTotal` nor unlocks next stage. Help overlay still shows required keywords, is scrollable, card opaque, overlay transparent, Back returns to correct root.
+- [ ] Reloading preserves `COURSES_KEY` staged courses per unlock order; `COURSES_KEY` always contains courses in `STAGES` order `[3,6,9,18]` for unlocked ones, locked stages not in array until unlocked.
 
 ## File Paths
 

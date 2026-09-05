@@ -859,5 +859,5 @@ export function generateLevels(seed = 42, count = 18, options = {}) {
   return LEVELS;
 }
 
-export let LEVELS = _generateLevelsInternal(42, 18);
-export let LEVEL = LEVELS[0];
+export let LEVELS = [];
+export let LEVEL = { id: "hole-1", name: "Hole 1", canvas: { width: LOGICAL_W, height: LOGICAL_H }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], waterHazards: [], terrain: null, field: { cols: 32, rows: 18, strength: 80, seed: 42, sources: 1, sinks: 1, doublets: 1, vortexes: 0 }, difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 3, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 } };

@@ -71,9 +71,64 @@ export function validateCourse(c) {
   return true;
 }
 
+export const STAGES = [3, 6, 9, 18];
+
+export function isStageUnlocked(courses, holeCount) {
+  if (holeCount === 3) return true;
+  const idx = STAGES.indexOf(holeCount);
+  if (idx <= 0) return false;
+  const prevHoleCount = STAGES[idx - 1];
+  const prev = courses.find(c => c.holeCount === prevHoleCount);
+  return !!prev && prev.bestTotal !== null;
+}
+
+export function getUnlockedStages(courses) {
+  const unlocked = [];
+  for (const hc of STAGES) {
+    if (isStageUnlocked(courses, hc)) unlocked.push(hc);
+    else break;
+  }
+  return unlocked;
+}
+
+export function ensureStagedCourses(courses) {
+  // Normalize to staged model: keep first course per holeCount in STAGES order, fill missing unlocked stages
+  const byHoleCount = new Map();
+  for (const c of courses) {
+    if (!STAGES.includes(c.holeCount)) continue;
+    if (!byHoleCount.has(c.holeCount)) byHoleCount.set(c.holeCount, c);
+  }
+  const staged = [];
+  for (const hc of STAGES) {
+    if (byHoleCount.has(hc)) {
+      staged.push(byHoleCount.get(hc));
+    } else if (isStageUnlocked(staged, hc)) {
+      // auto-generate missing unlocked stage
+      const gen = hc === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(hc, Date.now());
+      staged.push(gen);
+    } else {
+      break;
+    }
+  }
+  // If no courses (fresh), create 3-easy
+  if (staged.length === 0) {
+    const def = generateCourse(3, Date.now(), { difficulty: 'easy' });
+    staged.push(def);
+  }
+  return staged;
+}
+
+// In-memory cache: generate once, then read from cache/localStorage without re-generating on menu entry
+let _coursesCache = null;
+let _coursesCacheRaw = null;
+
 export function loadCourses() {
   try {
     const raw = localStorage.getItem(COURSES_KEY);
+    // Serve from in-memory cache if storage unchanged (avoids re-parse + re-generation lag on every menu open)
+    if (_coursesCache && raw && raw === _coursesCacheRaw) {
+      return _coursesCache;
+    }
     if (!raw) throw new Error("no courses");
     const d = JSON.parse(raw);
     if (d.version !== 1 || !Array.isArray(d.courses)) throw new Error("bad version");
@@ -84,21 +139,63 @@ export function loadCourses() {
         // Ensure bestTotal is either null or number
         if (c.bestTotal !== null && typeof c.bestTotal !== 'number') c.bestTotal = null;
         if (typeof c.bestTotal === 'number') c.bestTotal = Math.max(0, Math.floor(c.bestTotal));
+        // Ensure holeCount and stage
+        if (!STAGES.includes(c.holeCount)) c.holeCount = c.holes.length;
         valid.push(c);
       } catch (e) {
         console.warn("Discarding invalid course", c, e);
       }
     }
-    return valid;
+    // Normalize to staged unlocking model — only generates if a previously-unlocked stage is missing (once per unlock)
+    const staged = ensureStagedCourses(valid);
+    // If staged differs (e.g. old save had 18 only, or missing 3), persist normalized
+    if (staged.length !== valid.length || staged.some((c,i) => c.id !== valid[i]?.id)) {
+      try { saveCourses(staged); } catch {}
+      _coursesCache = staged;
+      _coursesCacheRaw = localStorage.getItem(COURSES_KEY);
+      return staged;
+    }
+    _coursesCache = staged;
+    _coursesCacheRaw = raw;
+    return staged;
   } catch (e) {
-    const def = generateCourse(18, Date.now());
+    const def = generateCourse(3, Date.now(), { difficulty: 'easy' });
     try { saveCourses([def]); } catch {}
+    _coursesCache = [def];
+    try { _coursesCacheRaw = localStorage.getItem(COURSES_KEY); } catch {}
     return [def];
   }
 }
 
+export function ensureNextStageUnlocked(courses) {
+  // Called after a stage is cleared (bestTotal set). If next stage locked, generate it.
+  for (let i = 0; i < STAGES.length - 1; i++) {
+    const currHC = STAGES[i];
+    const nextHC = STAGES[i+1];
+    const curr = courses.find(c => c.holeCount === currHC);
+    const next = courses.find(c => c.holeCount === nextHC);
+    if (curr && curr.bestTotal !== null && !next) {
+      const gen = generateCourse(nextHC, Date.now());
+      courses.push(gen);
+      // Keep staged order
+      courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
+      saveCourses(courses);
+      return gen;
+    }
+  }
+  return null;
+}
+
 export function saveCourses(courses) {
   localStorage.setItem(COURSES_KEY, JSON.stringify({ version: 1, courses }));
+  _coursesCache = courses;
+  try { _coursesCacheRaw = localStorage.getItem(COURSES_KEY); } catch {}
+}
+
+// Invalidate in-memory cache (e.g. after external clear)
+export function invalidateCoursesCache() {
+  _coursesCache = null;
+  _coursesCacheRaw = null;
 }
 
 export function exportCourse(course) {

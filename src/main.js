@@ -35,7 +35,7 @@ import {
   getWindUniforms,
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
-import { COURSES_KEY, generateCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse } from "./courses.js";
+import { COURSES_KEY, STAGES, generateCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked } from "./courses.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -514,17 +514,36 @@ function hasRestorableSave() {
     return !!findCourseById(d.courseId);
   } catch { return false; }
 }
+let _lastCourseListSig = null;
+function _courseListSignature() {
+  try {
+    // Cheap signature: length + each id/bestTotal
+    return courses.map(c => `${c.id}:${c.holeCount}:${c.bestTotal}`).join('|');
+  } catch { return null; }
+}
 function renderMainMenuRootVisibility() {
   const contBtn = document.getElementById('continue-button');
   const endBtn = document.getElementById('end-run-button');
   const newGameBtn = document.getElementById('new-game-button');
+  const stagedList = document.getElementById('staged-course-list');
   const showSave = hasRestorableSave();
   const isPause = !!isInLevelPause;
   if (contBtn) contBtn.classList.toggle('hidden', !showSave);
   // Splash never shows End Run, even if save exists; pause shows End Run only if save exists
   if (endBtn) endBtn.classList.toggle('hidden', !isPause || !showSave);
-  // Pause never shows New Game, entry always shows New Game
-  if (newGameBtn) newGameBtn.classList.toggle('hidden', !!isPause);
+  // Staged unlocking: New Game is removed (courses auto-generate), always hidden
+  if (newGameBtn) newGameBtn.classList.add('hidden');
+  // Pause in game should show only Continue and End Run, not the levels
+  if (stagedList) stagedList.classList.toggle('hidden', !!isPause);
+  // Only re-render course list when staged courses actually changed (avoids lag on every help close / menu toggle)
+  // Courses are generated once and cached in localStorage; read from cache without re-generation
+  if (!isPause) {
+    const sig = _courseListSignature();
+    if (sig !== _lastCourseListSig) {
+      _lastCourseListSig = sig;
+      try { renderCourseList(); } catch {}
+    }
+  }
 }
 function showMainMenuRoot() {
   courseMenuVisible = false;
@@ -532,7 +551,7 @@ function showMainMenuRoot() {
   const root = document.getElementById('main-menu-root');
   const cm = document.getElementById('course-menu');
   const hm = document.getElementById('help-overlay');
-  const mmc = document.querySelector('.main-menu-content');
+  const mmc = document.querySelector('#main-menu-overlay .main-menu-content');
   if (mmc) mmc.classList.remove('hidden');
   if (root) root.classList.remove('hidden');
   if (cm) cm.classList.add('hidden');
@@ -580,12 +599,25 @@ function showHelpOverlay() {
   helpVisible = true;
   courseMenuVisible = false;
   const hm = document.getElementById('help-overlay');
-  const mmc = document.querySelector('.main-menu-content');
-  if (mmc) mmc.classList.add('hidden');
   if (hm) hm.classList.remove('hidden');
+  // Hide main and pause contents but keep overlays for backdrop
+  const mmc = document.querySelector('#main-menu-overlay .main-menu-content');
+  const pc = document.querySelector('#pause-overlay .pause-content');
+  if (mmc) mmc.classList.add('hidden');
+  if (pc) pc.classList.add('hidden');
+  syncHelpOverlay();
 }
 function handleContinue() {
-  // In-level pause (Escape during active run): simply hide overlay and resume preserving ball
+  // In-level pause (Escape during active run): simply hide pause overlay and resume preserving ball
+  if (pauseMenuVisible) {
+    pauseMenuVisible = false;
+    isInLevelPause = false;
+    helpVisible = false;
+    syncPauseOverlay();
+    syncHelpOverlay();
+    return true;
+  }
+  // Legacy isInLevelPause + mainMenuVisible compat
   if (isInLevelPause && mainMenuVisible) {
     mainMenuVisible = false;
     courseMenuVisible = false;
@@ -593,6 +625,7 @@ function handleContinue() {
     isInLevelPause = false;
     syncMainMenu();
     syncPauseOverlay();
+    syncHelpOverlay();
     return true;
   }
   // Entry resume (after reload, no in-memory run): load from storage
@@ -625,18 +658,16 @@ function handleContinue() {
   return true;
 }
 function openInLevelPause() {
-  // Show main menu with backdrop shadowing field, works even in FLYING
+  // Show pause menu (separate overlay) with backdrop, works even in FLYING
   if (rewardMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
-  // Only if a run is active (has course and not already showing menu)
+  if (pauseMenuVisible) return false;
   if (mainMenuVisible) return false;
   if (!activeCourse && !hasRestorableSave()) return false;
-  // If no activeCourse but hasRestorableSave, set activeCourse from storage courseId for display purposes? Keep current level's course
-  // Show overlay with backdrop
+  pauseMenuVisible = true;
   isInLevelPause = true;
-  mainMenuVisible = true;
-  courseMenuVisible = false;
   helpVisible = false;
-  syncMainMenu();
+  syncPauseOverlay();
+  syncHelpOverlay();
   return true;
 }
 const HIGH_SCORE_KEY = "golfVectorField.highScore.v1";
@@ -660,12 +691,24 @@ function maybeUpdateHighScore() {
   // Legacy global high score (migration)
   const prev = getHighScore();
   if (prev == null || totalAttempts < prev) setHighScore(totalAttempts);
-  // Per-course bestTotal per REQ-031
+  // Per-course bestTotal per REQ-031 + staged unlocking 3→6→9→18
+  let updated = false;
   if (activeCourse.bestTotal == null || totalAttempts < activeCourse.bestTotal) {
     activeCourse.bestTotal = totalAttempts;
+    updated = true;
     try { saveCourses(); } catch {}
     // Re-render course list to show new record
     try { renderCourseList(); } catch {}
+  }
+  // Auto-generate next stage if this stage was just cleared (or already cleared)
+  if (activeCourse.bestTotal !== null) {
+    const next = ensureNextStageUnlocked(courses);
+    if (next) {
+      try { renderCourseList(); } catch {}
+    } else if (updated) {
+      // still re-render to show unlock
+      try { renderCourseList(); } catch {}
+    }
   }
 }
 function maybeUpdateCourseRecord() { return maybeUpdateHighScore(); }
@@ -689,60 +732,186 @@ function showToast(msg) {
 }
 
 function renderCourseList() {
-  const list = document.getElementById('course-list');
-  if (!list) return;
-  list.innerHTML = '';
-  for (const course of courses) {
-    const row = document.createElement('div');
-    row.className = 'course-row';
-    row.dataset.courseId = course.id;
-    const playBtn = document.createElement('button');
-    playBtn.className = 'course-play-button';
-    const record = course.bestTotal == null ? '—' : String(course.bestTotal);
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'course-name';
-    nameSpan.textContent = course.name;
-    const metaSpan = document.createElement('span');
-    metaSpan.className = 'course-meta';
-    metaSpan.textContent = `${course.holeCount} holes \u2003 Record: ${record}`;
-    playBtn.appendChild(nameSpan);
-    playBtn.appendChild(metaSpan);
-    playBtn.title = `Play ${course.name} (${course.holeCount} holes)`;
-    playBtn.addEventListener('click', () => handleCoursePlay(course.id));
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'course-delete-button';
-    deleteBtn.textContent = '🗑';
-    deleteBtn.title = 'Delete course';
-    deleteBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!confirm(`Delete course "${course.name}"?`)) return;
-      const idx = courses.findIndex(c => c.id === course.id);
-      if (idx !== -1) {
-        const wasActive = activeCourseId === course.id || (activeCourse && activeCourse.id === course.id);
-        courses.splice(idx, 1);
-        if (wasActive) {
-          clearProgress();
-          if (courses.length) {
-            setActiveCourse(courses[0]);
-          } else {
-            activeCourse = null;
-            activeCourseId = null;
-            // Keep LEVELS as is until next course creation/play; no auto-create default here per updated REQ-031
-            try { LEVELS.length = 0; } catch {}
+  // New staged unlocking: show 4 rows (3,6,9,18) with locked/unlocked + edit per stage
+  // Render into #staged-course-list if exists (new main menu root), otherwise fallback to #course-list
+  const stagedList = document.getElementById('staged-course-list');
+  const legacyList = document.getElementById('course-list');
+  const targets = [];
+  if (stagedList) targets.push(stagedList);
+  if (legacyList && legacyList !== stagedList) targets.push(legacyList);
+  if (targets.length === 0) return;
+  for (const list of targets) {
+    list.innerHTML = '';
+    for (const holeCount of STAGES) {
+      const course = courses.find(c => c.holeCount === holeCount);
+      const unlocked = isStageUnlocked(courses, holeCount);
+      const row = document.createElement('div');
+      row.className = 'course-row' + (unlocked ? '' : ' locked');
+      row.dataset.holes = String(holeCount);
+      if (course) row.dataset.courseId = course.id;
+      if (!unlocked) {
+        const lockedBtn = document.createElement('button');
+        lockedBtn.className = 'course-play-button';
+        lockedBtn.disabled = true;
+        lockedBtn.innerHTML = `<span class="course-name">🔒 ${holeCount} Holes — Locked</span><span class="course-meta">Clear ${STAGES[STAGES.indexOf(holeCount)-1]} Holes to unlock</span>`;
+        lockedBtn.title = `Locked — clear ${STAGES[STAGES.indexOf(holeCount)-1]} Holes`;
+        row.appendChild(lockedBtn);
+      } else if (course) {
+        const record = course.bestTotal == null ? '—' : String(course.bestTotal);
+        const playBtn = document.createElement('button');
+        playBtn.className = 'course-play-button';
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'course-name';
+        nameSpan.textContent = course.name;
+        const metaSpan = document.createElement('span');
+        metaSpan.className = 'course-meta';
+        metaSpan.textContent = `${course.holeCount} holes \u2003 Record: ${record}`;
+        playBtn.appendChild(nameSpan);
+        playBtn.appendChild(metaSpan);
+        playBtn.title = `Play ${course.name} (${course.holeCount} holes)`;
+        playBtn.addEventListener('click', () => handleCoursePlay(course.id));
+        const editBtn = document.createElement('button');
+        editBtn.className = 'course-edit-button';
+        editBtn.textContent = '✎';
+        editBtn.title = 'Edit course';
+        // Edit menu toggle
+        editBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          // Close any other open edit menus
+          const existing = row.nextElementSibling;
+          if (existing && existing.classList.contains('course-edit-menu')) {
+            existing.remove();
+            return;
           }
-        }
-        // Allow empty collection per updated REQ-031 — persist [] and show empty list
-        saveCourses();
-        renderCourseList();
-        try { renderMainMenuRootVisibility(); } catch {}
+          // Close all other edit menus in this list
+          list.querySelectorAll('.course-edit-menu').forEach(el => el.remove());
+          const menu = document.createElement('div');
+          menu.className = 'course-edit-menu';
+          menu.style.cssText = 'display:flex; gap:8px; padding:8px; background:rgba(0,0,0,0.12); border-radius:6px; margin:4px 0; flex-wrap:wrap;';
+          // Regenerate
+          const regenBtn = document.createElement('button');
+          regenBtn.className = 'course-regenerate-button';
+          regenBtn.textContent = 'Regenerate';
+          regenBtn.title = 'Generate new version (replaces current)';
+          regenBtn.addEventListener('click', () => {
+            if (!confirm(`Generate new ${holeCount}-hole course? This replaces the current one.`)) return;
+            const newCourse = holeCount === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(holeCount, Date.now());
+            // Keep stage order, replace
+            const idx = courses.findIndex(c => c.holeCount === holeCount);
+            if (idx !== -1) {
+              // Preserve id? Spec says replaces this course — keep same stage but new id/name/holes, bestTotal null
+              courses[idx] = newCourse;
+            } else {
+              courses.push(newCourse);
+              courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
+            }
+            // If active course was this stage, clear progress (since course changed)
+            if (activeCourseId && courses[idx] && activeCourseId === course.id) {
+              clearProgress();
+            }
+            saveCourses();
+            renderCourseList();
+          });
+          // Export
+          const exportBtn = document.createElement('button');
+          exportBtn.className = 'course-export-button';
+          exportBtn.textContent = 'Export';
+          exportBtn.addEventListener('click', () => {
+            try {
+              const b64 = exportCourse(course);
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(b64).then(() => showToast('copied to clipboard')).catch(() => {
+                  const ta = document.createElement('textarea'); ta.value = b64; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch{} document.body.removeChild(ta); showToast('copied to clipboard');
+                });
+              } else {
+                const ta = document.createElement('textarea'); ta.value = b64; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch{} document.body.removeChild(ta); showToast('copied to clipboard');
+              }
+            } catch (e) { showToast('Copy failed'); }
+          });
+          // Import
+          const importBtn = document.createElement('button');
+          importBtn.className = 'course-import-button';
+          importBtn.textContent = 'Import';
+          importBtn.addEventListener('click', () => {
+            // Toggle import area for this stage
+            let importArea = menu.querySelector('.stage-import-area');
+            if (importArea) { importArea.remove(); return; }
+            importArea = document.createElement('div');
+            importArea.className = 'stage-import-area';
+            importArea.style.cssText = 'width:100%; display:flex; flex-direction:column; gap:6px; margin-top:6px;';
+            const help = document.createElement('p');
+            help.className = 'import-help';
+            help.textContent = 'Paste the string exported from another game';
+            help.style.cssText = 'font:600 11px system-ui; color:#333; margin:0;';
+            const ta = document.createElement('textarea');
+            ta.id = 'stage-import-input';
+            ta.placeholder = 'Paste base64 string here';
+            ta.style.cssText = 'width:100%; min-height:60px; font: 11px monospace; padding:6px;';
+            const rowBtns = document.createElement('div');
+            rowBtns.style.cssText = 'display:flex; gap:8px;';
+            const confirmBtn = document.createElement('button');
+            confirmBtn.textContent = 'Import';
+            confirmBtn.addEventListener('click', () => {
+              const val = ta.value.trim();
+              if (!val) { alert('Invalid course data'); return; }
+              try {
+                const imported = importCourse(val);
+                if (imported.holeCount !== holeCount) {
+                  alert(`Wrong hole count — import must be ${holeCount} holes (got ${imported.holeCount})`);
+                  const err = menu.querySelector('.import-error') || document.createElement('p');
+                  err.className = 'import-error';
+                  err.textContent = `Wrong hole count — import must be ${holeCount} holes`;
+                  err.style.cssText = 'color:#e74c3c; font:600 11px system-ui; margin:0;';
+                  if (!menu.contains(err)) menu.appendChild(err);
+                  return;
+                }
+                // Replace stage's course
+                const idx2 = courses.findIndex(c => c.holeCount === holeCount);
+                if (idx2 !== -1) courses[idx2] = imported;
+                else courses.push(imported);
+                courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
+                saveCourses();
+                renderCourseList();
+              } catch (e) {
+                const err = menu.querySelector('.import-error') || document.createElement('p');
+                err.className = 'import-error';
+                err.textContent = 'Invalid course data';
+                err.style.cssText = 'color:#e74c3c; font:600 11px system-ui; margin:0;';
+                if (!menu.contains(err)) menu.appendChild(err);
+              }
+            });
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.addEventListener('click', () => importArea.remove());
+            rowBtns.appendChild(confirmBtn);
+            rowBtns.appendChild(cancelBtn);
+            importArea.appendChild(help);
+            importArea.appendChild(ta);
+            importArea.appendChild(rowBtns);
+            menu.appendChild(importArea);
+          });
+          menu.appendChild(regenBtn);
+          menu.appendChild(exportBtn);
+          menu.appendChild(importBtn);
+          row.insertAdjacentElement('afterend', menu);
+        });
+        row.appendChild(playBtn);
+        row.appendChild(editBtn);
+      } else {
+        // Unlocked but no course yet (should not happen, but handle)
+        row.innerHTML = `<span class="course-name">${holeCount} Holes — Ready</span>`;
       }
-    });
-    row.appendChild(playBtn);
-    row.appendChild(deleteBtn);
-    list.appendChild(row);
+      list.appendChild(row);
+    }
   }
-  // After rendering, ensure Continue visibility is up to date (in case active course deleted)
-  try { renderMainMenuRootVisibility(); } catch {}
+  // Cache signature after render to avoid re-rendering on every help close / menu toggle
+  try { _lastCourseListSig = _courseListSignature(); } catch {}
+  // After rendering, ensure Continue visibility is up to date (in case active course deleted) without re-entering course render
+  try {
+    const contBtn = document.getElementById('continue-button');
+    const showSave = hasRestorableSave();
+    if (contBtn) contBtn.classList.toggle('hidden', !showSave);
+  } catch {}
 }
 
 function handleCoursePlay(courseId) {
@@ -827,38 +996,32 @@ function syncMainMenu() {
   if (el) {
     if (mainMenuVisible) {
       el.classList.remove("hidden");
-      // Backdrop: transparent over splash (entry), dim over paused field (Escape in level)
-      el.classList.toggle("with-backdrop", !!isInLevelPause);
-      el.dataset.mode = isInLevelPause ? "pause" : "entry";
-      // Sync sub-views (help-overlay is sibling of .main-menu-content)
-      const mmc = document.querySelector('.main-menu-content');
+      // Main menu is always transparent over splash, never with backdrop (pause has its own overlay)
+      el.classList.remove("with-backdrop");
+      el.dataset.mode = "entry";
+      // Sync sub-views — help is now global, not inside main-menu-overlay, so handle separately
+      const mmc = el.querySelector('.main-menu-content');
       const root = document.getElementById('main-menu-root');
       const cm = document.getElementById('course-menu');
-      const hm = document.getElementById('help-overlay');
-      if (helpVisible) {
-        if (mmc) mmc.classList.add('hidden');
-        if (hm) hm.classList.remove('hidden');
-      } else {
+      // Help is global, handled in syncHelpOverlay
+      if (courseMenuVisible) {
+        if (root) root.classList.add('hidden');
+        if (cm) cm.classList.remove('hidden');
+        const ncc2 = document.getElementById('new-course-choices');
+        const nccDiff2 = document.getElementById('new-course-choices-difficulty');
+        const ia2 = document.getElementById('import-area');
+        const cmf2 = document.getElementById('course-menu-footer');
+        if (ncc2) ncc2.classList.add('hidden');
+        if (nccDiff2) nccDiff2.classList.add('hidden');
+        if (ia2) ia2.classList.add('hidden');
+        if (cmf2) cmf2.classList.remove('hidden');
+        try { renderCourseList(); } catch {}
         if (mmc) mmc.classList.remove('hidden');
-        if (hm) hm.classList.add('hidden');
-        if (courseMenuVisible) {
-          if (root) root.classList.add('hidden');
-          if (cm) cm.classList.remove('hidden');
-          // Ensure inner choices hidden when showing course menu via direct flag
-          const ncc2 = document.getElementById('new-course-choices');
-          const nccDiff2 = document.getElementById('new-course-choices-difficulty');
-          const ia2 = document.getElementById('import-area');
-          const cmf2 = document.getElementById('course-menu-footer');
-          if (ncc2) ncc2.classList.add('hidden');
-          if (nccDiff2) nccDiff2.classList.add('hidden');
-          if (ia2) ia2.classList.add('hidden');
-          if (cmf2) cmf2.classList.remove('hidden');
-          try { renderCourseList(); } catch {}
-        } else {
-          if (root) root.classList.remove('hidden');
-          if (cm) cm.classList.add('hidden');
-          renderMainMenuRootVisibility();
-        }
+      } else {
+        if (root) root.classList.remove('hidden');
+        if (cm) cm.classList.add('hidden');
+        if (mmc) mmc.classList.remove('hidden');
+        renderMainMenuRootVisibility();
       }
     } else {
       el.classList.add("hidden");
@@ -866,11 +1029,34 @@ function syncMainMenu() {
       el.dataset.mode = "";
     }
   }
-  // Ensure bottom background reflects mode (splash vs grass, entry vs pause) per REQ-030
+  // Help overlay is global — sync separately
+  syncHelpOverlay();
+  // Ensure bottom background reflects mode (splash vs grass) per REQ-030
   redrawBottom();
-  // Wind overlay: hidden on entry splash, visible on level and also while paused with backdrop (field dimmed but wind still animates)
-  try { const showWind = !mainMenuVisible || isInLevelPause; setWindVisible(showWind); } catch {}
+  // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop)
+  try { const showWind = !mainMenuVisible && !pauseMenuVisible; setWindVisible(!showWind ? false : true); } catch {}
+  // Actually wind should be visible on level and also while paused (dimmed), hidden only on main menu entry
+  try { const showWind2 = !mainMenuVisible; setWindVisible(showWind2 || pauseMenuVisible); } catch {}
   updateHotbarUI();
+}
+
+function syncHelpOverlay() {
+  const hm = document.getElementById('help-overlay');
+  if (!hm) return;
+  if (helpVisible) {
+    hm.classList.remove('hidden');
+    // Hide other menu contents when help is visible (but keep overlays themselves to preserve backdrop)
+    const mmc = document.querySelector('#main-menu-overlay .main-menu-content');
+    const pc = document.querySelector('#pause-overlay .pause-content');
+    if (mmc) mmc.classList.add('hidden');
+    if (pc) pc.classList.add('hidden');
+  } else {
+    hm.classList.add('hidden');
+    const mmc = document.querySelector('#main-menu-overlay .main-menu-content');
+    const pc = document.querySelector('#pause-overlay .pause-content');
+    if (mmc && mainMenuVisible) mmc.classList.remove('hidden');
+    if (pc && pauseMenuVisible) pc.classList.remove('hidden');
+  }
 }
 function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {
@@ -903,7 +1089,14 @@ function endRun() {
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, maxAttempts: 0, areaUp: 0, bouncyBall: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  loadLevel(0); gameState = "AIMING";
+  gameState = "AIMING";
+  // Avoid heavy field generation when entering main menu (splash) — courses are cached in localStorage, field will be created on next course play
+  // Keep level as dummy behind splash to avoid blocking UI; no createField here
+  if (LEVELS.length) {
+    level = LEVELS[0];
+  } else if (courses.length) {
+    level = courses[0].holes[0];
+  }
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   syncPauseOverlay(); syncMainMenu();
   updateAttemptsUI(); updateHotbarUI();
@@ -1334,11 +1527,19 @@ function handleGameOverReturn() {
   bouncyBallCount = 0;
   bouncyRemaining = 0;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, maxAttempts: 0, areaUp: 0, bouncyBall: 0 };
+  // Avoid heavy field generation when returning to main menu after Game Over — defer to next course play
+  _lastCourseListSig = null;
   syncMainMenu();
   syncPauseOverlay();
   updateAttemptsUI();
   updateHotbarUI();
-  loadLevel(0);
+  if (LEVELS.length) {
+    level = LEVELS[0];
+    try { createBall(level.tee); } catch {}
+  } else if (courses.length) {
+    level = courses[0].holes[0];
+    try { createBall(level.tee); } catch {}
+  }
   // ensure win overlay hidden
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
 }
@@ -1359,15 +1560,18 @@ function syncPauseOverlay() {
   if (!po) return;
   if (pauseMenuVisible) {
     po.classList.remove("hidden");
-    for (const el of po.querySelectorAll(".reward-stats [data-type]")) {
-      const t = el.dataset.type;
-      const cnt = rewardChosenCounts[t] ?? 0;
-      const countEl = el.querySelector(".count");
-      if (countEl) countEl.textContent = `x${cnt}`;
+    po.classList.add("with-backdrop");
+    // Help is global, handled by syncHelpOverlay
+    const pc = po.querySelector('.pause-content');
+    if (pc) {
+      if (helpVisible) pc.classList.add('hidden');
+      else pc.classList.remove('hidden');
     }
   } else {
     po.classList.add("hidden");
+    po.classList.remove("with-backdrop");
   }
+  syncHelpOverlay();
 }
 
 function getCanvasMousePos(e) {
@@ -1485,24 +1689,25 @@ function returnToMainMenu() {
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
   mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
-  // Load hole 1 layout behind splash for next run (not visible until course play)
+  // Avoid heavy field generation when entering main menu (splash) — courses are cached in localStorage, field will be created on next course play via handleCoursePlay/loadLevel
+  // Keep level as first hole reference behind splash without creating field to avoid blocking UI
   try {
     if (LEVELS.length) {
       level = LEVELS[0];
-      windStrength = level.field.strength ?? WIND_STRENGTH;
-      createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
-      syncModifiersToField();
-      createBall(level.tee);
+    } else if (courses.length && courses[0].holes.length) {
+      level = courses[0].holes[0];
+    } else {
+      level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
+    }
+    // Defer ball/field creation — not needed while splash is visible; create minimal ball for HUD
+    try { createBall(level.tee); } catch {}
+    try {
       const dx = level.hole.x - level.tee.x;
       const dy = level.hole.y - level.tee.y;
       setAimAngle(Math.atan2(dy, dx));
-    } else {
-      // No courses — create dummy level to keep loop stable (hidden behind main menu splash)
-      level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
-      createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
-      syncModifiersToField();
-      createBall(level.tee);
-    }
+    } catch {}
+    // Invalidate course list signature so next menu open re-renders with updated bestTotal/unlock (courses are read from cache)
+    _lastCourseListSig = null;
   } catch {}
   bouncyRemaining = bouncyBallCount;
   resetHotbarCollapsed();
@@ -1907,11 +2112,26 @@ function init() {
   if (helpBtn) {
     helpBtn.addEventListener('click', () => showHelpOverlay());
   }
+  const pauseHelpBtn = document.getElementById('pause-help-button');
+  if (pauseHelpBtn) {
+    pauseHelpBtn.addEventListener('click', () => showHelpOverlay());
+  }
   if (courseMenuBack) {
     courseMenuBack.addEventListener('click', () => showMainMenuRoot());
   }
   if (helpBackBtn) {
-    helpBackBtn.addEventListener('click', () => showMainMenuRoot());
+    helpBackBtn.addEventListener('click', () => {
+      helpVisible = false;
+      syncHelpOverlay();
+      if (pauseMenuVisible) {
+        syncPauseOverlay();
+      } else if (mainMenuVisible) {
+        showMainMenuRoot();
+        syncMainMenu();
+      } else {
+        syncHelpOverlay();
+      }
+    });
   }
 
   // REQ-031: course submenu UI handlers (inside #course-menu) - supports 3,6,9,18 and difficulty chooser for 3
@@ -2192,6 +2412,19 @@ function init() {
       }
       return;
     }
+    // Help has priority over main/pause
+    if (helpVisible) {
+      if (e.code === "Escape") {
+        helpVisible = false;
+        syncHelpOverlay();
+        if (pauseMenuVisible) syncPauseOverlay();
+        else if (mainMenuVisible) { showMainMenuRoot(); syncMainMenu(); }
+        e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      return;
+    }
     // REQ-029/028: main menu / in-level pause blocks, but Escape to close when isInLevelPause
     if (mainMenuVisible) {
       // Allow browser shortcuts
@@ -2205,16 +2438,29 @@ function init() {
       if (e.code === "Escape" || e.code === "KeyP") {
         // In-level pause (Escape/P during level, with backdrop): Escape/P closes or goes back
         if (isInLevelPause) {
-          if (helpVisible || courseMenuVisible) {
+          if (helpVisible) {
+            // Help is global — return to previous menu (main or pause)
+            helpVisible = false;
+            syncHelpOverlay();
+            // Restore correct menu content
+            if (pauseMenuVisible) {
+              syncPauseOverlay();
+            } else if (mainMenuVisible) {
+              showMainMenuRoot();
+              syncMainMenu();
+            } else {
+              syncHelpOverlay();
+            }
+          } else if (courseMenuVisible) {
             showMainMenuRoot();
             syncMainMenu();
           } else {
             // Root pause: simply resume (like Continue)
-            mainMenuVisible = false;
+            pauseMenuVisible = false;
             isInLevelPause = false;
-            courseMenuVisible = false;
             helpVisible = false;
-            syncMainMenu();
+            syncPauseOverlay();
+            syncHelpOverlay();
           }
           e.preventDefault();
           return;

@@ -47,28 +47,13 @@
         <p class="win-hint">Press Esc or Enter</p>
       </div>
     </div>
-    <div id="pause-overlay" class="hidden">
-      <div class="pause-content">
-        <h2>Paused</h2>
-        <button id="resume-button">▶ Resume</button>
-        <button id="pause-end-run-button">✕ End Run</button>
-        <button id="pause-export-button" class="course-export-button">⎙ Export Course</button>
-        <div class="reward-stats">
-          <div data-type="amplify"><span class="icon">»</span> Amplify <span class="count">x0</span></div>
-          <div data-type="nullify"><span class="icon">∅</span> Nullify <span class="count">x0</span></div>
-          <div data-type="flip"><span class="icon">⇄</span> Flip <span class="count">x0</span></div>
-          <div data-type="maxAttempts"><span class="icon">★</span> Max Attempts <span class="count">x0</span></div>
-          <div data-type="areaUp"><span class="icon">◯</span> Area +20% <span class="count">x0</span></div>
-        </div>
-      </div>
-    </div>
     <div id="main-menu-overlay" class="hidden">
+      <button id="help-button" class="help-corner-button" title="Help">?</button>
       <div class="main-menu-content">
         <div id="main-menu-root">
           <button id="continue-button" class="main-menu-button hidden">Continue</button>
-          <button id="new-game-button" class="main-menu-button">New Game</button>
-          <button id="help-button" class="main-menu-button">Help</button>
-          <button id="end-run-button" class="main-menu-button hidden">End Run</button>
+          <button id="new-game-button" class="main-menu-button hidden">New Game</button>
+          <div id="staged-course-list" class="course-list"></div>
         </div>
         <div id="course-menu" class="hidden">
           <div id="course-list" class="course-list"></div>
@@ -101,23 +86,30 @@
           <button id="course-menu-back">Back</button>
         </div>
       </div>
-      <div id="help-overlay" class="hidden">
-        <div class="help-card">
-          <h3>How to Play</h3>
-          <p class="help-rules">Get the ball into the hole in as few attempts as possible. Wind vectors push the ball while it flies; wind varies per hole via a vector field. Place modifiers (Amplify, Nullify, Flip) before shooting to alter wind locally. Each hole tracks attempts; total across the course is your score. Low record per course is saved.</p>
-          <h4>Controls</h4>
-          <ul class="help-controls">
-            <li>Arrow keys — Aim</li>
-            <li>Space — Hold to charge power, release to shoot</li>
-            <li>Click — Place selected modifier</li>
-            <li>Right-click — Remove modifier</li>
-            <li>1 / 2 / 3 — Select Amplify / Nullify / Flip</li>
-            <li>H — Toggle wind visualization</li>
-            <li>R — Reset ball</li>
-            <li>Escape — Pause</li>
-          </ul>
-          <button id="help-back-button">Back</button>
-        </div>
+    </div>
+    <div id="pause-overlay" class="hidden">
+      <button id="pause-help-button" class="help-corner-button" title="Help">?</button>
+      <div class="pause-content">
+        <button id="resume-button" class="main-menu-button">Continue</button>
+        <button id="pause-end-run-button" class="main-menu-button" style="background:#e74c3c; border-color:#c0392b;">End Run</button>
+      </div>
+    </div>
+    <div id="help-overlay" class="hidden">
+      <div class="help-card">
+        <h3>How to Play</h3>
+        <p class="help-rules">Get the ball into the hole in as few attempts as possible. Wind vectors push the ball while it flies; wind varies per hole via a vector field. Place modifiers (Amplify, Nullify, Flip) before shooting to alter wind locally. Each hole tracks attempts; total across the course is your score. Low record per course is saved.</p>
+        <h4>Controls</h4>
+        <ul class="help-controls">
+          <li>Arrow keys — Aim</li>
+          <li>Space — Hold to charge power, release to shoot</li>
+          <li>Click — Place selected modifier</li>
+          <li>Right-click — Remove modifier</li>
+          <li>1 / 2 / 3 — Select Amplify / Nullify / Flip</li>
+          <li>H — Toggle wind visualization</li>
+          <li>R — Reset ball</li>
+          <li>Escape — Pause</li>
+        </ul>
+        <button id="help-back-button">Back</button>
       </div>
     </div>
     <div id="toast" class="hidden">copied to clipboard</div>
