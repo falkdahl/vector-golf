@@ -255,6 +255,26 @@ function sampleOnEdgeForFree(edge, rand, width, height) {
   return { x: Math.floor(rand() * (width - 40)) + 20, y: height };
 }
 
+function getClosestEdgeName(target, width, height) {
+  const distLeft = target.x;
+  const distRight = width - target.x;
+  const distTop = target.y;
+  const distBottom = height - target.y;
+  let edge = 'left';
+  let min = distLeft;
+  if (distRight < min) { min = distRight; edge = 'right'; }
+  if (distTop < min) { min = distTop; edge = 'top'; }
+  if (distBottom < min) { min = distBottom; edge = 'bottom'; }
+  return edge;
+}
+
+function getEdgeName(pos, width, height) {
+  if (pos.x === 0) return 'left';
+  if (pos.x === width) return 'right';
+  if (pos.y === 0) return 'top';
+  return 'bottom';
+}
+
 function _generateLevelsInternal(seed = 42, count = 18) {
   const rand = mulberry32(seed);
   const levels = [];
@@ -536,28 +556,39 @@ function _generateLevelsInternal(seed = 42, count = 18) {
       sourcePositions = [sourceNearTee, extraSource];
       sinkPositions = [sinkNearGreen, extraSink];
     } else if (tier === 'medium' && extraMediumSink) {
-      // Medium with extra sink on free edge
+      // Medium with extra sink: both sinks on free edges NOT closest to green (REQ-034/REQ-003 updated)
       const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H);
-      const sinkNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H);
-      const getEdge = (pos) => {
-        if (pos.x === 0) return 'left';
-        if (pos.x === LOGICAL_W) return 'right';
-        if (pos.y === 0) return 'top';
-        return 'bottom';
-      };
-      const usedEdges = new Set([getEdge(sourceNearTee), getEdge(sinkNearGreen)]);
+      const greenClosestEdge = getClosestEdgeName(hole, LOGICAL_W, LOGICAL_H);
+      const sourceEdge = getEdgeName(sourceNearTee, LOGICAL_W, LOGICAL_H);
       const allEdges = ['left','right','top','bottom'];
-      const freeEdges = allEdges.filter(e => !usedEdges.has(e));
-      const freeEdge = freeEdges.length ? freeEdges[Math.floor(rand()*freeEdges.length)] : 'top';
-      const extraSink = sampleOnEdgeForFree(freeEdge, rand, LOGICAL_W, LOGICAL_H);
+      const freeEdges = allEdges.filter(e => e !== greenClosestEdge && e !== sourceEdge);
+      // Need 2 distinct sinks on free edges not near green
+      let sinkEdges;
+      if (freeEdges.length >= 2) {
+        // shuffle freeEdges and take first 2
+        const shuffled = [...freeEdges];
+        for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+        sinkEdges = shuffled.slice(0, 2);
+      } else if (freeEdges.length === 1) {
+        sinkEdges = [freeEdges[0], freeEdges[0]];
+      } else {
+        sinkEdges = ['top','bottom'];
+      }
+      const sink1 = sampleOnEdgeForFree(sinkEdges[0], rand, LOGICAL_W, LOGICAL_H);
+      const sink2 = sampleOnEdgeForFree(sinkEdges[1], rand, LOGICAL_W, LOGICAL_H);
       sourcePositions = [sourceNearTee];
-      sinkPositions = [sinkNearGreen, extraSink];
+      sinkPositions = [sink1, sink2];
     } else {
-      // Easy or medium without extra
+      // Easy or medium without extra: single sink on free edge NOT closest to green (REQ-034/REQ-003/REQ-010)
       const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H);
-      const sinkNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H);
+      const greenClosestEdge = getClosestEdgeName(hole, LOGICAL_W, LOGICAL_H);
+      const sourceEdge = getEdgeName(sourceNearTee, LOGICAL_W, LOGICAL_H);
+      const allEdges = ['left','right','top','bottom'];
+      const freeEdges = allEdges.filter(e => e !== greenClosestEdge && e !== sourceEdge);
+      const sinkEdge = freeEdges.length ? freeEdges[Math.floor(rand() * freeEdges.length)] : (greenClosestEdge === 'right' ? 'top' : 'left');
+      const sinkOnFree = sampleOnEdgeForFree(sinkEdge, rand, LOGICAL_W, LOGICAL_H);
       sourcePositions = [sourceNearTee];
-      sinkPositions = [sinkNearGreen];
+      sinkPositions = [sinkOnFree];
     }
     // Generate doublet positions: first doublet(s) in middle of fairway trees
     const doubletPositions = [];
