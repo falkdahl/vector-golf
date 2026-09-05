@@ -26,16 +26,19 @@
 - Force bar `drawForceBar` under ball (see `03-rendering.md`) only while `CHARGING`; hidden otherwise. Aim line length scales `30+charge*50`.
 - Launch is ignored if ball moving.
 
-## 4. Attempts Counters
+## 4. Attempts Counters — Max Attempts + Attempts Left (replaces Free Shots)
 
-- State in `src/main.js`: `currentHoleIndex` (0-based, displayed 1-based), `holeAttempts`, `totalAttempts` (=`attempts` alias), `totalHoles = LEVELS.length` (see `08-level-generation.md`).
-- **Increment exactly once per counted launch** (see `09-rewards-and-progression.md` for free-shots gating): when `freeShots===0` at `handleLaunch`, do `holeAttempts++; totalAttempts++; attempts=totalAttempts; secretRewardCounter++ (see §9)`; when `freeShots>0`, do `freeShots--` instead. `R` without launch does not increment.
-- **HUD** is canvas-drawn `drawHUD` (see `03-rendering.md`) with strip behind text, visible in `AIMING`/`CHARGING`/`FLYING`. Win overlay (DOM) shows `You Win! Hole N/M - Attempts this hole: X, Total: Y`; final hole shows `Game Complete! Total Attempts: Y`.
-- **Lifecycle**: death (`resetBall`) does not reset counters; `R` during play does not reset; hole advance (`handleNextHole`, see `09-rewards-and-progression.md`) resets `holeAttempts=0` but keeps `totalAttempts`; `WIN`/`GAME_COMPLETE` → `R`/`resetGameAfterWin`/`startNewGameFromMain`/`endRun` resets all to `0` (see `10-persistence-and-menus.md`) and also resets supply/freeShots etc.
+- State in `src/main.js`: `currentHoleIndex` (0-based, displayed 1-based), `holeAttempts` (attempts used this hole, `0..maxAttempts`), `totalAttempts` (=`attempts` alias, total across run), `maxAttempts` (hidden per-run max, starts `10`, increased by `+5` via `Max Attempts +5` reward, see `09`), `totalHoles = LEVELS.length` (see `08-level-generation.md`). Derived `attemptsLeft = max(0, maxAttempts - holeAttempts)` — **hidden max, shown left**.
+- **Increment exactly once per launch** (`handleLaunch` always counted, no `freeShots` gating — `freeShots` removed per `09`): on each `launchBall` do `holeAttempts++; totalAttempts++; attempts=totalAttempts; attemptsLeft = maxAttempts - holeAttempts; secretRewardCounter++` (see `09`); `R` without launch does not increment. After increment, check **Game Over** (see §5): if `attemptsLeft <= 0` and `gameState !== 'WIN'` (hole not completed within `maxAttempts` attempts), set `gameState='GAME_OVER'`, show **Game Over** screen (see below), block all input except return to menu.
+- **HUD** is canvas-drawn `drawHUD` (see `03-rendering.md`) with strip behind text, visible in `AIMING`/`CHARGING`/`FLYING`. Now shows **`Attempts Left: X`** (where `X = max(0, maxAttempts - holeAttempts)`) **instead of `Attempts: X`**, centered; left still `Hole: N/M`, right `Total: Y`. Win overlay (DOM) shows `You Win! Hole N/M - Attempts this hole: X, Total: Y` (still `holeAttempts`/`totalAttempts`); final hole shows `Game Complete! Total Attempts: Y`. Game Over overlay shows `Game Over` (see §5).
+- **Lifecycle**: death (`resetBall`, tree bounce) does not reset counters; `R` during play does not reset; hole advance (`handleNextHole`, see `09-rewards-and-progression.md`) resets `holeAttempts=0` (so `attemptsLeft` resets to `maxAttempts`) but keeps `totalAttempts` and **keeps `maxAttempts`** (increased max persists across holes); `WIN`/`GAME_COMPLETE` → `R`/`resetGameAfterWin`/`startNewGameFromMain`/`endRun` resets all to `0` with `maxAttempts=10` (see `10-persistence-and-menus.md`) and also resets `supply`/`areaUpgradeCount` etc. **Game Over** → `Return to Main Menu` does `clearProgress()` (see `10`) and returns to entry main menu.
+- **Max Attempts reward** (`Max Attempts +5`, see `09`): `maxAttempts = max(10, maxAttempts + 5)` (exactly `+5` per grant), persists for remainder of run, retroactively increases `attemptsLeft` (`max - holeAttempts`) immediately. No Free Shots.
 
-## 5. Game States & Transitions
+## 5. Game States & Transitions — including GAME_OVER
 
-States (string enum in `src/main.js`): `AIMING`, `CHARGING`, `FLYING` (covers drifting), `WIN` (no `REST_CHECK`).
+States (string enum in `src/main.js`): `AIMING`, `CHARGING`, `FLYING` (covers drifting), `WIN`, `GAME_OVER` (no `REST_CHECK`).
+
+**GAME_OVER** (new per max-attempts): when `holeAttempts >= maxAttempts` (i.e. `attemptsLeft <=0`) without winning the hole, `gameState='GAME_OVER'`, `ball.isMoving=false`, show **Game Over** screen (see below). While `GAME_OVER`, `updateBall`/`handleLaunch`/modifier placement/`maybeShowRewardMenu`/`pause` are blocked; only `Return to Main Menu` (click or `Escape`/`Enter`) is accepted. That action does `clearProgress()` (remove `STORAGE_KEY`, reset `currentHoleIndex=0, holeAttempts=0, totalAttempts=0, maxAttempts=10, supply={1,1,1}, areaUpgradeCount=0, modifiers=[]`, see `10`) and returns to entry main menu (`mainMenuVisible=true, isInLevelPause=false`). No `Next` or `Continue` from Game Over; the run is cleared from memory (reload shows entry with no `Continue`).
 
 - `AIMING`: ball at tee `vel=0`, accept aim+Space→`CHARGING`, modifier placement allowed (see `07-modifiers.md`), hotbar visible (see `07-modifiers.md`).
 - `CHARGING`: `Space` held, update force bar, angle may be locked (document), release → `launch()` → `FLYING`.
@@ -44,7 +47,7 @@ States (string enum in `src/main.js`): `AIMING`, `CHARGING`, `FLYING` (covers dr
 
 `resetBall()` (idempotent, synchronous, callable from collision/OOB/`R`):
 
-- `ball.pos={...tee}; ball.vel={0,0}; ball.isMoving=false; charge=0; charging=false; state='AIMING';` clear win overlay; **do NOT touch** `aimAngle` (per §2), `holeAttempts`/`totalAttempts`, `supply`/`freeShots`/`areaUpgradeCount`/`bouncyBallCount`, `modifiers` (they persist through death), `secretRewardCounter` (see `09-rewards-and-progression.md`). Re-initialize `bouncyRemaining=bouncyBallCount` (if bouncy feature present, see `04-physics-and-collision.md` §5).
+- `ball.pos={...tee}; ball.vel={0,0}; ball.isMoving=false; charge=0; charging=false; state='AIMING';` clear win/Game Over overlay if not in those states; **do NOT touch** `aimAngle` (per §2), `holeAttempts`/`totalAttempts`/`maxAttempts`, `supply`/`areaUpgradeCount`, `modifiers` (they persist through death), `secretRewardCounter` (see `09-rewards-and-progression.md`). No `bouncy` (trees always bounce, see `04` §5).
 
 `R` key:
 - In `AIMING`/`FLYING` → `resetBall()` (keeps aim angle, no counter increment).
@@ -58,9 +61,11 @@ Attempts/hole progression (see `09-rewards-and-progression.md` for full trigger 
 
 - [ ] Orbit and aim line update at 60fps, `ArrowRight` 1s ≈90-150°; `aimAngle` persists after death but re-initializes on new hole.
 - [ ] Space tap/hold 0s/0.75s/1.5s shows 0%/50%/100% bar; bar only under ball while `CHARGING`; color green→red.
-- [ ] `holeAttempts`/`totalAttempts` increment exactly once per counted launch; free-shot launches do not increment (see `09-rewards-and-progression.md`).
-- [ ] `resetBall` reappears at tee within 1 frame on hit/edge/`R` and does not interrupt HUD counts.
-- [ ] No launch when `FLYING`; no aiming while `WIN`/`rewardMenuVisible`/`mainMenuVisible`.
+- [ ] `holeAttempts`/`totalAttempts` increment exactly once per launch; `maxAttempts` starts `10`, `attemptsLeft = maxAttempts - holeAttempts` shown as `Attempts Left`; `Max Attempts +5` reward makes `maxAttempts+=5`. No `freeShots`.
+- [ ] `resetBall` reappears at tee within 1 frame on hit/edge/`R` and does not interrupt HUD counts; `maxAttempts` persists, `holeAttempts` only reset on hole win/Game Over.
+- [ ] No launch when `FLYING`; no aiming while `WIN`/`GAME_OVER`/`rewardMenuVisible`/`mainMenuVisible`.
+- [ ] At `holeAttempts == maxAttempts` without win, `gameState='GAME_OVER'`, `Game Over` screen shown with only `Return to Main Menu`, which does `clearProgress()` and returns to entry (no `Continue` after).
+- [ ] HUD shows `Attempts Left: X` (not `Attempts: X`), `X = maxAttempts - holeAttempts`, updates after each launch and after `Max Attempts +5`.
 
 ## File Paths
 

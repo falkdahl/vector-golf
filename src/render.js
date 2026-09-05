@@ -782,8 +782,8 @@ export function drawAim(ctx, ball, aimAngle, charge, gameState) {
   ctx.restore();
 }
 
-export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, totalAttempts) {
-  // Top bar inside canvas per REQ-012/014 - Hole left, Attempts center, Total right
+export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, totalAttempts, maxAttempts = 10) {
+  // Top bar inside canvas per REQ-012/014/05 — Hole left, Attempts Left center, Total right
   ctx.save();
   // semi-transparent strip
   ctx.fillStyle = "rgba(0,0,0,0.25)";
@@ -794,7 +794,8 @@ export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, 
   ctx.lineWidth = 3;
   ctx.lineJoin = "round";
   const holeText = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
-  const attemptsText = `Attempts: ${holeAttempts}`;
+  const attemptsLeft = Math.max(0, (maxAttempts ?? 10) - holeAttempts);
+  const attemptsText = `Attempts Left: ${attemptsLeft}`;
   const totalText = `Total: ${totalAttempts}`;
   // Hole left
   ctx.textAlign = "left";
@@ -950,7 +951,7 @@ const REWARD_TYPE_DEFS = {
   amplify: { icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.28)', fillHover: 'rgba(230,126,34,0.38)', hint: '+1 to supply' },
   nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
-  freeShots: { icon: '★', label: 'Free Shots', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+3 free shots' },
+  maxAttempts: { icon: '★', label: 'Max Attempts +5', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+5 max attempts' },
   areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' }
 };
 
@@ -1279,8 +1280,8 @@ export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts =
   ctx.strokeText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
   ctx.fillStyle = "white"; ctx.fillText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
   ctx.restore();
-  // Bottom reward list - all types with xN (bouncy removed, trees always bounce)
-  const types = ['amplify','nullify','flip','freeShots','areaUp'];
+  // Bottom reward list - all types with xN (bouncy removed, freeShots replaced by Max Attempts)
+  const types = ['amplify','nullify','flip','maxAttempts','areaUp'];
   // include sharpshooter if defined in pool but keep 5 for now
   const listY = height / 2 + 100;
   const gap = 8;

@@ -14,7 +14,7 @@
   No dimming rect here; backdrop dimming is done by `#main-menu-overlay.with-backdrop` per `10-persistence-and-menus.md`.
 
 - **Middle `fgCtx` (`#game`, `z-index:2`, transparent, `clearRect` each frame)** — every `render()`:
-  1. Trees / circular obstacles, 2. Hole + flag, 3. Ball, 4. Aim orbit+line+indicator (when `AIMING`/`CHARGING`), 5. Modifier circles + preview, 6. Force bar under ball (when `CHARGING`), 7. HUD `Hole/Attempts/Total` (canvas), 8. Reward menu canvas overlay (when visible), 9. Pause dim (if canvas mode, else DOM)
+  1. Trees / circular obstacles, 2. Hole + flag, 3. Ball (with shadow, `z` lift), 4. Aim orbit+line+indicator (when `AIMING`/`CHARGING`), 5. Modifier circles + preview, 6. Force bar under ball (when `CHARGING`), 7. HUD `Hole/Attempts Left/Total` (canvas), 8. Reward menu canvas overlay (when visible), 9. Pause/Game Over dim (if canvas mode, else DOM)
 
 - **Top `windRenderer` (`#wind-canvas`, `z-index:3`, transparent, `pointer-events:none`)** — Three.js ghost trails + particles (see `06-wind-system.md`), `renderer.setClearColor(0x000000,0)` and own per-frame clear, above game but below HTML overlays (`#hotbar` z5, overlays z10-12).
 
@@ -42,9 +42,10 @@ Rendering order on `bgCtx` is `OB → Rough → Fairway → Green → Water`. Zo
 - **Main-menu mode** (`mainMenuVisible===true`): show splash aspect-covered (`scale=Math.max(W/imgW,H/imgH)`, centered `drawImage`); no grass visible. No dimming backdrop in this mode (see `10-persistence-and-menus.md` entry vs pause distinction). Splash/grass switch is via `drawBackground(mode)` on mode toggle and resize.
 - Fallback solid fill (`#3a9d23` or `#2E2E2E`) is shown only while images are decoding; `#loading-screen` covers white flash (see `02-canvas-system.md`).
 
-## 4. HUD & In-Canvas UI
+## 4. HUD & In-Canvas UI — Attempts Left + Game Over
 
-- **HUD** `drawHUD(ctx, currentHoleIndex, totalHoles, holeAttempts, totalAttempts)` every `render()`: `Hole: N/M` at `(12,22)` left, `Attempts: X` at `(W/2,22)` center, `Total: Y` at `(W-12,22)` right, `14px system-ui`, fill `white`, stroke `rgba(0,0,0,0.7) 3px` or shadow, semi-transparent strip `rgba(0,0,0,0.25) 28px` behind.
+- **HUD** `drawHUD(ctx, currentHoleIndex, totalHoles, holeAttempts, totalAttempts, maxAttempts)` every `render()`: `Hole: N/M` at `(12,22)` left, **`Attempts Left: X`** (where `X = max(0, maxAttempts - holeAttempts)`, **not** `Attempts: X`) at `(W/2,22)` center, `Total: Y` at `(W-12,22)` right, `14px system-ui`, fill `white`, stroke `rgba(0,0,0,0.7) 3px` or shadow, semi-transparent strip `rgba(0,0,0,0.25) 28px` behind. `maxAttempts` starts `10` and is increased by `Max Attempts +5` reward (see `09`). HUD visible in `AIMING`/`CHARGING`/`FLYING`, also dimmed behind `WIN`/`GAME_OVER`.
+- **Game Over overlay** (canvas or DOM, when `gameState==='GAME_OVER'`): full-canvas dim `rgba(0,0,0,0.55)` (same as Victory), title `Game Over` `700 22px` white `stroke 5px` centered, subtitle `Hole N/M - Out of attempts` or `Attempts Left: 0`, button `Return to Main Menu` (opaque, centered) — only action, does `clearProgress()` and returns to entry main menu (no `Next`/`Continue` from Game Over).
 - **Force bar** `drawForceBar(ctx, ball, charge)` only when `CHARGING` (Space held): centered at `ball.pos + (0,28)`, `60×8`, border `1px #222`, bg `rgba(0,0,0,0.35)`, fill `charge*100%` lerp green `#2ecc71→yellow→red #e74c3c`, label below as `78%` (no word "Power") `13-14px 600` white with shadow.
 - **Aim visuals** (see `05-input-and-states.md`): orbit `28-32px` dashed `rgba(0,0,0,0.2)`, aim line `30px` (+ `charge*50` when charging), indicator dot on orbit.
 - **Modifier circles & preview**: see `07-modifiers.md`.

@@ -10,28 +10,28 @@
 - **Active-run**: `STORAGE_KEY="golfVectorField.progress.v1"` JSON `version:1` payload:
   ```js
   { version:1, courseId:string, currentHoleIndex:number, holeAttempts:number, totalAttempts:number,
-    supply:{amplify, nullify, flip}, freeShots:number, areaUpgradeCount:number,
-    // bouncyBallCount legacy (kept for compat, always 0, trees always bounce per 04)
+    supply:{amplify, nullify, flip}, maxAttempts:number, holeAttempts:number, attemptsLeft:number, areaUpgradeCount:number,
+    // freeShots/bouncyBallCount legacy removed (kept for compat, always 0, trees always bounce per 04)
     sharpshooterCount?:number, secretRewardCounter:number, rewardPending:boolean, rewardOffered:string[]|null,
-    rewardRerolled:boolean, rewardMenuVisible:boolean,
+    rewardRerolled:boolean, rewardMenuVisible:boolean, gameState:string, // may be 'GAME_OVER'
     modifiers:Array<{type,x,y,radius}>, aimAngle:number, savedAt:number }
   ```
-  Transient `ball.pos/vel/isMoving`, `gameState==="FLYING"` (resume always `AIMING` at tee), `charging/charge`, `mousePos`, field grid not persisted; on resume ball at tee `vel=0`. All numbers clamped `≥0` on load; missing fields default `0/false/[]`; corrupt/`version!==1`/`courseId` missing in courses → treat as no save. Wrap in `try/catch`; quota/error fallback to new game.
+  Transient `ball.pos/vel/isMoving/z/vz`, `gameState==="FLYING"` (resume always `AIMING` at tee unless `GAME_OVER` — see §7), `charging/charge`, `mousePos`, field grid not persisted; on resume ball at tee `vel=0` unless loading `GAME_OVER` (then show Game Over screen). All numbers clamped `≥0` on load; `maxAttempts` defaults `10` if missing; `holeAttempts` defaults `0`; `attemptsLeft = max(0, maxAttempts - holeAttempts)` recomputed. Missing fields default `0/false/[]`; corrupt/`version!==1`/`courseId` missing in courses → treat as no save. Wrap in `try/catch`; quota/error fallback to new game.
 
 - **Courses collection**: `COURSES_KEY="golfVectorField.courses.v1"` JSON `version:1` with `Course[]` per §2. Two keys only (plus legacy `HIGH_SCORE_KEY` for migration). Do not scatter others.
 
 ### Save triggers
 
-- `handleLaunch` (exactly once per attempt, counted or free) calls `saveProgress()`; also after `claimReward`, `rerollReward`, `placeModifier`/removal/drag, `advanceHole`/`handleNextHole`/`loadLevel`, `maybeShowRewardMenu` when creating fresh `rewardOffered`.
+- `handleLaunch` (exactly once per attempt, always counted, decrements `attemptsLeft`) calls `saveProgress()`; also after `claimReward` (`Max Attempts +5` increases `maxAttempts`), `rerollReward` (costs 1 attempt toward `maxAttempts`), `placeModifier`/removal/drag, `advanceHole`/`handleNextHole`/`loadLevel`, `maybeShowRewardMenu` when creating fresh `rewardOffered`, and on `GAME_OVER` trigger.
 
-### Load & Resume — Manual via **Continue**, not auto-resume
+### Load & Resume — Manual via **Continue**, not auto-resume — Game Over handling
 
-- On load `init()` shows main menu (see §3) and evaluates `hasRestorableSave()` (valid JSON `version:1` + `courseId` exists in `courses`) only to toggle `#continue-button` visibility; it does **not** auto-restore.
-- Clicking **Continue** (`#continue-button` text `Continue` id `continue-button`, visible iff valid save) restores: resolve `activeCourse = courses.find(c=>c.id===data.courseId)`, `LEVELS=activeCourse.holes`, restore all persisted fields, recompute `areaMultiplier/bouncyRemaining` (`bouncyRemaining=bouncyBallCount`), recreate field `createField(cols,rows,strength,seed,W,H)` then `setModifiers(modifiers)`, ball at tee `AIMING` (never `FLYING`/`WIN`), `rewardMenuVisible` if `rewardOffered.length===3`, then hide main-menu overlay, switch bottom to grass via `drawBackground('grass')`, `updateAttemptsUI`/`updateHotbarUI`. If no save/corrupt, Continue does nothing (menu stays on root). `loadProgress()`/`hasRestorableSave()` handle validation.
+- On load `init()` shows main menu (see §3) and evaluates `hasRestorableSave()` (valid JSON `version:1` + `courseId` exists in `courses`) only to toggle `#continue-button` visibility; it does **not** auto-restore. If saved `gameState==='GAME_OVER'`, `Continue` is still shown but loading it will immediately show **Game Over** screen (see §7).
+- Clicking **Continue** (`#continue-button` text `Continue` id `continue-button`, visible iff valid save) restores: resolve `activeCourse = courses.find(c=>c.id===data.courseId)`, `LEVELS=activeCourse.holes`, restore all persisted fields (`maxAttempts`, `holeAttempts`, `attemptsLeft` recomputed), recompute `areaMultiplier` (no `bouncyRemaining` — trees always bounce), recreate field `createField(cols,rows,strength,seed,W,H)` then `setModifiers(modifiers)`, ball at tee `AIMING` (never `FLYING`/`WIN`) **unless** saved `gameState==='GAME_OVER'` — then set `gameState='GAME_OVER'`, show Game Over overlay (see §7) instead of `AIMING`, still hide main-menu overlay but bottom shows grass dimmed. If saved `rewardMenuVisible` and not Game Over, show reward menu. If no save/corrupt, Continue does nothing (menu stays on root). `loadProgress()`/`hasRestorableSave()` handle validation; `maxAttempts` missing → `10`.
 
-### Clear on abandon / new course start
+### Clear on abandon / new course start / Game Over
 
-- `clearProgress() => localStorage.removeItem(STORAGE_KEY)` and reset run state to `currentHoleIndex=0, holeAttempts=0, totalAttempts=0, supply={1,1,1}, freeShots=0, areaUpgradeCount=0, bouncyBallCount=0, bouncyRemaining=0, secretRewardCounter=0, rewardPending=false, rewardOffered=[], modifiers=[]…` without touching `COURSES_KEY`. Called on `resetGameAfterWin` (`R` in `WIN`/`GAME_COMPLETE`), `startNewGameFromMain` (course play), `endRun` (see §6). Only **full completion** updates `bestTotal` (see §5), `End Run` does not.
+- `clearProgress() => localStorage.removeItem(STORAGE_KEY)` and reset run state to `currentHoleIndex=0, holeAttempts=0, totalAttempts=0, maxAttempts=10, supply={1,1,1}, areaUpgradeCount=0, secretRewardCounter=0, rewardPending=false, rewardOffered=[], modifiers=[]…` without touching `COURSES_KEY`. Called on `resetGameAfterWin` (`R` in `WIN`/`GAME_COMPLETE`), `startNewGameFromMain` (course play), `endRun` (see §6) **and on `Game Over → Return to Main Menu`** (see §7). Only **full completion** updates `bestTotal` (see §5), `End Run` and `Game Over` do not.
 
 ## 2. Course Model `src/courses.js`
 
@@ -103,10 +103,11 @@ No `<h2>Golf Vector Field</h2>` inside overlay required; outside `#game-containe
 - Encode `exportCourse(course) = btoa(JSON.stringify(course))` (whole course including `holes/field`; `bestTotal` may be excluded/reset to `null` on import if documented).
 - In pause overlay (`#pause-overlay .pause-content` or inside `#main-menu-overlay.with-backdrop`) beside `Resume`/`End Run`, add `button#pause-export-button.course-export-button` (text `⎙ Export Course`/`Export` acceptable, visible). It exports `activeCourse` via `navigator.clipboard.writeText(base64)` or fallback `execCommand('copy')` via temporary textarea (`try/catch`). Show toast `#toast` near bottom-center of `#game-container` `text:"copied to clipboard"` (case-insensitive) `background:rgba(0,0,0,0.75); color:white; padding:8px 14px; border-radius:6px; position:absolute; bottom:20px; left:50%; transform:translateX(-50%); z-index:20` auto-hide `1800-2500ms`. Does not close pause or end run.
 
-## 7. End Run
+## 7. End Run + Game Over (max attempts)
 
-- `function endRun(){ clearProgress(); currentHoleIndex=0; holeAttempts=0; totalAttempts=0; supply={1,1,1}; freeShots=0; areaUpgradeCount=0; bouncyBallCount=0; ...; modifiers=[]; syncModifiersToField(); mainMenuVisible=true; isInLevelPause=false; courseMenuVisible=false; helpVisible=false; /* no maybeUpdateHighScore */ }`
+- `function endRun(){ clearProgress(); currentHoleIndex=0; holeAttempts=0; totalAttempts=0; maxAttempts=10; supply={1,1,1}; areaUpgradeCount=0; ...; modifiers=[]; syncModifiersToField(); mainMenuVisible=true; isInLevelPause=false; courseMenuVisible=false; helpVisible=false; /* no maybeUpdateHighScore */ }`
 - Removes `STORAGE_KEY` only; preserves `COURSES_KEY`; `bestTotal` unchanged.
+- **Game Over** (`gameState='GAME_OVER'` when `holeAttempts >= maxAttempts` per `05`/`09`): full-canvas dim `rgba(0,0,0,0.55)`, title `Game Over` `700 22px` white `stroke 5px` centered, subtitle `Hole N/M — Out of attempts` or `Attempts Left: 0`, single button `Return to Main Menu` (`#gameover-return-button` or `#continue-button` repurposed, opaque) centered. While `GAME_OVER`, `updateBall`/`handleLaunch`/modifiers/pause are blocked; only `Return to Main Menu` (click or `Escape`/`Enter`) is accepted. It does `clearProgress()` (same reset as `endRun` with `maxAttempts=10`) and returns to entry main menu (`mainMenuVisible=true`, `isInLevelPause=false`, `gameState='AIMING'` after clear). No `Next`/`Continue` from Game Over; reload after Game Over shows entry with no `Continue` (run cleared). Also not saved as win — `bestTotal` unchanged.
 
 ## 8. Help Overlay (inside same main-menu overlay)
 
