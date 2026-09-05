@@ -26,9 +26,11 @@ Order per tick:
 
 ## 3. Obstacles
 
-- **Trees**: `type:'circle'`, `r∈[18,36]`, placed per `08-level-generation.md` (subset `treesOnFairway` on fairway per tier; extras in Rough/OB). Rendered as tree texture on top canvas (see `03-rendering.md`).
+- **Trees**: `type:'circle'`, `r∈[18,36]`, placed per `08-level-generation.md`:
+  - `treesOnFairway` per tier are **on fairway** and **≥ dist(tee,hole)/3 from the tee** (see `08-level-generation.md` Step 4).
+  - Non-fairway trees (extras) are **on the rough, spread around the border between rough and out of bounds** (`warpedDist ∈ [W_rough-25, W_rough-4]`, `terrainZoneAt==='rough'`), intentionally placed so the player can bounce on them (see §5 and `08-level-generation.md` Step 4). No non-fairway tree is strictly in OB. Rendered as tree texture on top canvas (see `03-rendering.md`).
 - **Water hazards**: either `{x,y,w,h}` or `{x,y,r}`, blue per `03-rendering.md`, generated per `08-level-generation.md` (on-fairway counts Easy 0, Medium 1, Hard 1-3); entering water is fatal like a tree.
-- **Terrain OB** (`terrainZoneAt(pos)==='ob'`) is fatal; hitting gray OB zone triggers same reset as canvas edge (see also `08-level-generation.md`).
+- **Terrain OB** (`terrainZoneAt(pos)==='ob'`) is fatal; hitting gray OB zone triggers same reset as canvas edge unless bounced via §5 (see also `08-level-generation.md`). Rough-border trees near the OB edge give the bounce opportunity before OB death.
 
 - Collision helpers in `src/obstacles.js` / `src/physics.js`: `checkObstacleCollision(ballPos, ballRadius, obstacles)` (circle-vs-circle, circle-vs-AABB), `isInWater(ballPos, waterHazards)`, `isOutOfBoundsTerrain(terrainZoneAt)` (or `isOutOfBounds(pos,radius,W,H)` for canvas edge).
 - Tunneling guard: max step `~10px` at `600 px/s`; ensure obstacles ≥16px thick; optional swept test.

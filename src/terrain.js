@@ -309,6 +309,94 @@ export function generateTreesPoisson(count, spine, Wf, Wr, tee, hole, waterHazar
   return trees;
 }
 
+// New per 08 Step 4 updated: non-fairway trees on rough border between rough and OB for bounce
+export function generateRoughBorderTrees(count, spine, Wf, Wr, tee, hole, waterHazards, rand, terrain, width = LOGICAL_W, height = LOGICAL_H) {
+  const trees = [];
+  if (count <= 0) return trees;
+  let noise2D = null;
+  if (terrain && terrain._noise2D) noise2D = terrain._noise2D;
+  else if (terrain && terrain.noiseSeed !== undefined) noise2D = makeNoise2D(terrain.noiseSeed);
+  const warpScale = terrain ? (terrain.warpScale || 0.008) : 0.008;
+  const warpStrength = terrain ? (terrain.warpStrength || 18) : 18;
+  function getD(x, y) {
+    if (noise2D) return warpedDist(x, y, spine, noise2D, warpScale, warpStrength);
+    return sdfToSpine(x, y, spine);
+  }
+  const maxAttempts = count * 200;
+  let attempts = 0;
+  const minDist = 45;
+  while (trees.length < count && attempts < maxAttempts) {
+    attempts++;
+    let x, y;
+    if (rand() < 0.5) {
+      x = Math.floor(rand() * (width - 40)) + 20;
+      y = Math.floor(rand() * (height - 40)) + 20;
+    } else {
+      const tIdx = Math.floor(rand() * (spine.length - 1));
+      const a = spine[tIdx];
+      const b = spine[Math.min(spine.length - 1, tIdx + 1)];
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      const sign = rand() < 0.5 ? 1 : -1;
+      const bandCenter = Wr - 14.5;
+      const jitter = (rand() - 0.5) * 18;
+      const dist = bandCenter + jitter;
+      x = midX + nx * dist * sign;
+      y = midY + ny * dist * sign;
+      x = Math.max(20, Math.min(width - 20, x));
+      y = Math.max(20, Math.min(height - 20, y));
+      x = Math.round(x + (rand() - 0.5) * 6);
+      y = Math.round(y + (rand() - 0.5) * 6);
+    }
+    const d = getD(x, y);
+    if (d < Wr - 25 - 2 || d > Wr - 4 + 2) continue;
+    const greenR = terrain && terrain.green ? terrain.green.r : 70;
+    const teeR = terrain && terrain.teeBox ? terrain.teeBox.r : 70;
+    const teeDist = Math.hypot(x - tee.x, y - tee.y);
+    const holeDist = Math.hypot(x - hole.x, y - hole.y);
+    if (teeDist < teeR + 10 || holeDist < greenR + 10) continue;
+    const r = 18 + Math.floor(rand() * 18);
+    if (teeDist < teeR + 40 + r || holeDist < greenR + 40 + r) continue;
+    if (isInWater(x, y, waterHazards)) continue;
+    let overlap = false;
+    for (const t of trees) {
+      const dist = Math.hypot(x - t.x, y - t.y);
+      if (dist < r + t.r + 6) { overlap = true; break; }
+      if (dist < minDist) { overlap = true; break; }
+    }
+    if (overlap) continue;
+    trees.push({ type: 'circle', x: Math.round(x), y: Math.round(y), r });
+  }
+  if (trees.length < count) {
+    let extraAttempts = 0;
+    while (trees.length < count && extraAttempts < maxAttempts) {
+      extraAttempts++;
+      const x = Math.floor(rand() * (width - 40)) + 20;
+      const y = Math.floor(rand() * (height - 40)) + 20;
+      const d = getD(x, y);
+      if (d < Wr - 27 || d > Wr - 2) continue;
+      const greenR2 = terrain && terrain.green ? terrain.green.r : 70;
+      const teeR2 = terrain && terrain.teeBox ? terrain.teeBox.r : 70;
+      const teeDist = Math.hypot(x - tee.x, y - tee.y);
+      const holeDist = Math.hypot(x - hole.x, y - hole.y);
+      if (teeDist < teeR2 + 10 || holeDist < greenR2 + 10) continue;
+      const r = 18 + Math.floor(rand() * 18);
+      if (teeDist < teeR2 + 40 + r || holeDist < greenR2 + 40 + r) continue;
+      if (isInWater(x, y, waterHazards)) continue;
+      let overlap = false;
+      for (const t of trees) {
+        if (Math.hypot(x - t.x, y - t.y) < r + t.r + 6) { overlap = true; break; }
+      }
+      if (overlap) continue;
+      trees.push({ type: 'circle', x: Math.round(x), y: Math.round(y), r });
+    }
+  }
+  return trees;
+}
+
 // Step 5: Playability validation
 export function isHoleSolvable(tee, hole, spine, Wf, waterHazards, obstacles, Wr, maxDrive = LOGICAL_W * 0.55) {
   // 1. Spine traversable: sample t=0,0.25,0.5,0.75,1.0 along spine, each point must not be in water and not be OB? Actually fairway/green, not OB

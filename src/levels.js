@@ -1,4 +1,4 @@
-import { sampleBezier, generateWaterClusters, generateTreesPoisson, isHoleSolvable, attachNoiseToTerrain, classifyFairwayShape } from "./terrain.js";
+import { sampleBezier, generateWaterClusters, generateTreesPoisson, generateRoughBorderTrees, isHoleSolvable, attachNoiseToTerrain, classifyFairwayShape, warpedDist } from "./terrain.js";
 
 function mulberry32(a) {
   return function () {
@@ -377,8 +377,16 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       }
       // Use warped check would be more accurate, but unwarped with margin should be safe
       if (minD > Wf - 8) continue;
-      // Check not in green/tee masks
-      if (Math.hypot(x - hole.x, y - hole.y) < 70 || Math.hypot(x - tee.x, y - tee.y) < 70) continue;
+      // Warped distance check for true fairway (with domain warping) — must be inside fairway
+      const dWarped = warpedDist(x, y, spine, terrain._noise2D, terrain.warpScale, terrain.warpStrength);
+      if (dWarped > Wf - 4) continue;
+      // Check not in green/tee masks (use actual mask radii)
+      const greenR = terrain.green.r;
+      const teeR = terrain.teeBox.r;
+      if (Math.hypot(x - hole.x, y - hole.y) < greenR + 10 || Math.hypot(x - tee.x, y - tee.y) < teeR + 10) continue;
+      // REQ 04/08: fairway trees at least 1/3 distance from tee toward green
+      const distTeeHole = Math.hypot(hole.x - tee.x, hole.y - tee.y);
+      if (Math.hypot(x - tee.x, y - tee.y) < distTeeHole / 3 - 1) continue;
       const r = 18 + Math.floor(rand() * 18);
       // Check overlap with existing fairway trees
       let overlap = false;
@@ -386,13 +394,17 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
         if (Math.hypot(x - t.x, y - t.y) < r + t.r + 6) { overlap = true; break; }
       }
       if (overlap) continue;
-      // Check clearance from tee/hole masks
-      if (Math.hypot(x - tee.x, y - tee.y) < 40 + r || Math.hypot(x - hole.x, y - hole.y) < 40 + r) continue;
+      // Check clearance from tee/hole masks (40 + r beyond mask edge)
+      if (Math.hypot(x - tee.x, y - tee.y) < teeR + 40 + r || Math.hypot(x - hole.x, y - hole.y) < greenR + 40 + r) continue;
+      // Also ensure warped is not inside green/tee after warping (redundant with above)
       fairwayTrees.push({ type: 'circle', x: Math.round(x), y: Math.round(y), r });
     }
-    // Ensure we have required count, if not, force placement at spine points
-    while (fairwayTrees.length < treesOnFairwayNeeded) {
-      const idx = Math.floor(rand() * spine.length);
+    // Ensure we have required count, if not, force placement at spine points (must respect ≥1/3 rule)
+    let fallbackAttempts = 0;
+    while (fairwayTrees.length < treesOnFairwayNeeded && fallbackAttempts < 200) {
+      fallbackAttempts++;
+      // Bias toward latter 2/3 of spine to satisfy ≥1/3 distance
+      const idx = Math.floor((0.35 + rand() * 0.65) * (spine.length - 1));
       const pt = spine[idx];
       const r = 20 + Math.floor(rand() * 10);
       // Small offset inside fairway
@@ -400,7 +412,15 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       const offY = (rand() - 0.5) * 20;
       const x = Math.round(pt.x + offX);
       const y = Math.round(pt.y + offY);
-      if (Math.hypot(x - hole.x, y - hole.y) < 70 || Math.hypot(x - tee.x, y - tee.y) < 70) continue;
+      const greenR2 = terrain.green.r;
+      const teeR2 = terrain.teeBox.r;
+      if (Math.hypot(x - hole.x, y - hole.y) < greenR2 + 10 || Math.hypot(x - tee.x, y - tee.y) < teeR2 + 10) continue;
+      const distTeeHoleFB = Math.hypot(hole.x - tee.x, hole.y - tee.y);
+      if (Math.hypot(x - tee.x, y - tee.y) < distTeeHoleFB / 3 - 1) continue;
+      if (Math.hypot(x - tee.x, y - tee.y) < teeR2 + 40 + r || Math.hypot(x - hole.x, y - hole.y) < greenR2 + 40 + r) continue;
+      // Ensure warped is still inside fairway
+      const dW = warpedDist(x, y, spine, terrain._noise2D, terrain.warpScale, terrain.warpStrength);
+      if (dW > Wf - 4) continue;
       fairwayTrees.push({ type: 'circle', x, y, r });
       if (fairwayTrees.length >= treesOnFairwayNeeded) break;
     }
@@ -457,14 +477,12 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     // For fairway water, we already have required; for extra water near edges, we could add but not needed for difficulty
     // For now, extra water is none; extra trees in rough/OB will be added after
 
-    // Generate extra trees in Rough/OB for aesthetics (not counted toward difficulty, but to fill map)
-    const extraTrees = [];
-    // Add some rough/OB trees to make course look natural, but not required for difficulty
-    const extraCount = Math.max(0, 8 - fairwayTrees.length + Math.floor(rand() * 4)); // ensure at least 8 total if fairwayTrees is 1-2, but for easy we already have 1-2 fairway, so add 6-8 extra in rough/OB
-    // Use the existing Poisson generator for rough/OB
-    const roughOBTrees = generateTreesPoisson(extraCount, spine, Wf, Wr, tee, hole, fairwayWater.concat(fairwayTrees), rand, LOGICAL_W, LOGICAL_H);
-    // Combine: fairway trees (difficulty) + rough/OB trees (aesthetic)
-    let obstacles = [...fairwayTrees, ...roughOBTrees];
+    // Generate extra trees on rough border between rough and OB for bounce (not counted toward difficulty)
+    const extraCount = Math.max(0, 8 - fairwayTrees.length + Math.floor(rand() * 4)); // ensure at least 8 total if fairwayTrees is 1-2; extras are rough-border only
+    // Use rough-border generator per updated 08 Step 4: trees on rough at W_rough border, spread around perimeter
+    const roughBorderTrees = generateRoughBorderTrees(extraCount, spine, Wf, Wr, tee, hole, fairwayWater.concat(fairwayTrees), rand, terrain, LOGICAL_W, LOGICAL_H);
+    // Combine: fairway trees (difficulty, ≥1/3 from tee) + rough-border trees (bounce, on rough at OB border)
+    let obstacles = [...fairwayTrees, ...roughBorderTrees];
     // Also add any fairway water already in fairwayWater
     let waterHazards = [...fairwayWater];
     // For medium/hard, fairwayWater already has required 1 or 1-3; for easy, none
