@@ -962,8 +962,8 @@ function bounceBall(hit, isEdge) {
   ball.isMoving = true;
 }
 
-// Reward menu per REQ-021/023/024: secret counter per-hole (reset to 0 on each hole advance, reward before first attempt on holes >0) - 3 random of 6 pool
-const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp', 'bouncyBall'];
+// Reward menu per REQ-021/023 : secret counter per-hole - 3 random of 5 pool (bouncy removed, trees always bounce)
+const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShots', 'areaUp'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
 let rewardMenuHover = null; // hovered type for visual feedback
@@ -1034,9 +1034,6 @@ function claimReward(type) {
   } else if (type === 'areaUp') {
     addAreaUpgrade(1); // REQ-023: Area +20% additive (addAreaUpgrade handles retroactive grow + sync)
     rewardChosenCounts.areaUp = Math.max(0, (rewardChosenCounts.areaUp || 0) + 1);
-  } else if (type === 'bouncyBall') {
-    addBouncyBall(1); // REQ-024: Bouncy Ball +1
-    rewardChosenCounts.bouncyBall = Math.max(0, (rewardChosenCounts.bouncyBall || 0) + 1);
   } else {
     if (!(type in supply)) return false;
     addToSupply(type, 1);
@@ -1657,14 +1654,9 @@ function update(dt) {
     }
     const hit = checkObstacleCollision(ball.pos, BALL_RADIUS, level.obstacles);
     if (hit) {
-      if (bouncyRemaining > 0) {
-        bouncyRemaining = Math.max(0, bouncyRemaining - 1);
-        bounceBall(hit, false);
-        // remain FLYING, do not reset
-      } else {
-        resetBall();
-        return;
-      }
+      // Trees always bounce (bouncyBall removed, no limit)
+      bounceBall(hit, false);
+      // remain FLYING, do not reset
     }
 
     // No auto-reset on rest - ball continues drifting per REQ-005

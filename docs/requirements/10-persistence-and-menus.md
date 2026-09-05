@@ -10,7 +10,8 @@
 - **Active-run**: `STORAGE_KEY="golfVectorField.progress.v1"` JSON `version:1` payload:
   ```js
   { version:1, courseId:string, currentHoleIndex:number, holeAttempts:number, totalAttempts:number,
-    supply:{amplify, nullify, flip}, freeShots:number, areaUpgradeCount:number, bouncyBallCount:number,
+    supply:{amplify, nullify, flip}, freeShots:number, areaUpgradeCount:number,
+    // bouncyBallCount legacy (kept for compat, always 0, trees always bounce per 04)
     sharpshooterCount?:number, secretRewardCounter:number, rewardPending:boolean, rewardOffered:string[]|null,
     rewardRerolled:boolean, rewardMenuVisible:boolean,
     modifiers:Array<{type,x,y,radius}>, aimAngle:number, savedAt:number }

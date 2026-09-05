@@ -951,12 +951,11 @@ const REWARD_TYPE_DEFS = {
   nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
   freeShots: { icon: '★', label: 'Free Shots', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+3 free shots' },
-  areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' },
-  bouncyBall: { icon: '◎', label: 'Bouncy Ball +1', color: '#1abc9c', border: 'rgba(26,188,156,0.9)', fill: 'rgba(26,188,156,0.28)', fillHover: 'rgba(26,188,156,0.38)', hint: '+1 bounce' }
+  areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' }
 };
 
 export function getRewardButtonsLayout(width, height, offered = null) {
-  // REQ-021/023/024: 3 random of 6 pool; if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
+  // REQ-021/023: 3 random of 5 pool (bouncy removed); if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
   const types = Array.isArray(offered) && offered.length === 3 ? offered : ['amplify', 'nullify', 'flip'];
   const cardW = 340;
   const cardH = 220;
@@ -1280,9 +1279,9 @@ export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts =
   ctx.strokeText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
   ctx.fillStyle = "white"; ctx.fillText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
   ctx.restore();
-  // Bottom reward list - all types with xN
-  const types = ['amplify','nullify','flip','freeShots','areaUp','bouncyBall'];
-  // include sharpshooter if defined in pool but keep 6 for now
+  // Bottom reward list - all types with xN (bouncy removed, trees always bounce)
+  const types = ['amplify','nullify','flip','freeShots','areaUp'];
+  // include sharpshooter if defined in pool but keep 5 for now
   const listY = height / 2 + 100;
   const gap = 8;
   const entryW = 88, entryH = 34;

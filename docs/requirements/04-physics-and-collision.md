@@ -1,7 +1,7 @@
 # 04 — Ball Physics, Obstacles & Hole
 
 - **ID:** 04-physics-and-collision
-- **Supersedes:** REQ-005, REQ-008, REQ-009, REQ-024 (bouncy portion)
+- **Supersedes:** REQ-005, REQ-008, REQ-009
 - **Type:** Functional
 - **References:** `02-canvas-system.md` (logical size, loop dt), `06-wind-system.md` (wind field), `08-level-generation.md` (terrain zones, trees/water generation)
 
@@ -20,9 +20,9 @@ Order per tick:
 4. Otherwise **apply friction**: `vel *= (1 - FRICTION * dt)`.
 5. **Integrate**: `pos += vel * dt`.
 6. **Check win** before death: `dist = hypot(pos.x-hole.x, pos.y-hole.y) < hole.radius + BALL_RADIUS` (edge grazing counts). On win: `vel=0; isMoving=false;` freeze position over hole; set `gameState='WIN'` and show Victory overlay (see `09-rewards-and-progression.md` / `05-input-and-states.md`). Win is terminal until `Next`/`R`.
-7. **Check collision / water / OB / edge** every tick (including slow drift), not only when `isMoving`. See §3-§4. On hit with `bouncyRemaining>0` bounce (see §5); else instant death via `resetBall()`.
+7. **Check collision / water / OB / edge** every tick (including slow drift), not only when `isMoving`. See §3-§4. On tree hit **always bounce** (see §5, no limit, no bouncy reward); on water/OB/edge instant death via `resetBall()` (water not fatal while airborne per airborne rule).
 
-- **No stop-reset**: speed `<5` does not trigger reset; ball keeps drifting under wind until obstacle/edge/hole. No gravity.
+- **No stop-reset**: speed `<5` does not trigger reset; ball keeps drifting under wind until obstacle/edge/hole. No gravity (vertical air arc is separate visual, see `src/physics.js` `GRAVITY`).
 
 ## 3. Obstacles
 
@@ -37,25 +37,24 @@ Order per tick:
 
 ## 4. Out-of-Bounds & Edge
 
-- Canvas edge contact is fatal (no bounce, except when bouncy bounces remain per §5): `pos.x - radius < 0` or `pos.x + radius > LOGICAL_W` or same for `y` → death/bounce.
-- Terrain `d > W_rough` (OB gray) is fatal (`d > W_rough` behind `isOutOfBoundsTerrain`).
-- Water blue zone is fatal.
+- Canvas edge contact is fatal (trees bounce, edge/water/OB do not): `pos.x - radius < 0` or `pos.x + radius > LOGICAL_W` or same for `y` → death (no bounce). Trees always bounce per §5.
+- Terrain `d > W_rough` (OB gray) is fatal (`d > W_rough` behind `isOutOfBoundsTerrain`), even while airborne.
+- Water blue zone is fatal **only while on ground** (`ball.z ≤ 5`); when airborne (`z>5`) water is ignored (fly over).
 
-## 5. Bouncy Ball (optional via rewards)
+## 5. Tree Bounce (always, no limit — bouncy reward removed)
 
-- Counters `bouncyBallCount` (total earned, `>=0`) and `bouncyRemaining` (per-attempt remaining) are defined in `09-rewards-and-progression.md` and `05-input-and-states.md` lifecycle. Default `0`.
+- Trees **always bounce**, no `bouncyBallCount`/`bouncyRemaining` limit. Bouncy Ball reward has been removed.
 - **Bounce vs die** branching (in `src/main.js` collision branch while `FLYING`):
   ```
-  if (hit || outOfBounds) {
-    if (bouncyRemaining > 0) { bouncyRemaining--; bounceBall(hit,isEdge); }
-    else resetBall();
+  if (hit) { // tree
+    bounceBall(hit, false); // always bounce, remain FLYING
+  } else if (terrainHit || waterHit || edgeOut) {
+    resetBall(); // water/OB/edge fatal (water ignored if airborne)
   }
   ```
-- `bounceBall`:
-  - **Edge**: reflect `vel.x *= -BOUNCE_DAMPING` (vertical walls) or `vel.y *= -BOUNCE_DAMPING` (horizontal); clamp `pos` inside `[radius, W-radius]`; corner inverts both.
-  - **Rect obstacle**: closest point on AABB, normal `n=normalize(ball-pos - closest)`, `vel = vel - 2*dot(vel,n)*n * BOUNCE_DAMPING`, reposition to `radius+0.5` along `n`.
-  - **Circle**: `n=normalize(pos - center)`, same reflect, reposition to `hit.r + radius+0.5`.
-  - After bounce `isMoving` stays `true`, `gameState` stays `FLYING`, wind continues. Win check still precedes bounce; hole entry never consumes a bounce. Simultaneous edge+obstacle consumes one bounce.
+- `bounceBall` ( `src/main.js:bounceBall` with `BOUNCE_DAMPING=0.7` ):
+  - **Circle tree** (only type now): `n=normalize(pos - center)`, `vel = vel - 2*dot(vel,n)*n * BOUNCE_DAMPING`, reposition to `hit.r + radius+0.5`.
+  - After bounce `isMoving` stays `true`, `gameState` stays `FLYING`, wind continues. Win check still precedes bounce; hole entry never bounces.
 
 ## 6. Rendering
 
@@ -64,10 +63,10 @@ Order per tick:
 ## Acceptance Criteria
 
 - [ ] Ball at rest is drifted by wind within 0.2s and reaches >80 px/s within 0.3s (very fast wind with `180/0.35/28`).
-- [ ] No reset on rest; only obstacle/water/OB/edge or hole terminates.
-- [ ] Edge grazing (`dist==radius+0.1`) no false positive; `+1px` overlap triggers reset/bounce.
+- [ ] No reset on rest; only tree bounce vs water/OB/edge death or hole win terminates.
+- [ ] Edge grazing (`dist==radius+0.1`) no false positive; `+1px` overlap triggers bounce (tree) or reset (water/OB/edge).
 - [ ] `nullify` preserves entry velocity (±5% over 0.5s inside, see `07-modifiers.md`).
-- [ ] With `bouncy=0` any hit dies; with `1` first hit bounces (position re-clamped, velocity reflected with damping) and second dies; `bouncyRemaining` re-initializes each attempt.
+- [ ] Tree hit always bounces (position re-clamped to `hit.r+radius+0.5`, velocity reflected with `BOUNCE_DAMPING=0.7`, remains `FLYING`); no limit, no `bouncyRemaining`. Water hit while airborne (`z>5`) does not trigger death; same spot with `z=0` does.
 
 ## File Paths
 

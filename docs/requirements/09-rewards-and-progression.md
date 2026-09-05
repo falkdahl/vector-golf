@@ -1,9 +1,9 @@
 # 09 — Rewards & Progression (Hole Advance, Secret Counter, Random Upgrades, Reroll)
 
 - **ID:** 09-rewards-and-progression
-- **Supersedes:** REQ-009 (win section), REQ-014 (hole progression part), REQ-021, REQ-022, REQ-023, REQ-024, REQ-025, plus `05-input-and-states.md` shared counters
+- **Supersedes:** REQ-009 (win section), REQ-014 (hole progression part), REQ-021, REQ-022, REQ-023, REQ-025, plus `05-input-and-states.md` shared counters — **bouncy removed, trees always bounce**
 - **Type:** Functional + UI
-- **References:** `05-input-and-states.md` (attempts/counters), `07-modifiers.md` (supply), `04-physics-and-collision.md` (win check), `10-persistence-and-menus.md` (course complete vs abandon)
+- **References:** `05-input-and-states.md` (attempts/counters), `07-modifiers.md` (supply), `04-physics-and-collision.md` (win check, trees always bounce), `10-persistence-and-menus.md` (course complete vs abandon)
 
 ## 1. Hole & Win Definition (extends `04-physics-and-collision.md`)
 
@@ -28,19 +28,18 @@
 - **Deduction** in `handleLaunch` (exactly once per launch, after `launchBall`): `if (freeShots>0) freeShots=max(0,freeShots-1)` **mutually exclusive** with the counted-shot increment above (never both). Does not increment `secretRewardCounter`, `holeAttempts`, `totalAttempts`; HUD unchanged.
 - **Grant**: via random reward menu (see §5) only when `Free Shots +3` is among the offered 3 and chosen → `freeShots+=3` (exactly `+3`, `addFreeShots(3)`), clamped. Not consumed by re-roll (see §6).
 
-## 5. Reward Menu — Random 3-of-6 Inside Canvas
+## 5. Reward Menu — Random 3-of-5 Inside Canvas (bouncy removed)
 
-- Pool `POOL=['amplify','nullify','flip','freeShots','areaUp','bouncyBall']` (6 types, later entries are authoritative; earlier 4-/5-pool mentions are legacy and superseded). Per trigger randomly pick **3 distinct** uniformly without replacement (`shuffle([...POOL]).slice(0,3)` via `Math.random`), same 6-pool for reroll. Excluded types not shown that trigger.
+- Pool `POOL=['amplify','nullify','flip','freeShots','areaUp']` (5 types, bouncy removed; earlier 6-pool mentions are legacy and superseded). Per trigger randomly pick **3 distinct** uniformly without replacement (`shuffle([...POOL]).slice(0,3)` via `Math.random`), same 5-pool for reroll. Excluded types not shown that trigger.
 - State per menu `rewardOffered` (current 3), `rewardRerolled=false` when freshly shown (`maybeShowRewardMenu` resets it), `rewardMenuVisible` blocks input.
 - **Inside-canvas canvas overlay** `drawRewardMenu(ctx,W,H,offered,hovered,rerolled,rerollHovered)` called from `render()` when `rewardMenuVisible`: full-canvas dim `rgba(0,0,0,0.55)` (no white card), title `Choose an Upgrade` 22px `700` white `stroke rgba(0,0,0,0.75) 5px` centered, three `90×110` buttons centered (`340×220` card) horizontally `gap 12`:
-  - `amplify` border `rgba(230,126,34,0.9)` fill `rgba(230,126,34,0.28)` (hover `0.38`) icon `»` `#e67e22`; `nullify` `#3498db` `∅`; `flip` `#9b59b6` `⇄`; `freeShots` green `★` `#2ecc71` hint `+3 free shots`; `areaUp` amber `◯` `#f39c12` hint `+20% area`; `bouncyBall` teal `◎` `#1abc9c` hint `+1 bounce`. All labels white with `stroke rgba(0,0,0,0.75) 4px` for contrast on green/dim; no `Total Attempts: N` subtitle.
+  - `amplify` border `rgba(230,126,34,0.9)` fill `rgba(230,126,34,0.28)` (hover `0.38`) icon `»` `#e67e22`; `nullify` `#3498db` `∅`; `flip` `#9b59b6` `⇄`; `freeShots` green `★` `#2ecc71` hint `+3 free shots`; `areaUp` amber `◯` `#f39c12` hint `+20% area`. All labels white with `stroke rgba(0,0,0,0.75) 4px` for contrast on green/dim; no `Total Attempts: N` subtitle. (bouncy `◎` `#1abc9c` removed).
 - **Blocking**: while visible, aim/charge/launch/modifier `1/2/3` placement is ignored; only menu `1`/`2`/`3` (by **offered order** left-to-right, not fixed) or click on button rects selects; `7-modifiers.md` hotbar is visible but disabled underneath.
 - **Selection** (idempotent, once per menu): click or `1`/`2`/`3` for `rewardOffered[0..2]`:
   - `amplify`/`nullify`/`flip` → `supply[t]++` once,
   - `freeShots` → `freeShots+=3`,
   - `areaUp` → `areaUpgradeCount+=1` (`areaMultiplier=1+0.2*areaUpgradeCount`, retroactively grows all modifiers via `getEffectiveModifierRadius()`, see `07-modifiers.md` §4; base `BASE_MODIFIER_RADIUS` normative per `07-modifiers.md` — accept `54*` progression `64.8/75.6/...` if base `54`, or `108/126/...` if base `90`; additive not `1.2^n`),
-  - `bouncyBall` → `bouncyBallCount+=1` (`bouncyRemaining` re-init per `05-input-and-states.md`),
-  then `rewardPending=false; rewardMenuVisible=false; rewardOffered=[]` (secret already `0` after the 5th counted shot). Menu closes, normal `AIMING` resumes. Save via `saveProgress()`.
+  then `rewardPending=false; rewardMenuVisible=false; rewardOffered=[]` (secret already `0` after the 5th counted shot). Menu closes, normal `AIMING` resumes. Save via `saveProgress()`. Trees always bounce per `04-physics-and-collision.md:5`, no `bouncyBall` grant.
 
 ## 6. Re-roll — Once per Menu for 1 Attempt
 
@@ -58,18 +57,19 @@
 ## 7. Persistence Interactions & Course Records
 
 - Only **full course completion** (final-hole `WIN`) updates `bestTotal` per course (`10-persistence-and-menus.md`); `End Run` does not.
-- Counters and `supply`/`freeShots`/`areaUpgradeCount`/`bouncyBallCount`/`secretRewardCounter`/`reward…`/`modifiers`/`aimAngle` are part of `STORAGE_KEY` payload and re-saved after every launch/claim/reroll/placement/advance (see `10-persistence-and-menus.md`).
+- Counters and `supply`/`freeShots`/`areaUpgradeCount`/`secretRewardCounter`/`reward…`/`modifiers`/`aimAngle` are part of `STORAGE_KEY` payload and re-saved after every launch/claim/reroll/placement/advance (see `10-persistence-and-menus.md`). `bouncyBallCount` is legacy (kept for compat, always `0`, trees always bounce).
 
 ## Acceptance Criteria
 
 - [ ] New game hole 1 no menu; each subsequent hole has menu before first attempt with `secretRewardCounter===0` after hole-entry reset.
-- [ ] After 5 counted shots `secret 0→5→0` queues menu at next `AIMING`; menu shows 3 distinct from 6-pool; excluded not clickable; `Space`/`Arrow` blocked; `1/2/3` selects by offered order.
-- [ ] Grants: `amplify/nullify/flip` `+1 supply`, `freeShots +3`, `areaUp` `areaUpgradeCount+1` → `effectiveRadius` additive (`BASE*1.2/1.4/1.6`…), retroactively grows; `bouncyBall +1`.
+- [ ] After 5 counted shots `secret 0→5→0` queues menu at next `AIMING`; menu shows 3 distinct from **5-pool** (`amplify/nullify/flip/freeShots/areaUp`, no bouncy); excluded not clickable; `Space`/`Arrow` blocked; `1/2/3` selects by offered order.
+- [ ] Grants: `amplify/nullify/flip` `+1 supply`, `freeShots +3`, `areaUp` `areaUpgradeCount+1` → `effectiveRadius` additive (`BASE*1.2/1.4/1.6`…), retroactively grows. No `bouncyBall` grant.
 - [ ] `freeShots` consumed first, not counted; does not increment secret or `Total`; delaying next reward until 5 counted shots.
-- [ ] Re-roll button shown when `rerolled===false`; `R`/click once increments `holeAttempts`/`totalAttempts` by `+1` but keeps `freeShots` and `secret` unchanged, replaces offer, disables button; second `R` no-ops. `Total` at second reward is `11` if one reroll taken after `5` (proof of cost).
+- [ ] Tree hit always bounces (no `bouncyRemaining` check, unlimited), `bouncyBallCount` legacy `0`; water `z>5` flies over.
+- [ ] Re-roll button shown when `rerolled===false`; `R`/click once increments `holeAttempts`/`totalAttempts` by `+1` but keeps `freeShots` and `secret` unchanged, replaces offer (new 3 from 5-pool), disables button; second `R` no-ops. `Total` at second reward is `11` if one reroll taken after `5`.
 - [ ] No white card; dim `0.55` behind high-contrast white-with-stroke buttons; HUD still underneath.
 
 ## File Paths
 
-- `src/main.js:1` (`POOL`, `secretRewardCounter`, `freeShots`, `areaUpgradeCount`, `bouncyBallCount`, `reward*` state, `handleLaunch` branching, `claimReward`, `rerollReward`, `maybeShowRewardMenu`, `advanceHole`/`handleNextHole` secret reset)
-- `src/render.js:1` (`drawRewardMenu`, `getRewardButtonsLayout`, `getRewardRerollButtonLayout`, high-contrast styles)
+- `src/main.js:1` (`POOL` 5, `secretRewardCounter`, `freeShots`, `areaUpgradeCount`, `reward*` state, `claimReward` 5-pool, `rerollReward`, `maybeShowRewardMenu`, trees always bounce)
+- `src/render.js:1` (`drawRewardMenu` 5-pool, `getRewardButtonsLayout`, no bouncy def)
