@@ -219,19 +219,19 @@ export function generateWaterClusters(spine, Wf, rand, noiseSeed, width = LOGICA
     // Clamp inside bounds with margin
     const clampedX = Math.max(30, Math.min(width - 30, cx));
     const clampedY = Math.max(30, Math.min(height - 30, cy));
-    // Generate cluster size 800-3000 area
-    const area = 800 + Math.floor(rand() * 2200);
+    // Generate cluster size 2000-6000 area (bigger water)
+    const area = 2000 + Math.floor(rand() * 4000); // bigger (was 800-3000)
     // Approximate as circle radius from area: r = sqrt(area/PI)
     let r = Math.sqrt(area / Math.PI);
     // Add variation: make some rects, but spec says small clusters; we will use circles for simplicity
-    // Ensure not too large to block all fairway
-    r = Math.max(18, Math.min(32, r));
+    // Ensure not too large to block all fairway - but allow bigger
+    r = Math.max(28, Math.min(48, r)); // bigger (was 18-32)
     // Cellular Automata alternative: we could generate grid, but for our purpose circle is sufficient and passes area test
     // Ensure water not covering spine fully: check distance to spine > Wf*0.3 and < Wf+40, already ensured
-    // If water would be too close to tee/hole (within 70px of masks), skip
+    // If water would overlap tee/green masks (mask radius ~70-90 + water r + buffer), skip — must not overlap tee or green
     const teeDist = Math.hypot(clampedX - spine[0].x, clampedY - spine[0].y);
     const holeDist = Math.hypot(clampedX - spine[spine.length-1].x, clampedY - spine[spine.length-1].y);
-    if (teeDist < 90 || holeDist < 90) continue;
+    if (teeDist < r + 85 || holeDist < r + 85) continue;
     // Also ensure not overlapping existing water too much
     let tooCloseWater = false;
     for (const w of clusters) {

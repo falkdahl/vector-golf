@@ -1509,12 +1509,14 @@ function handleLaunch(angle, power) {
 
 function checkWin() {
   const dist = Math.hypot(ball.pos.x - level.hole.x, ball.pos.y - level.hole.y);
-  // Victory when ball touches any part of black circle per new requirement
+  // Victory when ball touches any part of black circle per new requirement (ground projection)
   if (dist < level.hole.radius + BALL_RADIUS) {
-    // Ball stops in place per requirement
+    // Ball stops in place per requirement — also settle height
     ball.vel.x = 0;
     ball.vel.y = 0;
     ball.isMoving = false;
+    ball.z = 0;
+    ball.vz = 0;
     gameState = "WIN";
     updateAttemptsUI();
     winOverlay.classList.remove("hidden");
@@ -1636,11 +1638,20 @@ function update(dt) {
 
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
     // Water/OB terrain are fatal even with bouncy (hazard spec); trees respect bouncy
-    const terrainHit = checkTerrainCollision(ball.pos, BALL_RADIUS, level);
-    const waterHit = checkWaterCollision(ball.pos, BALL_RADIUS, level.waterHazards);
+    // But water is not fatal while ball is in the air (flying over)
+    const isAirborneOverWater = ball.z !== undefined && ball.z > 5;
+    let terrainHit = checkTerrainCollision(ball.pos, BALL_RADIUS, level);
+    let waterHit = checkWaterCollision(ball.pos, BALL_RADIUS, level.waterHazards);
+    // Ignore water when airborne (ball flies over)
+    if (isAirborneOverWater) {
+      if (terrainHit && terrainHit.zone === 'water') terrainHit = null;
+      if (terrainHit && terrainHit.type === 'water') terrainHit = null;
+      if (waterHit) waterHit = null;
+    }
     const edgeOut = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
     if (terrainHit || waterHit || edgeOut) {
       // Fatal terrain/water/edge — instant reset (no bouncy bounce for hazards)
+      // (water already filtered for airborne, so this is ground water)
       resetBall();
       return;
     }

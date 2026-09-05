@@ -183,33 +183,67 @@ function generateFairwayShape(tier, tee, hole, rand) {
       shape = 'I';
     }
   } else if (tier === 'medium') {
-    // L, V, or U: randomly pick one
-    const choice = Math.floor(rand() * 3); // 0=L,1=V,2=U
+    // More L shapes with harder edges — biased to L (50% L, 25% V, 25% U)
+    const rPick = rand();
+    let choice;
+    if (rPick < 0.50) choice = 0; // L 50%
+    else if (rPick < 0.75) choice = 1; // V 25%
+    else choice = 2; // U 25%
     if (choice === 0) {
-      // L: one 90° bend
-      const offset = (rand() > 0.5 ? 1 : -1) * (60 + rand() * 40); // 60-100
-      p1 = { x: mx + Math.cos(perpAng) * offset, y: my + Math.sin(perpAng) * offset };
+      // L: hard 90° edge — larger than original but toned down from 140-200
+      const useCorner = rand() < 0.6;
+      if (useCorner) {
+        // Hard L corner at (hole.x, tee.y) or (tee.x, hole.y) — creates true hard edge
+        const cornerX = rand() < 0.5 ? hole.x : tee.x;
+        const cornerY = cornerX === hole.x ? tee.y : hole.y;
+        const offset = (rand() - 0.5) * 40; // small jitter ±20
+        p1 = {
+          x: cornerX + Math.cos(perpAng) * offset,
+          y: cornerY + Math.sin(perpAng) * offset
+        };
+        // Clamp to stay inside bounds
+        p1.x = Math.max(30, Math.min(1250, p1.x));
+        p1.y = Math.max(30, Math.min(690, p1.y));
+      } else {
+        const offset = (rand() > 0.5 ? 1 : -1) * (125 + rand() * 50); // 125-175 — toned down from 140-200
+        p1 = { x: mx + Math.cos(perpAng) * offset, y: my + Math.sin(perpAng) * offset };
+      }
       shape = 'L';
     } else if (choice === 1) {
-      // V: acute bend 30-70°
-      const offset = (rand() > 0.5 ? 1 : -1) * (50 + rand() * 30); // 50-80, slightly less than L
+      // V: acute — larger but toned down from 120-170
+      const offset = (rand() > 0.5 ? 1 : -1) * (105 + rand() * 45); // 105-150
       p1 = { x: mx + Math.cos(perpAng) * offset, y: my + Math.sin(perpAng) * offset };
       shape = 'V';
     } else {
-      // U: two same-side offsets
-      const offset = (rand() > 0.5 ? 1 : -1) * (70 + rand() * 30); // 70-100 same side
+      // U: two same-side — larger but toned down from 150-210
+      const offset = (rand() > 0.5 ? 1 : -1) * (135 + rand() * 50); // 135-185
       p1 = { x: mx - (hole.x - tee.x) * 0.15 + Math.cos(perpAng) * offset, y: my - (hole.y - tee.y) * 0.15 + Math.sin(perpAng) * offset };
       p2 = { x: mx + (hole.x - tee.x) * 0.15 + Math.cos(perpAng) * offset, y: my + (hole.y - tee.y) * 0.15 + Math.sin(perpAng) * offset };
       shape = 'U';
     }
   } else if (tier === 'hard') {
-    // S or Z: two opposite-side offsets
+    // S/Z with larger bends but NOT bending back over itself — toned down from loopback
     const isZ = rand() < 0.5;
-    const offset1 = (rand() > 0.5 ? 1 : -1) * (70 + rand() * 40); // 70-110
-    const offset2 = -offset1 * (0.8 + rand() * 0.4); // opposite side, similar magnitude
-    p1 = { x: mx - (hole.x - tee.x) * 0.18 + Math.cos(perpAng) * offset1, y: my - (hole.y - tee.y) * 0.18 + Math.sin(perpAng) * offset1 };
-    p2 = { x: mx + (hole.x - tee.x) * 0.18 + Math.cos(perpAng) * offset2, y: my + (hole.y - tee.y) * 0.18 + Math.sin(perpAng) * offset2 };
+    const offset1 = (rand() > 0.5 ? 1 : -1) * (155 + rand() * 65); // 155-220 — larger than original 115-170 but toned down from 320-430 loopback
+    const offset2 = -offset1 * (0.88 + rand() * 0.28); // opposite, 0.88-1.16×
+    const longFactor = 0.24 + rand() * 0.08; // 0.24-0.32 — keeps p1/p2 between tee/hole, no backtrack
+    p1 = { x: mx - (hole.x - tee.x) * longFactor + Math.cos(perpAng) * offset1, y: my - (hole.y - tee.y) * longFactor + Math.sin(perpAng) * offset1 };
+    p2 = { x: mx + (hole.x - tee.x) * longFactor + Math.cos(perpAng) * offset2, y: my + (hole.y - tee.y) * longFactor + Math.sin(perpAng) * offset2 };
+    // Clamp to stay inside canvas
+    p1.x = Math.max(30, Math.min(1250, p1.x));
+    p1.y = Math.max(30, Math.min(690, p1.y));
+    p2.x = Math.max(30, Math.min(1250, p2.x));
+    p2.y = Math.max(30, Math.min(690, p2.y));
     shape = isZ ? 'Z' : 'S';
+  }
+  // Clamp controls to stay inside playable area so fairway doesn't go off-canvas with extreme bends
+  if (p1) {
+    p1.x = Math.max(30, Math.min(1250, p1.x));
+    p1.y = Math.max(30, Math.min(690, p1.y));
+  }
+  if (p2) {
+    p2.x = Math.max(30, Math.min(1250, p2.x));
+    p2.y = Math.max(30, Math.min(690, p2.y));
   }
   const spine = sampleBezier(tee, p1, p2, hole, 50);
   // For easy I, ensure not too much deviation: if tier easy but p1 caused >30 deviation, correct to straight
@@ -386,7 +420,7 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       if (Math.hypot(x - hole.x, y - hole.y) < greenR + 10 || Math.hypot(x - tee.x, y - tee.y) < teeR + 10) continue;
       // REQ 04/08: fairway trees at least 1/3 distance from tee toward green
       const distTeeHole = Math.hypot(hole.x - tee.x, hole.y - tee.y);
-      if (Math.hypot(x - tee.x, y - tee.y) < distTeeHole / 3 - 1) continue;
+      if (Math.hypot(x - tee.x, y - tee.y) < distTeeHole / 3) continue;
       const r = 18 + Math.floor(rand() * 18);
       // Check overlap with existing fairway trees
       let overlap = false;
@@ -416,7 +450,7 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       const teeR2 = terrain.teeBox.r;
       if (Math.hypot(x - hole.x, y - hole.y) < greenR2 + 10 || Math.hypot(x - tee.x, y - tee.y) < teeR2 + 10) continue;
       const distTeeHoleFB = Math.hypot(hole.x - tee.x, hole.y - tee.y);
-      if (Math.hypot(x - tee.x, y - tee.y) < distTeeHoleFB / 3 - 1) continue;
+      if (Math.hypot(x - tee.x, y - tee.y) < distTeeHoleFB / 3) continue;
       if (Math.hypot(x - tee.x, y - tee.y) < teeR2 + 40 + r || Math.hypot(x - hole.x, y - hole.y) < greenR2 + 40 + r) continue;
       // Ensure warped is still inside fairway
       const dW = warpedDist(x, y, spine, terrain._noise2D, terrain.warpScale, terrain.warpStrength);
@@ -455,10 +489,15 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
           if (d < minD) minD = d;
         }
         if (minD > Wf - 12) continue;
+        // Do not overlap tee/green masks — keep water entirely outside masks (green/tee + water radius + buffer)
+        // Early coarse check before r known
         if (Math.hypot(x - hole.x, y - hole.y) < 80 || Math.hypot(x - tee.x, y - tee.y) < 80) continue;
-        const area = 800 + Math.floor(rand() * 2200);
+        const area = 2000 + Math.floor(rand() * 4000); // bigger water (was 800-3000)
         let r = Math.sqrt(area / Math.PI);
-        r = Math.max(18, Math.min(32, r));
+        r = Math.max(28, Math.min(48, r)); // bigger (was 18-32)
+        // Strict mask overlap: water circle must not intersect green/tee circles
+        if (Math.hypot(x - hole.x, y - hole.y) < terrain.green.r + r + 10) continue;
+        if (Math.hypot(x - tee.x, y - tee.y) < terrain.teeBox.r + r + 10) continue;
         // Check not overlapping existing water or fairway trees too much
         let overlap = false;
         for (const ex of fairwayWater) {

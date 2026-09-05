@@ -648,23 +648,77 @@ export function drawHole(ctx, hole) {
 
 export function drawBall(ctx, ball) {
   ctx.save();
-  // shadow
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  const z = ball.z ?? 0;
+  const isAirborne = z > 0.5;
+  // --- Shadow on ground ---
+  // Shadow stays at ground projection (ball.pos), shrinks/fades with height
+  const shadowScale = Math.max(0.35, 1 - z * 0.011);
+  const shadowAlpha = Math.max(0.07, 0.32 - z * 0.0035);
+  const shadowW = ball.radius * 0.95 * shadowScale;
+  const shadowH = ball.radius * 0.65 * shadowScale;
+  // Sow shadow slightly below ground pos, and squash when bouncing
+  const squash = isAirborne ? 1 : (ball.vz !== undefined && Math.abs(ball.vz) > 5 ? 0.85 : 1);
+  ctx.fillStyle = `rgba(0,0,0,${shadowAlpha.toFixed(3)})`;
   ctx.beginPath();
-  ctx.ellipse(ball.pos.x + 2, ball.pos.y + 2, ball.radius * 0.9, ball.radius * 0.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(ball.pos.x + 2, ball.pos.y + 4, shadowW, shadowH * squash, 0, 0, Math.PI * 2);
   ctx.fill();
-  // ball
+  // subtle second shadow blur for depth
+  if (shadowAlpha > 0.12) {
+    ctx.fillStyle = `rgba(0,0,0,${(shadowAlpha * 0.5).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(ball.pos.x + 2, ball.pos.y + 4, shadowW * 1.35, shadowH * 1.35 * squash, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // --- Ball in air ---
+  // Visual lift: ball appears above ground. Offset y by -z*0.55 for pseudo-3D.
+  const lift = z * 0.55;
+  const ballX = ball.pos.x;
+  const ballY = ball.pos.y - lift;
+  const visualR = ball.radius + z * 0.025; // grows when high
+  // squash/stretch on bounce: when just hit ground (z==0 && |vz| ~ bouncing), stretch
+  let scaleY = 1, scaleX = 1;
+  if (!isAirborne && ball.vz !== undefined) {
+    const avz = Math.abs(ball.vz);
+    if (avz > 30 && avz < 180) {
+      // compress on impact
+      scaleY = 0.85;
+      scaleX = 1.12;
+    }
+  } else if (isAirborne) {
+    // slight stretch when fast falling
+    if ((ball.vz ?? 0) < -120) {
+      scaleY = 1.08;
+      scaleX = 0.96;
+    }
+  }
+  ctx.translate(ballX, ballY);
+  ctx.scale(scaleX, scaleY);
+  // ball body
   ctx.fillStyle = "#fff";
   ctx.strokeStyle = "#222";
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = 1.4;
   ctx.beginPath();
-  ctx.arc(ball.pos.x, ball.pos.y, ball.radius, 0, Math.PI * 2);
+  ctx.arc(0, 0, visualR, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  // dimple
-  ctx.fillStyle = "rgba(0,0,0,0.07)";
+  // top highlight for 3D
+  const grad = ctx.createRadialGradient(-visualR * 0.35, -visualR * 0.45, visualR * 0.2, 0, 0, visualR);
+  grad.addColorStop(0, "rgba(255,255,255,0.95)");
+  grad.addColorStop(0.35, "rgba(255,255,255,0.35)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.arc(ball.pos.x - 1.5, ball.pos.y - 1.5, 1.2, 0, Math.PI * 2);
+  ctx.arc(0, 0, visualR, 0, Math.PI * 2);
+  ctx.fill();
+  // dimple
+  ctx.fillStyle = "rgba(0,0,0,0.09)";
+  ctx.beginPath();
+  ctx.arc(-visualR * 0.22, -visualR * 0.25, Math.max(1, visualR * 0.14), 0, Math.PI * 2);
+  ctx.fill();
+  // small specular
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.beginPath();
+  ctx.arc(-visualR * 0.28, -visualR * 0.35, Math.max(0.9, visualR * 0.11), 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
