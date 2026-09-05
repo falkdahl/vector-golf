@@ -1,143 +1,233 @@
-# REQ-010: Level Definition (Multi-Hole) — Procedural 18 Levels with Increasing Difficulty
+# REQ-010: Level Definition (Multi-Hole) — Procedural 18 Levels With 5-Step Terrain Pipeline & Zoned Colors
 
 - **ID:** REQ-010
-- **Title:** Level Definition — Procedural 18 Holes, Tee Left / Hole Right, Random Height, Increasing Difficulty
+- **Title:** Level Definition — Procedural 18 Holes Via 5-Step Pipeline: Bézier Layout → SDF Masking → Domain-Warped Noise → Hazards/Trees → Validation; Zoned Terrain Colors
 - **Priority:** Must Have
-- **Type:** Data / Functional
+- **Type:** Data / Functional / Procedural Generation
 - **Status:** Draft
-- **Related Plan Section:** levels.js, Architecture File Structure
+- **Related Plan Section:** levels.js, Architecture File Structure, Terrain Pipeline (NEW)
 
 ## Description
-On start of a **new game**, the game SHALL **procedurally generate exactly 18 levels (holes)** with **monotonically increasing difficulty**. Generation is deterministic via a seed and SHALL be performed in `src/levels.js` (e.g., `generateLevels(seed, count=18)` or `createProceduralLevels()` called from `src/main.js` on new game). Each generated level SHALL have `tee` on the **left side** of the map and `hole` on the **right side** with **random height** placement, and SHALL define `field` and `obstacles` per the progression below. The static `LEVELS` array, if kept for backwards compat, SHALL be replaced or overwritten by the generated 18 at runtime; `LEVELS.length` SHALL be `18` after generation.
+On start of a **new game**, the game SHALL **procedurally generate exactly 18 levels (holes)** with **monotonically increasing difficulty** using a **5-step layered generation pipeline** that combines `Quadratic/Cubic Bézier Curves or Directed A* Pathfinding` for the fairway spine, `Signed Distance Fields (SDFs)` for zone masking, `Simplex/Perlin Noise with Domain Warping` for organic contours, `Cellular Automata (water) + Poisson Disc Sampling (trees)` for hazards/obstacles, and `Physics Raycasting / A* Shot Simulation` for playability validation. Generation is deterministic via a seed and SHALL be performed in `src/levels.js` (e.g., `generateLevels(seed, count=18)`). Each generated level SHALL have `tee` on the **left side** and `hole` on the **right side** with **random height**, SHALL define `field` and `obstacles` per progression, **and SHALL define `terrain` zones** (`Green`, `Fairway`, `Rough`, `Out of Bounds`, `Water`) **rendered with fixed colors**: `Green` light green, `Fairway` slightly darker green, `Rough` even darker green, `OB` even darker gray, `Water` blue, and **trees SHALL be circular obstacles**. The static `LEVELS` array, if kept, SHALL be overwritten by the generated 18 at runtime; `LEVELS.length` SHALL be `18` after generation.
 
 ## Rationale
-18 holes gives a full round with clear progression. Tee left / hole right guarantees the primary shot is left-to-right and requires wind-aware routing. Random height per hole prevents memorization and forces re-aiming. Starting with a single source (left edge) + sink (right edge) teaches the wind mechanic; adding obstacles then vortex introduces complexity stepwise; thereafter adding obstacles and field components steadily raises challenge without sudden spikes. Procedural generation from a seed keeps every new game fresh but reproducible.
+18 holes gives a full round with clear progression. Tee left / hole right guarantees the primary shot is left-to-right and requires wind-aware routing. Random height per hole prevents memorization. A single algorithm cannot produce both structured playability (tee must lead to green without impossible blocks) and natural looks; the 5-step pipeline layers domain constraints (tees lead to greens, hazards don't completely block fairways) over standard procedural techniques, yielding organic, natural-looking top-down courses that remain solvable. Fixed terrain colors give immediate visual readability of lie/penalty zones while circular tree obstacles provide consistent collision.
 
 ## Requirements
 
 1. **Generation entry point in `src/levels.js`**:
-   - SHALL export `LEVELS: Level[]` (length `18` after generation) and a function `generateLevels(seed?: number, count?: number): Level[]` (or `createLevels`, `generateProceduralLevels`) that (re)creates the 18 levels. `src/main.js` SHALL call this on **new game start** (`startNewGame()`, `startNewGameFromMain()`, `resetGameAfterWin()`, and initial load with no save) before `loadLevel(0)`. The seed MAY be `Date.now()` or `Math.floor(Math.random()*1e9)` for fresh games, or a fixed debug seed if `?seed=` is present; generation MUST be deterministic for a given seed (same PRNG sequence yields same 18).
+   - SHALL export `LEVELS: Level[]` (length `18` after generation) and a function `generateLevels(seed?: number, count?: number): Level[]` (or `createLevels`, `generateProceduralLevels`) that (re)creates the 18 levels. `src/main.js` SHALL call this on **new game start** (`startNewGame()`, `startNewGameFromMain()`, `resetGameAfterWin()`, and initial load with no save) before `loadLevel(0)`. The seed MAY be `Date.now()` or `Math.floor(Math.random()*1e9)` for fresh games, or a fixed debug seed if `?seed=` is present; generation MUST be deterministic for a given seed.
    - `LEVELS` after generation SHALL have `length === 18`, each element as:
-      ```js
-      {
-        id: "hole-1" … "hole-18",
-        name: `Hole ${i+1}`,
-        canvas: {width:LOGICAL_W, height:LOGICAL_H}, // 16:9 e.g., 1280×720 per REQ-002/REQ-030, not 900×600
-        tee: {x:number, y:number},
-        hole: {x:number, y:number, radius:14},
-        obstacles: Array<{type:'rect',x,y,w,h} | {type:'circle',x,y,r}>,
-        field: {cols:32, rows:18, strength:number, seed:number, sources:number, sinks:number, doublets:number, vortexes:number} // 32×18 for 1280×720 square cells; 20×15 legacy tolerated if scaled to 16:9
-      }
-      ```
-      `LOGICAL_W×LOGICAL_H` SHALL be 16:9 (`1280×720` default per REQ-002/REQ-030, `width/height=1.777`). All `tee.x/hole.x/y` ranges SHALL be scaled to this logical size (see §2).
+     ```js
+     {
+       id: "hole-1" … "hole-18",
+       name: `Hole ${i+1}`,
+       canvas: {width:LOGICAL_W, height:LOGICAL_H}, // 16:9 e.g., 1280×720 per REQ-002/REQ-030, not 900×600
+       tee: {x:number, y:number},
+       hole: {x:number, y:number, radius:14},
+       obstacles: Array<{type:'circle', x,y,r}>, // trees: circular obstacles only per new spec (see §7)
+       waterHazards: Array<{x,y,w,h} | {x,y,r}>, // blue water zones (rendered as terrain, also fatal if entered)
+       terrain: { // zoned SDF masks for rendering (see §3-5)
+         green: {x,y,r}, // circular mask around hole
+         teeBox: {x,y,r}, // circular mask around tee
+         fairwayPath: Array<{x,y}>, // sampled Bézier spine points
+         widthFairway: number, // SDF threshold W_fairway
+         widthRough: number,   // SDF threshold W_rough
+         noiseSeed: number
+       },
+       field: {cols:32, rows:18, strength:number, seed:number, sources:number, sinks:number, doublets:number, vortexes:number}
+     }
+     ```
+     For backwards compat, `obstacles` MAY still contain `rect` types in legacy levels, but **newly generated levels per this spec SHALL use `type:'circle'` for trees**; any `rect` obstacles SHALL be considered deprecated and treated as water/tree zones. `LOGICAL_W×LOGICAL_H` SHALL be 16:9 (`1280×720` default).
 
-2. **Tee left / hole right, random height** (scaled to 16:9 logical per REQ-002/REQ-030, e.g., `LOGICAL_W=1280, LOGICAL_H=720`):
-    - For every level `i`, `tee.x ∈ [40, 180]` scaled to `LOGICAL_W` (e.g., `≈3-14%` of W, default `≈80` at 1280) on left side and `hole.x ∈ [LOGICAL_W-180, LOGICAL_W-40]` on right side, guaranteeing `hole.x - tee.x ≥ LOGICAL_W*0.6` (e.g., `≥ 768` at `1280`). Legacy `40,140 / 760,860` for `900×600` SHALL be mapped proportionally to new `W`.
-    - `tee.y` and `hole.y` SHALL be sampled **randomly** per hole via the seeded PRNG (`rand()*(LOGICAL_H-160)+80`, i.e., `y∈[80, LOGICAL_H-80]` with `20px` margin from top/bottom), **deterministically** from the generation seed (so same seed → same heights). The two heights MAY be independent (different `rand()` calls) to create varied up/down shots.
-    - No hard-coded `y` (e.g., `300`) for all holes; heights MUST vary across the 18 (verify at least `≥10` distinct `tee.y` and `≥10` distinct `hole.y` values).
+2. **Terrain Zones & Colors — Fixed Palette** in `src/levels.js` / `src/render.js` / `src/terrain.js`:
+   - Every level SHALL expose zoned terrain via SDF thresholds (see §4) rendered with these **exact or within-tolerance colors** (tolerance ± `0x08` per channel, or delta-E < 10):
+     - **Golf Green** (putting surface, circular mask around hole, radius `~60-90px`): **light green** `fillStyle = "#A8E6A3"` (or `#B7E5B0` / `#A0E0A0` acceptable if light; reference `rgb(168,230,163)`). SHALL be drawn as a solid circle centered at `hole` before fairway.
+     - **Fairway** (play corridor, `0 ≤ d ≤ W_fairway` from warped SDF): **slightly darker green** `fillStyle = "#6BC96E"` (or `#7AC87A` / `#68B86A` acceptable; reference `rgb(107,201,110)`), darker than Green by at least `ΔL* > 10`.
+     - **Rough** (fringe, `W_fairway < d ≤ W_rough`): **even darker green** `fillStyle = "#3D8B3D"` (or `#4A9F4A` / `#36802F` acceptable; reference `rgb(61,139,61)`), darker than Fairway by at least `ΔL* > 8`.
+     - **Out of Bounds (OB)** (`d > W_rough`): **even darker gray** `fillStyle = "#2E2E2E"` (or `#333333` / `#3A3A3A` / `#404040` acceptable; reference `rgb(46,46,46)`), gray (saturation < 20) and darker than Rough (luminance < 35).
+     - **Water Hazards** (cellular-automata clusters, see §6): **blue** `fillStyle = "#4A90E2"` (or `#3A8DDE` / `#2E86C1` / `#5AA0E8` acceptable; reference `rgb(74,144,226)`), hue `210±10`, saturation > 50.
+   - Rendering order on the bottom canvas (behind top transparent `game` canvas per REQ-012/REQ-030): `OB (gray) → Rough (darker green) → Fairway (lighter green) → Green (lightest) → Water (blue, on top of zones)` → then obstacles/trees (circular) on the top canvas per REQ-008. The bottom canvas MAY still tile `grass_seamless.webp` at low opacity as texture overlay, but the **zone colors SHALL be the dominant visible fill** (not hidden behind opaque grass).
+   - **Trees SHALL be circular obstacles** (`type:'circle'`, `r∈[18,36]`), rendered with trunk `#6B3A2A` and canopy `#1E7A34` per REQ-008, on top of terrain zones (placed in Rough & OB per §6).
 
-3. **Field progression — sources/sinks/doublets/vortexes per REQ-003** (edge sources/sinks, interior vortex/doublet, no unary):
-   - **Level 1 (hole-1)**: `field = {cols:20, rows:15, strength:80-90, seed, sources:1, sinks:1, doublets:0, vortexes:0}` with the single source **exactly on the left edge** (`x==0`, `y∈[0,height]` sampled uniformly along left side) and the single sink **exactly on the right edge** (`x==width`, `y∈[0,height]`). This satisfies REQ-003 mandatory edge + no interior vortex/doublet is coerced, but for level 1 the coercion SHALL be **overridden** to allow `0` vortex/doublet so the first field is just source→sink cross-breeze for tutorial. If the generic `createField` would coerce a vortex, level 1 SHALL explicitly pass `0,0` and the generator SHALL bypass the coercion for this level (or the field SHALL be documented as the single exception with `0` interior).
-   - **Level 2 (hole-2)**: Same field as level 1 (`1` source left edge, `1` sink right edge, `0` vortex/doublet) **plus exactly 2 obstacles** (see §4). Field unchanged to isolate obstacle introduction.
-   - **Level 3 (hole-3)**: Add **one vortex inside** (strictly interior, `20≤x≤width-20, 20≤y≤height-20`) to the level 2 field: `sources:1, sinks:1, doublets:0, vortexes:1`. Obstacles remain `2` (or carry over). This introduces rotation.
-   - **Levels 4-18**: Difficulty SHALL **monotonically increase** by adding **more obstacles and/or more field components** each level, never decreasing. At least one of the two SHALL increase strictly every level, and over any 3-level window the sum `obstacles.length + (sources+sinks+doublets+vortexes)` SHALL increase by `≥2`. Suggested progression (tunable but MUST be documented and enforced in tests):
-      ```
-      L1: 0 obs, 2 comps (1+1+0+0)
-      L2: 2 obs, 2 comps
-      L3: 2 obs, 3 comps (add vortex)
-      L4: 4 obs, 3 comps
-      L5: 4 obs, 4 comps (add doublet)
-      L6: 6 obs, 4 comps
-      L7: 6 obs, 5 comps (add source)
-      L8: 8 obs, 6 comps (add sink)
-      L9: 8 obs, 7 comps (add vortex)
-      L10:10 obs, 7 comps
-      L11:10 obs, 8 comps (add doublet)
-      L12:12 obs, 8 comps
-      ... up to L18: 12 obs, 9-11 comps (capped at 12)
-      ```
-      Concrete rule: `obstacles.length = min(12, 2 * Math.floor((level-1)/2))` for `level≥2` (0,2,2,4,4,6,6,8,8,10,10,12,12…) capped at **12**, and `field components` increase by `1` every 2 levels starting at `L3`, alternating `vortex, doublet, source, sink, vortex...` until `≤10` total. `strength` MAY increase slightly (`80→125` over 18) to reflect stronger winds later, but MUST stay `80-125`.
-   - Every generated field SHALL still satisfy REQ-003: at least one source at edge, one sink at edge, and (except level 1-2) at least one vortex/doublet inside; edge sources/sinks exactly on edge (`x==0||x==width||y==0||y==height`), interior vortex/doublet strictly inside with `20px` margin. `createField` coercion SHALL guarantee this even if counts would otherwise be zero.
+3. **Tee left / hole right, random height** (scaled to 16:9 logical per REQ-002/REQ-030, e.g., `LOGICAL_W=1280, LOGICAL_H=720`):
+   - For every level `i`, `tee.x ∈ [40, 180]` on left side and `hole.x ∈ [LOGICAL_W-180, LOGICAL_W-40]` on right side, guaranteeing `hole.x - tee.x ≥ LOGICAL_W*0.6` (e.g., `≥ 768` at `1280`).
+   - `tee.y` and `hole.y` SHALL be sampled **randomly** per hole via the seeded PRNG (`rand()*(LOGICAL_H-160)+80`, i.e., `y∈[80, LOGICAL_H-80]`), **deterministically** from the generation seed (so same seed → same heights). The two heights MAY be independent to create varied up/down shots.
+   - No hard-coded `y` for all holes; heights MUST vary across the 18 (≥10 distinct `tee.y` and ≥10 distinct `hole.y` values).
 
-4. **Obstacles progression — vertical first, then circular/horizontal, two at a time, max 6 squares**:
-   - Obstacles SHALL be `rect` (`x,y,w,h`) — sub-typed as **vertical** (`w==20, h∈[80,220]`) or **horizontal** (`w∈[80,220], h==20`) — collectively called **square obstacles** (brick walls) — or `circle` (`x,y,r` with `r∈[25,45]`) called **trees**. `rect` SHALL be reddish brick (`src/render.js:204`), `circle` as tree. **At most 6 square obstacles (rects) SHALL be present in any level**; any remaining obstacle budget SHALL be filled with **trees (circles)**.
-   - **Algorithm SHALL add two obstacles at a time** in this order:
-     1. **First two (L2)**: **two vertical rectangular obstacles** (`type:'rect', w:20, h:80-220`) — no circular/horizontal yet.
-     2. **Next two (to reach 4 at L4)**: **two circular obstacles** (`type:'circle'`) — still only 2 squares total.
-     3. **Next two (to reach 6 at L6)**: **two horizontal rectangular obstacles** (`w:80-220, h:20`) — now 4 squares (2 vertical + 2 horizontal), 2 trees.
-      4. **Remaining to reach 6 squares (L8)**: **two vertical** again to reach the cap of `6` squares (4 vertical + 2 horizontal). Thereafter (`L10` onward) **all additional obstacles SHALL be trees** (`circle`) to respect the `max 6 squares` cap and **12 total cap**. So counts: `L1:0` (0 squares), `L2:2` (2 vertical), `L4:4` (2 vertical +2 circular), `L6:6` (2V+2C+2H = 4 squares +2 trees), `L8:8` (6 squares +2 trees), `L10:10` (6+4 trees), `L12:12` (6+6 trees, cap), `L14:12` (6+6), `L16:12` (6+6), `L18:12` (6+6). No level SHALL have `>6` rects and **no level SHALL have `>12` total obstacles**.
-    - **Square spread & clearance**: Square obstacles (rects) SHALL be **spread so there is always a gap between them** and they **cannot be too close to the player (tee) or the hole**. Required: `≥40px` gap between any two rects (edge-to-edge, not just `> -10` overlap), and `≥60px` clearance from `tee` and from `hole` (distance from rect edge to point, or `≥60px` from rect centre to tee/hole minus half-size). Trees (circles) need only `≥30px` from tee/hole and `≥10px` from each other per previous rule, but rects have stricter spread. Placement SHALL be deterministic via PRNG and re-sample (up to `100` attempts per rect) until the gap/clearance constraints are met; if still not met, skip that rect and fill with a tree instead to keep total count.
-   - Counts per level as in §3 (0,2,2,4,4,6,6,8,8,10,10,12,12,12,12,12,12,12) — **always even, adding two at a time**, never `1` or `3`, **capped at 12**. Placement per type SHALL be random but with a **block-direct-line** check for `≥2` obstacles: `tee→hole` segment SHALL intersect at least one obstacle; if not, re-sample deterministically (up to 20 attempts) or move first obstacle to midpoint.
-   - **Field strength increase on early levels**: `field.strength` SHALL increase more quickly in early levels to make wind matter early, then plateau. Required: `L1:80, L2:85, L3:90, L4:95, L5:100, L6:105` ( `+5` per level for 1-6), thereafter `+2` per two levels (`L7:105, L8:107, L9:109, L10:111, L11:113, L12:115, L13:117, L14:119, L15:121, L16:123, L17:125, L18:125` capped at `125`). Overall `80→125` monotonic, with early jump `80→105` in first 6 levels. Any monotonic early-strong progression that satisfies `L6≥105` and `L18≥115` and never decreases is also acceptable if documented.
-   - Difficulty increase via obstacles SHALL be monotonic: `obstacles.length` for `n+1` `≥` that for `n`, and strictly `>` every other level (exactly `+2` when it increases).
+4. **Step 1: Course Layout & Pathing — Bézier Curves or Directed A*** in `src/levels.js` / `src/terrain.js`:
+   - For each hole, pick **starting point Tee Box** (`tee`) and **end point Green/Hole** (`hole`) per §3.
+   - Place **1–2 control points** between them to create the shot line (dog-leg left/right, straight fairway). Control points SHALL be offset perpendicular to the `tee→hole` vector by `rand()* (LOGICAL_W*0.15)` with random sign, and along the line at `t≈0.3` and `t≈0.6` for cubic (or `t≈0.5` for quadratic).
+   - Sample points along the **Quadratic/Cubic Bézier spline** (e.g., `getBezierPoint(t, p0,p1,p2[,p3])` with `t∈[0,1]` step `0.02` → ~50 spine points) to form the **spine of the fairway** (`terrain.fairwayPath`). Alternatively, a **Directed A* Pathfinding** grid may be used if it produces a comparable dog-leg spine; the choice SHALL be documented. The spine SHALL be stored as `terrain.fairwayPath`.
+   - Requirement: The spine SHALL be continuous, non-self-intersecting, and its endpoints SHALL be within `r=60` of `tee`/`hole` (ensuring tee leads to green).
 
-5. **No hard-coded levels**: `src/levels.js` SHALL NOT contain 18 hand-written objects as the source of truth; instead it SHALL contain the generator and optionally a `STATIC_LEVELS` fallback for tests. `src/main.js` SHALL use the generated `LEVELS` for `currentHoleIndex`, `Hole: N/M` HUD, and `createField` calls.
+5. **Step 2: Distance Field & Masking — SDFs or Euclidean Distance Maps** in `src/terrain.js`:
+   - Compute the distance `d` of every cell/pixel on the grid from the Bézier spine (and from tee/green circular masks) via **Signed Distance Fields (SDFs)** or Euclidean Distance Maps:
+     ```js
+     function terrainZoneAt(x,y, spine, tee, hole, Wf, Wr, warpedDist){
+       const d = warpedDist(x,y); // or SDF(spine,x,y)
+       if (inGreenMask(x,y,hole)) return 'green';
+       if (inTeeMask(x,y,tee)) return 'teeBox'; // rendered as fairway or light green
+       if (d <= Wf) return 'fairway';
+       if (d <= Wr) return 'rough';
+       return 'ob'; // out of bounds
+     }
+     ```
+   - Apply **width thresholds** to define zone boundaries:
+     - `0 ≤ d ≤ W_fairway → Fairway` where `W_fairway ∈ [80, 140]` (base `110` ± `rand()*30`, varied per hole, increasing slightly with hole index to widen later holes).
+     - `W_fairway < d ≤ W_rough → Rough` where `W_rough = W_fairway + [60,100]` (base `+80`).
+     - `d > W_rough → Out of Bounds (OB)` (gray).
+   - Expand **circular distance masks** around the path endpoints to form the **Tee Box** (start, radius `70-90`) and **Green** (end, radius `60-90`) — these SHALL be rendered as Green/light-green circles regardless of `d`.
+   - `W_fairway`/`W_rough` SHALL be stored per level in `terrain` for rendering and for §6 hazard placement and §7 validation.
 
-6. **Validation & seed**: On generation, each level SHALL be validated: `tee`/`hole` clamped inside canvas, obstacles inside bounds, `field` counts non-negative integers, `seed` distinct per hole (e.g., `baseSeed + level* 9973` or sequential `rand()`), `strength` in `80-125`. Log warning if clearance violated.
+6. **Step 3: Organic Shape & Contour Generation — Domain-Warped Simplex/Perlin Noise** in `src/terrain.js`:
+   - To make the fairway and rough look natural rather than perfect geometric capsules, **distort the coordinates used in the distance lookup** using **2D Simplex noise** (or Perlin) with **Domain Warping**:
+     ```js
+     // pseudo
+     function warpedDist(x,y, spine, warpScale=0.008, warpStrength=18){
+       const nx = simplexNoise(x*warpScale, y*warpScale); // [-1,1]
+       const ny = simplexNoise((x+431)*warpScale, (y-217)*warpScale);
+       const wx = x + nx * warpStrength;
+       const wy = y + ny * warpStrength;
+       return sdfDistance(wx, wy, spine); // SDF of warped coord to spine
+     }
+     ```
+     Formula: `dist_warped(x,y) = SDF( x + Noise_x(x,y), y + Noise_y(x,y) )` as per spec, creating organic, wavy fairway and rough edges while retaining structural playability.
+   - Noise SHALL be **seeded per hole** (`terrain.noiseSeed = baseSeed + i*  7919`), so same seed → same warping. `warpStrength` SHALL be `12-24` (base `18`), `warpScale` `0.006-0.012` (base `0.008`). The warping SHALL be applied **before** thresholding (so zone boundaries wobble).
+   - Requirement: For a fixed `spine` and `W_fairway`, the warped boundary SHALL deviate from the unwarped capsule by `≥ 8px` RMS and `≤ 35px` max (organic but not chaotic). This can be verified by sampling 100 points along the boundary.
 
-7. **Course Wrapper (REQ-031)**: Levels SHALL be grouped into a `Course` per REQ-031 (`{id: uuid, name: "Adjective Noun", holes: Level[], holeCount: 3|9|18, seed, createdAt, bestTotal}`) where `holes` is the array generated by `generateLevels(seed, holeCount)`. `generateLevels` SHALL support variable `count` `3|9|18` (not only `18`) and `LEVELS` after generation SHALL equal `course.holes` for the active course. See REQ-031 for UUID/name/storage.
+7. **Step 4: Placing Hazards & Obstacles — Cellular Automata (Water) & Poisson Disc Sampling (Trees)** in `src/levels.js` / `src/terrain.js` / `src/obstacles.js`:
+   - **Water Hazards & Sand Traps (blue zones) — partly on Fairway per difficulty (REQ-034):**
+     - Generate **small clusters** using **Cellular Automata** (e.g., 8x8 grid, random fill `0.42`, 4 iterations of `B3/S23`-like smoothing) **or thresholded Perlin Noise** (`noise > 0.6`). Per **REQ-034**, `waterOnFairway` counts are **Easy 0, Medium 1, Hard 1-3** (center `d ≤ W_fairway-10` strictly on fairway, `terrainZoneAt === 'fairway'`), while extra clusters for aesthetics near edges (`d ∈ [W_fairway-20, W_fairway+40]`) are optional but the **on-fairway count is normative** for difficulty. Each cluster area `800-3000px²` (converted to `w×h` rects or `r=18-32` circles).
+     - **Rule:** Ensure water hazards **intersect the fairway selectively** (forced carries) **or hug the edges as risk-reward elements**, but **shall NOT completely block fairways**. Validation: the fairway spine SHALL remain traversable (see §8). Water on fairway per tier SHALL be satisfied first.
+     - Water zones SHALL be rendered **blue** (`#4A90E2` etc., see §2) on the bottom canvas **above** green/fairway/rough but **below** trees/obstacles on the top canvas. They SHALL be treated as **fatal hazards** (ball entering water → instant reset to tee, same as OB/tree collision per REQ-008, or as `isInWater()` check).
+   - **Tree Placement — circular obstacles, partly on Fairway per REQ-034 difficulty + optional Rough/OB:**
+     - Use **Poisson Disc Sampling** (e.g., Bridson's algorithm, `minDist = 45 + rand()*15`, `k=30`) to scatter **trees with natural, non-overlapping spacing**. All trees SHALL be `type:'circle'`, `r∈[18,36]` (trees), rendered per REQ-008.
+     - **Per REQ-034, a subset `treesOnFairway` SHALL be placed *on the fairway* (`terrainZoneAt === 'fairway'` or `d ≤ W_fairway-4` and not in Green/Tee masks) with counts per tier: Easy `1-2`, Medium `2-3`, Hard `3-5`. These fairway trees are the difficulty-relevant trees and SHALL respect `≥40px` clearance from tee/green masks and `≥ r1+r2+6` between trees, and at least one doublet SHALL be co-located in a fairway tree (see REQ-034 §3).**
+     - **Additional trees for aesthetics MAY be placed in Rough & OB** (`d > W_fairway`) with density scaled `density_OB ≈ 1.8× density_Rough` (`minDist_OB=38`, `minDist_Rough=62` or `p=0.55` in rough). Total trees per hole MAY be `treesOnFairway + extraRoughOB` where total `8-22` is the old aesthetic total, but the **normative count for difficulty is `treesOnFairway` per tier**; extra rough/OB trees are not counted toward difficulty and SHALL never be inside Fairway/Green beyond the `treesOnFairway` budget.
+
+8. **Step 5: Playability Validation & Path Solvability — Physics Raycasting or A* Shot Simulation** in `src/levels.js` / `src/terrain.js`:
+   - Simulate **max-distance shots** from the Tee towards the Hole. Check if a **valid landing zone exists in the fairway for every shot**. A `maxDrive = LOGICAL_W*0.55` (e.g., `~700` at `1280`) or `600-750` SHALL be used as the player's maximum drive range (derived from `MAX_POWER`/`BALL_RADIUS` physics per REQ-005/007).
+   - Procedure per hole (deterministic, ≤ `20` simulations):
+     ```js
+     function isHoleSolvable(tee, hole, spine, Wf, waterZones, treeObstacles){
+       // 1. Check fairway spine is traversable: sample t=0,0.25,0.5,0.75,1.0 along spine, each point must be in fairway/green and not inside water
+       for (t of [0,0.25,0.5,0.75,1]) if (inWater(spine[t]) || terrainZoneAt(spine[t])==='ob') return false;
+       // 2. Simulate A* or raycast: from tee, can we reach hole in ≤ ceil(dist/halfMaxDrive) shots staying in fairway/rough?
+       // For MVP, check that no water/OB hazard completely covers the player's maximum drive range from tee:
+       const firstLandingRing = annulus(center=tee, rInner=maxDrive*0.7, rOuter=maxDrive);
+       const hasFairwayInRing = samplePointsInRing(firstLandingRing, 32).some(p=> terrainZoneAt(p)==='fairway' && !inWater(p));
+       if (!hasFairwayInRing) return false; // water hazard blocks all first drives
+       // 3. Ensure tree density doesn't block all gaps: at least one 40px corridor exists from tee to hole via fairway
+       return hasFairwayCorridor(tee, hole, Wf, obstacles);
+     }
+     ```
+   - **Ensure water/OB hazards do not create impossible shots** (e.g., a water hazard completely covering the player's maximum drive range). If validation fails, **regenerate** that hole (re-roll control points, noise seed, or hazard positions) up to `15` attempts until solvable; if still unsolvable, **remove the offending water cluster** or **widen `W_fairway` by `+15`** and re-validate. No generated hole SHALL be left unsolvable.
+   - The validation SHALL be **deterministic** for a given seed (same PRNG sequence → same accept/reject).
+
+9. **Field & Obstacle Progression With Terrain — Superseded By REQ-034 Difficulty Calculation (Including Flipped/Extra Sources/Sinks, Bigger Bends, Tighter Fairway):**
+   - Level difficulty SHALL be calculated per **REQ-034** from four factors: fairway shape (I/L/V/U/S/Z **with bigger bends on medium/hard and tighter fairway on hard**), field components (with **flipped source/sink + extra source/sink on free edges for hard, extra sink on free edge for medium**), trees on fairway, water on fairway. The per-hole budgets per tier SHALL be:
+     - **Easy:** shape `I` (horizontal/vertical, straight, tiny offset <15px, `W_fairway` baseline 90-140 not tightened), `waterOnFairway===0`, `treesOnFairway∈[1,2]`, `field: sources=1 near tee (edge ≤180px from tee) + sinks=1 near green (≤180px from hole) + doublets=1 in fairway (if tree on fairway, doublet in middle of tree ≤2px, applies to all difficulties)`, `vortexes=0` (total 3 components).
+     - **Medium:** shape `L/V/U` with **even bigger bends** (`perp offset >45px` vs `>30px` before, `60-100` for L, `50-80` for V, `70-110` same-side for U, total heading 70-220°), `treesOnFairway∈[2,3]`, `waterOnFairway===1`, `field: sources=1 near tee + sinks=1 near green **plus MAYBE an extra sink on any free edge** (60% of medium holes have `sinks=2` on a free edge) + doublets∈[2,3] + vortexes=1` (total 5-6 or 6-7 with extra sink, at least one doublet in a fairway tree).
+     - **Hard:** shape `S/Z` with **even bigger bends** (`perp offsets >55px` opposite sides, `70-110` each, `S/Z` inflection) and **tighter fairway** (`W_fairway` **15-25px smaller** than baseline for easy/medium, `W_fairway_hard = clamp(W_fairway_baseline - (15+rand()*10), 70, 140)`), `treesOnFairway∈[3,5]`, `waterOnFairway∈[1,3]`, `field: **MAY flip** so **sink on tee side + source on green side** (sink near tee ≤180px, source near hole ≤180px) **plus extra source and sink on the two free edges** (so `sources=2, sinks=2` when flipped+extra, at least 50% of hard holes SHALL be flipped when sampling 100 hard holes) or if not flipped still **add extra source and sink on free edges** (so hard always has `sources=2, sinks=2` via flipped or extra), `+ doublets∈[3,4] + vortexes∈[1,2]` (total 7-10 with extra source/sink, 6-8 without), at least one doublet in tree, remaining interior fairway/rough.
+   - The previous monotonic progression table SHALL be considered **superseded** by the tier budgets above; the generator SHALL pick a tier first (e.g., `1-6 easy, 7-12 medium, 13-18 hard` or `≈30%/40%/30%` distribution) and then generate shape/field/trees/water matching that tier **with bigger bends for medium/hard and tighter fairway for hard**. The 18 holes SHALL contain at least `3` of each tier for variety. See REQ-034 for shape classification with bigger bends, source/sink placement with flipped/extra, and the exact placement rules.
+   - Every generated field SHALL still satisfy REQ-003 with the new placement constraints (source near tee edge, sink near green edge, doublets interior fairway/rough, at least one doublet in tree when `treesOnFairway≥1`). `strength` still `80→125`.
+
+10. **No hard-coded levels, Course Wrapper (REQ-031)**:
+    - `src/levels.js` SHALL NOT contain 18 hand-written objects as the source of truth; instead it SHALL contain the generator and optionally a `STATIC_LEVELS` fallback for tests. `src/main.js` SHALL use the generated `LEVELS` for `currentHoleIndex`, `Hole: N/M` HUD, and `createField` calls. `generateLevels` SHALL support variable `count` `3|9|18` and `LEVELS` after generation SHALL equal `course.holes` for the active course.
 
 ## Acceptance Criteria
 
 - [ ] On fresh new game (clear `localStorage`, reload, or call `generateLevels(Date.now())`), `LEVELS.length === 18`, `generateLevels` returns 18, and `LEVELS[0].id === "hole-1"` … `LEVELS[17].id === "hole-18"`.
-- [ ] Every level `tee.x ∈ [40,140]` (left side) and `hole.x ∈ [760,860]` (right side), `hole.x - tee.x ≥ 600`, and `tee.y`/`hole.y` vary randomly across the 18 (≥10 distinct `tee.y` and ≥10 distinct `hole.y`, not all `300`), deterministic for same seed (calling `generateLevels(12345)` twice yields identical `tee.y`/`hole.y` arrays).
-- [ ] **Level 1**: `field` is exactly `sources:1, sinks:1, doublets:0, vortexes:0`, source `x==0` (left edge), sink `x==width` (right edge), `obstacles.length === 0`, `tee` left, `hole` right.
-- [ ] **Level 2**: `field` same as L1 (`1,1,0,0`), `obstacles.length === 2`, **both obstacles are vertical rectangles** (`type:'rect', w==20, h∈[80,220]`), inside bounds and `≥60px` from tee/hole (stricter for squares), `≥40px` gap between the two rects, and `tee→hole` line is blocked.
-- [ ] **Level 3**: `field` is `1,1,0,1` (adds one vortex inside, `20≤x≤width-20`), `obstacles.length === 2` (still 2 vertical from L2), source left edge, sink right edge retained.
-- [ ] **Obstacle type order & max 6 squares, max 12 total**: For `L2` (2 obs) both vertical; for `L4` (4 obs) `2` vertical + `2` circular; for `L6` (6 obs) `2V+2C+2H` (`4` squares + `2` trees); for `L8` (8 obs) `6` squares + `2` trees (max squares reached); for `L10`+ all remaining added are **trees** (`type:'circle'`), so **no level has `>6` rects** and **no level has `>12` total** (verify `obstacles.filter(o=>o.type==='rect').length <=6` and `obstacles.length <=12` for all 18, and `L18` has `6` rects + `6` circles = `12` total). Verify vertical `o.w==20` counts and horizontal `o.h==20` counts per the order above.
-- [ ] **Square spread**: For any level, the minimum edge-to-edge gap between any two rects is `≥40px` (not just `> -10` overlap), and the minimum distance from any rect edge to `tee`/`hole` is `≥60px` (vs `30px` for circles). For `100` random seeds, zero rects violate these gaps. Check via `Math.hypot` or rect distance functions.
-- [ ] **Two-at-a-time**: Every level's `obstacles.length` is even (`0,2,4,6,8…16`), never odd, and increases by exactly `2` when it increases (never `+1`).
-- [ ] **Monotonic difficulty**: For `i=1..17`, `obstacles.length[i+1] ≥ obstacles.length[i]` and `fieldComponents[i+1] = sources+sinks+doublets+vortexes` at `i+1` is `≥` that at `i`; over any 3-level window `obstacles+components` increases by `≥2`. At L18, `obstacles.length ==12` (cap) and `fieldComponents ≥7`. Verified by iterating `generateLevels` and checking monotonic arrays.
-- [ ] Every level `≥1` has at least one source at edge (`x==0||x==width||y==0||y==height`) and at least one sink at edge; every level `≥3` has at least one vortex or doublet inside (`20≤x≤width-20`). For 100 random seeds, zero sources/sinks fall strictly inside and zero sinks fall outside, and every level `≥3` has interior vortex/doublet (checked via `getSourcePositions()`/`getSinkPositions()`/`getVortexPositions()`).
-- [ ] **Field strength early increase**: `field.strength` is `80-125`, non-decreasing, and **increases on early levels**: `L1:80, L2:85, L3:90, L4:95, L5:100, L6:105` (`+5` per level for 1-6), thereafter `+2` per two levels to `125`. Verify `strength[0]==80 && strength[1]==85 && strength[2]==90 && strength[5]==105` and `strength[17]>=115` and never decreases.
-- [ ] Calling `generateLevels(seed)` twice with same `seed` yields `JSON.stringify` equal 18 levels; different seed yields different `tee.y`/`hole.y`/`obstacle` positions for at least `≥50%` of levels.
-- [ ] `src/main.js` on new game generates 18, sets `LEVELS = generateLevels(...)`, `currentHoleIndex=0`, `Hole: 1/18` HUD, and `loadLevel(0)` uses `LEVELS[0].field` to create field with correct edge source/sink.
+- [ ] Every level `tee.x ∈ [40,180]` on left side and `hole.x ∈ [LOGICAL_W-180, LOGICAL_W-40]` on right side, `hole.x - tee.x ≥ LOGICAL_W*0.6`, and `tee.y`/`hole.y` vary randomly across the 18 (≥10 distinct values), deterministic for same seed.
+- [ ] **Terrain zones & colors — visual regression:** For any level sampled at `hole` center, `getTerrainAt(hole.x,hole.y)` (or reading bottom canvas `ImageData` at that pixel after `redrawBottom`) returns **Green** `rgb(168,230,163) ±8` (light green); at `tee` + `40px` toward hole along spine returns **Fairway** `rgb(107,201,110) ±8` (slightly darker); at `d = W_fairway+30` returns **Rough** `rgb(61,139,61) ±8` (even darker green); at `d = W_rough+40` returns **OB** `rgb(46,46,46) ±8` (gray, saturation <20); at any water cluster center returns **Water** `rgb(74,144,226) ±8` (blue, hue 210±10). No zone uses the wrong palette (e.g., fairway not gray, OB not blue). The bottom canvas zone fills are the dominant visible fill (not hidden behind opaque grass).
+- [ ] **Trees are circular obstacles with on-fairway subset per difficulty (REQ-034):** For every level, `obstacles.every(o=>o.type==='circle' && o.r>=18 && o.r<=36)` for newly generated levels; `level.difficulty.treesOnFairway` trees satisfy `terrainZoneAt(tree.x,tree.y) === 'fairway'` (or `d <= W_fairway-4` not in Green/Tee mask) with counts per tier `Easy 1-2, Medium 2-3, Hard 3-5`; any extra trees (if `obstacles.length > treesOnFairway`) are in `rough`/`ob` only, never `fairway`/`green` beyond the budgeted `treesOnFairway`. All trees respect Poisson `minDist` (`≥ r1+r2+6`, `OB 38`/`Rough 62` or 1.8× density for rough/OB extras) and `≥40px` clearance from tee/green masks, and at least one `doublet` is co-located within `≤2px` of a fairway tree when `treesOnFairway≥1`.
+
+- [ ] **Step 1 Bézier Layout:** For each level, `terrain.fairwayPath.length ≥ 20` points, endpoints within `60px` of `tee`/`hole`, spine is non-self-intersecting, and at least one control point is offset perpendicular to `tee→hole` by `≥ LOGICAL_W*0.05` (dogs-leg) for `≥30%` of holes (randomly). Sampled spine points are stored and `W_fairway`/`W_rough` are defined.
+- [ ] **Step 2 SDF Masking:** For any `(x,y)` on the spine, `terrainZoneAt` returns `fairway`; for any point `W_fairway+1` perpendicular offset returns `rough`, and `W_rough+1` returns `ob`. Tee and Green circular masks (`r=70-90`) return `green`/`teeBox` regardless of `d`. Thresholds `W_fairway ∈ [80,140]` and `W_rough = W_fairway + [60,100]` per level.
+- [ ] **Step 3 Domain Warping:** For a fixed spine and thresholds, the warped boundary deviates from the unwarped capsule by `≥8px` RMS and `≤35px` max (organic wavy edges). Verified by sampling 100 boundary points along spine with `warpStrength=18` and `warpScale=0.008` vs `0` warp. Noise is seeded per hole (`terrain.noiseSeed`), so same seed → same warping.
+- [ ] **Step 4 Hazards — Water/ Trees on Fairway per Difficulty (REQ-034):** Water clusters via Cellular Automata / thresholded Perlin and trees via Poisson are placed **on the fairway** for difficulty counting: `level.difficulty.waterOnFairway` with `Easy 0`, `Medium 1`, `Hard 1-3` (center `d ≤ W_fairway-10`, area `800-3000px²`, blue), and `treesOnFairway` as above; water never completely blocks the fairway spine (validation ensures at least one spine sample not in water) and at least one doublet is placed in a fairway tree. Extra water/trees for aesthetics may be in rough/OB but the on-fairway budgets are normative. Water rendered blue and treated as fatal.
+
+- [ ] **Step 5 Playability Validation:** For 100 random seeds, **zero** holes are unsolvable per `isHoleSolvable`: the fairway spine is traversable (no water/OB covering all spine samples), the first drive annulus (`tee` ring `0.7*maxDrive` to `maxDrive`) contains at least one fairway point not in water, and at least one `40px` corridor exists from tee to hole via fairway. Holes that fail validation are regenerated or water removed/widened until solvable (≤15 attempts).
+- [ ] **Level 1-3 field progression retained:** L1 `sources:1,sinks:1,doublets:0,vortexes:0` source left edge `x==0` sink right edge `x==width` obstacles `0`; L2 `1,1,0,0` with `8` trees; L3 `1,1,0,1` with vortex inside, etc., per old progression table but with trees/water instead of rects.
+- [ ] Calling `generateLevels(seed)` twice with same `seed` yields `JSON.stringify` equal 18 levels (including `terrain` and `obstacles`/`waterHazards`); different seed yields different `tee.y`/`hole.y`/`spine`/`terrain` for at least `≥50%` of levels.
+- [ ] `src/main.js` on new game generates 18, sets `LEVELS = generateLevels(...)`, `currentHoleIndex=0`, `Hole: 1/18` HUD, and `loadLevel(0)` uses `LEVELS[0].field` and `terrain` to create field and draw terrain zones with correct colors.
 
 ## Dependencies
 - REQ-003 (field superposition, edge sources/sinks, interior vortex/doublet, no unary)
-- REQ-008 (obstacles, brick rects, clearance)
+- REQ-008 (circular tree obstacles, collision, Poisson spacing)
 - REQ-009 (hole)
+- REQ-012 (rendering — terrain zones drawn with specified greens/gray/blue, trees on top)
 - REQ-014 (attempts, Hole N/M)
+- REQ-030 (bottom canvas terrain rendering)
 
 ## Notes
-- Generator sketch `src/levels.js:1`:
+- Generator sketch `src/levels.js:1` + `src/terrain.js:1`:
   ```js
+  // Simplex noise with domain warping
+  import { createNoise2D } from 'simplex-noise'; // or inline mulberry32-based noise, no external download per REQ-001 (vendor copy allowed)
+  function mulberry32(seed){ /* ... */ }
+  function simplexWarp(x,y, scale=0.008, strength=18, noise2D){
+    const nx = noise2D(x*scale, y*scale);
+    const ny = noise2D((x+431)*scale, (y-217)*scale);
+    return {x: x + nx*strength, y: y + ny*strength};
+  }
+  function sdfToSpine(x,y, spine){
+    let min=Infinity; for(let i=0;i<spine.length-1;i++){ min=Math.min(min, distToSegment(x,y, spine[i], spine[i+1])); } return min;
+  }
   export function generateLevels(seed = Date.now(), count=18){
     const rand = mulberry32(seed);
     const levels=[];
     for(let i=0;i<count;i++){
       const levelNum=i+1;
-      const tee={x:40+Math.floor(rand()*100), y: Math.floor(rand()*440)+80}; // 40-140
-      const hole={x:760+Math.floor(rand()*100), y: Math.floor(rand()*440)+80, radius:14}; // 760-860
-      // field progression
+      const tee={x:40+Math.floor(rand()*100), y: Math.floor(rand()*(LOGICAL_H-160))+80};
+      const hole={x:LOGICAL_W-180+Math.floor(rand()*140), y: Math.floor(rand()*(LOGICAL_H-160))+80, radius:14};
+      // Step 1: Bézier control points
+      const mx = (tee.x+hole.x)/2, my=(tee.y+hole.y)/2;
+      const perpAng = Math.atan2(hole.y-tee.y, hole.x-tee.x)+Math.PI/2;
+      const offset = (rand()-0.5)*LOGICAL_W*0.15;
+      const p1 = (levelNum%3===0)? {x: mx+Math.cos(perpAng)*offset, y: my+Math.sin(perpAng)*offset} : null;
+      const p2 = (levelNum%4===0)? {x: mx+Math.cos(perpAng)*offset*0.6, y: my+Math.sin(perpAng)*offset*0.6} : null;
+      const spine = sampleBezier(tee, p1, p2, hole); // 50 points
+      const Wf = 90 + Math.floor(rand()*50) + Math.floor(levelNum/3)*5; // 90-140, widen later
+      const Wr = Wf + 60 + Math.floor(rand()*40);
+      const noiseSeed = seed + i*7919;
+      // Step 4: water clusters via Cellular Automata near fairway edge
+      const waterHazards = (rand()<0.4)? generateWaterClusters(spine, Wf, rand, noiseSeed) : [];
+      // Step 4: trees via Poisson in rough/OB
+      const treeCount = Math.min(22, 8 + Math.floor((levelNum-1)/2)*2);
+      const obstacles = generateTreesPoisson(treeCount, spine, Wf, Wr, tee, hole, waterHazards, rand);
+      // Step 3 warping is applied at render/query time via simplexWarp, not baked into obstacles
+      // Step 5 validation
+      let attempts=0;
+      while(attempts<15 && !isHoleSolvable(tee,hole,spine,Wf,waterHazards,obstacles)){
+        // widen or remove water
+        if(waterHazards.length) waterHazards.pop(); else Wf+=15;
+        attempts++;
+      }
+      // field progression (old)
       let sources=1, sinks=1, doublets=0, vortexes=0;
       if(levelNum>=3) vortexes=1;
       if(levelNum>=5) doublets=1;
-      if(levelNum>=7) sources=2;
-      if(levelNum>=8) sinks=2;
-      if(levelNum>=9) vortexes=2;
-      if(levelNum>=11) doublets=2;
-      if(levelNum>=13) sources=3;
-      // ... up to 4,4,3,3
-      const obsCount = levelNum===1?0: Math.min(12, 2*Math.ceil(levelNum/2)); // 0,2,2,4,4,6... capped at 12
-      // obsCount even, +2 at a time
-      const obstacles = generateObstacles(obsCount, tee, hole, rand); // first 2 vertical, next 2 circular, next 2 horizontal, cycle
-      // field strength early increase +5 per level for 1-6, then +2 per 2 levels
-      let strength;
-      if(levelNum<=6) strength = 80 + (levelNum-1)*5; // 80,85,90,95,100,105
-      else strength = 105 + Math.floor((levelNum-6)/2)*2 + (levelNum>6 && levelNum%2===1 ? 2 : 0); // 105,107,109...
+      // ... etc
+      let strength = levelNum<=6? 80+(levelNum-1)*5 : 105+Math.floor((levelNum-6)/2)*2;
       if(strength>125) strength=125;
-       levels.push({id:`hole-${levelNum}`, name:`Hole ${levelNum}`, canvas:{width:LOGICAL_W,height:LOGICAL_H}, tee, hole, obstacles, field:{cols:32,rows:18,strength, seed: seed + i*9973 + levelNum*101, sources, sinks, doublets, vortexes}}); // LOGICAL 16:9 e.g., 1280×720; cols/rows 32×18 keeps square cells
+      levels.push({id:`hole-${levelNum}`, name:`Hole ${levelNum}`, canvas:{width:LOGICAL_W,height:LOGICAL_H}, tee, hole, obstacles, waterHazards, terrain:{green:{x:hole.x,y:hole.y,r:75}, teeBox:{x:tee.x,y:tee.y,r:80}, fairwayPath:spine, widthFairway:Wf, widthRough:Wr, noiseSeed}, field:{cols:32,rows:18,strength, seed: seed + i*9973 + levelNum*101, sources, sinks, doublets, vortexes}});
     }
     return levels;
   }
-  export let LEVELS = generateLevels(42, 18); // default for tests, overwritten on new game
   ```
-- `generateObstacles(count, tee, hole, rand)` SHALL add **two at a time** in order **vertical (2) → circular (2) → horizontal (2)** then **all remaining as trees** to respect **max 6 squares**: for `count=2` → 2 vertical (2 squares), `4` → 2V+2C (2 squares), `6` → 2V+2C+2H (4 squares), `8` → 6 squares (2V+2C+2H) +2 trees, `10` → 6+4 trees, `12` → 6+6, `14` → 6+8, `16` → 6+10. For `count>6`, only `circle` shall be used for the excess. Each placement uses `rand()` and re-samples if overlapping: **rects** require `≥40px` gap to other rects and `≥60px` to tee/hole, **circles** require `≥10px`/`≥30px`; if a rect cannot be placed after `100` attempts, fall back to a tree to keep total count. For `≥2` obstacles ensures `tee→hole` line is blocked (move first obstacle to midpoint if needed).
-- Keep `LEVEL` alias as `LEVELS[0]` for backwards compat.
+- Colors reference for tests (tolerance ±8 per channel):
+  - Green light: `#A8E6A3` `rgb(168,230,163)`
+  - Fairway: `#6BC96E` `rgb(107,201,110)` (or `#7AC87A`)
+  - Rough: `#3D8B3D` `rgb(61,139,61)` (or `#4A9F4A`)
+  - OB gray: `#2E2E2E` `rgb(46,46,46)` (gray, saturation <20, luminance <35)
+  - Water blue: `#4A90E2` `rgb(74,144,226)` (hue 210±10, sat >50)
+- Tree rendering: `type:'circle'` with `r=18-36`, trunk `#6B3A2A`, canopy `#1E7A34` per REQ-008, placed only where `terrainZoneAt` is `rough`/`ob`.
 
 ## File Paths
-- `src/levels.js:1` (generateLevels, LEVELS 18, tee left/hole right random height, field progression, obstacles progression)
+- `src/levels.js:1` (generateLevels, LEVELS 18, tee left/hole right random height, field progression, terrain via 5-step pipeline, obstacles as circular trees)
+- `src/terrain.js:1` (NEW: SDF, domain-warped noise, terrainZoneAt, isHoleSolvable, water/terrain helpers)
 - `src/main.js:1` (calls generateLevels on new game, uses LEVELS.length 18)
 - `src/vectorField.js:1` (field creation per level, edge/inside constraints)
-```
+- `src/render.js:1` (drawTerrainZones with specified greens/gray/blue, drawObstacles for circular trees)

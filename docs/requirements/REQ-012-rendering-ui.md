@@ -15,13 +15,20 @@ Separating opaque background (image-tiled grass or splash) from transparent dyna
 
 ## Requirements
 
-1. **Background — Dual Canvas Split** (see REQ-030 for image specifics):
-   - **Bottom canvas `#bg-canvas`** SHALL be the only surface that draws background imagery:
-     - During **level play** (`mainMenuVisible===false`): tile `img/grass_seamless.webp` (seamless grass) across the entire logical area via `createPattern` `repeat` or `drawImage` tiling, covering `0,0,LOGICAL_W,LOGICAL_H` (16:9). Image SHALL be preloaded (`new Image()` `src="./img/grass_seamless.webp"`) and drawn with `ctx.createPattern(img,'repeat')` scaled to DPR.
-     - During **main menu** (`mainMenuVisible===true` including root / course submenu / help): show `img/gfg-splash.png` (file in repo is `img/gfg-spash.png` — tolerate typo, check both `./img/gfg-splash.png` and `./img/gfg-spash.png`) centered and covered (`object-fit:cover` equivalent via `drawImage` aspect-cover) on the bottom canvas, not tiled. No grass SHALL be visible behind the splash while main menu is shown. **No dimming backdrop** SHALL be drawn — the splash is fully visible (see §3).
-     - No solid `#3a9d23` fill SHALL be the primary background in either mode; the images are the background. Fallback `#3a9d23` MAY be used while images are loading or on error, but not as the final rendered background. While splash is loading, a **black background with "Loading..." text** SHALL be shown (REQ-030, §3).
-     - Bottom canvas SHALL be `opaque` (`background:#3a9d23` as fallback) and drawn only on mode change / resize / dpr change (not necessarily every frame).
-   - **Top canvas `#game`** SHALL be transparent (`background:transparent; clearRect` each frame) and SHALL NOT draw background — only dynamic content (see §2). Its `clearRect(0,0,W,H)` SHALL NOT erase the bottom canvas underneath (stacked `z-index` keeps bottom visible through transparency).
+1. **Background & Terrain — Dual Canvas Split With Zoned Colors (REQ-010 Pipeline)** (see REQ-030 for image specifics and REQ-010 for terrain zones):
+   - **Bottom canvas `#bg-canvas`** SHALL be the only surface that draws background/terrain:
+     - During **level play** (`mainMenuVisible===false`): draw **zoned terrain** per REQ-010 §2-6 on the bottom canvas **before** any grass texture overlay, covering `0,0,LOGICAL_W,LOGICAL_H` (16:9). Terrain zones SHALL be filled with **fixed colors** (tolerance ±8 per channel):
+       - **Golf Green** (putting circle around hole): light green `#A8E6A3` `rgb(168,230,163)`
+       - **Fairway** (`0 ≤ d ≤ W_fairway` warped SDF): slightly darker green `#6BC96E` `rgb(107,201,110)`
+       - **Rough** (`W_fairway < d ≤ W_rough`): even darker green `#3D8B3D` `rgb(61,139,61)`
+       - **Out of Bounds** (`d > W_rough`): even darker gray `#2E2E2E` `rgb(46,46,46)` (gray, sat <20)
+       - **Water Hazards** (Cellular Automata clusters near fairway edges): blue `#4A90E2` `rgb(74,144,226)` (hue 210±10)
+       Rendering order on bottom canvas: `OB gray → Rough → Fairway → Green → Water blue` (water on top of zones). After solid zone fills, the bottom canvas **MAY** tile `img/grass_seamless.webp` at low opacity (`globalAlpha 0.12-0.18`) as texture overlay, but **zone colors SHALL remain the dominant visible fill** (not hidden behind opaque grass). Image SHALL be preloaded (`new Image()` `src="./img/grass_seamless.webp"`) and drawn with `ctx.createPattern(img,'repeat')` scaled to DPR if used.
+     - During **main menu** (`mainMenuVisible===true` including root / course submenu / help): show `img/gfg-splash.png` (file in repo is `img/gfg-spash.png` — tolerate typo, check both `./img/gfg-splash.png` and `./img/gfg-spash.png`) centered and covered (`object-fit:cover` equivalent via `drawImage` aspect-cover) on the bottom canvas, not tiled. No terrain/grass SHALL be visible behind the splash while main menu is shown. **No dimming backdrop** SHALL be drawn — the splash is fully visible (see §3).
+     - Fallback solid fills MAY be used while images are loading, but not as the final rendered background. While splash is loading, a **black background with "Loading..." text** SHALL be shown (REQ-030, §3).
+     - Bottom canvas SHALL be `opaque` (`background:#2E2E2E` or `#3a9d23` as fallback for OB) and drawn only on mode change / resize / dpr change or when `terrain` changes (not necessarily every frame). Zone drawing SHALL use the per-level `terrain` SDF + warped noise (REQ-010 §5-6) to compute `terrainZoneAt(x,y)` per pixel or per `4×4` block for performance.
+   - **Top canvas `#game`** SHALL be transparent (`background:transparent; clearRect` each frame) and SHALL NOT draw background — only dynamic content on top of terrain (see §2: obstacles/trees (circular), hole/flag, ball, etc., drawn **above** terrain zones). Its `clearRect(0,0,W,H)` SHALL NOT erase the bottom canvas underneath (stacked `z-index` keeps bottom visible through transparency).
+   - Trees SHALL be **circular obstacles** (`type:'circle'`, `r=18-36`) rendered on the top canvas above terrain, per REQ-008/034 (Poisson Disc, a subset `treesOnFairway` on fairway per difficulty Easy 1-2/Medium 2-3/Hard 3-5, plus optional extra in Rough/OB).
 
 2. **Draw Order** split across layers:
    - **Bottom layer (`bgCtx` on `#bg-canvas`, `z-index:1`)**, drawn on demand:

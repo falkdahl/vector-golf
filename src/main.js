@@ -1,7 +1,8 @@
 import { LEVEL, LEVELS, generateLevels } from "./levels.js";
 import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, clearModifiers } from "./vectorField.js";
 import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING } from "./physics.js";
-import { checkObstacleCollision, isOutOfBounds } from "./obstacles.js";
+import { checkObstacleCollision, isOutOfBounds, checkWaterCollision, checkTerrainCollision } from "./obstacles.js";
+import { terrainZoneAt } from "./terrain.js";
 import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
 import {
   drawObstacles,
@@ -19,6 +20,8 @@ import {
   getPauseButtonsLayout,
   drawArrowsInModifiers,
   setCanvasSize,
+  drawTerrainZones,
+  drawBackground,
 } from "./render.js";
 import {
   initWindOverlay,
@@ -127,8 +130,17 @@ function redrawBottom() {
         bgCtx.fillStyle = '#2c3e50';
         bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
       }
+    } else if (level && level.terrain && level.terrain.fairwayPath) {
+      // New pipeline: zoned terrain with fixed palette per REQ-010/033
+      try {
+        drawTerrainZones(bgCtx, level, LOGICAL_W, LOGICAL_H);
+      } catch (e) {
+        console.warn('drawTerrainZones failed', e);
+        bgCtx.fillStyle = '#3a9d23';
+        bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      }
     } else {
-      // grass tiled scaled down so strands appear smaller
+      // grass tiled scaled down so strands appear smaller (legacy fallback)
       if (!grassPattern) ensureGrassPattern();
       if (grassPattern) {
         bgCtx.fillStyle = grassPattern;
@@ -559,7 +571,7 @@ function handleContinue() {
   try {
     level = LEVELS[currentHoleIndex];
     windStrength = level.field.strength ?? WIND_STRENGTH;
-    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
     syncModifiersToField();
     createBall(level.tee);
     bouncyRemaining = bouncyBallCount;
@@ -1073,7 +1085,7 @@ function loadLevel(index) {
   currentHoleIndex = index;
   level = LEVELS[currentHoleIndex];
   windStrength = level.field.strength ?? WIND_STRENGTH;
-  createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+  createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
   // Clear modifiers for new hole per REQ-015 (persist through death, cleared on hole advance)
   // REQ-020: supply persists across hole advances, do NOT reset supply here
   modifiers = [];
@@ -1108,6 +1120,8 @@ function loadLevel(index) {
   // REQ-015 collapsible: reset to expanded on new hole
   resetHotbarCollapsed();
   updateHotbarUI();
+  // Redraw terrain for new hole (zoned background per REQ-010/033)
+  try { redrawBottom(); } catch {}
 }
 
 function initLevel() {
@@ -1366,7 +1380,7 @@ function returnToMainMenu() {
     if (LEVELS.length) {
       level = LEVELS[0];
       windStrength = level.field.strength ?? WIND_STRENGTH;
-      createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+      createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
       syncModifiersToField();
       createBall(level.tee);
       const dx = level.hole.x - level.tee.x;
@@ -1375,7 +1389,7 @@ function returnToMainMenu() {
     } else {
       // No courses — create dummy level to keep loop stable (hidden behind main menu splash)
       level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
-      createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+      createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
       syncModifiersToField();
       createBall(level.tee);
     }
@@ -1595,14 +1609,21 @@ function update(dt) {
       return;
     }
 
-    // Check OOB / edge and obstacle - bounce vs death per REQ-024
-    const outOfBounds = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
+    // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
+    // Water/OB terrain are fatal even with bouncy (hazard spec); trees respect bouncy
+    const terrainHit = checkTerrainCollision(ball.pos, BALL_RADIUS, level);
+    const waterHit = checkWaterCollision(ball.pos, BALL_RADIUS, level.waterHazards);
+    const edgeOut = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
+    if (terrainHit || waterHit || edgeOut) {
+      // Fatal terrain/water/edge — instant reset (no bouncy bounce for hazards)
+      resetBall();
+      return;
+    }
     const hit = checkObstacleCollision(ball.pos, BALL_RADIUS, level.obstacles);
-    if (outOfBounds || hit) {
+    if (hit) {
       if (bouncyRemaining > 0) {
         bouncyRemaining = Math.max(0, bouncyRemaining - 1);
-        if (hit) bounceBall(hit, false);
-        else bounceBall(null, true);
+        bounceBall(hit, false);
         // remain FLYING, do not reset
       } else {
         resetBall();
@@ -1877,7 +1898,7 @@ function init() {
   if (LEVELS.length) {
     level = LEVELS[0];
     windStrength = level.field.strength ?? WIND_STRENGTH;
-    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
     modifiers = []; syncModifiersToField();
     createBall(level.tee);
     const dx0 = level.hole.x - level.tee.x;
@@ -1885,7 +1906,7 @@ function init() {
     setAimAngle(Math.atan2(dy0, dx0));
   } else {
     level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
-    createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+    createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
     modifiers = []; syncModifiersToField();
     createBall(level.tee);
     setAimAngle(0);

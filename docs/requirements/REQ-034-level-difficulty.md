@@ -1,0 +1,150 @@
+# REQ-034: Level Difficulty — Calculated From Fairway Shape + Field Components + Trees/Water on Fairway (with Flipped Sources/Sinks and Tighter Fairway on Hard)
+
+- **ID:** REQ-034
+- **Title:** Level Difficulty Calculated From Fairway Shape (I/L/V/U/S/Z, Bigger Bends on Medium/Hard, Tighter Fairway on Hard), Field Components (Source Near Tee/Sink Near Green, Flipped + Extra Sources/Sinks on Hard/Medium, Doublets in Trees), Trees/Water on Fairway
+- **Priority:** Must Have
+- **Type:** Functional / Procedural Generation / Balancing
+- **Status:** Draft
+- **Related Plan Section:** levels.js / terrain.js / vectorField.js (REQ-010, REQ-003, REQ-008, REQ-033 Extension)
+
+## Description
+**Level difficulty SHALL be calculated from four factors:** (1) **shape of the fairway** (with **even bigger bends on medium/hard** and **tighter fairway on hard**), (2) **number of field components** (with **hard levels able to flip sink/source** so **sink is on tee side and source on green side, plus an extra source and sink on the two free edges**; **medium levels can add an extra sink on any free edge**), (3) **number of tree obstacles on the fairway**, and (4) **number of water hazards on the fairway**. The fairway shape classification SHALL be: **Easy = I-shaped** (horizontal or vertical, straight), **Medium = L, V or U-shaped** (with bigger bends than before), **Hard = S or Z-shaped** (with even bigger bends and tighter fairway). Tree/water counts on the fairway per tier SHALL be: **Easy: 0 water, 1-2 trees on fairway; Medium: 2-3 trees and 1 water on fairway; Hard: 3-5 trees and 1-3 water hazards on fairway**. **Every level** SHALL normally have **one source on the edge close to the tee** and **one sink on the edge close to the green**, except **hard levels MAY flip this** (sink near tee, source near green) and then **add another source and sink on the two free edges** (so hard has up to 2 sources + 2 sinks). **Medium levels MAY add an additional sink on any free edge** (so medium can have 1 source + 2 sinks). **Easy** SHALL also have **one doublet somewhere in the fairway** (if a tree is on the fairway the doublet SHALL always be placed in the middle of the tree — applies to all difficulties). **Medium** can have (additional to source and sink) **2-3 doublets and 1 vortex**; **Hard** SHALL have **3-4 doublets and 1-2 vortexes**, with doublets in trees as above. **Hard fairways SHALL be a bit tighter** (`W_fairway` reduced by `15-25px` vs medium/easy). Validation SHALL ensure the counted trees/water are **on the fairway** (`terrainZoneAt === 'fairway'` or warped SDF `d ≤ W_fairway-4` and not in Green/Tee masks).
+
+## Rationale
+Difficulty that is only “more obstacles” feels arbitrary. By tying difficulty to the *shape* of the playable corridor (I vs L/V/U vs S/Z with bigger bends on harder tiers and tighter fairways), plus the *wind field* complexity (including flipped and extra sources/sinks that reverse or complicate the dominant wind) and the *hazard density on the fairway* itself (trees/water that must be directly avoided), each hole’s challenge is readable from the top-down map and the wind field remains tightly coupled to the geometry (doublets in trees create local wind traps, flipped source/sink creates upwind play).
+
+## Requirements
+
+1. **Difficulty Factors & Shape Classification — Bigger Bends on Medium/Hard, Tighter Fairway on Hard** in `src/terrain.js` / `src/levels.js`:
+   - For each generated `Level`, the generator SHALL compute:
+     ```js
+     difficulty = {
+       shape: 'I'|'L'|'V'|'U'|'S'|'Z', // fairway spine shape
+       shapeTier: 0|1|2, // 0=easy(I), 1=medium(L/V/U), 2=hard(S/Z)
+       fieldComponents: number, // total sources+sinks+doublets+vortexes
+       treesOnFairway: number, // count where terrainZoneAt(tree.x,tree.y) === 'fairway' (or d ≤ W_fairway-4)
+       waterOnFairway: number, // count where water cluster center or sample point is in fairway
+       tier: 'easy'|'medium'|'hard' // overall level difficulty
+     }
+     ```
+   - **Shape classification (fairway spine):** Based on the Bézier control points and sampled `fairwayPath` (50 points) per REQ-033 Step 1:
+     - **I-shaped (Easy):** Horizontal or vertical straight fairway. No control point, or all control points within `15px` of the `tee→hole` line *and* the spine’s maximum perpendicular deviation from the straight `tee→hole` segment is `< 30px` *and* the spine’s total angular change (sum of absolute heading changes along the polyline) is `< 15°`. Essentially a straight capsule, axis-aligned within `±15°` of horizontal (`|dy| < 0.26*|dx|`) or vertical (`|dx| < 0.26*|dy|`). **Fairway width `W_fairway` for easy SHALL be the baseline** (`90-140` per REQ-033, not tightened).
+     - **L-shaped (Medium, bigger bend):** One 90° bend. Exactly one control point with perpendicular offset `> 45px` (increased from `>30px` for bigger bends) and the spine has a single dominant bend where heading changes `70°–110°` once and then stays straight (two straight segments meeting at a corner). Medium bends SHALL be `1.4-1.6×` larger than the previous threshold (e.g., `45-65px` vs `30-45px`).
+     - **V-shaped (Medium, bigger bend):** Similar to L but with an acute bend `30°–70°` (sharp V) at a single control point, offset `> 45px`, forming a V with bigger bend than easy.
+     - **U-shaped (Medium, bigger bend):** Two control points offset to the **same side** of the `tee→hole` line (both cross products have same sign) with offsets `> 45px` (bigger than before `>30px`), forming a U/bowl where the spine goes out and back, with total heading change `150°–220°` and two bends same direction, offset magnitude `70-110px` (vs `60-90` before).
+     - **S-shaped (Hard, even bigger bend + tighter fairway):** Two control points offset to **opposite sides** of the `tee→hole` line (cross products opposite signs) with offsets `> 55px` each (even bigger than medium) and `≤80px` max, forming an S/inflection (one bend left, one bend right). Heading change includes an inflection (`+` then `-`). **Hard fairway SHALL be a bit tighter:** `W_fairway` for hard SHALL be `15-25px` **smaller** than the baseline for easy/medium at the same hole index (e.g., `W_fairway_hard = W_fairway_baseline - (15 + rand()*10)`, clamped to `≥70`).
+     - **Z-shaped (Hard, even bigger bend + tighter fairway):** Similar to S but with sharper, more angular bends (control points offset opposite sides `>55px` and the middle segment is relatively straight, heading changes `≈90°` at each bend but opposite directions, forming a Z), also with tighter fairway as above.
+     - Implementation for bigger bends: **Medium** control point offsets SHALL be `45-80px` minimum (vs `30px` before), **Hard** `55-90px` minimum and tighter fairway `W_fairway -15 to -25`. The chosen method SHALL be documented and yield the tier mapping: `I→ tier 0 (easy)`, `L|V|U → tier 1 (medium)`, `S|Z → tier 2 (hard)`. Tests SHALL verify at least `≥15%` of generated holes are hard S/Z when seeding 100 courses and that hard `W_fairway` is on average `≥12px` smaller than easy `W_fairway` for same hole index.
+   - **Tighter fairway on hard:** `terrain.widthFairway` for `tier==='hard'` SHALL be `15-25px` smaller than the value that would be used for `easy`/`medium` at the same `levelNum` (e.g., `Wf_hard = clamp(Wf_baseline - (15 + rand()*10), 70, 140)`). `W_rough` SHALL still be `W_fairway + [60,100]` (so rough also tightens proportionally).
+
+2. **Fairway Trees & Water Counts Per Difficulty (On Fairway Only)** in `src/levels.js` / `src/terrain.js`:
+   - Counting rule: A tree or water hazard counts as **"on the fairway"** iff its center point satisfies `terrainZoneAt(x,y, level) === 'fairway'` **and** is not inside Green/Tee masks (`!inGreenMask` and `!inTeeMask`) and `warpedDist(x,y) ≤ W_fairway - 4` (strictly inside fairway, not on the edge). The counts SHALL be stored as `level.difficulty.treesOnFairway` and `waterOnFairway` and also as `level.treesOnFairwayCount` / `level.waterOnFairwayCount` for backwards compat.
+   - Per-tier budgets (these are **on-fairway counts**, not total trees/water in rough/OB which may be higher):
+     - **Easy:** `waterOnFairway === 0` (no water hazard on fairway) and `treesOnFairway ∈ [1,2]` (one or two trees on the fairway). Total trees in rough/OB are not counted here; the fairway count is strict. If the generator cannot place 1-2 trees on fairway without blocking validation, it MAY place 1 but SHALL NOT place 0 and SHALL NOT place water.
+     - **Medium:** `treesOnFairway ∈ [2,3]` and `waterOnFairway === 1` (exactly one water hazard on fairway). Previous spec allowed 2-3 trees and 1 water — this is now normative for medium. Water on fairway SHALL be a Cellular-Automata/Perlin cluster whose center is in fairway and area `800-3000px²` (as per REQ-010/033).
+     - **Hard:** `treesOnFairway ∈ [3,5]` and `waterOnFairway ∈ [1,3]` (one to three water hazards on fairway). Hard SHALL be the only tier that can have `>1` water on fairway.
+   - The generator SHALL enforce these counts **after** terrain SDF is known: first generate the fairway spine and zones (with tightened `W_fairway` for hard), then place trees/water *on* the fairway by sampling points where `terrainZoneAt === 'fairway'` (rejection sampling until the budget is met, `maxAttempts = budget*80`). Trees on fairway SHALL respect `≥ 40px` clearance from tee/green masks and `≥ r1+r2+6` between trees (Poisson), and water clusters SHALL respect the same `d∈[W_fairway-20, W_fairway+40]`-overlap rule but now centered *inside* fairway for these counts (for fairway water, center must be `d ≤ W_fairway-10` to be strictly on fairway).
+   - **Validation:** For every generated level, `treesOnFairway` and `waterOnFairway` SHALL be within the tier's budget; otherwise the level SHALL be regenerated (new control points/tree positions) until it fits, or the tier SHALL be re-rolled. Tests SHALL verify for 18 generated holes, the distribution respects budgets and that water `0` appears only on `easy` (except `0` may appear on `easy` only; `medium`/`hard` never have `0` water on fairway).
+
+3. **Field Components Per Difficulty — Source Near Tee, Sink Near Green, Flipped + Extra on Hard/Medium, Doublets In Trees** in `src/vectorField.js` / `src/levels.js` / `src/terrain.js`:
+   - **Every level, all difficulties**, SHALL normally have:
+     - **One source** (`nSources ≥1`) placed **on the edge of the canvas close to the tee** (not random along any edge). Implement as: sample the canvas edge (left `x=0`, right `x=LOGICAL_W`, top `y=0`, bottom `y=LOGICAL_H`) and pick the edge point with **minimum Euclidean distance to `tee`** (or if two edges tie, pick the one with smallest distance). The chosen source position `ex,ey` SHALL satisfy `ex==0||ex==LOGICAL_W||ey==0||ey==LOGICAL_H` and `dist(source, tee) ≤ 180px` (close to tee). If the closest edge point is farther than `180px`, clamp or re-sample until it is.
+     - **One sink** (`nSinks ≥1`) placed **on the edge close to the green** (`hole`): edge point with minimum distance to `hole`, `dist(sink, hole) ≤ 180px`, edge-only.
+     - These two are mandatory and counted in `fieldComponents` for all tiers.
+   - **Hard levels — flipped + extra source/sink on free edges:** For `tier==='hard'`, the generator **MAY flip** the source/sink so that **sink is on the tee side and source is on the green side** (i.e., `sink` closest to `tee` ≤180px, `source` closest to `hole` ≤180px, creating an upwind challenge). When flipped, it SHALL also **add another source and sink on the two free edges** (the two edges not containing the first source/sink; e.g., if flipped source is on right edge near green and flipped sink on left edge near tee, the free edges are top `y=0` and bottom `y=LOGICAL_H`, each gets one of the extra components). The selection of which free edge gets source vs sink SHALL be random per hole (`rand()<0.5` swap). The total for flipped hard SHALL be `sources=2` (one on green side, one on a free edge) and `sinks=2` (one on tee side, one on the other free edge). If not flipped (still normal orientation), hard SHALL still have the extra source/sink on free edges as an alternative: with `rand()<0.5` the generator MAY either flip or keep normal orientation then add the extra pair; at least `50%` of hard holes SHALL be flipped when sampling 100 hard holes. The extra source/sink positions SHALL be sampled uniformly along their free edge within `[20, LOGICAL_W-20]` or `[20, LOGICAL_H-20]` and SHALL be edge-only.
+   - **Medium levels — extra sink on free edge:** For `tier==='medium'`, in addition to the mandatory source near tee and sink near green, the generator **MAY add an additional sink on any of the free edges** (the two edges not containing the first source/sink, or any edge if flipping not used). This extra sink SHALL be on an edge (`x==0||x==LOGICAL_W||y==0||y==LOGICAL_H`) sampled uniformly along that edge. The decision to add the extra sink SHALL be `rand()<0.6` (60% of medium holes have the extra sink). When added, medium has `sources=1, sinks=2` (plus doublets/vortexes); when not added, `sources=1, sinks=1`. Tests SHALL verify at least `30%` of medium holes have the extra sink when sampling 100 medium holes.
+   - **Easy:** Additionally, **one doublet somewhere in the fairway** (`nDoublets = 1`, `nVortexes = 0` on top of the mandatory source/sink, so total `sources=1, sinks=1, doublets=1, vortexes=0` → `fieldComponents = 3`). The doublet position `(dx,dy)` SHALL satisfy `terrainZoneAt(dx,dy) === 'fairway'` and not in Green/Tee mask. **If there's a tree on the fairway, the doublet SHALL always be placed in the middle of the tree** (i.e., `doublet.x == tree.x && doublet.y == tree.y` within `≤2px` tolerance). This applies to **all difficulties** (not just easy): whenever `treesOnFairway ≥1`, at least one doublet SHALL be co-located with a fairway tree (choose the first/most central fairway tree). If `treesOnFairway ===0` (should not happen for easy per §2, but for safety), the doublet MAY be at a random fairway point (sample until `terrainZoneAt === 'fairway'`).
+   - **Medium:** Additional to the mandatory source and sink (and possibly extra sink per above), **2-3 doublets and 1 vortex**. So totals: `sources=1` (or `1` plus maybe not extra), `sinks=1` (or `2` if extra sink added) `+ doublets∈[2,3], vortexes=1` → `fieldComponents = 5 or 6` (or `6-7` if extra sink). At least `1` of the doublets SHALL be co-located with a fairway tree if `treesOnFairway≥1` (which it is for medium, 2-3 trees). The remaining doublets/vortex SHALL be placed **inside the fairway or rough** (`d ≤ W_rough`, not OB) but not necessarily in trees, with `≥20px` margin from edge (interior). Vortex `Gamma ∈ [1.4,2.6]` random sign, doublet `mu ∈ [1.2,2.2]` random orientation.
+   - **Hard:** Additional to source/sink (including flipped + extra per above), **3-4 doublets and 1-2 vortexes**. So totals: `sources=2, sinks=2` (when flipped+extra) or `sources=1, sinks=1` (when not flipped but still extra) `+ doublets∈[3,4], vortexes∈[1,2]` → `fieldComponents = 7-10` (or `6-8` if not flipped). At least `1` doublet SHALL be co-located with a fairway tree; if `treesOnFairway ≥3`, up to `2` doublets MAY be in trees (but at least one). Remaining doublets/vortexes interior as above. **Hard doublets/vortexes MAY be placed slightly more aggressively** (still interior but with `≥15px` margin, allowing closer to edge for stronger effect).
+   - **Placement constraints for all doublets/vortexes:** Position `(ex,ey)` SHALL be sampled uniformly **inside** `[20, LOGICAL_W-20]×[20, LOGICAL_H-20]` and then **rejected if `terrainZoneAt` is not `fairway` or `rough`** (or if for the "in-tree" doublet, not within `≤2px` of the chosen tree). Doublets/vortexes SHALL be strictly interior (`≥20px` from edge, `≥15px` for hard), never on edge (edge is only for sources/sinks). This replaces the previous generic "interior margin 20px" rule but now also requires fairway/rough for these interior elements (not OB).
+   - **Counts are exact budgets per tier, not minima:** Easy SHALL have exactly `1` doublet (not 2-3), medium SHALL have `2-3` doublets and exactly `1` vortex, hard SHALL have `3-4` doublets and `1-2` vortexes. Tests SHALL verify `field.doublets` and `field.vortexes` per hole fall within the tier's budget and that at least one doublet is in a fairway tree when `treesOnFairway≥1`.
+
+4. **Overall Difficulty Calculation** in `src/levels.js` / `src/terrain.js`:
+   - Each level SHALL expose `level.difficulty` as:
+     ```js
+     {
+       shape: 'I'|'L'|'V'|'U'|'S'|'Z',
+       shapeTier: 0|1|2, // 0=easy,1=medium,2=hard
+       fieldComponents: number, // sources+sinks+doublets+vortexes
+       treesOnFairway: number, // 0-5
+       waterOnFairway: number, // 0-3
+       tier: 'easy'|'medium'|'hard', // overall
+       score: number // 0-8, sum of tiers
+     }
+     ```
+   - **Calculation:** The four factors SHALL be scored as:
+     - `shapeTier`: `I`→`0`, `L|V|U`→`1`, `S|Z`→`2` (with bigger bends on medium/hard as per §1, hard tighter fairway)
+     - `fieldTier`: derived from `doublets+vortexes` (or total components minus mandatory 2): Easy (`doublets=1,vortexes=0` → `fieldComponents=3` → tier `0`), Medium (`doublets2-3+vortex1` → `5-6` or `6-7` with extra sink → tier `1`), Hard (`doublets3-4+vortex1-2` + extra source/sink when flipped → `7-10` → tier `2`). Alternatively `fieldTier = (fieldComponents <=3 ?0 : fieldComponents<=6 ?1 :2)` (with extra source/sink, hard will be `7-10` → `2`).
+     - `treeTier`: `treesOnFairway 1-2→0` (easy), `2-3→1` (medium), `3-5→2` (hard) — but note `2` appears in both easy (up to 2) and medium (2-3); the tier is determined by the *budget* for that level's overall tier, not by raw count alone. For scoring, map `treesOnFairway ≤2` and `waterOnFairway===0` → treeTier `0`; `treesOnFairway 2-3` and `waterOnFairway 1` → `1`; `treesOnFairway 3-5` and `waterOnFairway 1-3` → `2`.
+     - `waterTier`: `0→0`, `1→1`, `1-3→2` (for hard, `1-3` maps to `2` if `≥2`, or `1` if `1`; but hard requires at least `1`, so `waterTier` for hard is `1` or `2`).
+     - **Overall tier** `tier` SHALL be the **majority or max** of the four factor tiers, or more simply `tier = shapeTier` (since shape is now the primary driver and the other factors are forced to match the shape's tier per generation). For generation, the generator SHALL **pick a tier first** (`easy`/`medium`/`hard` with distribution `≈30%/40%/30%` for 18 holes, or increasing difficulty `1-6 easy, 7-12 medium, 13-18 hard` — either is acceptable if documented), then generate a fairway shape of that tier (with bigger bends for medium/hard, tighter for hard), then generate field/trees/water counts matching that tier's budgets (including flipped/extra sources/sinks for hard/medium). The resulting `level.difficulty.tier` SHALL equal the picked tier.
+     - `score` MAY be `shapeTier + fieldTier + treeTier + waterTier` (0-8) for fine-grained sorting, but `tier` is normative for hole classification. Tests SHALL verify that for any generated level, `level.difficulty.tier` matches the tier implied by its `shape` and its `treesOnFairway`/`waterOnFairway`/`fieldComponents` budgets (no level has easy shape `I` but hard counts `5` trees/`3` water). Also verify hard `W_fairway` is on average `≥12px` smaller than easy `W_fairway` (tighter fairway).
+   - The generator SHALL store `level.difficulty` on each level and SHALL ensure the 18 holes contain at least `3` of each tier (`easy`/`medium`/`hard`) for variety, unless `count` is `3` or `9` (then proportionally `1` of each for `3`, `3` of each for `9`).
+
+5. **Integration With Existing Pipeline (REQ-010/033):**
+   - The 5-step pipeline per REQ-010/033 SHALL remain, but **Step 4 hazard placement** SHALL now be constrained to place the *required* number of trees/water **on the fairway** per this requirement's per-tier budgets (instead of or in addition to rough/OB trees). Trees in rough/OB per REQ-033 Step 4 MAY still be placed as extra (not counted toward `treesOnFairway`), but the **on-fairway counts are normative** for difficulty and SHALL be satisfied first. Total trees per hole MAY thus be `treesOnFairway + treesInRoughOB` where `treesInRoughOB` is still `8-22` per old spec or `0` if not needed; for simplicity, the total MAY be just `treesOnFairway` plus a small number of extra rough/OB trees for aesthetics, but the on-fairway budget MUST be met.
+   - **Step 5 validation** SHALL still ensure solvability, but now with the additional constraint that **doublets on fairway trees do not block the fairway** (they are wind singularities, not physical obstacles; trees are physical). Water on fairway SHALL still not completely block the fairway spine (at least one spine sample not in water, per REQ-033).
+
+## Acceptance Criteria
+
+- [ ] For any generated course with `generateLevels(seed, 18)`, every level has `level.difficulty` with `shape ∈ {I,L,V,U,S,Z}`, `shapeTier 0-2`, `fieldComponents`, `treesOnFairway`, `waterOnFairway`, `tier ∈ {easy,medium,hard}` and `score 0-8`, and `tier` matches the tier implied by `shape` and the on-fairway counts (e.g., no `shape='I'` with `treesOnFairway=5`/`waterOnFairway=3`). `shape` for `easy` is always `I` (with tiny deviation), `medium` always `L/V/U` with bigger bends (`>45px` offset), `hard` always `S/Z` with even bigger bends (`>55px`) and tighter fairway (`W_fairway` `15-25px` smaller than easy).
+- [ ] **Shape classification (bigger bends):** For 100 generated levels, at least `15%` are `I` (easy, maxDev `<30` and `totalTurn <15°`), at least `15%` are `L/V/U` (medium, one or two same-side offsets `>45px`), at least `15%` are `S/Z` (hard, two opposite-side offsets `>55px` each, `totalTurn` includes inflection). Medium bends are on average `≥12px` larger than easy deviation, hard bends `≥20px` larger than medium (bigger bends).
+- [ ] **Tighter fairway on hard:** For 18 holes, average `terrain.widthFairway` for `tier==='hard'` is `≥12px` smaller than average for `tier==='easy'` (e.g., easy `Wf≈110`, hard `Wf≈90`), and no hard `W_fairway` exceeds the maximum easy `W_fairway`.
+- [ ] **Easy:** For any level where `level.difficulty.tier === 'easy'`, `level.terrain.fairwayPath` shape is `I` (horizontal/vertical), `waterOnFairway === 0`, `treesOnFairway ∈ [1,2]`, `field.sources ===1` on edge close to tee (`dist(source, tee) ≤180` and edge), `field.sinks ===1` on edge close to green (`dist(sink, hole) ≤180`), `field.doublets ===1` (plus source/sink total 3), `field.vortexes ===0`, and the single doublet is within `≤2px` of a fairway tree if `treesOnFairway≥1` (which it is for easy).
+- [ ] **Medium:** For `tier==='medium'`, shape ∈ `L,V,U` with bigger bends, `treesOnFairway ∈ [2,3]`, `waterOnFairway ===1`, `field.sources===1` near tee, `field.sinks` is `1` or `2` (the extra sink on a free edge appears in `≥30%` of medium holes), `field.doublets ∈ [2,3]` and `field.vortexes ===1` (total `5-6` or `6-7` with extra sink), and at least one doublet is co-located with a fairway tree (distance ≤2px) when `treesOnFairway≥1`.
+- [ ] **Hard:** For `tier==='hard'`, shape ∈ `S,Z` with even bigger bends and tighter fairway, `treesOnFairway ∈ [3,5]`, `waterOnFairway ∈ [1,3]`, `field.sources` and `field.sinks` are `1` or `2` each (flipped case: sink near tee + source near green + extra source/sink on two free edges → `sources=2`/`sinks=2`; non-flipped: `sources=1`/`sinks=1` plus extra pair on free edges also `2`/`2`; at least `50%` of hard holes SHALL be flipped when sampling 100 hard holes). `field.doublets ∈ [3,4]` and `field.vortexes ∈ [1,2]` (total `7-10` with extra source/sink, `6-8` without), and at least one doublet is in a fairway tree. No hard hole has `sources===1` and `sinks===1` without the extra pair being on free edges — it must have the extra source/sink on the two free edges.
+- [ ] **Doublet-in-tree rule (all difficulties):** If `treesOnFairway ≥1`, then there exists at least one `doublet` in `field` whose position (`x,y` sampled as interior point per REQ-003) satisfies `Math.hypot(doublet.x - tree.x, doublet.y - tree.y) ≤ 2` for some fairway tree. Tests SHALL verify by inspecting `field` element positions via `getDoubletPositions()` or debug exposure `level.field._doubletPositions` and tree positions.
+- [ ] **Source near tee / sink near green (and flipped/extra):** For every level, `Math.hypot(source.x - tee.x, source.y - tee.y) ≤ 180` or source is on the edge closest to tee, and similarly `dist(sink, hole) ≤180` on edge close to green, except for flipped hard where `dist(sink, tee) ≤180` and `dist(source, hole) ≤180`. For hard flipped, the extra source/sink are on the two free edges (the two edges not containing the first source/sink), each edge gets one, sampled uniformly along that edge. For medium extra sink, it is on any free edge (the two edges not containing the primary source/sink). No source/sink is placed randomly along a distant edge. Verify via `getSourcePositions()`/`getSinkPositions()`.
+- [ ] **Difficulty calculation:** `level.difficulty.tier` is derived from the four factors and matches the generation tier; for 18 holes there are at least `3` easy, `3` medium, `3` hard (or proportionally `6/6/6` if using increasing difficulty `1-6 easy, 7-12 medium, 13-18 hard`). The `score` is monotonic with tier (easy `0-2`, medium `3-5`, hard `6-8`).
+- [ ] **No regressions:** `LEVELS.length===18` after `generateLevels(42,18)`, `tee` left / `hole` right, `field` still deterministic per seed, `obstacles` are still `type:'circle'` trees, `waterHazards` are blue clusters, and `terrainZoneAt` still returns correct colors per REQ-010/033.
+
+## Dependencies
+
+- REQ-010 (level count, tee/hole placement, terrain SDF, 5-step pipeline, tighter fairway on hard)
+- REQ-003 (field vector field sources/sinks/doublets/vortexes, edge/interior placement, flipped/extra per difficulty)
+- REQ-008 (circular tree obstacles, collision, Poisson spacing, on-fairway trees)
+- REQ-033 (Bézier/SDF/warped noise/water/tree pipeline, terrain colors, bigger bends)
+- REQ-012 (rendering — terrain zones with colors, trees on top)
+
+## Notes
+
+- Generator sketch `src/levels.js` / `src/terrain.js` for difficulty (updated for flipped/extra and bigger bends/tighter fairway):
+  ```js
+  function classifyFairwayShape(spine, tee, hole, p1, p2){
+    const perp = (p, a,b) => Math.abs((b.y-a.y)*p.x - (b.x-a.x)*p.y + b.x*a.y - b.y*a.x)/Math.hypot(b.x-a.x,b.y-a.y);
+    const maxDev = Math.max(...spine.map(pt=> perp(pt, tee, hole)));
+    const totalTurn = spine.reduce((acc,pt,i,arr)=> i? acc+Math.abs(headingChange(arr[i-1],pt,arr[i+1])) : acc, 0);
+    if (maxDev < 30 && totalTurn < 15) return 'I';
+    if (p1 && !p2) return (totalTurn < 70 ? 'V' : 'L');
+    if (p1 && p2 && Math.sign(perpOffset(p1))*Math.sign(perpOffset(p2)) >0) return 'U';
+    if (p1 && p2 && Math.sign(perpOffset(p1))!==Math.sign(perpOffset(p2))) return (Math.abs(totalTurn-180)<40?'S':'Z');
+    return 'L';
+  }
+  function getLevelDifficulty(level){
+    const shapeTier = {I:0, L:1, V:1, U:1, S:2, Z:2}[level.difficulty.shape];
+    const fieldTier = level.field.doublets===1&&level.field.vortexes===0?0 : level.field.doublets>=2&&level.field.doublets<=3&&level.field.vortexes===1?1 : 2;
+    const treeTier = level.difficulty.treesOnFairway<=2 && level.difficulty.waterOnFairway===0?0 : level.difficulty.treesOnFairway<=3?1 :2;
+    const waterTier = level.difficulty.waterOnFairway===0?0 : level.difficulty.waterOnFairway===1?1 :2;
+    // overall tier is max of shape/field/tree/water tiers or the picked tier
+  }
+  // Field placement near tee/green with flipped/extra for hard/medium:
+  function placeSourceNearTee(tee, rand, flipped=false, extraFreeEdges=[]){
+    // flipped hard: source near hole, sink near tee
+    // extra source/sink on free edges: pick the two edges not containing primary source/sink
+  }
+  // Doublet in tree:
+  function placeDoubletInTree(tree){ return {x:tree.x, y:tree.y, mu:1.2+rand()*1.0, theta:rand()*2*Math.PI}; }
+  // Tighter fairway on hard:
+  // Wf_hard = clamp(Wf_baseline - (15 + rand()*10), 70, 140)
+  // Bigger bends: medium offsets 45-80 vs easy <15, hard 55-90
+  ```
+- For tests, expose `level.difficulty` and `getFairwayShape(level)` for verification, and `field._sourcePositions` etc.
+
+## File Paths
+
+- `src/levels.js:1` (generateLevels with difficulty tier, bigger bends for medium/hard, tighter fairway on hard, source near tee / sink near green with flipped + extra source/sink per REQ-034)
+- `src/terrain.js:1` (classifyFairwayShape with bigger bends, terrainZoneAt, isHoleSolvable, generateTreesPoisson with on-fairway sampling, generateWaterClusters on fairway)
+- `src/vectorField.js:1` (createField with edge source near tee / sink near green, interior doublets/vortexes at fairway/tree positions when provided, support for flipped and extra source/sink)
+- `src/render.js:1` (drawTerrainZones with fixed palette, drawObstacles for circular trees)
+- `docs/requirements/REQ-034-level-difficulty.md:1` (this file)
+

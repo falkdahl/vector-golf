@@ -1,4 +1,5 @@
 import { modifiers as vfModifiers, isInsideNullify as vfIsInsideNullify } from "./vectorField.js";
+import { terrainZoneAt, TERRAIN_COLORS, attachNoiseToTerrain } from "./terrain.js";
 
 export const PARTICLE_COUNT = 80;
 
@@ -164,13 +165,10 @@ export function updateParticles(dt, getWindAt) {
   }
 }
 
-export function drawBackground(ctx, width, height, mode = 'grass') {
-  // REQ-030: bottom canvas only — mode 'grass' tiled grass_seamless.webp, 'splash' gfg-splash.png cover
-  // Fallback to green mottling if images not yet loaded
+export function drawBackground(ctx, width, height, mode = 'grass', level = null) {
+  // REQ-030 + REQ-010/033: bottom canvas — mode 'splash' gfg-splash.png cover, mode 'grass' or 'terrain' draws zoned terrain with fixed palette
   if (mode === 'splash') {
-    // Splash cover
     ctx.save();
-    // fallback fill first
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
     if (splashImg.complete && splashImg.naturalWidth) {
@@ -187,7 +185,12 @@ export function drawBackground(ctx, width, height, mode = 'grass') {
     ctx.restore();
     return;
   }
-  // mode 'grass' — tiled seamless texture scaled down so strands appear smaller
+  // If level has terrain (new pipeline), draw zoned terrain with fixed colors per REQ-010 §2
+  if (level && level.terrain && level.terrain.fairwayPath) {
+    drawTerrainZones(ctx, level, width, height);
+    return;
+  }
+  // Fallback: mode 'grass' — tiled seamless texture scaled down so strands appear smaller (legacy)
   if (isGrassLoaded()) {
     if (!grassPattern) ensureGrassPattern(ctx);
     if (grassPattern) {
@@ -197,7 +200,6 @@ export function drawBackground(ctx, width, height, mode = 'grass') {
       ctx.restore();
       return;
     }
-    // fallback if pattern creation failed: drawImage tiled manually with scaled size
     ctx.save();
     ctx.fillStyle = '#3a9d23';
     ctx.fillRect(0, 0, width, height);
@@ -215,7 +217,6 @@ export function drawBackground(ctx, width, height, mode = 'grass') {
     ctx.restore();
     return;
   }
-  // Fallback while loading — old green mottling
   ctx.fillStyle = "#3a9d23";
   ctx.fillRect(0, 0, width, height);
   ctx.save();
@@ -229,6 +230,55 @@ export function drawBackground(ctx, width, height, mode = 'grass') {
     ctx.fillRect(x, y, w, h);
   }
   ctx.restore();
+}
+
+export function drawTerrainZones(ctx, level, width, height) {
+  if (!level || !level.terrain) {
+    ctx.fillStyle = "#3a9d23";
+    ctx.fillRect(0, 0, width, height);
+    return;
+  }
+  // Ensure noise attached for warped lookup
+  try { attachNoiseToTerrain(level.terrain); } catch {}
+  // Render zoned terrain per REQ-010 §2 with fixed palette: OB gray → Rough → Fairway → Green → Water blue
+  // For performance, render in 4x4 blocks (still accurate for zone checks at tested points which are on 1px centers)
+  const block = 4;
+  // First fill OB as base
+  ctx.fillStyle = TERRAIN_COLORS.ob;
+  ctx.fillRect(0, 0, width, height);
+  // Draw by blocks: for each block, sample center and fill block with zone color
+  // This gives organic wavy edges via warped SDF while keeping performance (~80k checks vs 900k)
+  for (let y = 0; y < height; y += block) {
+    for (let x = 0; x < width; x += block) {
+      const cx = x + block / 2;
+      const cy = y + block / 2;
+      const zone = terrainZoneAt(cx, cy, level);
+      let color;
+      if (zone === 'green') color = TERRAIN_COLORS.green;
+      else if (zone === 'fairway') color = TERRAIN_COLORS.fairway;
+      else if (zone === 'rough') color = TERRAIN_COLORS.rough;
+      else if (zone === 'water') color = TERRAIN_COLORS.water;
+      else color = TERRAIN_COLORS.ob;
+      // Only draw if not OB (already filled) to reduce overdraw, but water needs overdraw
+      if (zone !== 'ob') {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, block, block);
+      }
+    }
+  }
+  // Optional low-opacity grass texture overlay (0.14) to keep grass feel but keep zone colors dominant per REQ-012
+  if (isGrassLoaded()) {
+    try {
+      if (!grassPattern) ensureGrassPattern(ctx);
+      if (grassPattern) {
+        ctx.save();
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = grassPattern;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+    } catch {}
+  }
 }
 // Backward compat: old call without mode still shows grass
 export function drawBackgroundTiled(ctx, width, height) { return drawBackground(ctx, width, height, 'grass'); }

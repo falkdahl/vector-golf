@@ -93,6 +93,11 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   let doublets = DEFAULT_DOUBLETS;
   let vortexes = DEFAULT_VORTEXES;
 
+  // Support explicit positions per REQ-034: source near tee, sink near green, doublets in trees
+  let explicitSourcePositions = null;
+  let explicitSinkPositions = null;
+  let explicitDoubletPositions = null;
+  let explicitVortexPositions = null;
   if (typeof nSources === 'object' && nSources !== null) {
     const opts = nSources;
     // Ignore unaryFlow if present
@@ -100,6 +105,16 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
     sinks = Math.max(0, Math.floor(opts.sinks ?? opts.nSinks ?? DEFAULT_SINKS));
     doublets = Math.max(0, Math.floor(opts.doublets ?? opts.nDoublets ?? DEFAULT_DOUBLETS));
     vortexes = Math.max(0, Math.floor(opts.vortexes ?? opts.nVortexes ?? opts.vortex ?? DEFAULT_VORTEXES));
+    // Explicit positions for per-difficulty placement (REQ-034)
+    if (Array.isArray(opts._sourcePositions)) explicitSourcePositions = opts._sourcePositions;
+    if (Array.isArray(opts._sinkPositions)) explicitSinkPositions = opts._sinkPositions;
+    if (Array.isArray(opts._doubletPositions)) explicitDoubletPositions = opts._doubletPositions;
+    if (Array.isArray(opts._vortexPositions)) explicitVortexPositions = opts._vortexPositions;
+    // Also support alternative naming without underscore
+    if (!explicitSourcePositions && Array.isArray(opts.sourcePositions)) explicitSourcePositions = opts.sourcePositions;
+    if (!explicitSinkPositions && Array.isArray(opts.sinkPositions)) explicitSinkPositions = opts.sinkPositions;
+    if (!explicitDoubletPositions && Array.isArray(opts.doubletPositions)) explicitDoubletPositions = opts.doubletPositions;
+    if (!explicitVortexPositions && Array.isArray(opts.vortexPositions)) explicitVortexPositions = opts.vortexPositions;
   } else {
     if (typeof nSources === 'number') sources = Math.max(0, Math.floor(nSources));
     if (typeof nSinks === 'number') sinks = Math.max(0, Math.floor(nSinks));
@@ -144,12 +159,16 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   _lastSourcePositions = [];
   for (let i = 0; i < sources; i++) {
     let pos;
-    if (isLevel1EdgeCase && i === 0) {
+    let sigma = 1.2 + rand() * 1.0;
+    if (explicitSourcePositions && explicitSourcePositions[i]) {
+      pos = { x: explicitSourcePositions[i].x, y: explicitSourcePositions[i].y };
+      if (typeof explicitSourcePositions[i].s === 'number') sigma = explicitSourcePositions[i].s;
+      else if (typeof explicitSourcePositions[i].sigma === 'number') sigma = explicitSourcePositions[i].sigma;
+    } else if (isLevel1EdgeCase && i === 0) {
       pos = { x: 0, y: rand() * canvasH };
     } else {
       pos = sampleOnEdge(canvasW, canvasH, rand);
     }
-    const sigma = 1.2 + rand() * 1.0; // 1.2-2.2 even stronger
     srcList.push({ x: pos.x, y: pos.y, s: sigma });
     _lastSourcePositions.push({ x: pos.x, y: pos.y, s: sigma });
   }
@@ -157,30 +176,48 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   _lastSinkPositions = [];
   for (let i = 0; i < sinks; i++) {
     let pos;
-    if (isLevel1EdgeCase && i === 0) {
+    let sigma = 1.2 + rand() * 1.0;
+    if (explicitSinkPositions && explicitSinkPositions[i]) {
+      pos = { x: explicitSinkPositions[i].x, y: explicitSinkPositions[i].y };
+      if (typeof explicitSinkPositions[i].s === 'number') sigma = explicitSinkPositions[i].s;
+      else if (typeof explicitSinkPositions[i].sigma === 'number') sigma = explicitSinkPositions[i].sigma;
+    } else if (isLevel1EdgeCase && i === 0) {
       pos = { x: canvasW, y: rand() * canvasH };
     } else {
       pos = sampleOnEdge(canvasW, canvasH, rand);
     }
-    const sigma = 1.2 + rand() * 1.0; // 1.2-2.2
     sinkList.push({ x: pos.x, y: pos.y, s: sigma });
     _lastSinkPositions.push({ x: pos.x, y: pos.y, s: sigma });
   }
   const doubletList = [];
   _lastDoubletPositions = [];
   for (let i = 0; i < doublets; i++) {
-    const pos = sampleInside(canvasW, canvasH, rand, 20);
-    const mu = 1.2 + rand() * 1.0; // 1.2-2.2
-    const theta = rand() * Math.PI * 2;
+    let pos, mu, theta;
+    if (explicitDoubletPositions && explicitDoubletPositions[i]) {
+      pos = { x: explicitDoubletPositions[i].x, y: explicitDoubletPositions[i].y };
+      mu = typeof explicitDoubletPositions[i].mu === 'number' ? explicitDoubletPositions[i].mu : 1.2 + rand() * 1.0;
+      theta = typeof explicitDoubletPositions[i].theta === 'number' ? explicitDoubletPositions[i].theta : rand() * Math.PI * 2;
+    } else {
+      pos = sampleInside(canvasW, canvasH, rand, 20);
+      mu = 1.2 + rand() * 1.0;
+      theta = rand() * Math.PI * 2;
+    }
     doubletList.push({ x: pos.x, y: pos.y, mu, theta, cosT: Math.cos(theta), sinT: Math.sin(theta) });
     _lastDoubletPositions.push({ x: pos.x, y: pos.y, mu, theta });
   }
   const vortexList = [];
   _lastVortexPositions = [];
   for (let i = 0; i < vortexes; i++) {
-    const pos = sampleInside(canvasW, canvasH, rand, 20);
-    let gamma = 1.4 + rand() * 1.2; // 1.4-2.6 stronger
-    if (rand() < 0.5) gamma = -gamma;
+    let pos, gamma;
+    if (explicitVortexPositions && explicitVortexPositions[i]) {
+      pos = { x: explicitVortexPositions[i].x, y: explicitVortexPositions[i].y };
+      gamma = typeof explicitVortexPositions[i].g === 'number' ? explicitVortexPositions[i].g : (1.4 + rand() * 1.2) * (rand()<0.5?-1:1);
+      if (typeof explicitVortexPositions[i].gamma === 'number') gamma = explicitVortexPositions[i].gamma;
+    } else {
+      pos = sampleInside(canvasW, canvasH, rand, 20);
+      gamma = 1.4 + rand() * 1.2;
+      if (rand() < 0.5) gamma = -gamma;
+    }
     vortexList.push({ x: pos.x, y: pos.y, g: gamma });
     _lastVortexPositions.push({ x: pos.x, y: pos.y, g: gamma });
   }
