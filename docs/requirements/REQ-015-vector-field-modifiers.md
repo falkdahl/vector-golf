@@ -42,7 +42,7 @@ User requested ability to strategically shape the wind field before each shot, t
    - Right-click or `Delete`/`Backspace` SHALL remove the modifier under cursor (or last placed) for misclick correction. `R` (ball reset) does NOT clear modifiers, but advancing hole or game reset does.
    - Placement SHALL allow **any number of modifiers** in play at the same time (no hard limit). The game SHALL NOT enforce a maximum of 3 per hole; the player may place unlimited modifiers until they choose to remove them or advance holes. Previous limit of 3 is removed.
    - Modifiers SHALL be stored as array `modifiers = [{id, type:'amplify'|'nullify'|'flip', x, y, radius:90, isDragging?:boolean}]` in `src/main.js` or `src/vectorField.js`.
-   - Modifiers SHALL persist through death resets (obstacle/edge) but SHALL be cleared on advancing to next hole or on game reset (`R` in WIN).
+   - Modifiers SHALL persist through death resets (obstacle/edge) but SHALL be cleared on advancing to next hole or on game reset (`R` in WIN). **When cleared because the hole was beaten (via `handleNextHole`/`advanceHole`), each cleared modifier SHALL be consumed from supply per REQ-035 (`supply[type] = max(0, supply[type]-1)` per placed modifier) before the array is emptied; clearing without a win (e.g., initial load) does not consume.**
 
 3. **Circular Area Effect** in `src/vectorField.js`:
    - `getWindAt(worldX, worldY)` SHALL be modified to apply all active modifiers that contain the query point (`hypot(x - mod.x, y - mod.y) < mod.radius`).
@@ -71,7 +71,7 @@ User requested ability to strategically shape the wind field before each shot, t
 - [ ] `getWindAt` inside amplify circle returns ~5× original vector (verified by sampling inside vs outside).
 - [ ] Arrows inside each modifier circle reflect resulting effect: inside amplify arrows more opaque/longer, inside nullify faint/zero, inside flip reversed direction (verified by sampling `getWindAt` for arrow drawing). Arrows under the transparent hotbar overlay remain visible through the semi-transparent pill.
 - [ ] Hotbar hidden entirely (`display:none`/`.hidden`) during `FLYING`; cannot place/drag while ball drifting. Collapse state resets to expanded on `loadLevel`/`advanceHole`/new game.
-- [ ] Right-click or Delete on modifier removes it; dragging adjusts without deleting; `R` (ball reset) does not clear modifiers, but advancing hole or game reset does.
+- [ ] Right-click or Delete on modifier removes it (and refunds the supply slot, not consumed); dragging adjusts without deleting; `R` (ball reset) does not clear modifiers, but advancing hole or game reset does (**and advancing after a win consumes each placed modifier from supply per REQ-035, so `supply` is reduced by the number of modifiers that were on the field at win time**).
 - [ ] Any number of modifiers can be in play at the same time; placing 5, 10 or more modifiers is allowed and all are rendered and affect `getWindAt`.
 - [ ] Particles and arrows inside modifier circles visibly change per modifier type.
 - [ ] Lower playing field obstruction check: with hotbar **collapsed**, the bottom `~80px` of the field shows no hotbar overlay (only small pill at bottom center); with hotbar **expanded**, the overlay is translucent so obstacles/ball at `y ~540-580` are still readable through it (verified by screenshot/opacity). No opaque bar covers the lower field in either state.
@@ -82,6 +82,8 @@ User requested ability to strategically shape the wind field before each shot, t
 - REQ-002 (game loop dt)
 - REQ-006/007 (input, only before shooting)
 - REQ-012 (UI)
+- REQ-020 (supply, placement limit)
+- REQ-035 (consumption of placed modifiers from supply on win)
 
 ## Notes
 - Hotbar can be DOM (`<div id="hotbar">`) for accessibility or canvas-drawn; DOM preferred for click handling.

@@ -277,6 +277,18 @@ function resetSupply() {
   updateHotbarUI();
 }
 
+function consumePlacedModifiersFromSupply() {
+  if (!modifiers || !modifiers.length) return;
+  // REQ-035: each placed modifier consumed from supply on level win, clamped >=0, exactly once per win
+  const snapshot = [...modifiers];
+  for (const m of snapshot) {
+    if (m.type && m.type in supply) {
+      supply[m.type] = Math.max(0, supply[m.type] - 1);
+    }
+  }
+  updateHotbarUI();
+}
+
 // Free shots hidden counter per REQ-022 - conditional attempt counting
 let freeShots = 0;
 function getFreeShots() { return freeShots; }
@@ -1318,6 +1330,8 @@ function resetBall() {
 
 function advanceHole() {
   if (currentHoleIndex < LEVELS.length - 1) {
+    // REQ-035: consume any placed modifiers from supply on level win before clearing for next hole
+    consumePlacedModifiersFromSupply();
     currentHoleIndex++;
     holeAttempts = 0;
     loadLevel(currentHoleIndex);
@@ -1521,6 +1535,8 @@ function checkWin() {
 
 function handleNextHole() {
   if (currentHoleIndex < LEVELS.length - 1) {
+    // REQ-035: consume any placed modifiers from supply on level win before clearing for next hole
+    consumePlacedModifiersFromSupply();
     currentHoleIndex++;
     holeAttempts = 0; // reset per-hole attempts, keep total per requirement
     loadLevel(currentHoleIndex);
@@ -1544,6 +1560,8 @@ function handleNextHole() {
     maybeShowRewardMenu();
     saveProgress();
   } else {
+    // REQ-009/035 final hole: consume placed modifiers before returning to main menu (moot as clearProgress resets to {1,1,1}, but do for completeness)
+    consumePlacedModifiersFromSupply();
     // REQ-009 final hole: return to main menu, not reset to hole 1 via generateLevels
     returnToMainMenu();
   }

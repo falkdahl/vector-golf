@@ -19,7 +19,7 @@ Unlimited placement (REQ-015 §2.5) removes strategic scarcity. An inventory mod
    - State SHALL be `supply = { amplify: number, nullify: number, flip: number }` with keys exactly `'amplify'|'nullify'|'flip'`.
    - Initialized to `{ amplify: 1, nullify: 1, flip: 1 }` on **new game**: page load / `initLevel()` for `currentHoleIndex=0`, `resetGameAfterWin()` (press `R` in `WIN` / `GAME_COMPLETE`), `startNewGameFromMain()` (REQ-029 main menu New Game), `endRun()` (REQ-029 pause End Run → main menu), `clearProgress()` new-game reset, and full page reload with no saved progress.
    - Supply SHALL persist through death resets (`resetBall()` on obstacle/OOB) and through `R` during play (ball reset without scoring) — those SHALL NOT reset supply.
-   - Supply SHALL persist across hole advances (`advanceHole()` / `handleNextHole() / loadLevel(n>0)` for sequential holes) — advancing SHALL NOT reset supply. Only a new game reset SHALL set all counters to `1` (one of each). Placed modifiers (`modifiers` array) are still cleared on hole advance per REQ-015, but supply counters remain. If design later ties supply to per-hole grants, that SHALL be a separate REQ; for this REQ supply is global per run.
+   - Supply SHALL persist across hole advances (`advanceHole()` / `handleNextHole() / loadLevel(n>0)` for sequential holes) **minus consumed modifiers per REQ-035**: when a hole is beaten (`WIN` → `handleNextHole`), **any modifiers currently placed on the field SHALL be consumed from supply** (`supply[type] = max(0, supply[type]-1)` per placed modifier, see REQ-035). The `modifiers` array is then cleared per REQ-015, but the reduced supply persists to the next hole. If no modifiers were placed at win time, supply is unchanged. Only a new game reset (`resetGameAfterWin`/`startNewGameFromMain`/`endRun`/`clearProgress`) SHALL set all counters to `1` (one of each). If design later ties supply to per-hole grants, that SHALL be a separate REQ; for this REQ supply is global per run minus win-consumption.
    - Future acquisition (e.g., `addToSupply(type, n)`, level config `supply:{amplify:2}`) SHALL increment the corresponding counter; this REQ only defines the container and limit, not the acquisition source.
 
 2. **Placement Limit Enforcement** in `src/main.js:placeModifier()` and `src/input.js` / canvas handlers:
@@ -40,7 +40,7 @@ Unlimited placement (REQ-015 §2.5) removes strategic scarcity. An inventory mod
    - All other REQ-015 behaviors remain: selection via `1`/`2`/`3` or click, deselection via `Escape`/same key/same button, `selectedModifier = null` after successful placement, draggable, right-click/`Delete` removal, hidden during `FLYING`/`WIN`, deterministic `getWindAt` stacking.
 
 5. **Determinism & Persistence**:
-   - Supply state SHALL be deterministic for the current run; reloading the hole SHALL NOT replenish supply (only `loadLevel` on hole advance keeps supply). `clearModifiers()` on hole advance SHALL NOT affect supply.
+   - Supply state SHALL be deterministic for the current run; reloading the hole SHALL NOT replenish supply (only `loadLevel` on hole advance keeps supply **minus win-consumption per REQ-035**). `clearModifiers()` on hole advance SHALL be preceded by **supply consumption** (`supply[type]--` per placed modifier, see REQ-035) before clearing; `clearModifiers()` alone without a win SHALL NOT affect supply.
 
 ## Acceptance Criteria
 
@@ -52,7 +52,7 @@ Unlimited placement (REQ-015 §2.5) removes strategic scarcity. An inventory mod
 - [ ] Right-clicking an existing amplify to remove it reduces `activeCount` to `1` (if supply 2) or `0` (if supply 1); re-selecting Amplify and clicking again now succeeds, proving removal frees the slot (refund).
 - [ ] Dragging an existing modifier does NOT consume supply: dragging the single allowed amplify to a new position keeps `activeCount === 1` and does NOT block or require extra supply.
 - [ ] Dying (obstacle/OOB) and `resetBall()` does NOT reset supply: supply stays `{amplify:1,...}` and active modifiers persist per REQ-015; counters not zeroed.
-- [ ] Advancing to next hole (`handleNextHole`) clears `modifiers` (no circles visible) but supply remains `{amplify:1,...}` (not reset to `{1,1,1}` again). Hotbar still shows `Amplify 1` enabled for next hole; player can place one amplify on new hole.
+ - [ ] Advancing to next hole (`handleNextHole`) without placed modifiers clears `modifiers` (no circles visible) and supply remains `{amplify:1,...}` (not reset to `{1,1,1}` again). Hotbar still shows `Amplify 1` enabled for next hole; player can place one amplify on new hole. **If a modifier was placed and the hole was beaten, supply is consumed per REQ-035: e.g., with one `Amplify` placed at win, `supply.amplify` becomes `0` after advancing, `modifiers` cleared, and hotbar `Amplify` is now disabled on the next hole until a reward replenishes it.**
 - [ ] Pressing `R` in `WIN` / `GAME_COMPLETE` (`resetGameAfterWin`), `startNewGameFromMain` (REQ-029), `endRun` (REQ-029), or reloading page resets supply to `{amplify:1, nullify:1, flip:1}` and hotbar shows all `1` again, no modifiers on field, no selection.
 - [ ] `getWindAt` inside amplify still `5×`, nullify `0`, flip `-1×` as per REQ-016/017/018; supply limit does not alter effect math, only whether placement is allowed.
 - [ ] Transparent hotbar still shows supply correctly: container `rgba(0,0,0,0.35-0.45)` + slots pause-menu style (`rgba(255,255,255,0.06)` `1px rgba(255,255,255,0.18)` `600 11px` white with stroke, icon `14px` `#e67e22/#3498db/#9b59b6`), field visible underneath; badges `1`/`1/1` remain readable with dark stroke/shadow.
@@ -65,6 +65,7 @@ Unlimited placement (REQ-015 §2.5) removes strategic scarcity. An inventory mod
 - REQ-016/017/018 (per-type effects; supply is per-type)
 - REQ-011 (reset / hole advance lifecycle)
 - REQ-012 (UI / hotbar rendering)
+- REQ-035 (supply consumption on win, modifies persistence across hole advances)
 
 ## Notes
 
