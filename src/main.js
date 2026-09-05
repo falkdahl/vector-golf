@@ -73,10 +73,33 @@ function ensureGrassPattern() {
     }
   } catch {}
 }
+function hideLoadingScreen() {
+  const ls = document.getElementById('loading-screen');
+  if (ls) ls.classList.add('hidden');
+}
+function maybeHideLoadingAfterSplash() {
+  // Hide once splash is decoded/complete; grass not required
+  try {
+    if (splashImg.complete && splashImg.naturalWidth) {
+      hideLoadingScreen();
+      return true;
+    }
+    // Try decode promise
+    if (splashImg.decode) {
+      splashImg.decode().then(hideLoadingScreen).catch(hideLoadingScreen);
+      return false;
+    }
+  } catch {}
+  return false;
+}
 if (typeof window !== 'undefined') {
   grassImg.onload = () => { ensureGrassPattern(); redrawBottom(); };
-  splashImg.onload = () => { redrawBottom(); };
-  splashImg.onerror = () => { /* try fallback already */ setTimeout(() => redrawBottom(), 50); };
+  splashImg.onload = () => { redrawBottom(); maybeHideLoadingAfterSplash(); };
+  splashImg.onerror = () => { /* try fallback already */ setTimeout(() => { redrawBottom(); hideLoadingScreen(); }, 50); };
+  // Also attempt hide after short timeout to avoid stuck Loading... if image cached
+  setTimeout(() => { if (splashImg.complete && splashImg.naturalWidth) hideLoadingScreen(); }, 500);
+  // Ensure fallback hide even if image fails completely
+  setTimeout(() => hideLoadingScreen(), 3000);
 }
 function redrawBottom() {
   if (!bgCanvas || !bgCtx) return;
@@ -431,9 +454,105 @@ function startNewGame() {
 }
 function isPauseMenuVisible() { return pauseMenuVisible; }
 
-// Main Menu per REQ-029 — shown if no current run, New Game + high score + golf art; pause End Run -> main menu
+// Main Menu per REQ-029 — Continue (conditional) / New Game / Help, New Game -> course submenu, Help -> help overlay, no backdrop
 let mainMenuVisible = false;
 let mainMenuHover = null;
+let courseMenuVisible = false;
+let helpVisible = false;
+function hasRestorableSave() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (!d || d.version !== 1 || !d.courseId) return false;
+    return !!findCourseById(d.courseId);
+  } catch { return false; }
+}
+function renderMainMenuRootVisibility() {
+  const btn = document.getElementById('continue-button');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !hasRestorableSave());
+}
+function showMainMenuRoot() {
+  courseMenuVisible = false;
+  helpVisible = false;
+  const root = document.getElementById('main-menu-root');
+  const cm = document.getElementById('course-menu');
+  const hm = document.getElementById('help-overlay');
+  const mmc = document.querySelector('.main-menu-content');
+  if (mmc) mmc.classList.remove('hidden');
+  if (root) root.classList.remove('hidden');
+  if (cm) cm.classList.add('hidden');
+  if (hm) hm.classList.add('hidden');
+  // Reset course submenu inner states when returning to root
+  const ncc = document.getElementById('new-course-choices');
+  const ia = document.getElementById('import-area');
+  const cmf = document.getElementById('course-menu-footer');
+  const ie = document.getElementById('import-error');
+  if (ncc) ncc.classList.add('hidden');
+  if (ia) ia.classList.add('hidden');
+  if (cmf) cmf.classList.remove('hidden');
+  if (ie) { ie.textContent = ''; ie.classList.add('hidden'); }
+  renderMainMenuRootVisibility();
+}
+function showCourseMenu() {
+  courseMenuVisible = true;
+  helpVisible = false;
+  const root = document.getElementById('main-menu-root');
+  const cm = document.getElementById('course-menu');
+  const hm = document.getElementById('help-overlay');
+  const mmc = document.querySelector('.main-menu-content');
+  if (mmc) mmc.classList.remove('hidden');
+  if (root) root.classList.add('hidden');
+  if (cm) cm.classList.remove('hidden');
+  if (hm) hm.classList.add('hidden');
+  // Ensure inner choices hidden and footer visible when entering course menu
+  const ncc = document.getElementById('new-course-choices');
+  const ia = document.getElementById('import-area');
+  const cmf = document.getElementById('course-menu-footer');
+  const ie = document.getElementById('import-error');
+  if (ncc) ncc.classList.add('hidden');
+  if (ia) ia.classList.add('hidden');
+  if (cmf) cmf.classList.remove('hidden');
+  if (ie) { ie.textContent = ''; ie.classList.add('hidden'); }
+  try { renderCourseList(); } catch {}
+}
+function showHelpOverlay() {
+  helpVisible = true;
+  courseMenuVisible = false;
+  const hm = document.getElementById('help-overlay');
+  const mmc = document.querySelector('.main-menu-content');
+  if (mmc) mmc.classList.add('hidden');
+  if (hm) hm.classList.remove('hidden');
+}
+function handleContinue() {
+  if (!hasRestorableSave()) return false;
+  const data = loadProgress();
+  if (!data) return false;
+  // loadProgress already restored state via side-effects
+  mainMenuVisible = false;
+  courseMenuVisible = false;
+  helpVisible = false;
+  // loadProgress put us in correct course/level but we need to set up field/ball
+  try {
+    level = LEVELS[currentHoleIndex];
+    windStrength = level.field.strength ?? WIND_STRENGTH;
+    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+    syncModifiersToField();
+    createBall(level.tee);
+    bouncyRemaining = bouncyBallCount;
+    gameState = "AIMING";
+    if (winOverlay) winOverlay.classList.add("hidden");
+    resetHotbarCollapsed();
+    updateAttemptsUI();
+    updateHotbarUI();
+    syncMainMenu();
+    syncPauseOverlay();
+    // draw grass now
+    redrawBottom();
+  } catch (e) { console.warn('continue resume failed', e); return false; }
+  return true;
+}
 const HIGH_SCORE_KEY = "golfVectorField.highScore.v1";
 function getHighScore() {
   try {
@@ -504,17 +623,9 @@ function renderCourseList() {
     playBtn.appendChild(metaSpan);
     playBtn.title = `Play ${course.name} (${course.holeCount} holes)`;
     playBtn.addEventListener('click', () => handleCoursePlay(course.id));
-    const exportBtn = document.createElement('button');
-    exportBtn.className = 'course-export-button';
-    exportBtn.textContent = '⎙ Export';
-    exportBtn.title = 'Export course';
-    exportBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      exportCourseById(course.id);
-    });
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'course-delete-button';
-    deleteBtn.textContent = '🗑 Delete';
+    deleteBtn.textContent = '🗑';
     deleteBtn.title = 'Delete course';
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -537,13 +648,15 @@ function renderCourseList() {
         // Allow empty collection per updated REQ-031 — persist [] and show empty list
         saveCourses();
         renderCourseList();
+        try { renderMainMenuRootVisibility(); } catch {}
       }
     });
     row.appendChild(playBtn);
-    row.appendChild(exportBtn);
     row.appendChild(deleteBtn);
     list.appendChild(row);
   }
+  // After rendering, ensure Continue visibility is up to date (in case active course deleted)
+  try { renderMainMenuRootVisibility(); } catch {}
 }
 
 function handleCoursePlay(courseId) {
@@ -556,7 +669,7 @@ function handleCoursePlay(courseId) {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
-  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
@@ -627,7 +740,34 @@ function syncMainMenu() {
   if (el) {
     if (mainMenuVisible) {
       el.classList.remove("hidden");
-      try { renderCourseList(); } catch {}
+      // Sync sub-views (help-overlay is sibling of .main-menu-content)
+      const mmc = document.querySelector('.main-menu-content');
+      const root = document.getElementById('main-menu-root');
+      const cm = document.getElementById('course-menu');
+      const hm = document.getElementById('help-overlay');
+      if (helpVisible) {
+        if (mmc) mmc.classList.add('hidden');
+        if (hm) hm.classList.remove('hidden');
+      } else {
+        if (mmc) mmc.classList.remove('hidden');
+        if (hm) hm.classList.add('hidden');
+        if (courseMenuVisible) {
+          if (root) root.classList.add('hidden');
+          if (cm) cm.classList.remove('hidden');
+          // Ensure inner choices hidden when showing course menu via direct flag
+          const ncc2 = document.getElementById('new-course-choices');
+          const ia2 = document.getElementById('import-area');
+          const cmf2 = document.getElementById('course-menu-footer');
+          if (ncc2) ncc2.classList.add('hidden');
+          if (ia2) ia2.classList.add('hidden');
+          if (cmf2) cmf2.classList.remove('hidden');
+          try { renderCourseList(); } catch {}
+        } else {
+          if (root) root.classList.remove('hidden');
+          if (cm) cm.classList.add('hidden');
+          renderMainMenuRootVisibility();
+        }
+      }
     } else {
       el.classList.add("hidden");
     }
@@ -667,7 +807,7 @@ function endRun() {
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
-  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden");
   syncPauseOverlay(); syncMainMenu();
@@ -1176,7 +1316,7 @@ function returnToMainMenu() {
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
-  mainMenuVisible = true;
+  mainMenuVisible = true; courseMenuVisible = false; helpVisible = false;
   gameState = "AIMING";
   // Load hole 1 layout behind splash for next run (not visible until course play)
   try {
@@ -1531,7 +1671,7 @@ function init() {
   winTotalValue = document.getElementById("win-total-value");
   winTitle = document.getElementById("win-title");
   nextHoleButton = document.getElementById("next-hole-button");
-  continueButton = document.getElementById("continue-button");
+  continueButton = document.getElementById("continue-button-win") || document.getElementById("continue-button");
   hotbarEl = document.getElementById("hotbar");
   hotbarToggleEl = document.getElementById("hotbar-toggle");
   if (hotbarToggleEl) {
@@ -1543,7 +1683,29 @@ function init() {
     syncHotbarCollapsedUI();
   }
 
-  // REQ-031: course list UI handlers
+  // REQ-029 root menu handlers (Continue / New Game / Help) + course submenu + help
+  const continueBtn = document.getElementById('continue-button');
+  const newGameBtn = document.getElementById('new-game-button');
+  const helpBtn = document.getElementById('help-button');
+  const courseMenuBack = document.getElementById('course-menu-back');
+  const helpBackBtn = document.getElementById('help-back-button');
+  if (continueBtn) {
+    continueBtn.addEventListener('click', () => handleContinue());
+  }
+  if (newGameBtn) {
+    newGameBtn.addEventListener('click', () => showCourseMenu());
+  }
+  if (helpBtn) {
+    helpBtn.addEventListener('click', () => showHelpOverlay());
+  }
+  if (courseMenuBack) {
+    courseMenuBack.addEventListener('click', () => showMainMenuRoot());
+  }
+  if (helpBackBtn) {
+    helpBackBtn.addEventListener('click', () => showMainMenuRoot());
+  }
+
+  // REQ-031: course submenu UI handlers (inside #course-menu)
   const newCourseBtn = document.getElementById('new-course-button');
   const newCourseChoices = document.getElementById('new-course-choices');
   const newCourseCancel = document.getElementById('new-course-cancel');
@@ -1553,10 +1715,10 @@ function init() {
   const importConfirm = document.getElementById('import-confirm');
   const importCancel = document.getElementById('import-cancel');
   const importError = document.getElementById('import-error');
-  const mainMenuFooter = document.getElementById('main-menu-footer');
+  const courseMenuFooter = document.getElementById('course-menu-footer');
   if (newCourseBtn && newCourseChoices) {
     newCourseBtn.addEventListener('click', () => {
-      if (mainMenuFooter) mainMenuFooter.classList.add('hidden');
+      if (courseMenuFooter) courseMenuFooter.classList.add('hidden');
       newCourseChoices.classList.remove('hidden');
       if (importArea) importArea.classList.add('hidden');
     });
@@ -1564,7 +1726,7 @@ function init() {
   if (newCourseCancel && newCourseChoices) {
     newCourseCancel.addEventListener('click', () => {
       newCourseChoices.classList.add('hidden');
-      if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+      if (courseMenuFooter) courseMenuFooter.classList.remove('hidden');
     });
   }
   if (newCourseChoices) {
@@ -1574,7 +1736,7 @@ function init() {
         if ([3,9,18].includes(hc)) {
           createNewCourseWithHoles(hc);
           newCourseChoices.classList.add('hidden');
-          if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+          if (courseMenuFooter) courseMenuFooter.classList.remove('hidden');
         }
       });
     });
@@ -1583,7 +1745,7 @@ function init() {
     importCourseBtn.addEventListener('click', () => {
       importArea.classList.remove('hidden');
       if (newCourseChoices) newCourseChoices.classList.add('hidden');
-      if (mainMenuFooter) mainMenuFooter.classList.add('hidden');
+      if (courseMenuFooter) courseMenuFooter.classList.add('hidden');
       if (importError) { importError.textContent = ''; importError.classList.add('hidden'); }
       if (importInput) importInput.value = '';
     });
@@ -1591,7 +1753,7 @@ function init() {
   if (importCancel && importArea) {
     importCancel.addEventListener('click', () => {
       importArea.classList.add('hidden');
-      if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+      if (courseMenuFooter) courseMenuFooter.classList.remove('hidden');
       if (importError) { importError.textContent = ''; importError.classList.add('hidden'); }
     });
   }
@@ -1604,12 +1766,9 @@ function init() {
       }
       try {
         const imported = importCourse(b64);
-        // Do not carry over record from another game - reset bestTotal per REQ-031 notes
         imported.bestTotal = null;
-        // Check duplicate id
         const existing = findCourseById(imported.id);
         if (existing) {
-          // Generate new uuid to avoid collision
           try {
             imported.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});
           } catch {}
@@ -1619,7 +1778,7 @@ function init() {
         saveCourses();
         renderCourseList();
         importArea.classList.add('hidden');
-        if (mainMenuFooter) mainMenuFooter.classList.remove('hidden');
+        if (courseMenuFooter) courseMenuFooter.classList.remove('hidden');
         if (importError) { importError.textContent = ''; importError.classList.add('hidden'); }
         showToast('Course imported');
       } catch (e) {
@@ -1661,71 +1820,49 @@ function init() {
     syncWindFieldToShader();
     resizeWindOverlay();
   } catch (e) { console.warn('wind overlay init failed', e); }
-  // REQ-027: try resume from localStorage before new game init
-  let _loaded = null;
-  try { _loaded = loadProgress(); } catch {}
-  // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden)
+  // REQ-027: Manual Continue — do NOT auto-resume. Show main menu with Continue conditional.
+  // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden) — clear save and set hole behind menu
   const _secretHole = getSecretHoleFromURL();
   if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
-    // URL override takes precedence over saved progress for testing
-    if (_loaded) clearProgress();
+    try { clearProgress(); } catch {}
     currentHoleIndex = _secretHole - 1;
-    _loaded = null;
+  } else {
+    currentHoleIndex = 0;
   }
-  if (_loaded) {
-    // Resume saved run — re-create field/ball for saved hole, keep persisted counters/inventory
-    level = LEVELS[currentHoleIndex];
+  // Always show main menu entry (REQ-029) — Continue visibility handled via hasRestorableSave()
+  if (LEVELS.length) {
+    level = LEVELS[0];
     windStrength = level.field.strength ?? WIND_STRENGTH;
     createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
-    syncModifiersToField();
+    modifiers = []; syncModifiersToField();
     createBall(level.tee);
-    // aimAngle already restored via loadProgress
-    bouncyRemaining = bouncyBallCount;
-    gameState = "AIMING";
-    mainMenuVisible = false;
-    if (winOverlay) winOverlay.classList.add("hidden");
-    resetHotbarCollapsed();
-    updateAttemptsUI();
-    updateHotbarUI();
-    syncMainMenu();
-    syncPauseOverlay();
-    // rewardMenuVisible/rewardOffered already restored; hotbar and HUD now reflect saved state
+    const dx0 = level.hole.x - level.tee.x;
+    const dy0 = level.hole.y - level.tee.y;
+    setAimAngle(Math.atan2(dy0, dx0));
   } else {
-    // No saved run — show main menu (REQ-029) instead of immediately starting
-    // Do not call initLevel() which would show reward menu; just load hole 1 layout behind menu
-    currentHoleIndex = 0;
-    if (LEVELS.length) {
-      level = LEVELS[0];
-      windStrength = level.field.strength ?? WIND_STRENGTH;
-      createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
-      modifiers = []; syncModifiersToField();
-      createBall(level.tee);
-      const dx0 = level.hole.x - level.tee.x;
-      const dy0 = level.hole.y - level.tee.y;
-      setAimAngle(Math.atan2(dy0, dx0));
-    } else {
-      // No courses yet (empty after delete per REQ-031) — dummy level hidden behind main menu splash
-      level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
-      createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
-      modifiers = []; syncModifiersToField();
-      createBall(level.tee);
-      setAimAngle(0);
-    }
-    bouncyRemaining = bouncyBallCount;
-    gameState = "AIMING";
-    mainMenuVisible = true;
-    pauseMenuVisible = false; rewardMenuVisible = false;
-    if (winOverlay) winOverlay.classList.add("hidden");
-    // Ensure run state is clean (no attempts) but with one of each modifier per REQ-020
-    holeAttempts = 0; totalAttempts = 0; attempts = 0;
-    supply = { amplify: 1, nullify: 1, flip: 1 };
-    freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
-    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
-    secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false; rewardOffered = []; rewardRerolled = false;
-    resetHotbarCollapsed();
-    updateAttemptsUI(); updateHotbarUI(); updateForceBar();
-    syncMainMenu(); syncPauseOverlay();
+    level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
+    createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field.sources, level.field.sinks, level.field.doublets, level.field.vortexes);
+    modifiers = []; syncModifiersToField();
+    createBall(level.tee);
+    setAimAngle(0);
   }
+  bouncyRemaining = bouncyBallCount;
+  gameState = "AIMING";
+  mainMenuVisible = true;
+  courseMenuVisible = false;
+  helpVisible = false;
+  pauseMenuVisible = false; rewardMenuVisible = false;
+  if (winOverlay) winOverlay.classList.add("hidden");
+  holeAttempts = 0; totalAttempts = 0; attempts = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1 };
+  freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShots: 0, areaUp: 0, bouncyBall: 0 };
+  secretRewardCounter = 0; rewardPending = false; firstRewardClaimed = false; rewardOffered = []; rewardRerolled = false;
+  resetHotbarCollapsed();
+  updateAttemptsUI(); updateHotbarUI(); updateForceBar();
+  syncMainMenu(); syncPauseOverlay();
+  // Hide loading after splash is ready (also handled via image onload)
+  try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch {}
   // Secret: react to hash changes for direct hole jumps
   window.addEventListener("hashchange", () => {
     const h = getSecretHoleFromURL();
@@ -2354,7 +2491,7 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, '__pauseMenuVisible', { get: () => pauseMenuVisible, set: (v) => { pauseMenuVisible = !!v; } });
   Object.defineProperty(window, 'rewardChosenCounts', { get: () => ({...rewardChosenCounts}), set: (v) => setRewardChosenCounts(v) });
   Object.defineProperty(window, '__rewardChosenCounts', { get: () => ({...rewardChosenCounts}), set: (v) => setRewardChosenCounts(v) });
-  // REQ-029: expose main menu + high score helpers
+  // REQ-029: expose main menu + high score helpers + new menu helpers
   window.__getHighScore = getHighScore;
   window.__setHighScore = setHighScore;
   window.__clearHighScore = clearHighScore;
@@ -2363,6 +2500,17 @@ if (typeof window !== 'undefined') {
   window.__syncMainMenu = syncMainMenu;
   window.__startNewGameFromMain = startNewGameFromMain;
   window.__endRun = endRun;
+  window.__hasRestorableSave = hasRestorableSave;
+  window.__handleContinue = handleContinue;
+  window.__showCourseMenu = showCourseMenu;
+  window.__showHelpOverlay = showHelpOverlay;
+  window.__showMainMenuRoot = showMainMenuRoot;
+  window.__renderMainMenuRootVisibility = renderMainMenuRootVisibility;
+  window.hasRestorableSave = hasRestorableSave;
+  window.handleContinue = handleContinue;
+  window.showCourseMenu = showCourseMenu;
+  window.showHelpOverlay = showHelpOverlay;
+  window.showMainMenuRoot = showMainMenuRoot;
   window.getHighScore = getHighScore;
   window.isMainMenuVisible = isMainMenuVisible;
   window.startNewGameFromMain = startNewGameFromMain;
@@ -2372,6 +2520,10 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'mainMenuVisible', { get: () => mainMenuVisible, set: (v) => { mainMenuVisible = !!v; } });
   Object.defineProperty(window, '__mainMenuVisible', { get: () => mainMenuVisible, set: (v) => { mainMenuVisible = !!v; } });
   Object.defineProperty(window, 'HIGH_SCORE_KEY', { get: () => HIGH_SCORE_KEY });
+  Object.defineProperty(window, 'courseMenuVisible', { get: () => courseMenuVisible, set: (v) => { courseMenuVisible = !!v; } });
+  Object.defineProperty(window, '__courseMenuVisible', { get: () => courseMenuVisible, set: (v) => { courseMenuVisible = !!v; } });
+  Object.defineProperty(window, 'helpVisible', { get: () => helpVisible, set: (v) => { helpVisible = !!v; } });
+  Object.defineProperty(window, '__helpVisible', { get: () => helpVisible, set: (v) => { helpVisible = !!v; } });
   // REQ-015 collapsible hotbar helpers
   window.__isHotbarCollapsed = isHotbarCollapsedState;
   window.__toggleHotbar = toggleHotbar;
@@ -2386,6 +2538,9 @@ if (typeof window !== 'undefined') {
   window.__handleNextHole = handleNextHole;
   window.resetGameAfterWin = resetGameAfterWin;
   window.__resetGameAfterWin = resetGameAfterWin;
+  window.__hideLoadingScreen = hideLoadingScreen;
+  window.hideLoadingScreen = hideLoadingScreen;
+  window.__maybeHideLoadingAfterSplash = maybeHideLoadingAfterSplash;
 }
 
 // Auto-init when loaded as module via script tag

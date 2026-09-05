@@ -4,22 +4,15 @@
 
 body {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   font-family: system-ui, -apple-system, sans-serif;
-  background: #1a1a1a;
+  background: #000;
   color: #eee;
   margin: 0;
-  padding: 20px;
+  padding: 0;
   min-height: 100vh;
-}
-
-h1 {
-  margin: 10px 0 8px;
-  font-size: 1.8rem;
-  letter-spacing: 0.02em;
-  flex-shrink: 0;
+  overflow: hidden;
 }
 
 #game-container {
@@ -64,6 +57,19 @@ h1 {
   pointer-events: auto;
 }
 
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  color: #fff;
+  font: 600 18px system-ui, sans-serif;
+  z-index: 100;
+}
+#loading-screen.hidden { display: none !important; }
+
 #win-overlay {
   position: absolute;
   inset: 0;
@@ -101,7 +107,6 @@ h1 {
   margin: 0 0 8px;
   font: 700 22px system-ui, sans-serif;
   color: white;
-  /* emulate canvas stroke rgba(0,0,0,0.75) 5px for "Choose an Upgrade" */
   -webkit-text-stroke: 5px rgba(0,0,0,0.75);
   paint-order: stroke fill;
   text-shadow: 0 1px 6px rgba(0,0,0,0.35);
@@ -112,14 +117,13 @@ h1 {
   line-height: 1;
   color: #FFD700;
   margin: 0 0 8px;
-  /* dark outline for contrast on green, like canvas stroke */
   -webkit-text-stroke: 3px rgba(0,0,0,0.65);
   paint-order: stroke fill;
   text-shadow: 0 2px 10px rgba(0,0,0,0.35);
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
 }
 
-#next-hole-button, #continue-button {
+#next-hole-button, #continue-button-win {
   margin-top: 12px;
   padding: 8px 20px;
   font-size: 1rem;
@@ -132,11 +136,11 @@ h1 {
   transition: background 0.15s;
 }
 
-#next-hole-button:hover, #continue-button:hover {
+#next-hole-button:hover, #continue-button-win:hover {
   background: #27ae60;
 }
 
-#next-hole-button.hidden, #continue-button.hidden {
+#next-hole-button.hidden, #continue-button-win.hidden {
   display: none;
 }
 
@@ -194,7 +198,7 @@ h1 {
   paint-order: stroke fill;
 }
 #resume-button:hover { background: rgba(255,255,255,0.22); }
-#new-game-button, #end-run-button {
+#end-run-button {
   padding: 10px 24px;
   font: 700 14px system-ui, sans-serif;
   color: white;
@@ -207,7 +211,7 @@ h1 {
   -webkit-text-stroke: 2px rgba(0,0,0,0.65);
   paint-order: stroke fill;
 }
-#new-game-button:hover, #end-run-button:hover { background: rgba(231,76,60,0.38); }
+#end-run-button:hover { background: rgba(231,76,60,0.38); }
 
 #main-menu-overlay {
   position: absolute;
@@ -217,7 +221,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,0.35);
+  background: transparent;
   border-radius: 8px;
   z-index: 12;
 }
@@ -225,55 +229,53 @@ h1 {
 .main-menu-content {
   background: transparent;
   color: white;
-  padding: 24px 20px;
+  padding: 16px 20px;
   border-radius: 10px;
   text-align: center;
   box-shadow: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   position: relative;
   max-width: 90%;
   max-height: 90%;
   overflow: hidden;
 }
-.main-menu-content h2 {
-  margin: 0 0 4px;
-  font: 700 22px system-ui, sans-serif;
-  color: white;
-  -webkit-text-stroke: 5px rgba(0,0,0,0.75);
-  paint-order: stroke fill;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+#main-menu-root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
 }
-#main-new-game-button {
+.main-menu-content.hidden { display: none !important; }
+#main-menu-root.hidden { display: none !important; }
+.main-menu-button {
+  min-width: 180px;
   padding: 12px 28px;
   font: 700 14px system-ui, sans-serif;
   color: white;
-  background: rgba(46,204,113,0.28);
-  border: 2px solid rgba(46,204,113,0.9);
+  background: #2ecc71;
+  border: 2px solid #27ae60;
   border-radius: 8px;
   cursor: pointer;
-  min-width: 160px;
   transition: background 0.15s;
-  -webkit-text-stroke: 2px rgba(0,0,0,0.65);
-  paint-order: stroke fill;
 }
-#main-new-game-button:hover { background: rgba(46,204,113,0.38); }
-.main-menu-content .high-score {
-  margin: 6px 0 0;
-  font: 600 13px system-ui, sans-serif;
-  color: rgba(255,255,255,0.95);
-  -webkit-text-stroke: 3px rgba(0,0,0,0.65);
-  paint-order: stroke fill;
+.main-menu-button:hover { background: #27ae60; }
+.main-menu-button.hidden { display: none !important; }
+#continue-button.hidden { display: none !important; }
+
+#course-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
 }
-.main-menu-content .subtitle {
-  margin: 0;
-  font: 600 13px system-ui, sans-serif;
-  color: rgba(255,255,255,0.85);
-  -webkit-text-stroke: 2px rgba(0,0,0,0.55);
-  paint-order: stroke fill;
-}
+#course-menu.hidden { display: none !important; }
+
 #course-list {
   width: 100%;
   max-width: 360px;
@@ -361,7 +363,8 @@ h1 {
   paint-order: stroke fill;
 }
 .course-delete-button:hover { background: #c0392b; }
-#main-menu-footer {
+
+#course-menu-footer {
   display: flex;
   gap: 10px;
   width: 100%;
@@ -373,21 +376,29 @@ h1 {
   padding: 10px 14px;
   font: 700 12px system-ui, sans-serif;
   color: white;
+  background: #2ecc71;
+  border: 2px solid #27ae60;
   border-radius: 8px;
   cursor: pointer;
   -webkit-text-stroke: 1.5px rgba(0,0,0,0.55);
   paint-order: stroke fill;
+  transition: background 0.15s;
 }
-#new-course-button {
-  background: rgba(46,204,113,0.28);
-  border: 2px solid rgba(46,204,113,0.9);
+#new-course-button:hover, #import-course-button:hover { background: #27ae60; }
+
+#course-menu-back, #help-back-button {
+  padding: 8px 16px;
+  font: 700 12px system-ui, sans-serif;
+  color: white;
+  background: #2ecc71;
+  border: 2px solid #27ae60;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.55);
+  paint-order: stroke fill;
 }
-#new-course-button:hover { background: rgba(46,204,113,0.38); }
-#import-course-button {
-  background: rgba(255,255,255,0.12);
-  border: 2px solid rgba(255,255,255,0.85);
-}
-#import-course-button:hover { background: rgba(255,255,255,0.22); }
+#course-menu-back:hover, #help-back-button:hover { background: #27ae60; }
+
 #new-course-choices, #import-area {
   width: 100%;
   max-width: 360px;
@@ -402,16 +413,16 @@ h1 {
   padding: 8px 12px;
   font: 600 12px system-ui, sans-serif;
   color: white;
-  background: rgba(255,255,255,0.10);
-  border: 1px solid rgba(255,255,255,0.25);
+  background: #2ecc71;
+  border: 2px solid #27ae60;
   border-radius: 6px;
   cursor: pointer;
 }
 #new-course-choices button[data-holes] {
-  background: rgba(46,204,113,0.18);
-  border-color: rgba(46,204,113,0.7);
+  background: #2ecc71;
+  border-color: #27ae60;
 }
-#new-course-choices button[data-holes]:hover { background: rgba(46,204,113,0.28); }
+#new-course-choices button[data-holes]:hover { background: #27ae60; }
 #import-input {
   width: 100%;
   min-height: 64px;
@@ -438,6 +449,60 @@ h1 {
   -webkit-text-stroke: 1px rgba(0,0,0,0.6);
   paint-order: stroke fill;
 }
+
+#help-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-radius: 8px;
+  z-index: 13;
+}
+#help-overlay.hidden { display: none !important; }
+.help-card {
+  max-width: 90%;
+  max-height: 85%;
+  width: min(420px, 90%);
+  min-width: 280px;
+  min-height: 200px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(0,0,0,0.75);
+  color: white;
+  padding: 16px 18px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  scrollbar-width: thin;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+.help-card h3, .help-card h4 {
+  margin: 0;
+  font: 700 14px system-ui, sans-serif;
+  color: white;
+}
+.help-rules {
+  margin: 0;
+  font: 500 12px system-ui, sans-serif;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.92);
+}
+.help-controls {
+  margin: 0;
+  padding-left: 18px;
+  font: 500 11px system-ui, sans-serif;
+  line-height: 1.5;
+  color: rgba(255,255,255,0.92);
+}
+.help-controls li { margin: 2px 0; }
+
 #toast {
   position: absolute;
   bottom: 20px;
@@ -611,15 +676,4 @@ h1 {
 }
 #hotbar.collapsed #hotbar-toggle {
   background: rgba(255,255,255,0.12);
-}
-
-#instructions {
-  margin-top: 12px;
-  font-size: 0.9rem;
-  opacity: 0.9;
-  text-align: center;
-}
-
-#instructions p {
-  margin: 4px 0;
 }

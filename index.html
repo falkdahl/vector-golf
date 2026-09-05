@@ -33,7 +33,7 @@
         <p>Hole <span id="win-hole-value">1</span>/<span id="win-hole-total">3</span> - Attempts this hole: <span
             id="win-attempts-value">0</span>, Total: <span id="win-total-value">0</span></p>
         <button id="next-hole-button">Next</button>
-        <button id="continue-button" class="hidden">Continue</button>
+        <button id="continue-button-win" class="hidden">Continue</button>
         <p class="win-hint">Press R to Continue</p>
       </div>
     </div>
@@ -55,36 +55,56 @@
     </div>
     <div id="main-menu-overlay" class="hidden">
       <div class="main-menu-content">
-        <p class="subtitle">Choose a Course</p>
-        <div id="course-list" class="course-list"></div>
-        <div id="main-menu-footer">
-          <button id="new-course-button">+ New Course</button>
-          <button id="import-course-button">⤵ Import Course</button>
+        <div id="main-menu-root">
+          <button id="continue-button" class="main-menu-button hidden">Continue</button>
+          <button id="new-game-button" class="main-menu-button">New Game</button>
+          <button id="help-button" class="main-menu-button">Help</button>
         </div>
-        <div id="new-course-choices" class="hidden">
-          <p>Choose holes:</p>
-          <button data-holes="3">3 Holes</button>
-          <button data-holes="9">9 Holes</button>
-          <button data-holes="18">18 Holes</button>
-          <button id="new-course-cancel">Cancel</button>
+        <div id="course-menu" class="hidden">
+          <div id="course-list" class="course-list"></div>
+          <div id="course-menu-footer">
+            <button id="new-course-button">New Course</button>
+            <button id="import-course-button">Import</button>
+          </div>
+          <div id="new-course-choices" class="hidden">
+            <p>Choose holes:</p>
+            <button data-holes="3">3 Holes</button>
+            <button data-holes="9">9 Holes</button>
+            <button data-holes="18">18 Holes</button>
+            <button id="new-course-cancel">Cancel</button>
+          </div>
+          <div id="import-area" class="hidden">
+            <p class="import-help">Paste the string exported from another game</p>
+            <textarea id="import-input" placeholder="Paste base64 string here"></textarea>
+            <button id="import-confirm">Import</button>
+            <button id="import-cancel">Cancel</button>
+            <p id="import-error" class="hidden"></p>
+          </div>
+          <button id="course-menu-back">Back</button>
         </div>
-        <div id="import-area" class="hidden">
-          <p class="import-help">Paste the string exported from another game</p>
-          <textarea id="import-input" placeholder="Paste base64 string here"></textarea>
-          <button id="import-confirm">Import</button>
-          <button id="import-cancel">Cancel</button>
-          <p id="import-error" class="hidden"></p>
+      </div>
+      <div id="help-overlay" class="hidden">
+        <div class="help-card">
+          <h3>How to Play</h3>
+          <p class="help-rules">Get the ball into the hole in as few attempts as possible. Wind vectors push the ball while it flies; wind varies per hole via a vector field. Place modifiers (Amplify, Nullify, Flip) before shooting to alter wind locally. Each hole tracks attempts; total across the course is your score. Low record per course is saved.</p>
+          <h4>Controls</h4>
+          <ul class="help-controls">
+            <li>Arrow keys — Aim</li>
+            <li>Space — Hold to charge power, release to shoot</li>
+            <li>Click — Place selected modifier</li>
+            <li>Right-click — Remove modifier</li>
+            <li>1 / 2 / 3 — Select Amplify / Nullify / Flip</li>
+            <li>H — Toggle wind visualization</li>
+            <li>R — Reset ball</li>
+            <li>Escape — Pause</li>
+          </ul>
+          <button id="help-back-button">Back</button>
         </div>
       </div>
     </div>
     <div id="toast" class="hidden">copied to clipboard</div>
   </div>
-
-  <div id="instructions">
-    <p><strong>Arrows</strong>: Aim &nbsp;|&nbsp; <strong>Space</strong>: Shoot &nbsp;|&nbsp; <strong>R</strong>: Reset
-      &nbsp;|&nbsp; <strong>H</strong>: Toggle Wind &nbsp;|&nbsp; <strong>Click</strong>: Place Modifier &nbsp;|&nbsp;
-      <strong>Right-Click</strong>: Remove &nbsp;|&nbsp; <strong>Escape</strong>: Pause Menu</p>
-  </div>
+  <div id="loading-screen">Loading...</div>
 
   <script type="module" src="src/main.js"></script>
 </body>
