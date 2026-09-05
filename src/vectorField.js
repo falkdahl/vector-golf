@@ -63,16 +63,17 @@ function mulberry32(a) {
 }
 
 function sampleOnEdge(width, height, rand) {
-  // Uniform along perimeter, exactly on edge (x==0||x==width||y==0||y==height)
+  // Uniform along perimeter, slightly outside (20-60px outside, not on edge) so wind doesn't converge at edge point
+  const outside = Math.floor(rand() * 41) + 20; // 20-60
   const side = Math.floor(rand() * 4);
-  if (side === 0) { // left x=0
-    return { x: 0, y: rand() * height };
-  } else if (side === 1) { // right x=width
-    return { x: width, y: rand() * height };
-  } else if (side === 2) { // top y=0
-    return { x: rand() * width, y: 0 };
-  } else { // bottom y=height
-    return { x: rand() * width, y: height };
+  if (side === 0) { // left x=-outside
+    return { x: -outside, y: rand() * height };
+  } else if (side === 1) { // right x=width+outside
+    return { x: width + outside, y: rand() * height };
+  } else if (side === 2) { // top y=-outside
+    return { x: rand() * width, y: -outside };
+  } else { // bottom y=height+outside
+    return { x: rand() * width, y: height + outside };
   }
 }
 
@@ -165,7 +166,8 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
       if (typeof explicitSourcePositions[i].s === 'number') sigma = explicitSourcePositions[i].s;
       else if (typeof explicitSourcePositions[i].sigma === 'number') sigma = explicitSourcePositions[i].sigma;
     } else if (isLevel1EdgeCase && i === 0) {
-      pos = { x: 0, y: rand() * canvasH };
+      const outside = Math.floor(rand() * 41) + 20;
+      pos = { x: -outside, y: rand() * canvasH };
     } else {
       pos = sampleOnEdge(canvasW, canvasH, rand);
     }
@@ -182,7 +184,8 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
       if (typeof explicitSinkPositions[i].s === 'number') sigma = explicitSinkPositions[i].s;
       else if (typeof explicitSinkPositions[i].sigma === 'number') sigma = explicitSinkPositions[i].sigma;
     } else if (isLevel1EdgeCase && i === 0) {
-      pos = { x: canvasW, y: rand() * canvasH };
+      const outside = Math.floor(rand() * 41) + 20;
+      pos = { x: canvasW + outside, y: rand() * canvasH };
     } else {
       pos = sampleOnEdge(canvasW, canvasH, rand);
     }

@@ -231,13 +231,14 @@ function generateFairwayShape(tier, tee, hole, rand) {
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-function edgePointClosestTo(target, width, height) {
-  // Find the point on the canvas edge closest to target
+function edgePointClosestTo(target, width, height, rand) {
+  // Find the point slightly outside the canvas closest to target (20-60px outside, not on edge)
+  const outside = rand ? Math.floor(rand() * 41) + 20 : 35; // 20-60, default 35 if no rand
   const candidates = [
-    { x: 0, y: clamp(target.y, 0, height) },
-    { x: width, y: clamp(target.y, 0, height) },
-    { x: clamp(target.x, 0, width), y: 0 },
-    { x: clamp(target.x, 0, width), y: height },
+    { x: -outside, y: clamp(target.y, 0, height) },
+    { x: width + outside, y: clamp(target.y, 0, height) },
+    { x: clamp(target.x, 0, width), y: -outside },
+    { x: clamp(target.x, 0, width), y: height + outside },
   ];
   let best = candidates[0];
   let bestDist = Math.hypot(best.x - target.x, best.y - target.y);
@@ -249,10 +250,11 @@ function edgePointClosestTo(target, width, height) {
 }
 
 function sampleOnEdgeForFree(edge, rand, width, height) {
-  if (edge === 'left') return { x: 0, y: Math.floor(rand() * (height - 40)) + 20 };
-  if (edge === 'right') return { x: width, y: Math.floor(rand() * (height - 40)) + 20 };
-  if (edge === 'top') return { x: Math.floor(rand() * (width - 40)) + 20, y: 0 };
-  return { x: Math.floor(rand() * (width - 40)) + 20, y: height };
+  const outside = Math.floor(rand() * 41) + 20; // 20-60 outside
+  if (edge === 'left') return { x: -outside, y: Math.floor(rand() * (height - 40)) + 20 };
+  if (edge === 'right') return { x: width + outside, y: Math.floor(rand() * (height - 40)) + 20 };
+  if (edge === 'top') return { x: Math.floor(rand() * (width - 40)) + 20, y: -outside };
+  return { x: Math.floor(rand() * (width - 40)) + 20, y: height + outside };
 }
 
 function getClosestEdgeName(target, width, height) {
@@ -269,6 +271,11 @@ function getClosestEdgeName(target, width, height) {
 }
 
 function getEdgeName(pos, width, height) {
+  if (pos.x < 0) return 'left';
+  if (pos.x > width) return 'right';
+  if (pos.y < 0) return 'top';
+  if (pos.y > height) return 'bottom';
+  // fallback for exact edge (should not happen now, but keep)
   if (pos.x === 0) return 'left';
   if (pos.x === width) return 'right';
   if (pos.y === 0) return 'top';
@@ -502,8 +509,8 @@ function _generateLevelsInternal(seed = 42, count = 18) {
     let sinkPositions = [];
     if (tier === 'hard' && flippedHard) {
       // Flipped: sink near tee, source near green
-      const sinkNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H);
-      const sourceNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H);
+      const sinkNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
+      const sourceNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H, rand);
       // Find free edges (the two edges not containing these points)
       const getEdge = (pos) => {
         if (pos.x === 0) return 'left';
@@ -530,8 +537,8 @@ function _generateLevelsInternal(seed = 42, count = 18) {
       sinkPositions = [sinkNearTee, extraSink];
     } else if (tier === 'hard') {
       // Hard not flipped: source near tee, sink near green, plus extra source/sink on free edges
-      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H);
-      const sinkNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H);
+      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
+      const sinkNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H, rand);
       const getEdge = (pos) => {
         if (pos.x === 0) return 'left';
         if (pos.x === LOGICAL_W) return 'right';
@@ -557,7 +564,7 @@ function _generateLevelsInternal(seed = 42, count = 18) {
       sinkPositions = [sinkNearGreen, extraSink];
     } else if (tier === 'medium' && extraMediumSink) {
       // Medium with extra sink: both sinks on free edges NOT closest to green (REQ-034/REQ-003 updated)
-      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H);
+      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
       const greenClosestEdge = getClosestEdgeName(hole, LOGICAL_W, LOGICAL_H);
       const sourceEdge = getEdgeName(sourceNearTee, LOGICAL_W, LOGICAL_H);
       const allEdges = ['left','right','top','bottom'];
@@ -580,7 +587,7 @@ function _generateLevelsInternal(seed = 42, count = 18) {
       sinkPositions = [sink1, sink2];
     } else {
       // Easy or medium without extra: single sink on free edge NOT closest to green (REQ-034/REQ-003/REQ-010)
-      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H);
+      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
       const greenClosestEdge = getClosestEdgeName(hole, LOGICAL_W, LOGICAL_H);
       const sourceEdge = getEdgeName(sourceNearTee, LOGICAL_W, LOGICAL_H);
       const allEdges = ['left','right','top','bottom'];
