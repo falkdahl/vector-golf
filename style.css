@@ -444,7 +444,6 @@ body {
 #staged-course-list {
   overflow-x: visible;
   padding-right: 52px;
-  margin-right: -52px;
 }
 .course-row.locked {
   opacity: 0.55;
