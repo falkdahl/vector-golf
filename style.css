@@ -138,7 +138,7 @@ body {
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
 }
 
-#next-hole-button, #continue-button-win {
+#next-hole-button, #continue-button-win, #gameover-return-button {
   margin-top: 12px;
   padding: 8px 20px;
   font-size: 1rem;
@@ -151,11 +151,11 @@ body {
   transition: background 0.15s;
 }
 
-#next-hole-button:hover, #continue-button-win:hover {
+#next-hole-button:hover, #continue-button-win:hover, #gameover-return-button:hover {
   background: #0f3d1a;
 }
 
-#next-hole-button.hidden, #continue-button-win.hidden {
+#next-hole-button.hidden, #continue-button-win.hidden, #gameover-return-button.hidden {
   display: none;
 }
 

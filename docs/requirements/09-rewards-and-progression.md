@@ -10,7 +10,7 @@
 - Hole `hole={x,y,radius:14}` (12-16 tunable, black `fill #111` rim `2px #333`, optional flag). Position per `08-level-generation.md` (right side).
 - **Win check every tick** (continuous, not at rest): `hypot(ball.pos-hole) < hole.radius + BALL_RADIUS` (any edge grazing counts, `dist < …` not `≤`).
   - On **non-final hole** win: **do NOT show Victory screen**. Auto-advance immediately: `vel=0`, `isMoving=false`, freeze, then consume spatial supply per `07-modifiers.md` §7, `modifiers=[]` via `syncModifiersToField()`, `currentHoleIndex++`, `holeAttempts=0` (keep `totalAttempts`), `isFreeShotActive=false`, regenerate `treasure` uncollected, `loadLevel(next)`, `gameState='AIMING'`, `saveProgress()`. No `WIN` state, no overlay, no `Next` button. HUD `Hole: N/M` updates (`M=LEVELS.length`).
-  - On **final hole** win: `vel=0`, `isMoving=false`, freeze over hole, `gameState='WIN'`, show **Victory** overlay centered in canvas (DOM): title `Victory` / `Game Complete!`, text `Attempts this hole: X, Total: Y` (per `05-input-and-states.md`), single button `Continue`/`Back to Menu` → `clearProgress()` + `mainMenuVisible=true`. Victory is **only** for the last hole of the course.
+  - On **final hole** win: `vel=0`, `isMoving=false`, freeze over hole, `gameState='WIN'`, show **Victory** overlay centered in canvas (DOM): `★★★` three stars + title `Course Completed!`, text `Total: Y` (per `05-input-and-states.md`, no hole/attempts-this-hole info), green `Continue` button with `Press R to continue` → `R` or `Continue` → `clearProgress()` removing active game + `mainMenuVisible=true`. Victory is **only** for the last hole of the course.
 
 ## 2. Hole Advancement
 

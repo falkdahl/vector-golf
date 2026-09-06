@@ -1402,21 +1402,21 @@ function initLevel() {
   }
 }
 
+function getTotalHoles() {
+  return activeCourse ? activeCourse.holes.length : LEVELS.length;
+}
 function updateAttemptsUI() {
   attempts = totalAttempts; // keep alias synced
+  const totalHoles = getTotalHoles();
   if (winHoleValue) winHoleValue.textContent = String(currentHoleIndex + 1);
-  if (winHoleTotal) winHoleTotal.textContent = String(LEVELS.length);
+  if (winHoleTotal) winHoleTotal.textContent = String(totalHoles);
   if (winAttemptsValue) winAttemptsValue.textContent = String(holeAttempts);
   if (winTotalValue) winTotalValue.textContent = String(totalAttempts);
   if (winTitle) {
-    if (gameState === "WIN" && currentHoleIndex === LEVELS.length - 1) {
-      winTitle.textContent = "Game Complete!";
-    } else {
-      winTitle.textContent = "Victory";
-    }
+    winTitle.textContent = "Course Completed!";
   }
   if (nextHoleButton) {
-    const hasMoreHoles = currentHoleIndex < LEVELS.length - 1;
+    const hasMoreHoles = currentHoleIndex < totalHoles - 1;
     if (gameState === "WIN" && hasMoreHoles) {
       nextHoleButton.classList.remove("hidden");
       nextHoleButton.textContent = "Next";
@@ -1425,7 +1425,7 @@ function updateAttemptsUI() {
     }
   }
   if (continueButton) {
-    const isFinalWin = gameState === "WIN" && currentHoleIndex === LEVELS.length - 1;
+    const isFinalWin = gameState === "WIN" && currentHoleIndex === totalHoles - 1;
     if (isFinalWin) {
       continueButton.classList.remove("hidden");
       continueButton.textContent = "Continue";
@@ -1509,9 +1509,6 @@ function showGameOver() {
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   if (gameoverOverlay) {
     gameoverOverlay.classList.remove("hidden");
-    if (gameoverHoleValue) gameoverHoleValue.textContent = String(currentHoleIndex + 1);
-    if (gameoverHoleTotal) gameoverHoleTotal.textContent = String(LEVELS.length);
-    if (gameoverTotalValue) gameoverTotalValue.textContent = String(totalAttempts);
     if (gameoverTitle) gameoverTitle.textContent = "Game Over";
   }
   // hide pause and reward if any
@@ -1661,7 +1658,7 @@ function resetBall() {
 }
 
 function advanceHole() {
-  if (currentHoleIndex < LEVELS.length - 1) {
+  if (currentHoleIndex < getTotalHoles() - 1) {
     // REQ-035: consume any placed modifiers from supply on level win before clearing for next hole
     consumePlacedModifiersFromSupply();
     clearFreeShotGlow();
@@ -1854,7 +1851,7 @@ function checkWin() {
   const dist = Math.hypot(ball.pos.x - level.hole.x, ball.pos.y - level.hole.y);
   // Victory when ball touches any part of black circle per new requirement (ground projection)
   if (dist < level.hole.radius + BALL_RADIUS) {
-    const isFinalHole = currentHoleIndex === LEVELS.length - 1;
+    const isFinalHole = currentHoleIndex === getTotalHoles() - 1;
     if (!isFinalHole) {
       // Intermediate hole: do NOT show Victory screen — auto-advance to next hole
       ball.vel.x = 0;
@@ -2395,9 +2392,7 @@ function init() {
           // Use showGameOver path without resetting
           if (gameoverOverlay) {
             gameoverOverlay.classList.remove("hidden");
-            if (gameoverHoleValue) gameoverHoleValue.textContent = String(currentHoleIndex + 1);
-            if (gameoverHoleTotal) gameoverHoleTotal.textContent = String(LEVELS.length);
-            if (gameoverTotalValue) gameoverTotalValue.textContent = String(totalAttempts);
+            if (gameoverTitle) gameoverTitle.textContent = "Game Over";
           }
         } else {
           gameState = "AIMING";

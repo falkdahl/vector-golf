@@ -75,7 +75,7 @@ Visualization on `game` canvas (below wind overlay):
 
 - When a hole is beaten (`WIN` → `handleNextHole`/`advanceHole` before clearing), iterate **snapshot** of `modifiers` (spatial only) and for each `m`: `supply[m.type]=Math.max(0, supply[m.type]-1)` (only `amplify`/`nullify`/`flip`). Clamped, exactly once per win (guard against double `handleNextHole`), not on death/manual removal/drag/`End Run`.
 - `freeShot` is **not** consumed on win; it is only consumed on free launch per §5.2. If `isFreeShotActive` was armed but win occurs before launch, it remains armed into next hole until used or cleared.
-- Then `modifiers=[]; syncModifiersToField(); updateHotbarUI(); saveProgress();` For non-final holes next hole's hotbar reflects reduced spatial supply (type that hit `0` becomes disabled until reward replenishes). For final hole `Game Complete` → `clearProgress()` resets to `{1,1,1,0}` (consumption moot before reset).
+- Then `modifiers=[]; syncModifiersToField(); updateHotbarUI(); saveProgress();` For non-final holes next hole's hotbar reflects reduced spatial supply (type that hit `0` becomes disabled until reward replenishes). For final hole `Course Completed!` → `clearProgress()` resets to `{1,1,1,0}` (consumption moot before reset).
 
 ## Acceptance Criteria
 

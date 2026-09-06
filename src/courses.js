@@ -1,4 +1,4 @@
-import { generateLevels } from "./levels.js";
+import { generateLevels, LEVELS, LEVEL } from "./levels.js";
 
 export const COURSES_KEY = "golfVectorField.courses.v1";
 
@@ -44,9 +44,27 @@ export function generateCourse(holeCount = 18, seed = Date.now(), options = {}) 
   } else if (typeof options === 'string' && ['easy','medium','hard'].includes(options)) {
     difficulty = options;
   }
+  // Preserve global LEVELS / LEVEL which generateLevels mutates; generateCourse must not affect active game
+  let prevLevelsCopy = null;
+  let prevLevelCopy = null;
+  try {
+    prevLevelsCopy = JSON.parse(JSON.stringify(LEVELS));
+    prevLevelCopy = JSON.parse(JSON.stringify(LEVEL));
+  } catch {}
   const holes = (holeCount === 3 && difficulty) ? generateLevels(seed, holeCount, { difficulty }) : generateLevels(seed, holeCount);
   // Deep clone holes to avoid reference sharing with global LEVELS
   const holesCopy = JSON.parse(JSON.stringify(holes));
+  // Restore global LEVELS / LEVEL to not pollute active course (prevents 3-hole win from becoming 6-hole LEVELS)
+  try {
+    if (prevLevelsCopy) {
+      LEVELS.length = 0;
+      for (const h of prevLevelsCopy) LEVELS.push(h);
+    }
+    if (prevLevelCopy) {
+      for (const k of Object.keys(LEVEL)) delete LEVEL[k];
+      Object.assign(LEVEL, prevLevelCopy);
+    }
+  } catch {}
   return {
     id,
     name,
