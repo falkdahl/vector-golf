@@ -481,8 +481,8 @@ export function getWindAt(worldX, worldY) {
         result.x = 0;
         result.y = 0;
       } else if (mod.type === 'flip') {
-        result.x *= -5;
-        result.y *= -5;
+        result.x *= -1;
+        result.y *= -1;
       }
     }
   }

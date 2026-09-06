@@ -60,6 +60,21 @@ export function checkTerrainCollision(ballPos, ballRadius, level) {
   return null;
 }
 
+export function checkTreasureHit(ballPos, ballRadius, treasure) {
+  if (!treasure || treasure.isCollected) return false;
+  const dx = ballPos.x - treasure.x;
+  const dy = ballPos.y - treasure.y;
+  const rad = (treasure.radius || 12) + ballRadius;
+  return dx*dx + dy*dy < rad*rad;
+}
+export function collectTreasure(treasure) {
+  if (treasure && !treasure.isCollected) {
+    treasure.isCollected = true;
+    return true;
+  }
+  return false;
+}
+
 // Backward compat: expose helpers for physics tick
 export function checkWaterCollision(ballPos, ballRadius, waterHazards) {
   // For water, check if ball center is inside water (or edge touches water rect/circle)

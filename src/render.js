@@ -646,6 +646,61 @@ export function drawHole(ctx, hole) {
   ctx.restore();
 }
 
+export function drawTreasure(ctx, treasure) {
+  if (!treasure || treasure.isCollected) return;
+  const x = treasure.x, y = treasure.y, r = treasure.radius || 12;
+  ctx.save();
+  // shadow under treasure
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x + 1, y + r + 3, r * 0.6, r * 0.25, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // chest base - gold
+  ctx.fillStyle = "#D4AF37";
+  ctx.strokeStyle = "#8B6914";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  // simple chest: rect with rounded top
+  const w = r * 1.8, h = r * 1.4;
+  const rx = x - w/2, ry = y - h/2;
+  // chest body
+  ctx.fillRect(rx, ry + h*0.35, w, h*0.65);
+  ctx.strokeRect(rx, ry + h*0.35, w, h*0.65);
+  // chest lid (half circle)
+  ctx.beginPath();
+  ctx.arc(x, ry + h*0.35, w/2, Math.PI, 0);
+  ctx.lineTo(rx + w, ry + h*0.35);
+  ctx.closePath();
+  ctx.fillStyle = "#FFD700";
+  ctx.fill();
+  ctx.stroke();
+  // highlight stripe
+  ctx.fillStyle = "#8B6914";
+  ctx.fillRect(rx + w*0.42, ry, w*0.16, h + 1);
+  // lock
+  ctx.fillStyle = "#FFD700";
+  ctx.strokeStyle = "#8B6914";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(x, y + 2, 3.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.stroke();
+  // sparkle star
+  ctx.fillStyle = "#FFF8DC";
+  ctx.font = "700 10px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("✦", x + w*0.32, y - h*0.22);
+  ctx.fillText("✦", x - w*0.30, y - h*0.18);
+  // outline glow subtle
+  ctx.strokeStyle = "rgba(255,215,0,0.25)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(x, y, r + 2, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawBall(ctx, ball) {
   ctx.save();
   const z = ball.z ?? 0;
@@ -951,7 +1006,7 @@ const REWARD_TYPE_DEFS = {
   amplify: { icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.28)', fillHover: 'rgba(230,126,34,0.38)', hint: '+1 to supply' },
   nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
-  maxAttempts: { icon: '★', label: 'Max Attempts +5', color: '#2ecc71', border: 'rgba(46,204,113,0.9)', fill: 'rgba(46,204,113,0.28)', fillHover: 'rgba(46,204,113,0.38)', hint: '+5 max attempts' },
+  freeShot: { icon: '★', label: 'Free Shoot', color: '#f1c40f', border: 'rgba(241,196,15,0.9)', fill: 'rgba(241,196,15,0.28)', fillHover: 'rgba(241,196,15,0.38)', hint: 'Supply +5' },
   areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' }
 };
 
@@ -1280,8 +1335,8 @@ export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts =
   ctx.strokeText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
   ctx.fillStyle = "white"; ctx.fillText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
   ctx.restore();
-  // Bottom reward list - all types with xN (bouncy removed, freeShots replaced by Max Attempts)
-  const types = ['amplify','nullify','flip','maxAttempts','areaUp'];
+  // Bottom reward list - all types with xN (bouncy removed, maxAttempts replaced by freeShot)
+  const types = ['amplify','nullify','flip','freeShot','areaUp'];
   // include sharpshooter if defined in pool but keep 5 for now
   const listY = height / 2 + 100;
   const gap = 8;

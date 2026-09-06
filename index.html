@@ -16,14 +16,10 @@
     <canvas id="game" width="1280" height="720"></canvas>
     <canvas id="wind-canvas"></canvas>
     <div id="hotbar">
-      <div class="hotbar-slot" data-type="amplify" title="Amplify x5 (1)"><span class="hotbar-icon">»</span><span
-          class="hotbar-label">Amplify</span><span class="hotbar-count">0/0</span><span class="hotbar-key">1</span>
-      </div>
-      <div class="hotbar-slot" data-type="nullify" title="Nullify (2)"><span class="hotbar-icon">∅</span><span
-          class="hotbar-label">Nullify</span><span class="hotbar-count">0/0</span><span class="hotbar-key">2</span>
-      </div>
-      <div class="hotbar-slot" data-type="flip" title="Flip (3)"><span class="hotbar-icon">⇄</span><span
-          class="hotbar-label">Flip</span><span class="hotbar-count">0/0</span><span class="hotbar-key">3</span></div>
+      <div class="hotbar-slot" data-type="amplify" title="Amplify (1)"><span class="hotbar-icon">»</span> <span class="hotbar-label">Amplify</span> <span class="hotbar-count">0</span></div>
+      <div class="hotbar-slot" data-type="nullify" title="Nullify (2)"><span class="hotbar-icon">∅</span> <span class="hotbar-label">Nullify</span> <span class="hotbar-count">0</span></div>
+      <div class="hotbar-slot" data-type="flip" title="Flip (3)"><span class="hotbar-icon">⇄</span> <span class="hotbar-label">Flip</span> <span class="hotbar-count">0</span></div>
+      <div class="hotbar-slot" data-type="freeShot" title="Free Shot (4)"><span class="hotbar-icon">★</span> <span class="hotbar-label">Free Shot</span> <span class="hotbar-count">0</span></div>
       <button id="hotbar-toggle" aria-label="Collapse modifiers" title="Collapse modifiers">▾</button>
     </div>
     <div id="win-overlay" class="hidden">
@@ -51,7 +47,6 @@
       <button id="help-button" class="help-corner-button" title="Help">?</button>
       <div class="main-menu-content">
         <div id="main-menu-root">
-          <button id="continue-button" class="main-menu-button hidden">Continue</button>
           <button id="new-game-button" class="main-menu-button hidden">New Game</button>
           <div id="staged-course-list" class="course-list"></div>
         </div>
@@ -97,14 +92,14 @@
     <div id="help-overlay" class="hidden">
       <div class="help-card">
         <h3>How to Play</h3>
-        <p class="help-rules">Get the ball into the hole in as few attempts as possible. Wind vectors push the ball while it flies; wind varies per hole via a vector field. Place modifiers (Amplify, Nullify, Flip) before shooting to alter wind locally. Each hole tracks attempts; total across the course is your score. Low record per course is saved.</p>
+        <p class="help-rules">Get the ball into the hole in as few attempts and strokes as possible. Wind vectors push the ball while it flies; wind varies per hole and course via a vector field. Place modifiers (Amplify, Nullify, Flip) before shooting to alter wind locally. Press 4 to arm Free Shot – gold glow over ball shows next attempt is free and won't decrease Attempts Left. Each hole tracks Attempts Left; total across the course is your score (fewest wins). Low record per course is saved.</p>
         <h4>Controls</h4>
         <ul class="help-controls">
           <li>Arrow keys — Aim</li>
           <li>Space — Hold to charge power, release to shoot</li>
           <li>Click — Place selected modifier</li>
           <li>Right-click — Remove modifier</li>
-          <li>1 / 2 / 3 — Select Amplify / Nullify / Flip</li>
+          <li>1 / 2 / 3 / 4 — Select Amplify / Nullify / Flip / Free Shot</li>
           <li>H — Toggle wind visualization</li>
           <li>R — Reset ball</li>
           <li>Escape — Pause</li>

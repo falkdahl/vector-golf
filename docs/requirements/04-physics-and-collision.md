@@ -32,8 +32,9 @@ Order per tick:
 - **Water hazards**: either `{x,y,w,h}` or `{x,y,r}`, blue per `03-rendering.md`, generated per `08-level-generation.md` (on-fairway counts Easy 0, Medium 1, Hard 1-3); entering water is fatal like a tree.
 - **Terrain OB** (`terrainZoneAt(pos)==='ob'`) is fatal; hitting gray OB zone triggers same reset as canvas edge unless bounced via §5 (see also `08-level-generation.md`). Rough-border trees near the OB edge give the bounce opportunity before OB death.
 
-- Collision helpers in `src/obstacles.js` / `src/physics.js`: `checkObstacleCollision(ballPos, ballRadius, obstacles)` (circle-vs-circle, circle-vs-AABB), `isInWater(ballPos, waterHazards)`, `isOutOfBoundsTerrain(terrainZoneAt)` (or `isOutOfBounds(pos,radius,W,H)` for canvas edge).
+- Collision helpers in `src/obstacles.js` / `src/physics.js`: `checkObstacleCollision(ballPos, ballRadius, obstacles)` (circle-vs-circle, circle-vs-AABB), `isInWater(ballPos, waterHazards)`, `isOutOfBoundsTerrain(terrainZoneAt)` (or `isOutOfBounds(pos,radius,W,H)` for canvas edge), `checkTreasureHit(ballPos, ballRadius, treasure)` and `collectTreasure(level)` (`hypot(ball-treasure) < BALL_RADIUS + treasure.radius && !treasure.isCollected`).
 - Tunneling guard: max step `~10px` at `600 px/s`; ensure obstacles ≥16px thick; optional swept test.
+- **Treasure** (`level.treasure`, `r 10-14`, gold, one per hole near tree, see `08-level-generation.md` §4 & `09` §3): treasure hit is **non-fatal, non-bouncing**; it does not affect `vel`/`pos`; on hit set `treasure.isCollected=true`, hide treasure, set `rewardPending=true` and call `maybeShowRewardMenu()` (queued for `AIMING` if hit during `FLYING`, shown immediately if `AIMING`/`CHARGING`). Treasure is checked every tick like win, before tree bounce, after win check, and does not count as attempt. Only one collection per hole.
 
 ## 4. Out-of-Bounds & Edge
 
@@ -56,18 +57,20 @@ Order per tick:
   - **Circle tree** (only type now): `n=normalize(pos - center)`, `vel = vel - 2*dot(vel,n)*n * BOUNCE_DAMPING`, reposition to `hit.r + radius+0.5`.
   - After bounce `isMoving` stays `true`, `gameState` stays `FLYING`, wind continues. Win check still precedes bounce; hole entry never bounces.
 
-## 6. Rendering
+## 6. Treasure & Rendering
 
 - Ball as filled white circle `r=6`, black stroke, subtle shadow in `src/render.js:drawBall`.
+- Treasure as gold chest/star `r 10-14` (see `03-rendering.md` §5): `drawTreasure(ctx, treasure)` draws when `!isCollected`; hit test `checkTreasureHit` is circle-vs-circle, checked every tick (including slow drift) like win, does not bounce/kill, only collects.
 
 ## Acceptance Criteria
 
 - [ ] Ball at rest is drifted by wind within 0.2s and reaches >80 px/s within 0.3s (very fast wind with `180/0.35/28`).
-- [ ] No reset on rest; only tree bounce vs water/OB/edge death or hole win terminates.
-- [ ] Edge grazing (`dist==radius+0.1`) no false positive; `+1px` overlap triggers bounce (tree) or reset (water/OB/edge).
+- [ ] No reset on rest; only tree bounce vs water/OB/edge death or hole win terminates. Treasure hit does **not** terminate (no bounce, no reset).
+- [ ] Edge grazing (`dist==radius+0.1`) no false positive; `+1px` overlap triggers bounce (tree) or reset (water/OB/edge); treasure edge `dist==BALL_RADIUS+treasure.radius+0.1` no hit, `+1px` collects.
 - [ ] `nullify` preserves entry velocity (±5% over 0.5s inside, see `07-modifiers.md`).
 - [ ] Tree hit always bounces (position re-clamped to `hit.r+radius+0.5`, velocity reflected with `BOUNCE_DAMPING=0.7`, remains `FLYING`); no limit, no `bouncyRemaining`. Water hit while airborne (`z>5`) does not trigger death; same spot with `z=0` does.
+- [ ] Treasure: one per hole near tree, `hypot(ball-treasure) < BALL_RADIUS+12` collects, sets `isCollected=true` and queues reward menu (shown in `AIMING` before next launch or immediately if already `AIMING`); second hit no-op; does not affect `holeAttempts`.
 
 ## File Paths
 
-- `src/physics.js:1`, `src/obstacles.js:1`, `src/render.js:80` (`drawBall`/`drawObstacles`/`drawHole`)
+- `src/physics.js:1`, `src/obstacles.js:1` (`checkTreasureHit`, `collectTreasure`), `src/render.js:80` (`drawBall`/`drawObstacles`/`drawHole`/`drawTreasure`), `src/levels.js:1` (`treasure` per hole)

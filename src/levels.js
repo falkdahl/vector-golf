@@ -1,4 +1,4 @@
-import { sampleBezier, generateWaterClusters, generateTreesPoisson, generateRoughBorderTrees, isHoleSolvable, attachNoiseToTerrain, classifyFairwayShape, warpedDist } from "./terrain.js";
+import { sampleBezier, generateWaterClusters, generateTreesPoisson, generateRoughBorderTrees, isHoleSolvable, attachNoiseToTerrain, classifyFairwayShape, warpedDist, terrainZoneAt, isInWater } from "./terrain.js";
 
 function mulberry32(a) {
   return function () {
@@ -7,6 +7,56 @@ function mulberry32(a) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function generateTreasureForHole(obstacles, fairwayTrees, terrain, tee, hole, waterHazards, rand, width = 1280, height = 720) {
+  const treasureRadius = 12;
+  const candidates = fairwayTrees && fairwayTrees.length ? fairwayTrees : obstacles;
+  if (!candidates || !candidates.length) {
+    // Fallback: place near center fairway if no trees
+    const spine = terrain.fairwayPath;
+    const mid = spine[Math.floor(spine.length/2)];
+    return { x: Math.round(mid.x), y: Math.round(mid.y), radius: treasureRadius, isCollected: false, nearTreeId: -1 };
+  }
+  const levelProxy = { terrain, waterHazards };
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const treeIdx = Math.floor(rand() * candidates.length);
+    const tree = candidates[treeIdx];
+    const angle = rand() * Math.PI * 2;
+    const dist = tree.r + treasureRadius + 8 + rand() * 18; // 18-42px from tree edge
+    const x = Math.round(tree.x + Math.cos(angle) * dist);
+    const y = Math.round(tree.y + Math.sin(angle) * dist);
+    if (x < 12 || x > width - 12 || y < 12 || y > height - 12) continue;
+    // Not overlapping any tree
+    let overlap = false;
+    for (const t of obstacles) {
+      if (Math.hypot(x - t.x, y - t.y) < t.r + treasureRadius + 4) { overlap = true; break; }
+    }
+    if (overlap) continue;
+    // Not in water
+    if (isInWater(x, y, waterHazards)) continue;
+    // Zone must be fairway or rough
+    const zone = terrainZoneAt(x, y, levelProxy);
+    if (zone !== 'fairway' && zone !== 'rough') continue;
+    // Distance from tee/hole
+    const greenR = terrain.green ? terrain.green.r : 70;
+    const teeR = terrain.teeBox ? terrain.teeBox.r : 70;
+    if (Math.hypot(x - hole.x, y - hole.y) < greenR + treasureRadius + 20) continue;
+    if (Math.hypot(x - tee.x, y - tee.y) < teeR + treasureRadius + 20) continue;
+    if (Math.hypot(x - tee.x, y - tee.y) < 40) continue;
+    return { x, y, radius: treasureRadius, isCollected: false, nearTreeId: treeIdx };
+  }
+  // Fallback: place 30px from random tree towards hole center
+  const tree = candidates[Math.floor(rand() * candidates.length)];
+  const midX = (tee.x + hole.x) / 2;
+  const midY = (tee.y + hole.y) / 2;
+  const ang = Math.atan2(midY - tree.y, midX - tree.x);
+  const dist = tree.r + treasureRadius + 12;
+  const fx = Math.round(tree.x + Math.cos(ang) * dist);
+  const fy = Math.round(tree.y + Math.sin(ang) * dist);
+  const clampedX = Math.max(12, Math.min(width - 12, fx));
+  const clampedY = Math.max(12, Math.min(height - 12, fy));
+  return { x: clampedX, y: clampedY, radius: treasureRadius, isCollected: false, nearTreeId: 0 };
 }
 
 function generateObstacles(count, tee, hole, rand, width = 1280, height = 720) {
@@ -529,6 +579,10 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     // To keep validation simple, we will not add extra near-edge water beyond the on-fairway required, unless we want to add 0-1 extra near edge for variety
     // For now, keep as is
 
+    // Treasure: one per hole near a tree (see 08 §4 & 09 §3)
+    const treasureRand = mulberry32(seed + i * 7919 + 977);
+    const treasure = generateTreasureForHole(obstacles, fairwayTrees, terrain, tee, hole, waterHazards, treasureRand, LOGICAL_W, LOGICAL_H);
+
     // Field components per difficulty (REQ-034 §3) with flipped/extra sources/sinks and tighter fairway
     let sources = 1, sinks = 1, doublets = 0, vortexes = 0;
     let flippedHard = false;
@@ -829,6 +883,7 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       hole,
       obstacles, // circular trees (fairway + rough/OB)
       waterHazards,
+      treasure,
       terrain,
       field: fieldMeta,
       difficulty: levelDifficulty,
@@ -849,6 +904,7 @@ export function generateLevels(seed = 42, count = 18, options = {}) {
   LEVEL.hole = LEVELS[0].hole;
   LEVEL.obstacles = LEVELS[0].obstacles;
   LEVEL.waterHazards = LEVELS[0].waterHazards;
+  LEVEL.treasure = LEVELS[0].treasure;
   LEVEL.terrain = LEVELS[0].terrain;
   LEVEL.field = LEVELS[0].field;
   LEVEL.difficulty = LEVELS[0].difficulty;
@@ -860,4 +916,4 @@ export function generateLevels(seed = 42, count = 18, options = {}) {
 }
 
 export let LEVELS = [];
-export let LEVEL = { id: "hole-1", name: "Hole 1", canvas: { width: LOGICAL_W, height: LOGICAL_H }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], waterHazards: [], terrain: null, field: { cols: 32, rows: 18, strength: 80, seed: 42, sources: 1, sinks: 1, doublets: 1, vortexes: 0 }, difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 3, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 } };
+export let LEVEL = { id: "hole-1", name: "Hole 1", canvas: { width: LOGICAL_W, height: LOGICAL_H }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], waterHazards: [], treasure: { x: 400, y: 360, radius: 12, isCollected: false, nearTreeId: -1 }, terrain: null, field: { cols: 32, rows: 18, strength: 80, seed: 42, sources: 1, sinks: 1, doublets: 1, vortexes: 0 }, difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 3, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 } };

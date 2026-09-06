@@ -320,14 +320,14 @@ body {
   align-items: center;
   gap: 10px;
   width: 100%;
-  max-width: 360px;
+  max-width: 480px;
 }
 #course-menu.hidden { display: none !important; }
 
 #course-list,
 #staged-course-list {
   width: 100%;
-  max-width: 360px;
+  max-width: 480px;
   max-height: min(42vh, 320px);
   overflow-y: auto;
   overflow-x: hidden;
@@ -353,8 +353,8 @@ body {
 }
 .course-play-button {
   flex: 1;
-  min-width: 0;
-  padding: 8px 14px;
+  min-width: 260px;
+  padding: 10px 16px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -366,7 +366,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
   text-align: left;
-  overflow: hidden;
+  overflow: visible;
   transition: background 0.15s;
 }
 .course-play-button:hover { background: #0f3d1a; }
@@ -374,9 +374,9 @@ body {
   font: 700 13px system-ui, sans-serif;
   line-height: 1.2;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
   -webkit-text-stroke: 1.5px rgba(0,0,0,0.55);
   paint-order: stroke fill;
 }
@@ -384,6 +384,7 @@ body {
   font: 500 11px system-ui, sans-serif;
   line-height: 1.2;
   white-space: nowrap;
+  overflow: visible;
   opacity: 0.95;
   -webkit-text-stroke: 1px rgba(0,0,0,0.45);
   paint-order: stroke fill;
@@ -484,7 +485,7 @@ body {
   display: flex;
   gap: 10px;
   width: 100%;
-  max-width: 360px;
+  max-width: 480px;
   justify-content: center;
 }
 #new-course-button, #import-course-button {
@@ -698,7 +699,11 @@ body {
   paint-order: stroke fill;
   text-shadow: 0 1px 4px rgba(0,0,0,0.35);
   min-width: 80px;
-  justify-content: space-between;
+  justify-content: flex-start;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: transform 0.15s, border-color 0.15s, background 0.15s, opacity 0.15s;
   user-select: none;
 }
@@ -713,6 +718,8 @@ body {
 .hotbar-slot[data-type="amplify"].selected { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9) !important; }
 .hotbar-slot[data-type="nullify"].selected { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9) !important; }
 .hotbar-slot[data-type="flip"].selected { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9) !important; }
+.hotbar-slot[data-type="freeShot"].selected { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.9) !important; }
+.hotbar-slot[data-type="freeShot"].active { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.95) !important; box-shadow: 0 0 10px rgba(241,196,15,0.6); transform: scale(1.04); }
 .hotbar-slot.disabled {
   opacity: 0.45;
   filter: grayscale(0.6);
@@ -726,7 +733,9 @@ body {
 .hotbar-slot[data-type="amplify"] .hotbar-icon { color: #e67e22; }
 .hotbar-slot[data-type="nullify"] .hotbar-icon { color: #3498db; }
 .hotbar-slot[data-type="flip"] .hotbar-icon { color: #9b59b6; }
-.hotbar-label { flex: 1; text-align: left; }
+.hotbar-slot[data-type="freeShot"] .hotbar-icon { color: #f1c40f; }
+.hotbar-label { flex: 0 1 auto; text-align: left; white-space: nowrap; }
+.hotbar-label, .hotbar-count, .hotbar-icon { white-space: nowrap; flex-wrap: nowrap; }
 .hotbar-count {
   font: 700 12px system-ui, sans-serif;
   color: white;
