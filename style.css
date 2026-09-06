@@ -286,12 +286,12 @@ body {
   position: absolute;
   top: 12px;
   left: 12px;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
   padding: 0;
   border-radius: 50%;
-  font: 700 18px system-ui, sans-serif;
+  font: 700 36px system-ui, sans-serif;
   color: white;
   background: #145a32;
   border: 2px solid #0f3d1a;
@@ -418,7 +418,8 @@ body {
 }
 .course-delete-button:hover { background: #c0392b; }
 
-.course-edit-button {
+.course-edit-button,
+.course-refresh-button {
   position: absolute;
   right: -52px;
   top: 50%;
@@ -433,7 +434,13 @@ body {
   cursor: pointer;
   white-space: nowrap;
 }
-.course-edit-button:hover { background: #2980b9; }
+.course-edit-button:hover,
+.course-refresh-button:hover { background: #2980b9; }
+.course-refresh-button {
+  font: 700 18px system-ui, sans-serif;
+  line-height: 1;
+  padding: 6px 12px;
+}
 #staged-course-list {
   overflow-x: visible;
   padding-right: 52px;

@@ -35,6 +35,8 @@ import {
   resizeWindOverlay,
   getWindUniforms,
   setFreeShotActive as setWindFreeShotActive,
+  setFreeShotBallActive as setWindFreeShotBallActive,
+  setFreeShotEdgeActive as setWindFreeShotEdgeActive,
   updateFreeShotGlow,
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
@@ -265,8 +267,18 @@ function isFreeShotActiveState() { return isFreeShotActive; }
 function isFreeShotFlightActiveState() { return freeShotFlightActive; }
 function canActivateFreeShot() { return (supply.freeShot ?? 0) > 0; }
 function syncFreeShotGlow() {
-  const active = isFreeShotActive || freeShotFlightActive;
-  try { setWindFreeShotActive(active); if (active && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {}
+  const edgeActive = isFreeShotActive || freeShotFlightActive;
+  const ballActive = isFreeShotActive;
+  try {
+    setWindFreeShotActive(edgeActive);
+    try { setWindFreeShotBallActive(ballActive); } catch {}
+    try { setWindFreeShotEdgeActive(edgeActive); } catch {}
+    if (ballActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0);
+    else if (!ballActive) {
+      // ensure ball glow hidden when not armed (edge may still be visible)
+      try { setWindFreeShotBallActive(false); } catch {}
+    }
+  } catch {}
 }
 function setFreeShotActive(v) {
   if (!v) {
@@ -308,6 +320,8 @@ function clearFreeShotGlow() {
   isFreeShotActive = false;
   freeShotFlightActive = false;
   try { setWindFreeShotActive(false); } catch {}
+  try { setWindFreeShotBallActive(false); } catch {}
+  try { setWindFreeShotEdgeActive(false); } catch {}
 }
 function clearFreeShotFlightGlow() {
   freeShotFlightActive = false;
@@ -846,133 +860,32 @@ function renderCourseList() {
         playBtn.appendChild(metaSpan);
         playBtn.title = `Play ${course.name} (${course.holeCount} holes)`;
         playBtn.addEventListener('click', () => handleCoursePlay(course.id));
-        const editBtn = document.createElement('button');
-        editBtn.className = 'course-edit-button';
-        editBtn.textContent = '✎';
-        editBtn.title = 'Edit course';
-        // Edit menu toggle
-        editBtn.addEventListener('click', (e) => {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'course-refresh-button';
+        refreshBtn.textContent = '↻';
+        refreshBtn.title = 'Regenerate course';
+        refreshBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          // Close any other open edit menus
-          const existing = row.nextElementSibling;
-          if (existing && existing.classList.contains('course-edit-menu')) {
-            existing.remove();
-            return;
+          if (!confirm(`Generate new ${holeCount}-hole course? This replaces the current one.`)) return;
+          const newCourse = holeCount === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(holeCount, Date.now());
+          const idx = courses.findIndex(c => c.holeCount === holeCount);
+          const oldBest = idx !== -1 ? courses[idx].bestTotal : null;
+          if (idx !== -1) {
+            // Preserve unlock: keep bestTotal so previously unlocked next stages stay unlocked
+            newCourse.bestTotal = oldBest;
+            courses[idx] = newCourse;
+          } else {
+            courses.push(newCourse);
+            courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
           }
-          // Close all other edit menus in this list
-          list.querySelectorAll('.course-edit-menu').forEach(el => el.remove());
-          const menu = document.createElement('div');
-          menu.className = 'course-edit-menu';
-          menu.style.cssText = 'display:flex; gap:8px; padding:8px; background:rgba(0,0,0,0.12); border-radius:6px; margin:4px 0; flex-wrap:wrap;';
-          // Regenerate
-          const regenBtn = document.createElement('button');
-          regenBtn.className = 'course-regenerate-button';
-          regenBtn.textContent = 'Regenerate';
-          regenBtn.title = 'Generate new version (replaces current)';
-          regenBtn.addEventListener('click', () => {
-            if (!confirm(`Generate new ${holeCount}-hole course? This replaces the current one.`)) return;
-            const newCourse = holeCount === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(holeCount, Date.now());
-            // Keep stage order, replace
-            const idx = courses.findIndex(c => c.holeCount === holeCount);
-            if (idx !== -1) {
-              // Preserve id? Spec says replaces this course — keep same stage but new id/name/holes, bestTotal null
-              courses[idx] = newCourse;
-            } else {
-              courses.push(newCourse);
-              courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
-            }
-            // If active course was this stage, clear progress (since course changed)
-            if (activeCourseId && courses[idx] && activeCourseId === course.id) {
-              clearProgress();
-            }
-            saveCourses();
-            renderCourseList();
-          });
-          // Export
-          const exportBtn = document.createElement('button');
-          exportBtn.className = 'course-export-button';
-          exportBtn.textContent = 'Export';
-          exportBtn.addEventListener('click', () => {
-            try {
-              const b64 = exportCourse(course);
-              if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(b64).then(() => showToast('copied to clipboard')).catch(() => {
-                  const ta = document.createElement('textarea'); ta.value = b64; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch{} document.body.removeChild(ta); showToast('copied to clipboard');
-                });
-              } else {
-                const ta = document.createElement('textarea'); ta.value = b64; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch{} document.body.removeChild(ta); showToast('copied to clipboard');
-              }
-            } catch (e) { showToast('Copy failed'); }
-          });
-          // Import
-          const importBtn = document.createElement('button');
-          importBtn.className = 'course-import-button';
-          importBtn.textContent = 'Import';
-          importBtn.addEventListener('click', () => {
-            // Toggle import area for this stage
-            let importArea = menu.querySelector('.stage-import-area');
-            if (importArea) { importArea.remove(); return; }
-            importArea = document.createElement('div');
-            importArea.className = 'stage-import-area';
-            importArea.style.cssText = 'width:100%; display:flex; flex-direction:column; gap:6px; margin-top:6px;';
-            const help = document.createElement('p');
-            help.className = 'import-help';
-            help.textContent = 'Paste the string exported from another game';
-            help.style.cssText = 'font:600 11px system-ui; color:#333; margin:0;';
-            const ta = document.createElement('textarea');
-            ta.id = 'stage-import-input';
-            ta.placeholder = 'Paste base64 string here';
-            ta.style.cssText = 'width:100%; min-height:60px; font: 11px monospace; padding:6px;';
-            const rowBtns = document.createElement('div');
-            rowBtns.style.cssText = 'display:flex; gap:8px;';
-            const confirmBtn = document.createElement('button');
-            confirmBtn.textContent = 'Import';
-            confirmBtn.addEventListener('click', () => {
-              const val = ta.value.trim();
-              if (!val) { alert('Invalid course data'); return; }
-              try {
-                const imported = importCourse(val);
-                if (imported.holeCount !== holeCount) {
-                  alert(`Wrong hole count — import must be ${holeCount} holes (got ${imported.holeCount})`);
-                  const err = menu.querySelector('.import-error') || document.createElement('p');
-                  err.className = 'import-error';
-                  err.textContent = `Wrong hole count — import must be ${holeCount} holes`;
-                  err.style.cssText = 'color:#e74c3c; font:600 11px system-ui; margin:0;';
-                  if (!menu.contains(err)) menu.appendChild(err);
-                  return;
-                }
-                // Replace stage's course
-                const idx2 = courses.findIndex(c => c.holeCount === holeCount);
-                if (idx2 !== -1) courses[idx2] = imported;
-                else courses.push(imported);
-                courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
-                saveCourses();
-                renderCourseList();
-              } catch (e) {
-                const err = menu.querySelector('.import-error') || document.createElement('p');
-                err.className = 'import-error';
-                err.textContent = 'Invalid course data';
-                err.style.cssText = 'color:#e74c3c; font:600 11px system-ui; margin:0;';
-                if (!menu.contains(err)) menu.appendChild(err);
-              }
-            });
-            const cancelBtn = document.createElement('button');
-            cancelBtn.textContent = 'Cancel';
-            cancelBtn.addEventListener('click', () => importArea.remove());
-            rowBtns.appendChild(confirmBtn);
-            rowBtns.appendChild(cancelBtn);
-            importArea.appendChild(help);
-            importArea.appendChild(ta);
-            importArea.appendChild(rowBtns);
-            menu.appendChild(importArea);
-          });
-          menu.appendChild(regenBtn);
-          menu.appendChild(exportBtn);
-          menu.appendChild(importBtn);
-          row.insertAdjacentElement('afterend', menu);
+          if (activeCourseId && courses[idx] && activeCourseId === course.id) {
+            clearProgress();
+          }
+          saveCourses();
+          renderCourseList();
         });
         row.appendChild(playBtn);
-        row.appendChild(editBtn);
+        row.appendChild(refreshBtn);
       } else {
         // Unlocked but no course yet (should not happen, but handle)
         row.innerHTML = `<span class="course-name">${holeCount} Holes — Ready</span>`;
