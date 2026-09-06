@@ -1270,8 +1270,14 @@ function rerollReward() {
   totalAttempts += 1;
   attempts = totalAttempts;
   updateAttemptsUI();
+  saveProgress();
+  // If this reroll exhausted attempts, Game Over immediately — do not show new reward
+  if (getAttemptsLeft() <= 0) {
+    showGameOver();
+    return true;
+  }
   rewardRerolled = true;
-  // New random 3-set from same 6-pool, keep menu visible
+  // New random 3-set from same 5-pool, keep menu visible
   rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
   rewardMenuHover = null;
   rewardRerollHover = false;
@@ -1293,6 +1299,11 @@ function maybeShowRewardMenu() {
   if (pauseMenuVisible) return;
   if (mainMenuVisible) return;
   if (rewardMenuVisible) return;
+  // Game Over takes precedence — never show reward when out of attempts
+  if (getAttemptsLeft() <= 0) {
+    showGameOver();
+    return;
+  }
   // Allow reward menu in AIMING, CHARGING and FLYING — treasure pickup shows immediately even mid-flight
   if (gameState !== "AIMING" && gameState !== "CHARGING" && gameState !== "FLYING") return;
   // REQ-021 per-hole: no reward before first attempt on hole 1, reward before first attempt on holes >0 via rewardPending set on hole entry
@@ -1571,6 +1582,13 @@ function updateHotbarUI() {
 function showGameOver() {
   if (gameState === "GAME_OVER") return;
   clearFreeShotFlightGlow();
+  // Hide and clear any pending reward — Game Over takes precedence over reward screen
+  rewardMenuVisible = false;
+  rewardPending = false;
+  rewardOffered = [];
+  rewardRerolled = false;
+  rewardMenuHover = null;
+  rewardRerollHover = false;
   gameState = "GAME_OVER";
   ball.isMoving = false;
   ball.z = 0;
@@ -1583,12 +1601,13 @@ function showGameOver() {
     if (gameoverTotalValue) gameoverTotalValue.textContent = String(totalAttempts);
     if (gameoverTitle) gameoverTitle.textContent = "Game Over";
   }
-  // hide pause if any
+  // hide pause and reward if any
   if (pauseMenuVisible) {
     pauseMenuVisible = false;
     syncPauseOverlay();
   }
   updateAttemptsUI();
+  updateHotbarUI();
   saveProgress();
 }
 
@@ -2066,7 +2085,14 @@ function update(dt) {
       return;
     }
 
+    // Game Over check: immediately when Attempts Left is 0 (no grace, no reward delay) — takes precedence over treasure/reward
+    if (getAttemptsLeft() <= 0) {
+      showGameOver();
+      return;
+    }
+
     // Treasure hit (one per hole near tree, see 09 §3) - non-fatal, shows reward immediately (even mid-flight)
+    // Only shown if still have attempts left (Game Over already handled above)
     if (level && level.treasure && !level.treasure.isCollected && !rewardMenuVisible) {
       try {
         if (checkTreasureHit(ball.pos, BALL_RADIUS, level.treasure)) {
@@ -2078,17 +2104,6 @@ function update(dt) {
           if (rewardMenuVisible) return;
         }
       } catch {}
-    }
-
-    // Game Over check: if out of attempts and still flying, show Game Over after a short grace (allow ball to fly a bit before declaring)
-    // Also handled on fatal hit below; this handles bouncing-forever case
-    if (holeAttempts >= maxAttempts) {
-      let timeSinceLaunch = 0;
-      try { timeSinceLaunch = performance.now() - lastLaunchTime; } catch { timeSinceLaunch = Date.now() - lastLaunchTime; }
-      if (timeSinceLaunch > 4000) {
-        showGameOver();
-        return;
-      }
     }
 
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
