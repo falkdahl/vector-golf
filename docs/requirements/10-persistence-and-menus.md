@@ -115,7 +115,17 @@ No `<h2>Golf Vector Field</h2>` inside overlay required; outside `#game-containe
 
 - Shown via `Help` in either entry or pause → hide `#main-menu-root`/`#course-menu`, show `#help-overlay` (`position:absolute; inset:0; display:flex; align-items:center; justify-content:center; width:100%; height:100%; background:transparent; z-index:12`) while `mainMenuVisible===true` still on splash (entry) or on dimmed field with `with-backdrop` (pause). No `rgba(0,0,0,0.35)` full-screen dim; card provides legibility.
 - **Card** `.help-card` inside is opaque scrollable: `max-width:90%; max-height:85%; width:min(420px,90%); overflow-y:auto; overscroll-behavior:contain; background:rgba(0,0,0,0.75)` (or `#222` opaque) `color:white; padding:16px 18px; border-radius:10px; flex-direction:column; gap:10px; scrollbar-width:thin`. Card background is opaque/semi-opaque (not `transparent`); `getComputedStyle(helpOverlay).backgroundColor==="rgba(0,0,0,0)"` (no backdrop), card itself provides contrast.
-- **Content** (short, ≤400 words): Rules must contain `wind` + `hole`/`course` + `attempt`/`stroke`/`fewest`; controls must contain `arrow`/`aim` + `space`/`charge`/`shoot` + `click`/`place`; plus mention modifiers-before-shoot, `Free Shot` (`4` gold glow, next attempt free) + attempts tracking, per-course `bestTotal` saved. Controls list rows `Arrow keys — Aim`, `Space — Hold to charge, release to shoot`, `Click — Place modifier`, `Right-click — Remove`, `1/2/3/4` (including `4 Free Shot`), `H`, `R`, `Escape/P` pause (core three `Arrow/Space/Click` mandatory).
+- **Content** (`src/help`): Must show, in order, the sacred-links lore verbatim (or semantically identical) followed by the control scheme. Lore text normative:
+  ```
+  Welcome to the sacred links of Mt. Aeolus, the windiest peak on Earth, where the pompous Ancient Order of Golfing Purists holds its most ridiculous tradition.
+
+  Legend says the club’s founding blowhard declared on his deathbed that "putting is for cowards," decreeing that every hole must be aced straight from the tee in gale-force winds to prove true mastery. If you fail to land the shot in 10 attempts, the Grand Marshal revokes your membership, confiscates your pants, and hurls you into the stormy abyss via giant catapult.
+
+  To override the tempest, you rely on the Pocket-Atmosphere Overrider—a shady gadget you bought off a disgraced former caddie behind a dumpster.
+
+  By tossing down micro-sized zone emitters anywhere on the course, you can instantly amplify, completely nullify, or violently flip the wind direction inside a tiny bubble. The Purists scoff at these pocket-sized weather crimes, but as long as you disguise the devices as mundane turf repair tees, the Grand Marshal just assumes you're calling upon the mystical gods of aerodynamics.
+  ```
+  Rules keywords still satisfied: `wind`+`hole`/`course`+`attempt` (`wind` appears in lore, `hole`/`course` in “every hole must be aced…anywhere on the course”, `10 attempts`); controls must contain `arrow`/`aim` + `space`/`charge`/`shoot` + `click`/`place`; plus modifiers-before-shoot, `Free Shot` (`4` gold glow) mentioned in controls, per-course `bestTotal` saved via lore context. Controls list rows `Arrow keys — Aim`, `Space — Hold to charge, release to shoot`, `Click — Place modifier`, `Right-click — Remove`, `1/2/3/4` (including `4 Free Shot`), `H`, `R`, `Escape/P` pause (core three `Arrow/Space/Click` mandatory) must follow the lore in the same `.help-card`.
 - **Back** `#help-back-button` text `Back` opaque; returns to root without side effects. Bounded to canvas; no page scroll. While help visible game is paused (same blocking as §3).
 
 ## Acceptance Criteria — Staged Unlocking (3→6→9→18)
