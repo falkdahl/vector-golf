@@ -43,7 +43,7 @@ import {
   updateFreeShotGlow,
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
-import { COURSES_KEY, STAGES, generateCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked } from "./courses.js";
+import { COURSES_KEY, STAGES, generateCourse, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed } from "./courses.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -199,9 +199,15 @@ function setActiveCourse(course) {
   activeCourseId = course ? course.id : null;
   if (course && Array.isArray(course.holes)) {
     // Sync global LEVELS to active course holes for backward compat
+    // Deep clone to prevent treasure isCollected mutation from leaking back to stored course (fix treasure reappearing bug)
     try {
       LEVELS.length = 0;
-      for (const h of course.holes) LEVELS.push(h);
+      for (const h of course.holes) {
+        const clone = JSON.parse(JSON.stringify(h));
+        // Ensure fresh run starts with all treasures uncollected; runtime collect will set true on clone only
+        if (clone && clone.treasure) clone.treasure.isCollected = false;
+        LEVELS.push(clone);
+      }
       // Also update LEVEL alias to first hole
       Object.assign(LEVEL, LEVELS[0] || {});
       if (LEVELS[0]) {
@@ -210,6 +216,9 @@ function setActiveCourse(course) {
         LEVEL.hole = LEVELS[0].hole;
         LEVEL.obstacles = LEVELS[0].obstacles;
         LEVEL.field = LEVELS[0].field;
+        LEVEL.treasure = LEVELS[0].treasure;
+        LEVEL.terrain = LEVELS[0].terrain;
+        LEVEL.difficulty = LEVELS[0].difficulty;
       }
     } catch {}
   }
@@ -429,6 +438,8 @@ function getSavePayload() {
     rewardOffered: [...rewardOffered],
     rewardRerolled,
     rewardMenuVisible,
+    rewardSeedCounter,
+    campaignSeed: (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null),
     gameState,
     modifiers: modifiers.map(m => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })),
     aimAngle: getAimAngle(),
@@ -491,10 +502,14 @@ function loadProgress() {
     rewardOffered = rewardOffered.map(t => t === 'freeShots' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t);
     rewardRerolled = !!d.rewardRerolled;
     rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length === 3;
+    rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
+    if (d.campaignSeed && typeof setCampaignSeed === 'function') {
+      try { setCampaignSeed(String(d.campaignSeed)); } catch {}
+    }
     // Restore treasure collected state for current hole (one per hole near tree, see 08 §4)
+    // Only mutate runtime LEVELS/level, not the stored course definition (which stays false for future runs)
     try {
-      if (d.treasure && typeof d.treasure.isCollected === 'boolean' && activeCourse && activeCourse.holes[currentHoleIndex] && activeCourse.holes[currentHoleIndex].treasure) {
-        activeCourse.holes[currentHoleIndex].treasure.isCollected = !!d.treasure.isCollected;
+      if (d.treasure && typeof d.treasure.isCollected === 'boolean') {
         if (LEVELS[currentHoleIndex] && LEVELS[currentHoleIndex].treasure) LEVELS[currentHoleIndex].treasure.isCollected = !!d.treasure.isCollected;
         if (typeof level !== 'undefined' && level && level.treasure) level.treasure.isCollected = !!d.treasure.isCollected;
       }
@@ -576,6 +591,7 @@ function startNewGame() {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
@@ -863,32 +879,7 @@ function renderCourseList() {
         playBtn.appendChild(metaSpan);
         playBtn.title = `Play ${course.name} (${course.holeCount} holes)`;
         playBtn.addEventListener('click', () => handleCoursePlay(course.id));
-        const refreshBtn = document.createElement('button');
-        refreshBtn.className = 'course-refresh-button';
-        refreshBtn.textContent = '↻';
-        refreshBtn.title = 'Regenerate course';
-        refreshBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (!confirm(`Generate new ${holeCount}-hole course? This replaces the current one.`)) return;
-          const newCourse = holeCount === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(holeCount, Date.now());
-          const idx = courses.findIndex(c => c.holeCount === holeCount);
-          const oldBest = idx !== -1 ? courses[idx].bestTotal : null;
-          if (idx !== -1) {
-            // Preserve unlock: keep bestTotal so previously unlocked next stages stay unlocked
-            newCourse.bestTotal = oldBest;
-            courses[idx] = newCourse;
-          } else {
-            courses.push(newCourse);
-            courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
-          }
-          if (activeCourseId && courses[idx] && activeCourseId === course.id) {
-            clearProgress();
-          }
-          saveCourses();
-          renderCourseList();
-        });
         row.appendChild(playBtn);
-        row.appendChild(refreshBtn);
       } else {
         // Unlocked but no course yet (should not happen, but handle)
         row.innerHTML = `<span class="course-name">${holeCount} Holes — Ready</span>`;
@@ -915,6 +906,7 @@ function handleCoursePlay(courseId) {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
@@ -1024,6 +1016,20 @@ function syncMainMenu() {
   }
   // Help overlay is global — sync separately
   syncHelpOverlay();
+  syncCampaignSeedDisplay();
+  // If main menu hidden or help visible, hide campaign edit popup
+  if (!mainMenuVisible || helpVisible) {
+    if (campaignEditVisible) {
+      campaignEditVisible = false;
+      syncCampaignEditOverlay();
+    } else {
+      // ensure overlay hidden even if flag already false (stale DOM)
+      const ce = document.getElementById('campaign-edit-overlay');
+      if (ce && !ce.classList.contains('hidden')) ce.classList.add('hidden');
+    }
+  } else {
+    syncCampaignEditOverlay();
+  }
   // Ensure bottom background reflects mode (splash vs grass) per REQ-030
   redrawBottom();
   // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop)
@@ -1031,6 +1037,96 @@ function syncMainMenu() {
   // Actually wind should be visible on level and also while paused (dimmed), hidden only on main menu entry
   try { const showWind2 = !mainMenuVisible; setWindVisible(showWind2 || pauseMenuVisible); } catch {}
   updateHotbarUI();
+}
+
+let campaignEditVisible = false;
+function isCampaignEditVisible() { return campaignEditVisible; }
+function syncCampaignEditOverlay() {
+  const el = document.getElementById('campaign-edit-overlay');
+  if (!el) return;
+  if (campaignEditVisible) {
+    el.classList.remove('hidden');
+    try {
+      const cs = (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null) || '';
+      const cur = document.getElementById('campaign-edit-current-seed');
+      if (cur) cur.textContent = String(cs);
+      const inp = document.getElementById('campaign-seed-input');
+      if (inp) setTimeout(() => inp.focus(), 0);
+    } catch {}
+  } else {
+    el.classList.add('hidden');
+  }
+}
+function showCampaignEditOverlay() {
+  if (!mainMenuVisible) return;
+  campaignEditVisible = true;
+  syncCampaignEditOverlay();
+}
+function hideCampaignEditOverlay() {
+  campaignEditVisible = false;
+  syncCampaignEditOverlay();
+  try {
+    const inp = document.getElementById('campaign-seed-input');
+    if (inp) inp.value = '';
+  } catch {}
+}
+
+function syncCampaignSeedDisplay() {
+  const wrapper = document.getElementById('campaign-seed-wrapper');
+  const el = document.getElementById('campaign-seed-display');
+  if (!el) return;
+  try {
+    const cs = (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null) || '';
+    el.textContent = 'Seed: ' + String(cs);
+    const show = !!mainMenuVisible;
+    if (wrapper) wrapper.classList.toggle('hidden', !show);
+    else el.classList.toggle('hidden', !show);
+    // also update popup current seed if visible
+    const cur = document.getElementById('campaign-edit-current-seed');
+    if (cur) cur.textContent = String(cs);
+  } catch {}
+}
+
+function handleCampaignRegenerate() {
+  if (!confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
+  try {
+    const res = regenerateCampaign();
+    // Sync main.js courses array to the newly generated campaign (fix stale reference bug)
+    try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
+    clearProgress();
+    rewardSeedCounter = 0;
+    rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+    // Reset unlocking is handled by regenerateCampaign (only 3)
+    _lastCourseListSig = null;
+    try { renderCourseList(); } catch {}
+    syncCampaignSeedDisplay();
+    syncCampaignEditOverlay();
+    hideCampaignEditOverlay();
+    updateHotbarUI();
+  } catch (e) { console.warn('campaign regenerate failed', e); }
+}
+
+function handleManualSeedApply() {
+  const input = document.getElementById('campaign-seed-input');
+  const val = input ? String(input.value || '').trim() : '';
+  if (!val) {
+    try { showToast('Seed cannot be empty'); } catch {}
+    return;
+  }
+  if (!confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
+  try {
+    const res = applyManualSeed(val);
+    // Sync main.js courses array to the newly generated campaign (fix stale reference bug)
+    try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
+    clearProgress();
+    rewardSeedCounter = 0;
+    rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+    _lastCourseListSig = null;
+    try { renderCourseList(); } catch {}
+    syncCampaignSeedDisplay();
+    hideCampaignEditOverlay();
+    updateHotbarUI();
+  } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {} }
 }
 
 function syncHelpOverlay() {
@@ -1060,6 +1156,7 @@ function startNewGameFromMain() {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
@@ -1079,6 +1176,7 @@ function endRun() {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
@@ -1172,6 +1270,7 @@ function bounceBall(hit, isEdge) {
 }
 
 // Reward menu per REQ-09 : hole-start (except hole 1) + treasure near tree - 3 random of 5 pool (bouncy removed, maxAttempts replaced by freeShot Supply +5, trees always bounce)
+// Campaign deterministic rewards (12-campaign): single campaignSeed controls all offers including rerolls via seeded shuffle + counter
 const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShot', 'areaUp'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
@@ -1181,6 +1280,48 @@ let rewardPending = false;
 let firstRewardClaimed = false; // kept for backward compat
 let rewardRerolled = false; // per-menu flag per REQ-025, false when menu freshly shown
 let rewardRerollHover = false; // hover for re-roll button
+let rewardSeedCounter = 0; // deterministic counter for campaign seed, persisted in STORAGE_KEY
+function hashSeedString(s) {
+  let h = 2166136261 >>> 0;
+  const str = String(s);
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32Reward(a) {
+  return function () {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seededShuffle(a, seedStr) {
+  const seed = hashSeedString(seedStr);
+  const rand = mulberry32Reward(seed);
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function getSeededRewardOffer() {
+  const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
+  const seedStr = cs + ':' + rewardSeedCounter;
+  rewardSeedCounter++;
+  const copy = [...REWARD_POOL];
+  seededShuffle(copy, seedStr);
+  return copy.slice(0, 3);
+}
+function getSeededRerollOffer() {
+  const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
+  const seedStr = cs + ':reroll:' + rewardSeedCounter;
+  rewardSeedCounter++;
+  const copy = [...REWARD_POOL];
+  seededShuffle(copy, seedStr);
+  return copy.slice(0, 3);
+}
+function getRewardSeedCounter() { return rewardSeedCounter; }
+function setRewardSeedCounter(v) { rewardSeedCounter = Math.max(0, Math.floor(v || 0)); }
 
 // 11-banners: hole banner 2s, attempts banner 1s (Last Attempt)
 let holeBannerVisible = false;
@@ -1208,8 +1349,8 @@ function rerollReward() {
     return true;
   }
   rewardRerolled = true;
-  // New random 3-set from same 5-pool, keep menu visible
-  rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
+  // Deterministic reroll from campaign seed + counter (12-campaign)
+  rewardOffered = getSeededRerollOffer();
   rewardMenuHover = null;
   rewardRerollHover = false;
   saveProgress();
@@ -1217,7 +1358,7 @@ function rerollReward() {
 }
 
 function shuffleArray(a) {
-  // Fisher-Yates with Math.random, uniform
+  // Legacy random shuffle (kept for non-reward uses); rewards now use seededShuffle
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
@@ -1240,8 +1381,9 @@ function maybeShowRewardMenu() {
   // Allow reward menu in AIMING, CHARGING and FLYING — treasure pickup shows immediately even mid-flight
   if (gameState !== "AIMING" && gameState !== "CHARGING" && gameState !== "FLYING") return;
   // REQ-021 per-hole: no reward before first attempt on hole 1, reward before first attempt on holes >0 via rewardPending set on hole entry
+  // 12-campaign: deterministic reward via campaignSeed + counter
   if (rewardPending) {
-    rewardOffered = shuffleArray([...REWARD_POOL]).slice(0, 3);
+    rewardOffered = getSeededRewardOffer();
     rewardMenuVisible = true;
     rewardMenuHover = null;
     rewardPending = false;
@@ -1632,6 +1774,7 @@ function handleGameOverReturn() {
   rewardRerolled = false;
   rewardMenuHover = null;
   rewardRerollHover = false;
+  rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   modifiers = [];
@@ -1803,6 +1946,7 @@ function returnToMainMenu() {
   rewardOffered = [];
   rewardRerolled = false;
   rewardRerollHover = false;
+  rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false;
@@ -2495,9 +2639,44 @@ function init() {
     });
   }
 
+  // 12-campaign: campaign seed display + edit popup (seed input / regenerate with backdrop)
+  const campaignEditBtn = document.getElementById('campaign-seed-edit-button');
+  const campaignEditOverlay = document.getElementById('campaign-edit-overlay');
+  const campaignEditClose = document.getElementById('campaign-edit-close');
+  const campaignRegenBtn = document.getElementById('campaign-regenerate-button');
+  const campaignApplyBtn = document.getElementById('campaign-seed-apply');
+  const campaignInput = document.getElementById('campaign-seed-input');
+  if (campaignEditBtn) {
+    campaignEditBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showCampaignEditOverlay();
+    });
+  }
+  if (campaignEditClose) {
+    campaignEditClose.addEventListener('click', () => hideCampaignEditOverlay());
+  }
+  if (campaignEditOverlay) {
+    campaignEditOverlay.addEventListener('click', (e) => {
+      if (e.target === campaignEditOverlay) hideCampaignEditOverlay();
+    });
+  }
+  if (campaignRegenBtn) {
+    campaignRegenBtn.addEventListener('click', () => handleCampaignRegenerate());
+  }
+  if (campaignApplyBtn) {
+    campaignApplyBtn.addEventListener('click', () => handleManualSeedApply());
+  }
+  if (campaignInput) {
+    campaignInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); handleManualSeedApply(); }
+      if (e.key === 'Escape') { e.preventDefault(); hideCampaignEditOverlay(); }
+    });
+  }
+
   setupCanvas();
   // REQ-031: load courses collection before progress (so courseId can be resolved)
   try { loadCourses(); } catch (e) { console.warn('loadCourses failed', e); }
+  try { syncCampaignSeedDisplay(); } catch {}
   // No immediate auto-create if courses empty — allow empty per updated REQ-031 (persist [])
   // loadCourses already created default on first ever missing key; empty from delete stays empty
   // Ensure activeCourse defaults to first course if available
@@ -2741,6 +2920,22 @@ function init() {
         handleGameOverReturn();
         e.preventDefault();
       }
+      return;
+    }
+    // Campaign edit popup priority inside main menu
+    if (campaignEditVisible) {
+      if (e.code === "Escape") {
+        hideCampaignEditOverlay();
+        e.preventDefault();
+        return;
+      }
+      const ae = document.activeElement;
+      const isInput = ae && ae.id === 'campaign-seed-input';
+      if (isInput) {
+        // allow typing, Enter, Backspace, etc. in input
+        if (e.code === "Enter" || e.key.length === 1 || e.code === "Backspace" || e.code === "Delete" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "Home" || e.code === "End" || (e.ctrlKey || e.metaKey)) return;
+      }
+      e.preventDefault();
       return;
     }
     // Help has priority over main/pause
@@ -3447,6 +3642,28 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, '__holeBannerVisible', { get: () => holeBannerVisible, set: (v) => { holeBannerVisible = !!v; } });
   Object.defineProperty(window, 'attemptsBannerVisible', { get: () => attemptsBannerVisible, set: (v) => { attemptsBannerVisible = !!v; } });
   Object.defineProperty(window, '__attemptsBannerVisible', { get: () => attemptsBannerVisible, set: (v) => { attemptsBannerVisible = !!v; } });
+  // 12-campaign
+  window.__getCampaignSeed = () => (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null);
+  window.__setCampaignSeed = (s) => (typeof setCampaignSeed === 'function' ? setCampaignSeed(s) : null);
+  window.__regenerateCampaign = () => handleCampaignRegenerate();
+  window.__applyManualSeed = (s) => { const inp = document.getElementById('campaign-seed-input'); if (inp) inp.value = s; handleManualSeedApply(); };
+  window.__getRewardSeedCounter = getRewardSeedCounter;
+  window.__setRewardSeedCounter = setRewardSeedCounter;
+  window.__seededShuffle = seededShuffle;
+  window.__getSeededRewardOffer = getSeededRewardOffer;
+  window.__isCampaignEditVisible = isCampaignEditVisible;
+  window.__showCampaignEditOverlay = showCampaignEditOverlay;
+  window.__hideCampaignEditOverlay = hideCampaignEditOverlay;
+  window.__syncCampaignEditOverlay = syncCampaignEditOverlay;
+  window.__syncCampaignSeedDisplay = syncCampaignSeedDisplay;
+  window.getCampaignSeed = getCampaignSeed;
+  window.setCampaignSeed = setCampaignSeed;
+  window.regenerateCampaign = regenerateCampaign;
+  window.applyManualSeed = applyManualSeed;
+  Object.defineProperty(window, 'campaignEditVisible', { get: () => campaignEditVisible, set: (v) => { campaignEditVisible = !!v; syncCampaignEditOverlay(); } });
+  Object.defineProperty(window, '__campaignEditVisible', { get: () => campaignEditVisible, set: (v) => { campaignEditVisible = !!v; syncCampaignEditOverlay(); } });
+  Object.defineProperty(window, 'campaignSeed', { get: () => (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null), set: (v) => { if (typeof setCampaignSeed === 'function') setCampaignSeed(v); syncCampaignSeedDisplay(); } });
+  Object.defineProperty(window, 'rewardSeedCounter', { get: () => rewardSeedCounter, set: (v) => { rewardSeedCounter = Math.max(0, Math.floor(v||0)); } });
 }
 
 // Auto-init when loaded as module via script tag

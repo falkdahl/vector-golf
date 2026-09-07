@@ -23,6 +23,126 @@ function makeUUID() {
   });
 }
 
+function mulberry32(a) {
+  return function () {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashString(s) {
+  let h = 2166136261 >>> 0;
+  const str = String(s);
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function seedHash(seed) {
+  if (typeof seed === 'number' && Number.isFinite(seed)) return seed >>> 0;
+  return hashString(String(seed));
+}
+
+export function deriveCourseSeed(campaignSeed, holeCount) {
+  const base = seedHash(campaignSeed);
+  let h = (base ^ (holeCount * 2654435761) ^ 0x9e3779b9) >>> 0;
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+export function generateCampaignSeed() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try { return crypto.randomUUID().slice(0, 8); } catch {}
+  }
+  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4);
+}
+
+let campaignSeed = null;
+
+export function getCampaignSeed() {
+  return campaignSeed;
+}
+
+export function setCampaignSeed(seed) {
+  campaignSeed = String(seed);
+  return campaignSeed;
+}
+
+export function getOrCreateCampaignSeed() {
+  if (campaignSeed !== null && campaignSeed !== undefined && String(campaignSeed).length) return campaignSeed;
+  const s = generateCampaignSeed();
+  campaignSeed = String(s);
+  return campaignSeed;
+}
+
+function deterministicNameForCourse(campaignSeedVal, holeCount) {
+  const d = deriveCourseSeed(campaignSeedVal, holeCount * 100 + 7);
+  const r = mulberry32(d);
+  return randomName(r);
+}
+
+function deterministicIdForCourse(campaignSeedVal, holeCount) {
+  const d = deriveCourseSeed(campaignSeedVal, holeCount * 100 + 13);
+  const r = mulberry32(d);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const vRand = r() * 16 | 0;
+    const v = c === 'x' ? vRand : (vRand & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+export function generateCampaignCourse(holeCount = 18, campaignSeedVal = getOrCreateCampaignSeed(), options = {}) {
+  if (![3,6,9,18].includes(holeCount)) throw new Error("holeCount must be 3, 6, 9 or 18");
+  // Allow overload: generateCampaignCourse(3, {difficulty:'easy'})
+  if (typeof campaignSeedVal === 'object' && campaignSeedVal !== null && !Array.isArray(campaignSeedVal)) {
+    options = campaignSeedVal;
+    campaignSeedVal = getOrCreateCampaignSeed();
+  }
+  const derived = deriveCourseSeed(campaignSeedVal, holeCount);
+  let difficulty = null;
+  if (options && typeof options === 'object' && options.difficulty && ['easy','medium','hard'].includes(options.difficulty)) {
+    difficulty = options.difficulty;
+  } else if (typeof options === 'string' && ['easy','medium','hard'].includes(options)) {
+    difficulty = options;
+  }
+  const name = deterministicNameForCourse(campaignSeedVal, holeCount);
+  const id = deterministicIdForCourse(campaignSeedVal, holeCount);
+  let prevLevelsCopy = null;
+  let prevLevelCopy = null;
+  try {
+    prevLevelsCopy = JSON.parse(JSON.stringify(LEVELS));
+    prevLevelCopy = JSON.parse(JSON.stringify(LEVEL));
+  } catch {}
+  const holes = (holeCount === 3 && difficulty) ? generateLevels(derived, holeCount, { difficulty }) : generateLevels(derived, holeCount);
+  const holesCopy = JSON.parse(JSON.stringify(holes));
+  try {
+    if (prevLevelsCopy) {
+      LEVELS.length = 0;
+      for (const h of prevLevelsCopy) LEVELS.push(h);
+    }
+    if (prevLevelCopy) {
+      for (const k of Object.keys(LEVEL)) delete LEVEL[k];
+      Object.assign(LEVEL, prevLevelCopy);
+    }
+  } catch {}
+  return {
+    id,
+    name,
+    holes: holesCopy,
+    holeCount,
+    seed: derived,
+    campaignSeed: String(campaignSeedVal),
+    createdAt: Date.now(),
+    bestTotal: null
+  };
+}
+
 export function generateCourse(holeCount = 18, seed = Date.now(), options = {}) {
   // Allow overload: generateCourse(3, {difficulty:'hard'}) or generateCourse(3, seed, {difficulty})
   if (typeof seed === 'object' && seed !== null && !Array.isArray(seed) && holeCount !== undefined) {
@@ -36,6 +156,11 @@ export function generateCourse(holeCount = 18, seed = Date.now(), options = {}) 
     seed = Date.now();
   }
   if (![3,6,9,18].includes(holeCount)) throw new Error("holeCount must be 3, 6, 9 or 18");
+  // If campaignSeed is provided in options, use deterministic path
+  if (options && typeof options === 'object' && options.campaignSeed !== undefined && options.campaignSeed !== null) {
+    const cs = String(options.campaignSeed);
+    return generateCampaignCourse(holeCount, cs, options);
+  }
   const id = makeUUID();
   const name = randomName();
   let difficulty = null;
@@ -109,8 +234,9 @@ export function getUnlockedStages(courses) {
   return unlocked;
 }
 
-export function ensureStagedCourses(courses) {
-  // Normalize to staged model: keep first course per holeCount in STAGES order, fill missing unlocked stages
+export function ensureStagedCourses(courses, campaignSeedParam) {
+  const cs = campaignSeedParam !== undefined && campaignSeedParam !== null ? String(campaignSeedParam) : (campaignSeed !== null ? String(campaignSeed) : null);
+  // Normalize to staged model: keep first course per holeCount in STAGES order, fill missing unlocked stages using deterministic seeds
   const byHoleCount = new Map();
   for (const c of courses) {
     if (!STAGES.includes(c.holeCount)) continue;
@@ -121,16 +247,29 @@ export function ensureStagedCourses(courses) {
     if (byHoleCount.has(hc)) {
       staged.push(byHoleCount.get(hc));
     } else if (isStageUnlocked(staged, hc)) {
-      // auto-generate missing unlocked stage
-      const gen = hc === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(hc, Date.now());
+      // auto-generate missing unlocked stage deterministically if campaignSeed available
+      let gen;
+      if (cs) {
+        if (hc === 3) gen = generateCampaignCourse(3, cs, { difficulty: 'easy' });
+        else gen = generateCampaignCourse(hc, cs);
+      } else {
+        gen = hc === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(hc, Date.now());
+      }
       staged.push(gen);
     } else {
       break;
     }
   }
-  // If no courses (fresh), create 3-easy
+  // If no courses (fresh), create 3-easy with campaignSeed
   if (staged.length === 0) {
-    const def = generateCourse(3, Date.now(), { difficulty: 'easy' });
+    let def;
+    if (cs) {
+      def = generateCampaignCourse(3, cs, { difficulty: 'easy' });
+    } else {
+      const newCs = generateCampaignSeed();
+      campaignSeed = String(newCs);
+      def = generateCampaignCourse(3, campaignSeed, { difficulty: 'easy' });
+    }
     staged.push(def);
   }
   return staged;
@@ -150,6 +289,14 @@ export function loadCourses() {
     if (!raw) throw new Error("no courses");
     const d = JSON.parse(raw);
     if (d.version !== 1 || !Array.isArray(d.courses)) throw new Error("bad version");
+    // Extract campaignSeed
+    let cs = d.campaignSeed;
+    if (cs === undefined || cs === null) {
+      // Legacy save without campaignSeed: keep existing courses, generate random seed for future determinism but don't regenerate now
+      cs = generateCampaignSeed();
+      // Persist with new seed on next save, but set global now
+    }
+    campaignSeed = String(cs);
     const valid = [];
     for (const c of d.courses) {
       try {
@@ -164,11 +311,13 @@ export function loadCourses() {
         console.warn("Discarding invalid course", c, e);
       }
     }
+    // Fix legacy bug where collected treasure was persisted in course definition — always reset for stored courses
+    try { normalizeCourseTreasures(valid); } catch {}
     // Normalize to staged unlocking model — only generates if a previously-unlocked stage is missing (once per unlock)
-    const staged = ensureStagedCourses(valid);
-    // If staged differs (e.g. old save had 18 only, or missing 3), persist normalized
-    if (staged.length !== valid.length || staged.some((c,i) => c.id !== valid[i]?.id)) {
-      try { saveCourses(staged); } catch {}
+    const staged = ensureStagedCourses(valid, campaignSeed);
+    // If staged differs (e.g. old save had 18 only, or missing 3), persist normalized with campaignSeed
+    if (staged.length !== valid.length || staged.some((c,i) => c.id !== valid[i]?.id) || d.campaignSeed === undefined) {
+      try { saveCourses(staged, campaignSeed); } catch {}
       _coursesCache = staged;
       _coursesCacheRaw = localStorage.getItem(COURSES_KEY);
       return staged;
@@ -177,8 +326,10 @@ export function loadCourses() {
     _coursesCacheRaw = raw;
     return staged;
   } catch (e) {
-    const def = generateCourse(3, Date.now(), { difficulty: 'easy' });
-    try { saveCourses([def]); } catch {}
+    const newCs = generateCampaignSeed();
+    campaignSeed = String(newCs);
+    const def = generateCampaignCourse(3, campaignSeed, { difficulty: 'easy' });
+    try { saveCourses([def], campaignSeed); } catch {}
     _coursesCache = [def];
     try { _coursesCacheRaw = localStorage.getItem(COURSES_KEY); } catch {}
     return [def];
@@ -186,28 +337,71 @@ export function loadCourses() {
 }
 
 export function ensureNextStageUnlocked(courses) {
-  // Called after a stage is cleared (bestTotal set). If next stage locked, generate it.
+  const cs = campaignSeed !== null ? String(campaignSeed) : null;
+  // Called after a stage is cleared (bestTotal set). If next stage locked, generate it deterministically.
   for (let i = 0; i < STAGES.length - 1; i++) {
     const currHC = STAGES[i];
     const nextHC = STAGES[i+1];
     const curr = courses.find(c => c.holeCount === currHC);
     const next = courses.find(c => c.holeCount === nextHC);
     if (curr && curr.bestTotal !== null && !next) {
-      const gen = generateCourse(nextHC, Date.now());
+      let gen;
+      if (cs) gen = generateCampaignCourse(nextHC, cs);
+      else gen = generateCourse(nextHC, Date.now());
       courses.push(gen);
       // Keep staged order
       courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
-      saveCourses(courses);
+      saveCourses(courses, cs);
       return gen;
     }
   }
   return null;
 }
 
-export function saveCourses(courses) {
-  localStorage.setItem(COURSES_KEY, JSON.stringify({ version: 1, courses }));
+function normalizeCourseTreasures(courseList) {
+  if (!Array.isArray(courseList)) return;
+  for (const c of courseList) {
+    if (!c || !Array.isArray(c.holes)) continue;
+    for (const h of c.holes) {
+      if (h && h.treasure && typeof h.treasure.isCollected === 'boolean') {
+        h.treasure.isCollected = false;
+      }
+    }
+  }
+}
+
+export function resetCourseTreasures(course) {
+  if (!course || !Array.isArray(course.holes)) return;
+  for (const h of course.holes) {
+    if (h && h.treasure) h.treasure.isCollected = false;
+  }
+}
+
+export function saveCourses(courses, campaignSeedOverride) {
+  const cs = campaignSeedOverride !== undefined && campaignSeedOverride !== null ? String(campaignSeedOverride) : (campaignSeed !== null ? String(campaignSeed) : generateCampaignSeed());
+  campaignSeed = String(cs);
+  // Never persist collected treasure - courses are definitions, run state lives in STORAGE_KEY
+  try { normalizeCourseTreasures(courses); } catch {}
+  localStorage.setItem(COURSES_KEY, JSON.stringify({ version: 1, campaignSeed: cs, courses }));
   _coursesCache = courses;
   try { _coursesCacheRaw = localStorage.getItem(COURSES_KEY); } catch {}
+}
+
+export function regenerateCampaign(newSeed) {
+  const cs = String(newSeed !== undefined && newSeed !== null && String(newSeed).trim() !== '' ? String(newSeed).trim() : generateCampaignSeed());
+  campaignSeed = cs;
+  const coursesNew = [generateCampaignCourse(3, cs, { difficulty: 'easy' })];
+  // Only 3 unlocked initially per requirement
+  saveCourses(coursesNew, cs);
+  _coursesCache = coursesNew;
+  try { _coursesCacheRaw = localStorage.getItem(COURSES_KEY); } catch {}
+  return { campaignSeed: cs, courses: coursesNew };
+}
+
+export function applyManualSeed(seedStr) {
+  const trimmed = String(seedStr || '').trim();
+  if (!trimmed) throw new Error("Seed cannot be empty");
+  return regenerateCampaign(trimmed);
 }
 
 // Invalidate in-memory cache (e.g. after external clear)
