@@ -1212,9 +1212,9 @@ function maybeShowRewardMenu() {
   if (pauseMenuVisible) return;
   if (mainMenuVisible) return;
   if (rewardMenuVisible) return;
-  // Game Over takes precedence — never show reward when out of attempts
-  if (getAttemptsLeft() <= 0) {
-    showGameOver();
+  // Reward blocked when out of attempts at attempt-start — Game Over is deferred to next attempt start (handleLaunch)
+  // Allow treasure reward during last flight (FLYING) even with attemptsLeft 0, since last shot is allowed to finish
+  if (getAttemptsLeft() <= 0 && gameState !== "FLYING") {
     return;
   }
   // Allow reward menu in AIMING, CHARGING and FLYING — treasure pickup shows immediately even mid-flight
@@ -1808,13 +1808,35 @@ function handleLaunch(angle, power) {
   if (mainMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (gameState === "GAME_OVER") return;
+  // Deferred Game Over + Auto-arm: if this launch would be the last counted attempt and freeShot supply available, auto-arm it
+  if (!isFreeShotActive && (supply.freeShot ?? 0) > 0 && getAttemptsLeft() <= 1) {
+    isFreeShotActive = true;
+    syncFreeShotGlow();
+    updateHotbarUI();
+  }
+  // If no attempts left and no free shot armed, Game Over instead of launching (deferred to next attempt start)
+  if (getAttemptsLeft() <= 0 && !(isFreeShotActive && (supply.freeShot ?? 0) > 0)) {
+    showGameOver();
+    return;
+  }
   launchBall(angle, power);
-  // Free Shot: if armed and supply available, this attempt does not decrease Attempts Left — keep glow during flight
+  // Free Shot: if armed and supply available, this attempt does not decrease Attempts Left — keep glow during flight, persist if supply remains
   if (isFreeShotActive && (supply.freeShot ?? 0) > 0) {
     supply.freeShot = Math.max(0, supply.freeShot - 1);
-    isFreeShotActive = false;
-    freeShotFlightActive = true;
-    syncFreeShotGlow();
+    // Persist armed while supply remains, only clear when supply reaches 0
+    if (supply.freeShot > 0) {
+      // keep isFreeShotActive true for next attempt, but hide ball glow during current flight
+      isFreeShotActive = true;
+      freeShotFlightActive = true;
+      // Ball glow hidden during flight, edge glow visible via flight flag
+      try { setWindFreeShotBallActive(false); } catch {}
+      try { setWindFreeShotEdgeActive(true); } catch {}
+      try { setWindFreeShotActive(true); } catch {}
+    } else {
+      isFreeShotActive = false;
+      freeShotFlightActive = true;
+      syncFreeShotGlow();
+    }
     // Do NOT increment holeAttempts/totalAttempts
     updateHotbarUI();
     updateAttemptsUI();
@@ -1838,13 +1860,12 @@ function handleLaunch(angle, power) {
     attempts = totalAttempts;
     updateAttemptsUI();
   }
-  // Check immediate win not possible here; Game Over will be checked after flight if not won (see update loop)
+  // Game Over is deferred — last shot where attemptsLeft becomes 0 is allowed to finish; next handleLaunch will trigger Game Over
   gameState = "FLYING";
   try { lastLaunchTime = performance.now(); } catch { lastLaunchTime = Date.now(); }
   resetCharge();
   updateForceBar();
   saveProgress();
-  // If this was the last attempt, Game Over will be shown when ball fails to win (handled in update loop + water/OB handling)
 }
 
 function checkWin() {
@@ -1995,14 +2016,10 @@ function update(dt) {
       return;
     }
 
-    // Game Over check: immediately when Attempts Left is 0 (no grace, no reward delay) — takes precedence over treasure/reward
-    if (getAttemptsLeft() <= 0) {
-      showGameOver();
-      return;
-    }
+    // Deferred Game Over: last shot where attemptsLeft becomes 0 is allowed to finish (no immediate Game Over while FLYING)
+    // Game Over will be checked only when starting the next attempt (handleLaunch entry) or on reroll
 
     // Treasure hit (one per hole near tree, see 09 §3) - non-fatal, shows reward immediately (even mid-flight)
-    // Only shown if still have attempts left (Game Over already handled above)
     if (level && level.treasure && !level.treasure.isCollected && !rewardMenuVisible) {
       try {
         if (checkTreasureHit(ball.pos, BALL_RADIUS, level.treasure)) {
@@ -2030,12 +2047,13 @@ function update(dt) {
     }
     const edgeOut = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
     if (terrainHit || waterHit || edgeOut) {
-      // Fatal terrain/water/edge — if out of attempts, Game Over instead of reset
-      if (holeAttempts >= maxAttempts) {
+      // Fatal terrain/water/edge — if last counted attempt has just failed (attemptsLeft<=0), show Game Over immediately
+      // instead of resetting to tee and waiting for next launch. Allows last shot to finish (checkWin already ran) but fails fast.
+      // (water already filtered for airborne, so this is ground water)
+      if (getAttemptsLeft() <= 0) {
         showGameOver();
         return;
       }
-      // (water already filtered for airborne, so this is ground water)
       resetBall();
       return;
     }
