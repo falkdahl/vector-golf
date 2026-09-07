@@ -23,6 +23,9 @@ import {
   drawTerrainZones,
   drawBackground,
   drawTreasure,
+  drawCenterBanner,
+  drawHoleBanner,
+  drawAttemptsBanner,
 } from "./render.js";
 import {
   initWindOverlay,
@@ -749,7 +752,7 @@ function handleContinue() {
 }
 function openInLevelPause() {
   // Show pause menu (separate overlay) with backdrop, works even in FLYING
-  if (rewardMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
+  if (rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
   if (pauseMenuVisible) return false;
   if (mainMenuVisible) return false;
   if (!activeCourse && !hasRestorableSave()) return false;
@@ -912,6 +915,8 @@ function handleCoursePlay(courseId) {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
+  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
@@ -919,7 +924,7 @@ function handleCoursePlay(courseId) {
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   syncPauseOverlay(); syncMainMenu();
   updateAttemptsUI(); updateHotbarUI();
-  maybeShowRewardMenu();
+  // hole banner now shown by loadLevel; reward will auto-show after banner
   saveProgress();
 }
 
@@ -1074,6 +1079,8 @@ function endRun() {
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
+  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
@@ -1175,6 +1182,17 @@ let firstRewardClaimed = false; // kept for backward compat
 let rewardRerolled = false; // per-menu flag per REQ-025, false when menu freshly shown
 let rewardRerollHover = false; // hover for re-roll button
 
+// 11-banners: hole banner 2s, attempts banner 1s (Last Attempt)
+let holeBannerVisible = false;
+let holeBannerText = "";
+let holeBannerTimer = 0;
+const holeBannerDuration = 2000;
+let attemptsBannerVisible = false;
+let attemptsBannerText = "";
+let attemptsBannerTimer = 0;
+const attemptsBannerDuration = 1000;
+let lastAttemptsBannerValue = null;
+
 function getRewardRerolled() { return rewardRerolled; }
 function rerollReward() {
   if (!rewardMenuVisible || rewardRerolled) return false;
@@ -1212,6 +1230,8 @@ function maybeShowRewardMenu() {
   if (pauseMenuVisible) return;
   if (mainMenuVisible) return;
   if (rewardMenuVisible) return;
+  if (holeBannerVisible) return;
+  if (attemptsBannerVisible) return;
   // Reward blocked when out of attempts at attempt-start — Game Over is deferred to next attempt start (handleLaunch)
   // Allow treasure reward during last flight (FLYING) even with attemptsLeft 0, since last shot is allowed to finish
   if (getAttemptsLeft() <= 0 && gameState !== "FLYING") {
@@ -1231,6 +1251,64 @@ function maybeShowRewardMenu() {
     saveProgress();
     return;
   }
+}
+
+// 11-banners API
+function isHoleBannerVisible() { return holeBannerVisible; }
+function getHoleBannerText() { return holeBannerText; }
+function showHoleBanner(index, total) {
+  if (pauseMenuVisible || mainMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
+  const n = Math.max(1, Math.floor(index) + 1);
+  const m = Math.max(1, Math.floor(total) || getTotalHoles());
+  holeBannerText = `Hole ${n}`;
+  // alternative `Hole ${n}/${m}` also accepted; keep simple
+  holeBannerVisible = true;
+  holeBannerTimer = holeBannerDuration;
+  attemptsBannerVisible = false;
+  attemptsBannerTimer = 0;
+  rewardMenuVisible = false;
+  updateHotbarUI();
+  return true;
+}
+function hideHoleBanner() {
+  if (!holeBannerVisible) return false;
+  holeBannerVisible = false;
+  holeBannerTimer = 0;
+  // auto-transition to reward if pending (hole >0) — called from update timer expiry; also allow immediate maybeShowRewardMenu
+  // Defer to next tick to keep dim continuous
+  setTimeout(() => { try { maybeShowRewardMenu(); } catch {} }, 0);
+  return true;
+}
+function isAttemptsBannerVisible() { return attemptsBannerVisible; }
+function getAttemptsBannerText() { return attemptsBannerText; }
+function showAttemptsBanner(attemptsLeft) {
+  if (pauseMenuVisible || mainMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
+  if (rewardMenuVisible || holeBannerVisible) return false;
+  const v = Math.max(1, Math.min(3, Math.floor(attemptsLeft)));
+  if (v !== 1) return false;
+  attemptsBannerText = "Last Attempt";
+  attemptsBannerVisible = true;
+  attemptsBannerTimer = attemptsBannerDuration;
+  lastAttemptsBannerValue = v;
+  updateHotbarUI();
+  return true;
+}
+function hideAttemptsBanner() {
+  if (!attemptsBannerVisible) return false;
+  attemptsBannerVisible = false;
+  attemptsBannerTimer = 0;
+  return true;
+}
+function maybeShowAttemptsBanner() {
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
+  if (pauseMenuVisible || mainMenuVisible || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible) return false;
+  if (gameState === "WIN" || gameState === "GAME_OVER") return false;
+  const left = getAttemptsLeft();
+  if (left !== 1) return false;
+  if (lastAttemptsBannerValue === left) return false;
+  // Do not show if hole banner just finished and reward pending will show— attempts banner after reward? Attempts banner has lower priority than reward.
+  if (rewardPending) return false;
+  return showAttemptsBanner(left);
 }
 
 function claimReward(type) {
@@ -1354,9 +1432,17 @@ function loadLevel(index) {
   }
   // REQ-015 collapsible: reset to expanded on new hole
   resetHotbarCollapsed();
+  // 11-banners: reset attempts banner dedupe for new hole, hide any previous banner
+  lastAttemptsBannerValue = null;
+  attemptsBannerVisible = false;
+  attemptsBannerTimer = 0;
+  holeBannerVisible = false;
+  holeBannerTimer = 0;
   updateHotbarUI();
   // Redraw terrain for new hole (zoned background per REQ-010/033)
   try { redrawBottom(); } catch {}
+  // 11-banners: show Hole N banner for 2s before reward (same dim, auto-transition)
+  try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {}
 }
 
 function initLevel() {
@@ -1438,7 +1524,7 @@ function updateAttemptsUI() {
 function updateHotbarUI() {
   if (!hotbarEl) return;
   const isAiming = gameState === "AIMING" || gameState === "CHARGING";
-  const hideForPause = pauseMenuVisible || rewardMenuVisible || mainMenuVisible;
+  const hideForPause = pauseMenuVisible || rewardMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible;
   hotbarEl.classList.toggle("hidden", !isAiming || hideForPause);
   for (const slot of hotbarEl.querySelectorAll(".hotbar-slot")) {
     const type = slot.dataset.type;
@@ -1502,6 +1588,9 @@ function showGameOver() {
   rewardRerolled = false;
   rewardMenuHover = null;
   rewardRerollHover = false;
+  // 11-banners: hide banners on Game Over
+  holeBannerVisible = false; holeBannerTimer = 0;
+  attemptsBannerVisible = false; attemptsBannerTimer = 0;
   gameState = "GAME_OVER";
   ball.isMoving = false;
   ball.z = 0;
@@ -1543,6 +1632,8 @@ function handleGameOverReturn() {
   rewardRerolled = false;
   rewardMenuHover = null;
   rewardRerollHover = false;
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
+  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   modifiers = [];
   syncModifiersToField();
   selectedModifier = null;
@@ -1613,6 +1704,7 @@ function getCanvasMousePos(e) {
 }
 
 function placeModifier(x, y) {
+  if (holeBannerVisible || attemptsBannerVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (!selectedModifier) return;
   if (!canPlace(selectedModifier)) {
@@ -1711,6 +1803,8 @@ function returnToMainMenu() {
   rewardOffered = [];
   rewardRerolled = false;
   rewardRerollHover = false;
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
+  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false;
   pauseMenuHover = null;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
@@ -1802,8 +1896,10 @@ function resetGameAfterWin() {
 }
 
 function handleLaunch(angle, power) {
-  // REQ-021: block launch while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible
+  // REQ-021: block launch while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners block
   if (rewardMenuVisible) return;
+  if (holeBannerVisible) return;
+  if (attemptsBannerVisible) return;
   if (pauseMenuVisible) return;
   if (mainMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
@@ -1981,6 +2077,38 @@ function update(dt) {
     }
     return;
   }
+  // 11-banners: hole banner (2s, same dim as reward) blocks input and transitions to reward
+  if (holeBannerVisible) {
+    tickWind();
+    updateHotbarUI();
+    holeBannerTimer -= dt * 1000;
+    if (holeBannerTimer <= 0) {
+      holeBannerVisible = false;
+      holeBannerTimer = 0;
+      // auto-transition to reward menu if pending (holes >0)
+      try { maybeShowRewardMenu(); } catch {}
+      if (!rewardMenuVisible) try { maybeShowAttemptsBanner(); } catch {}
+    }
+    if (charging) {
+      resetCharge();
+      gameState = "AIMING";
+    }
+    return;
+  }
+  if (attemptsBannerVisible) {
+    tickWind();
+    updateHotbarUI();
+    attemptsBannerTimer -= dt * 1000;
+    if (attemptsBannerTimer <= 0) {
+      attemptsBannerVisible = false;
+      attemptsBannerTimer = 0;
+    }
+    if (charging) {
+      resetCharge();
+      gameState = "AIMING";
+    }
+    return;
+  }
 
   // Update input
   updateInput(dt, gameState);
@@ -1991,6 +2119,14 @@ function update(dt) {
   }
 
   updateHotbarUI();
+  // 11-banners: maybe show attempts banner before last three attempts (3/2/1)
+  if ((gameState === "AIMING" || gameState === "CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible) {
+    try { maybeShowAttemptsBanner(); } catch {}
+    if (attemptsBannerVisible) {
+      if (charging) { resetCharge(); gameState = "AIMING"; }
+      return;
+    }
+  }
 
   if (gameState === "AIMING" || gameState === "CHARGING") {
     updateForceBar();
@@ -2124,8 +2260,12 @@ function render() {
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
   }
-  // REQ-021/023/024 + REQ-025: reward menu inside canvas (on top of HUD) - 3 random of 6 + re-roll
-  if (rewardMenuVisible) {
+  // 11-banners: hole/attempts banners share reward backdrop/style, auto-hide 2s; hole banner transitions to reward
+  if (holeBannerVisible) {
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch {}
+  } else if (attemptsBannerVisible) {
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, attemptsBannerText); } catch {}
+  } else if (rewardMenuVisible) {
     drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover, rewardRerolled, rewardRerollHover);
   }
   // REQ-028: pause menu is DOM-only (#pause-overlay) to avoid duplicate rendering; canvas pause draw disabled
@@ -2514,8 +2654,9 @@ function init() {
     {
       onLaunch: handleLaunch,
       onReset: () => {
-        // REQ-021: block R while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible
+        // REQ-021: block R while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners: block on last attempt
         if (rewardMenuVisible) return;
+        if (holeBannerVisible || attemptsBannerVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
         if (gameState === "GAME_OVER") {
@@ -2529,6 +2670,11 @@ function init() {
             handleNextHole();
           }
         } else {
+          // Last attempt: reset disabled during last attempt's flight, ball must play out (attemptsLeft ===0)
+          // Fix: previously blocked on second-to-last flight where attemptsLeft was 1 after that launch; now only block when 0
+          if (getAttemptsLeft() === 0) {
+            return;
+          }
           resetBall();
         }
       },
@@ -2545,8 +2691,9 @@ function init() {
   if (hotbarEl) {
     hotbarEl.querySelectorAll(".hotbar-slot").forEach(slot => {
       slot.addEventListener("click", () => {
-        // REQ-021: block hotbar selection while reward menu visible; REQ-028: block while pause; REQ-029: block while main menu
+        // REQ-021: block hotbar selection while reward menu visible; REQ-028: block while pause; REQ-029: block while main menu; 11-banners block
         if (rewardMenuVisible) return;
+        if (holeBannerVisible || attemptsBannerVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
         if (gameState !== "AIMING" && gameState !== "CHARGING") return;
@@ -2657,7 +2804,7 @@ function init() {
       e.preventDefault();
       return;
     }
-    // REQ-021: when reward menu visible, 1/2/3 selects random offered reward by position, other inputs blocked
+    // REQ-021: when reward menu visible, 1/2/3 selects random offered reward by position, other inputs blocked; 11-banners: R rerolls (not 0)
     if (rewardMenuVisible) {
       if (e.code === "Digit1" && rewardOffered[0]) {
         claimReward(rewardOffered[0]);
@@ -2668,18 +2815,22 @@ function init() {
       } else if (e.code === "Digit3" && rewardOffered[2]) {
         claimReward(rewardOffered[2]);
         e.preventDefault();
-      } else if ((e.code === "Digit0" || e.code === "Numpad0") && !rewardRerolled) {
+      } else if (e.code === "KeyR" && !rewardRerolled) {
         rerollReward();
         e.preventDefault();
-      } else if ((e.code === "Digit0" || e.code === "Numpad0") && rewardRerolled) {
+      } else if (e.code === "KeyR" && rewardRerolled) {
         e.preventDefault();
-      } else if (e.code === "KeyR") {
-        // R no longer rerolls (now 0); block R during menu to prevent reset behind overlay
+      } else if (e.code === "Digit0" || e.code === "Numpad0") {
+        // Digit0 no longer rerolls; blocked
         e.preventDefault();
       } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4") {
         // Block aiming/charging while menu open (including Digit4 which is not used - only 3 options)
         e.preventDefault();
       }
+      return;
+    }
+    if (holeBannerVisible || attemptsBannerVisible) {
+      e.preventDefault();
       return;
     }
     if (e.code === "Escape" || e.code === "KeyP") {
@@ -3282,6 +3433,20 @@ if (typeof window !== 'undefined') {
   window.__hideLoadingScreen = hideLoadingScreen;
   window.hideLoadingScreen = hideLoadingScreen;
   window.__maybeHideLoadingAfterSplash = maybeHideLoadingAfterSplash;
+  // 11-banners
+  window.__isHoleBannerVisible = isHoleBannerVisible;
+  window.__getHoleBannerText = getHoleBannerText;
+  window.__showHoleBanner = showHoleBanner;
+  window.__hideHoleBanner = hideHoleBanner;
+  window.__isAttemptsBannerVisible = isAttemptsBannerVisible;
+  window.__getAttemptsBannerText = getAttemptsBannerText;
+  window.__showAttemptsBanner = showAttemptsBanner;
+  window.__hideAttemptsBanner = hideAttemptsBanner;
+  window.__maybeShowAttemptsBanner = maybeShowAttemptsBanner;
+  Object.defineProperty(window, 'holeBannerVisible', { get: () => holeBannerVisible, set: (v) => { holeBannerVisible = !!v; } });
+  Object.defineProperty(window, '__holeBannerVisible', { get: () => holeBannerVisible, set: (v) => { holeBannerVisible = !!v; } });
+  Object.defineProperty(window, 'attemptsBannerVisible', { get: () => attemptsBannerVisible, set: (v) => { attemptsBannerVisible = !!v; } });
+  Object.defineProperty(window, '__attemptsBannerVisible', { get: () => attemptsBannerVisible, set: (v) => { attemptsBannerVisible = !!v; } });
 }
 
 // Auto-init when loaded as module via script tag
@@ -3291,4 +3456,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, maxAttempts, getMaxAttempts, setMaxAttempts, addMaxAttempts, getAttemptsLeft, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, handleNextHole, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, maxAttempts, getMaxAttempts, setMaxAttempts, addMaxAttempts, getAttemptsLeft, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, handleNextHole, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, holeBannerText, attemptsBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner };

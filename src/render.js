@@ -1209,13 +1209,37 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
   ctx.lineJoin = "round";
   ctx.strokeStyle = isDisabled ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.65)";
   ctx.lineWidth = 3;
-  const rerollText = isDisabled ? "Re-rolled" : "↻ Re-roll (1 attempt) [0]";
+  const rerollText = isDisabled ? "Re-rolled" : "↻ Re-roll (1 attempt) [R]";
   ctx.strokeText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
   ctx.fillStyle = isDisabled ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.95)";
   ctx.fillText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
   ctx.restore();
 
   ctx.restore();
+}
+
+export function drawCenterBanner(ctx, width, height, text) {
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, width, height);
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.lineWidth = 5;
+  ctx.fillStyle = "white";
+  ctx.strokeText(text, width / 2, height / 2);
+  ctx.fillText(text, width / 2, height / 2);
+  ctx.restore();
+}
+export function drawHoleBanner(ctx, width, height, text) {
+  return drawCenterBanner(ctx, width, height, text);
+}
+export function drawAttemptsBanner(ctx, width, height, attemptsLeft) {
+  const n = Math.max(0, Math.floor(attemptsLeft));
+  const txt = n === 1 ? "1 Attempt Left" : `${n} Attempts Left`;
+  return drawCenterBanner(ctx, width, height, txt);
 }
 
 export function drawWinOverlay(ctx, width, height, holeIndex = 0, totalHoles = 1, holeAttempts = 0, totalAttempts = 0) {
