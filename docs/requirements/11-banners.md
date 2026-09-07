@@ -7,14 +7,14 @@
 
 ## 1. Purpose
 
-Two transient center banners share the reward menu backdrop/style. Hole banner auto-hides after 2 seconds, attempts banner after 1 second. They provide orientation at hole start and urgency before the last attempt.
+Two transient center banners share the reward menu backdrop/style. Hole banner auto-hides after 1 second, attempts banner after 1 second. They provide orientation at hole start and urgency before the last counted attempt when no free shots remain.
 
 ## 2. Shared Visual Style (normative, reuses reward backdrop)
 
 - **Backdrop:** full-canvas dim `rgba(0,0,0,0.55)` identical to reward menu (`drawRewardMenu` backdrop), covering `0,0,LOGICAL_W,LOGICAL_H` on `fgCtx` (top canvas, `z-index:2`, above ball/aim but below wind/HTML overlays). No white card.
 - **Text style:** centered, `font: 700 22px system-ui, sans-serif` (or `700 26px` on large canvas, both acceptable if stroke kept), `fill: white`, `stroke: rgba(0,0,0,0.75) 5px` (`lineJoin: round, paint-order stroke fill`), `textAlign: center, textBaseline: middle`. Optional subtle shadow `rgba(0,0,0,0.35) blur 6`.
 - **Position:** center `width/2, height/2` (vertical `height/2 - 6` to match reward title). Single line. Bounded to container, no scroll.
-- **Duration:** hole banner `2000ms ±100ms`, attempts banner `1000ms ±100ms` visible, then auto-hide (`setTimeout` or `dt` accumulator). No manual dismiss required; `Space`/`R`/`Escape` during banner are ignored (like reward blocking). While banner visible, `handleLaunch`, modifier placement, aim input are blocked (same blocking as `rewardMenuVisible`).
+- **Duration:** hole banner `1000ms ±100ms`, attempts banner `1000ms ±100ms` visible, then auto-hide (`setTimeout` or `dt` accumulator). No manual dismiss required; `Space`/`R`/`Escape` during banner are ignored (like reward blocking). While banner visible, `handleLaunch`, modifier placement, aim input are blocked (same blocking as `rewardMenuVisible`).
 
 Both banners are rendered on `fgCtx` via `drawCenterBanner(ctx,W,H,text)` or `drawHoleBanner` / `drawAttemptsBanner` wrappers, called from `render()` when corresponding `*Visible` flag true. Draw order on `fgCtx` after `drawHUD` / `drawForceBar` but before `drawRewardMenu`? Actually hole/attempts banners share same layer as reward (full-dim). When hole banner is visible, reward menu is **not** visible yet; hole banner transitions to reward menu automatically after timeout. Attempts banner and reward menu are mutually exclusive (attempts banner never shown when `rewardMenuVisible` true; `holeBannerVisible` takes precedence over `attemptsBannerVisible`).
 
@@ -23,19 +23,19 @@ Both banners are rendered on `fgCtx` via `drawCenterBanner(ctx,W,H,text)` or `dr
 - **Trigger:** `loadLevel(index)` / `handleCoursePlay` / `advanceHole` / `initLevel` for every hole (`currentHoleIndex 0..M-1`), immediately after `level` assignment and `createField`/`createBall`/`resetHotbar`, before `maybeShowRewardMenu()`. Call `showHoleBanner(currentHoleIndex, totalHoles)`.
 - **Text:** `Hole ${currentHoleIndex+1}` (alternatives `Hole ${N}/${M}` e.g. `Hole 2/6` or `Hole 2 — 6 Holes` acceptable, but must contain `Hole` and the 1-based number). Must be deterministic and match `Hole: N/M` HUD. Example: `Hole 1`, `Hole 2`. For 6-hole course, hole 2 → `Hole 2`.
 - **Behavior:**
-  - Set `holeBannerVisible=true`, `holeBannerText=text`, `holeBannerStart=performance.now()` (or `Date.now()`), `holeBannerTimer=2000`.
+  - Set `holeBannerVisible=true`, `holeBannerText=text`, `holeBannerStart=performance.now()` (or `Date.now()`), `holeBannerTimer=1000`.
   - Block `maybeShowRewardMenu`, `handleLaunch`, `placeModifier`, `updateBall` (freeze `AIMING` physics like reward menu) while visible — `update(dt)` decrements timer but still advances wind (`updateWindUniforms`).
-  - After exactly `2000ms`, auto-hide: `holeBannerVisible=false`, then **automatically** call `maybeShowRewardMenu()` if `rewardPending` (holes >0 will then show `Choose an Upgrade`; hole 1 has no pending so just enters `AIMING`). Transition uses same dim so no flash. No `clearTimeout` leak on early level change — new `loadLevel` resets timer.
+  - After exactly `1000ms`, auto-hide: `holeBannerVisible=false`, then **automatically** call `maybeShowRewardMenu()` if `rewardPending` (holes >0 will then show `Choose an Upgrade`; hole 1 has no pending so just enters `AIMING`). Transition uses same dim so no flash. No `clearTimeout` leak on early level change — new `loadLevel` resets timer.
   - Persisted? Not persisted via `STORAGE_KEY`; on reload/resume, no hole banner shown (directly `AIMING` or `GAME_OVER`).
 
-## 4. Attempts Banner — Before Last Attempt Only
+## 4. Attempts Banner — Before Last Attempt Only (when no free shots)
 
-- **Trigger:** before the **last counted attempt** on the current hole only, i.e. when `attemptsLeft` ( `maxAttempts - holeAttempts` ) `=== 1` and `holeAttempts < maxAttempts`, at the moment the player is in `AIMING` before that attempt. Implementation: after a counted launch that makes `attemptsLeft` become `1`, or on entering `AIMING` (via `resetBall` after failure, or via `loadLevel` if somehow already low), if `gameState ∈ {'AIMING','CHARGING'}` and `getAttemptsLeft() === 1` and `!holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible` and `lastAttemptsBannerValue !== 1`, then `showAttemptsBanner(1)`.
+- **Trigger:** before the **last counted attempt** on the current hole only, i.e. when `attemptsLeft` ( `maxAttempts - holeAttempts` ) `=== 1` and `holeAttempts < maxAttempts` **and `supply.freeShot === 0`** (no free shots remaining — wait to show until free-shot supply is empty), at the moment the player is in `AIMING` before that attempt. Implementation: after a counted launch that makes `attemptsLeft` become `1`, or on entering `AIMING` (via `resetBall` after failure, or via `loadLevel` if somehow already low), if `gameState ∈ {'AIMING','CHARGING'}` and `getAttemptsLeft() === 1` and `supply.freeShot === 0` and `!holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible` and `lastAttemptsBannerValue !== 1`, then `showAttemptsBanner(1)`. If `supply.freeShot > 0`, the banner is suppressed (the last counted attempt will be free via auto-arm, so not truly last); it will appear later when free-shot supply is exhausted and `attemptsLeft` is still `1`.
 - **Text:** same style as hole banner, normative: `Last Attempt`. Must contain `Last` and `Attempt` (case-insensitive). No number required. Alternative `Last Attempt!` acceptable.
 - **Behavior:**
   - `attemptsBannerVisible=true`, `attemptsBannerText="Last Attempt"`, `attemptsBannerTimer=1000`, `lastAttemptsBannerValue=1`.
   - Same backdrop/blocking as hole banner (dim, blocks launch/placement/aim while visible for **1s**, wind still animates). Does **not** block `WIN`/`GAME_OVER` — if win/Game Over occurs during banner, banner hides immediately.
-  - After `1000ms`, auto-hide: `attemptsBannerVisible=false`, remain `AIMING` and allow launch. Show at most once per hole attempt cycle (track `lastAttemptsBannerValue` to avoid repeat on same `attemptsLeft`; reset on hole advance/new game/Game Over). Free-shot launches do **not** decrement `attemptsLeft` and thus do not trigger attempts banner; reroll cost that makes `attemptsLeft` become `1` also triggers (reroll is counted attempt).
+  - After `1000ms`, auto-hide: `attemptsBannerVisible=false`, remain `AIMING` and allow launch. Show at most once per hole attempt cycle (track `lastAttemptsBannerValue` to avoid repeat on same `attemptsLeft`; reset on hole advance/new game/Game Over). Free-shot launches do **not** decrement `attemptsLeft` and thus do not trigger attempts banner; reroll cost that makes `attemptsLeft` become `1` also triggers only if `supply.freeShot === 0`. If `supply.freeShot > 0`, both counted launches and rerolls that would make `attemptsLeft === 1` **do not** trigger the banner — it remains suppressed until supply is `0`.
   - If `holeBannerVisible` or `rewardMenuVisible` is true, attempts banner is queued: do not show until those hide (hole banner has priority). Hole banner and attempts banner never overlap.
 
 ## 5. State & API `src/main.js`
@@ -60,9 +60,9 @@ Both banners are rendered on `fgCtx` via `drawCenterBanner(ctx,W,H,text)` or `dr
 
 ## Acceptance Criteria
 
-- [ ] At `loadLevel(0)` (Hole 1) banner `Hole 1*` appears with `rgba(0,0,0,0.55)` dim and `700 22px white stroke 5px` centered, stays `2000±100ms`, then auto-hides and does **not** show reward menu (con­sistent with 09 §3). At `loadLevel(1)` (Hole 2) banner `Hole 2*` appears `2s` then auto-transitions to `Choose an Upgrade` reward menu (same dim, no flash) — `maybeShowRewardMenu()` called after banner hide when `rewardPending`.
-- [ ] When `holeAttempts` increments to make `attemptsLeft` become `1`, next `AIMING` entry shows `Last Attempt` banner `1s` with same dim/style, then auto-hides allowing launch; shown once per hole (free launches do not decrement and do not trigger). `Last Attempt` banner visible even when free-shot auto-arm would make next launch free — banner reflects counted `attemptsLeft`.
-- [ ] While banner visible, `handleLaunch` is blocked (Space does not launch), hotbar hidden, wind still animates, and banner auto-hides after `2s` without manual input. `WIN`/`GAME_OVER` hides banner immediately.
+- [ ] At `loadLevel(0)` (Hole 1) banner `Hole 1*` appears with `rgba(0,0,0,0.55)` dim and `700 22px white stroke 5px` centered, stays `1000±100ms`, then auto-hides and does **not** show reward menu (con­sistent with 09 §3). At `loadLevel(1)` (Hole 2) banner `Hole 2*` appears `1s` then auto-transitions to `Choose an Upgrade` reward menu (same dim, no flash) — `maybeShowRewardMenu()` called after banner hide when `rewardPending`.
+- [ ] When `holeAttempts` increments to make `attemptsLeft` become `1` **and `supply.freeShot === 0`**, next `AIMING` entry shows `Last Attempt` banner `1s` with same dim/style, then auto-hides allowing launch; shown once per hole (free launches do not decrement and do not trigger). `Last Attempt` banner is **suppressed** while `supply.freeShot > 0` (even though `attemptsLeft === 1`, the next launch will be free via auto-arm, so not shown); it appears later only after free-shot supply is exhausted and `attemptsLeft` is still `1`.
+- [ ] While banner visible, `handleLaunch` is blocked (Space does not launch), hotbar hidden, wind still animates, and banner auto-hides after `1s` without manual input. `WIN`/`GAME_OVER` hides banner immediately.
 - [ ] Banners not persisted: reload mid-banner resumes at `AIMING` without banner.
 
 ## File Paths

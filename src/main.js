@@ -1323,11 +1323,11 @@ function getSeededRerollOffer() {
 function getRewardSeedCounter() { return rewardSeedCounter; }
 function setRewardSeedCounter(v) { rewardSeedCounter = Math.max(0, Math.floor(v || 0)); }
 
-// 11-banners: hole banner 2s, attempts banner 1s (Last Attempt)
+// 11-banners: hole banner 1s, attempts banner 1s (Last Attempt) — Last Attempt suppressed while freeShot supply >0
 let holeBannerVisible = false;
 let holeBannerText = "";
 let holeBannerTimer = 0;
-const holeBannerDuration = 2000;
+const holeBannerDuration = 1000;
 let attemptsBannerVisible = false;
 let attemptsBannerText = "";
 let attemptsBannerTimer = 0;
@@ -1426,6 +1426,7 @@ function getAttemptsBannerText() { return attemptsBannerText; }
 function showAttemptsBanner(attemptsLeft) {
   if (pauseMenuVisible || mainMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
   if (rewardMenuVisible || holeBannerVisible) return false;
+  if ((supply.freeShot ?? 0) > 0) return false;
   const v = Math.max(1, Math.min(3, Math.floor(attemptsLeft)));
   if (v !== 1) return false;
   attemptsBannerText = "Last Attempt";
@@ -1447,6 +1448,7 @@ function maybeShowAttemptsBanner() {
   if (gameState === "WIN" || gameState === "GAME_OVER") return false;
   const left = getAttemptsLeft();
   if (left !== 1) return false;
+  if ((supply.freeShot ?? 0) > 0) return false;
   if (lastAttemptsBannerValue === left) return false;
   // Do not show if hole banner just finished and reward pending will show— attempts banner after reward? Attempts banner has lower priority than reward.
   if (rewardPending) return false;
