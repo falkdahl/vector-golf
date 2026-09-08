@@ -210,6 +210,11 @@ function createWindShader() {
         contrib.y = st * local.x + ct * local.y;
         v += contrib;
       }
+      // Updated per new requirement: rotate includes 5×, stacked rotate/flip deduped to one 5×
+      int ampCnt = 0;
+      int flipCnt = 0;
+      int rotCnt = 0;
+      bool hasNull = false;
       for(int i=0; i<12; ++i){
         if(i >= uModifierCount) continue;
         vec2 mPos = uModifierPos[i];
@@ -217,10 +222,22 @@ function createWindShader() {
         float mType = uModifierType[i];
         vec2 md = world - mPos;
         if(dot(md,md) < mRad * mRad){
-          if(mType < 0.5) v *= 5.0;
-          else if(mType < 1.5) v = vec2(0.0);
-          else v *= -5.0;
+          if(mType < 0.5) ampCnt++;
+          else if(mType < 1.5) hasNull = true;
+          else if(mType < 2.5) flipCnt++;
+          else rotCnt++;
         }
+      }
+      if(hasNull) v = vec2(0.0);
+      else {
+        bool hasRotFlip = (flipCnt + rotCnt) > 0;
+        int totalPow = ampCnt + (hasRotFlip ? 1 : 0);
+        float totalFactor = pow(5.0, float(totalPow));
+        v *= totalFactor;
+        int totalQuarter = (rotCnt + 2 * flipCnt) - ((rotCnt + 2 * flipCnt) / 4) * 4;
+        if(totalQuarter == 1) v = vec2(v.y, -v.x);
+        else if(totalQuarter == 2) v = -v;
+        else if(totalQuarter == 3) v = vec2(-v.y, v.x);
       }
       return v * (uWindStrength * 2.0 + 20.0);
     }
@@ -714,6 +731,7 @@ export function setWindUniformsFromField(components, modifiers, windStrength) {
         let t = 0;
         if (m.type === 'nullify') t = 1;
         else if (m.type === 'flip') t = 2;
+        else if (m.type === 'rotate') t = 3;
         else t = 0;
         uniforms.uModifierType.value[i] = t;
       } else {

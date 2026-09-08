@@ -724,8 +724,8 @@ body {
 .hotbar-slot[data-type="amplify"].selected { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9) !important; }
 .hotbar-slot[data-type="nullify"].selected { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9) !important; }
 .hotbar-slot[data-type="flip"].selected { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9) !important; }
-.hotbar-slot[data-type="freeShot"].selected { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.9) !important; }
-.hotbar-slot[data-type="freeShot"].active { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.95) !important; box-shadow: 0 0 10px rgba(241,196,15,0.6); transform: scale(1.04); }
+.hotbar-slot[data-type="rotate"].selected { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.9) !important; }
+.hotbar-slot[data-type="rotate"].active { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.95) !important; box-shadow: 0 0 10px rgba(231,76,60,0.6); transform: scale(1.04); }
 .hotbar-slot.disabled {
   opacity: 0.45;
   filter: grayscale(0.6);
@@ -739,7 +739,7 @@ body {
 .hotbar-slot[data-type="amplify"] .hotbar-icon { color: #e67e22; }
 .hotbar-slot[data-type="nullify"] .hotbar-icon { color: #3498db; }
 .hotbar-slot[data-type="flip"] .hotbar-icon { color: #9b59b6; }
-.hotbar-slot[data-type="freeShot"] .hotbar-icon { color: #f1c40f; }
+.hotbar-slot[data-type="rotate"] .hotbar-icon { color: #e74c3c; }
 .hotbar-label { flex: 0 1 auto; text-align: left; white-space: nowrap; }
 .hotbar-label, .hotbar-count, .hotbar-icon { white-space: nowrap; flex-wrap: nowrap; }
 .hotbar-count {

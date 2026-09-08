@@ -463,45 +463,41 @@ export function getWindAt(worldX, worldY) {
     };
   }
 
-  // Apply modifiers in placement order (REQ-015/016/017/018 + rotate 90CW)
-  let result = { ...base };
+  // Apply modifiers - updated per new requirement: rotate includes one amplify (5×), stacked rotate/flip deduped to one amplify
+  // Normative: totalFactor = 5**(amplifyCount + (hasRotFlip?1:0)), rotation = (rotateCount*90 + flipCount*180) %360 CW, nullify dominates
   let amplifyCount = 0;
-  // Track nullify dominance: if any nullify active, result stays 0 regardless of later rotates/flips
+  let flipCount = 0;
+  let rotateCount = 0;
   let hasNullify = false;
   for (const mod of modifiers) {
     const dx = worldX - mod.x;
     const dy = worldY - mod.y;
     if (dx * dx + dy * dy < mod.radius * mod.radius) {
-      if (mod.type === 'nullify') {
-        result.x = 0;
-        result.y = 0;
-        hasNullify = true;
-      }
+      if (mod.type === 'nullify') hasNullify = true;
+      else if (mod.type === 'amplify') amplifyCount++;
+      else if (mod.type === 'flip') flipCount++;
+      else if (mod.type === 'rotate') rotateCount++;
     }
   }
-  if (hasNullify) return result;
-  for (const mod of modifiers) {
-    const dx = worldX - mod.x;
-    const dy = worldY - mod.y;
-    if (dx * dx + dy * dy < mod.radius * mod.radius) {
-      if (mod.type === 'amplify') {
-        // Cap at 25x per REQ-016
-        if (amplifyCount < 2) {
-          result.x *= 5;
-          result.y *= 5;
-          amplifyCount++;
-        }
-      } else if (mod.type === 'flip') {
-        result.x *= -5;
-        result.y *= -5;
-      } else if (mod.type === 'rotate') {
-        // 90° clockwise: (x,y) -> (y, -x)
-        const nx = result.y;
-        const ny = -result.x;
-        result.x = nx;
-        result.y = ny;
-      }
-    }
+  if (hasNullify) return { x: 0, y: 0 };
+  const hasRotFlip = (flipCount + rotateCount) > 0;
+  const totalFactor = Math.pow(5, amplifyCount + (hasRotFlip ? 1 : 0));
+  let result = { x: base.x * totalFactor, y: base.y * totalFactor };
+  // Apply combined rotation: rotateCount*90 + flipCount*180 CW = totalQuarterTurns*90
+  const totalQuarterTurns = (rotateCount + 2 * flipCount) % 4;
+  if (totalQuarterTurns === 1) {
+    const nx = result.y;
+    const ny = -result.x;
+    result.x = nx;
+    result.y = ny;
+  } else if (totalQuarterTurns === 2) {
+    result.x = -result.x;
+    result.y = -result.y;
+  } else if (totalQuarterTurns === 3) {
+    const nx = -result.y;
+    const ny = result.x;
+    result.x = nx;
+    result.y = ny;
   }
   return result;
 }

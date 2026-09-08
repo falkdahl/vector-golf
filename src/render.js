@@ -851,8 +851,8 @@ export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, 
   const holeText = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
   const attemptsLeft = Math.max(0, (maxAttempts ?? 10) - holeAttempts);
   const freeShot = Math.max(0, Math.floor(freeShotSupply ?? 0));
-  const attemptsText = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft} (+${freeShot})`;
-  // Requirement says e.g. "Attempts Left: 5 (+5)" — show (+Y) even when 0 may be " (+0)" but we show always for testability; alternative is to hide when 0, but we keep showing to match spec
+  const attemptsText = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft}`;
+  // Only show (+Y) when Y>0 per updated requirement; when 0 show just "Attempts Left: X"
   const totalText = `Total: ${totalAttempts}`;
   // Hole left
   ctx.textAlign = "left";
@@ -956,14 +956,15 @@ export function drawModifiers(ctx, modifiers) {
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
-    // icon
-    ctx.fillStyle = "white";
+    // icon - rotate red, others white (per updated requirement)
+    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : mod.type === 'flip' ? "⇄" : mod.type === 'rotate' ? "↻" : "•";
+    const isRotate = mod.type === 'rotate';
+    ctx.fillStyle = isRotate ? "#e74c3c" : "white";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
     ctx.font = "600 14px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : mod.type === 'flip' ? "⇄" : mod.type === 'rotate' ? "↻" : "•";
     ctx.strokeText(icon, mod.x, mod.y);
     ctx.fillText(icon, mod.x, mod.y);
     ctx.restore();
@@ -997,7 +998,14 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   ctx.fill();
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = blocked ? "rgba(255,80,80,0.95)" : "white";
+  const isRotatePreview = !blocked && type === 'rotate';
+  ctx.fillStyle = blocked ? "rgba(255,80,80,0.95)" : isRotatePreview ? "#e74c3c" : "white";
+  // Add subtle stroke for red icon to ensure contrast on light fill
+  if (isRotatePreview) {
+    ctx.strokeStyle = "rgba(0,0,0,0.5)";
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(type === 'rotate' ? "↻" : "•", x, y);
+  }
   ctx.font = "600 14px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
