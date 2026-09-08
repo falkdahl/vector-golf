@@ -433,10 +433,10 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     };
     attachNoiseToTerrain(terrain);
 
-    // Step 4: Generate treesOnFairway and waterOnFairway per tier (updated: easy 2-4, medium extra source)
+    // Step 4: Generate treesOnFairway and waterOnFairway per tier (updated: easy 1-2 per new requirement, medium/hard unchanged)
     let treesOnFairwayNeeded, waterOnFairwayNeeded;
     if (tier === 'easy') {
-      treesOnFairwayNeeded = 2 + Math.floor(rand() * 3); // 2-4 (was 1-2)
+      treesOnFairwayNeeded = 1 + Math.floor(rand() * 2); // 1-2 (updated from 0-2)
       waterOnFairwayNeeded = 0;
     } else if (tier === 'medium') {
       treesOnFairwayNeeded = 2 + Math.floor(rand() * 2); // 2-3
@@ -624,24 +624,26 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     // Source/sink placement with flipped and extra per tier (REQ-034)
     let sourcePositions = [];
     let sinkPositions = [];
-    // Helper: sink on right third top/bottom (y outside, x in [2W/3, W]) — increased distance 60-100
+    // Helper: sink on middle third top/bottom (y outside, x in [W/3, 2W/3]) — increased distance 60-100 (updated from right third)
     function sinkOnRightThirdTopOrBottom() {
       const outside = Math.floor(rand() * 41) + 60; // 60-100 increased (was 20-60)
       const isTop = rand() < 0.5;
-      const rightThirdStart = Math.floor(LOGICAL_W * 2 / 3); // 853 at 1280
-      const x = Math.floor(rand() * (LOGICAL_W - rightThirdStart)) + rightThirdStart; // [853,1280)
+      // Middle third: [W/3, 2W/3] => [426,853] at 1280 (was right third [853,1280])
+      const middleThirdStart = Math.floor(LOGICAL_W / 3); // 426
+      const middleThirdEnd = Math.floor(LOGICAL_W * 2 / 3); // 853
+      const x = Math.floor(rand() * (middleThirdEnd - middleThirdStart)) + middleThirdStart; // [426,853)
       const y = isTop ? -outside : LOGICAL_H + outside; // slightly above upper ( -60..-100 ) or below lower (780..820)
       return { x, y };
     }
     if (tier === 'easy') {
-      // Easy: no head wind — source left third, sink right third top/bottom, 2-4 trees
+      // Easy: no head wind — source left third, sink middle third top/bottom, 1-2 trees
       const outsideSource = Math.floor(rand() * 41) + 20; // 20-60
       const ySrc = Math.floor(rand() * (LOGICAL_H - 40)) + 20;
       sourcePositions = [{ x: -outsideSource, y: ySrc }]; // x < W/3
-      sinkPositions = [sinkOnRightThirdTopOrBottom()]; // x∈[2W/3,W], y outside top/bottom 60-100
+      sinkPositions = [sinkOnRightThirdTopOrBottom()]; // x∈[W/3,2W/3], y outside top/bottom 60-100 (middle third)
     } else if (tier === 'medium') {
       // Medium: source near tee + extra random outside edge not too close to existing source/sink
-      const sinkPos = sinkOnRightThirdTopOrBottom(); // 60-100 outside right third top/bottom
+      const sinkPos = sinkOnRightThirdTopOrBottom(); // 60-100 outside middle third top/bottom (updated from right third)
       const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand); // 20-60 outside closest to tee
       sinkPositions = [sinkPos];
       // Extra source randomly outside any edge (20-60) but not too close to existing source and sink
@@ -657,7 +659,7 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       if (!extraSource) extraSource = sampleRandomOutsideEdge(LOGICAL_W, LOGICAL_H, rand);
       sourcePositions = [sourceNearTee, extraSource];
     } else {
-      // Hard: single source near tee, single sink on right third top/bottom
+      // Hard: single source near tee, single sink on middle third top/bottom
       const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
       sourcePositions = [sourceNearTee];
       sinkPositions = [sinkOnRightThirdTopOrBottom()];

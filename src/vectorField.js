@@ -463,8 +463,8 @@ export function getWindAt(worldX, worldY) {
     };
   }
 
-  // Apply modifiers - updated per new requirement: rotate includes one amplify (5×), stacked rotate/flip deduped to one amplify
-  // Normative: totalFactor = 5**(amplifyCount + (hasRotFlip?1:0)), rotation = (rotateCount*90 + flipCount*180) %360 CW, nullify dominates
+  // Apply modifiers - updated per new requirement: rotate includes one amplify (5×), stacked rotate/flip deduped to one amplify, CCW
+  // Normative: totalFactor = 5**(amplifyCount + (hasRotFlip?1:0)), rotation = (rotateCount*90 CCW + flipCount*180) %360 CCW, nullify dominates
   let amplifyCount = 0;
   let flipCount = 0;
   let rotateCount = 0;
@@ -483,19 +483,19 @@ export function getWindAt(worldX, worldY) {
   const hasRotFlip = (flipCount + rotateCount) > 0;
   const totalFactor = Math.pow(5, amplifyCount + (hasRotFlip ? 1 : 0));
   let result = { x: base.x * totalFactor, y: base.y * totalFactor };
-  // Apply combined rotation: rotateCount*90 + flipCount*180 CW = totalQuarterTurns*90
+  // Apply combined rotation: rotateCount*90 CCW + flipCount*180 = totalQuarterTurns*90 CCW
   const totalQuarterTurns = (rotateCount + 2 * flipCount) % 4;
   if (totalQuarterTurns === 1) {
-    const nx = result.y;
-    const ny = -result.x;
+    const nx = -result.y;
+    const ny = result.x;
     result.x = nx;
     result.y = ny;
   } else if (totalQuarterTurns === 2) {
     result.x = -result.x;
     result.y = -result.y;
   } else if (totalQuarterTurns === 3) {
-    const nx = -result.y;
-    const ny = result.x;
+    const nx = result.y;
+    const ny = -result.x;
     result.x = nx;
     result.y = ny;
   }

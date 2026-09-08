@@ -210,7 +210,7 @@ function createWindShader() {
         contrib.y = st * local.x + ct * local.y;
         v += contrib;
       }
-      // Updated per new requirement: rotate includes 5×, stacked rotate/flip deduped to one 5×
+      // Updated per new requirement: rotate includes 5× CCW, stacked rotate/flip deduped to one 5×
       int ampCnt = 0;
       int flipCnt = 0;
       int rotCnt = 0;
@@ -235,9 +235,9 @@ function createWindShader() {
         float totalFactor = pow(5.0, float(totalPow));
         v *= totalFactor;
         int totalQuarter = (rotCnt + 2 * flipCnt) - ((rotCnt + 2 * flipCnt) / 4) * 4;
-        if(totalQuarter == 1) v = vec2(v.y, -v.x);
+        if(totalQuarter == 1) v = vec2(-v.y, v.x);
         else if(totalQuarter == 2) v = -v;
-        else if(totalQuarter == 3) v = vec2(-v.y, v.x);
+        else if(totalQuarter == 3) v = vec2(v.y, -v.x);
       }
       return v * (uWindStrength * 2.0 + 20.0);
     }
