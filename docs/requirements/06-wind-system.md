@@ -26,12 +26,12 @@ Defaults (when counts omitted): `seed=42, nSources=1, nSinks=1, nDoublets=1, nVo
 
 **Mandatory minima (coerced if violated, except hole-1 tutorial `sources:1,sinks:1,doublets:0,vortexes:0` bypasses vortex/doublet coercion; all-zero also coerces to `1,1,0,1` or `1,1,1,1`):**
 - At least one vortex **or** doublet strictly **inside** (`0<ex<width && 0<ey<height`, margin `≥20` → `20≤ex≤width-20`) for all levels except `hole-1`. If caller passes `0,0` for both with `nSources+sinks>0` on non-tutorial, implicitly create one vortex inside.
-- At least one source **and** one sink **slightly outside** (`ex<0||ex>width||ey<0||ey>height` with `OUTSIDE∈[20,60]`, e.g. `30+rand()*20`; no placement exactly on edge `ex==0` within `1px`, none strictly inside).
+- At least one source **and** one sink **slightly outside** (`ex<0||ex>width||ey<0||ey>height` with sources `OUTSIDE∈[20,60]` and sinks `OUTSIDE_SINK∈[60,100]` (increased distance, e.g. `60+rand()*40` for sink); no placement exactly on edge `ex==0` within `1px`, none strictly inside).
 
 **Seeded randomness**: deterministic `mulberry32(seed)` drives all positions/strengths/orientations; mandatory placements also derive from it.
 
 **Placement:**
-- Sources/sinks: random side `left x=-OUTSIDE / right x=width+OUTSIDE / top y=-OUTSIDE / bottom y=height+OUTSIDE` via `rand()`, other coordinate uniform along side in `[0,width]`/`[0,height]`, outside offset `20-60`. No inside, no edge.
+- Sources/sinks: random side `left x=-OUTSIDE / right x=width+OUTSIDE / top y=-OUTSIDE / bottom y=height+OUTSIDE` via `rand()`, other coordinate uniform along side in `[0,width]`/`[0,height]`, outside offset `20-60` for sources and **`60-100` for sinks (increased sink distance)**. No inside, no edge.
 - Vortexes/doublets: uniformly inside `[20,width-20]×[20,height-20]`.
 
 **Strengths (very fast wind, tunable but documented at `vectorField.js:5`):**
@@ -45,21 +45,26 @@ Defaults (when counts omitted): `seed=42, nSources=1, nSinks=1, nDoublets=1, nVo
 
 **Superposition**: `Vraw = Σsources(edge-outside)+Σsinks(edge-outside)+Σdoublets(inside)+Σvortexes(inside)` per cell centre. No unary flow.
 
-### 1.3 Per-Difficulty Field Placement (normative, see `08-level-generation.md` §3)
+### 1.3 Per-Difficulty Field Placement (normative, see `08-level-generation.md` §5)
 
-- Mandatory source slightly **outside edge closest to `tee`** (`dist≤180+OUTSIDE` outside).
-- Sink placement is **tier-dependent**:
-  - **Easy & Medium**: sink slightly **outside a free canvas edge that is NOT the edge closest to `hole`/`green` and NOT the source edge**, sampled uniformly along that free edge outside.
-  - **Hard non-flipped**: sink slightly **outside edge closest to `hole`** (`≤180+OUTSIDE` outside).
-  - **Hard flipped** (≥50% of hard when sampling 100 hard): sink slightly outside tee side + source slightly outside green side, **plus** extra source **and** sink slightly outside the two free edges (each gets one, `20-60` outside), resulting `sources=2,sinks=2`.
-  - **Medium extra sink** (60% of medium, ≥30% observed): additional sink slightly outside another remaining free edge also not closest to green (`sources=1,sinks=2` both outside on free edges not near green, `20-60` outside).
-- See `08-level-generation.md` for exact counts per tier and mandatory doublet-in-tree rule.
+- **Source outside `20-60` / sink outside `60-100` (increased distance)** — sources use `OUTSIDE=20-60` (`30+rand*20`), sinks use `OUTSIDE_SINK=60-100` (`60+rand*41`) for increased gap to canvas edge; none strictly inside or exactly on edge.
+- **Sink — every level has at least one sink** (`sinks ≥1`, actually `sinks=1` for all tiers) placed **slightly above the canvas upper edge** (`y=-OUTSIDE_SINK`) **or slightly below the lower edge** (`y=H+OUTSIDE_SINK`) **on the right third of the canvas** (`x ∈ [2*W/3, W]`, `OUTSIDE_SINK 60-100`), `rand()<0.5` chooses top vs bottom. Guarantees `sink.x > 2*W/3` (`x ∈ [853,1280]` at `W=1280`) and `sink.y <0` or `sink.y >H` with **increased distance 60-100** from edge (was 20-60). Applies to **all tiers** (easy/medium/hard).
+- **Easy — no head wind (tail wind left→right)**:
+  - Source **always slightly outside left edge** (`x=-OUTSIDE`, `OUTSIDE 20-60`, `y` uniform `20..H-20`) — left third of map (`x < W/3`).
+  - Sink as above (right third top/bottom, **60-100** outside). Guarantees `source.x < W/3` and `sink.x > 2*W/3`; no head wind. `1,1,1,0` total 3.
+- **Medium — extra source, single sink on right-third top/bottom (increased distance)**:
+  - Source slightly **outside edge closest to `tee`** (`dist≤180+OUTSIDE` outside, deterministic `edgePointClosestTo(tee)`, `OUTSIDE 20-60`) **plus an extra source placed randomly outside any canvas edge `OUTSIDE 20-60` but not too close to the existing source and sink (`hypot(newSource - existingSource) >180` and `hypot(newSource - sink) >180`, sampled with seeded `rand` and up to 30 retries, deterministic)**.
+  - Sink **single** as above (right third top/bottom, **60-100** outside) — always `sinks=1`. `2,1,2,1` total 6.
+- **Hard — single sink on right-third top/bottom (increased distance)**:
+  - Source slightly **outside edge closest to `tee`** (same as medium without extra, `OUTSIDE 20-60`).
+  - Sink **single** as above (right third top/bottom, **60-100** outside) — **no extra sink/source** (removed, always `1,1` not `2,2`; flipped logic removed). `1,1,3,1` total 6.
+- See `08-level-generation.md` §5 for exact `sources,sinks,doublets,vortexes` per tier, `waterOnFairway` `0`/`1-2`/`1-2`, and mandatory doublet-in-tree rule (≥1 doublet `≤2px` in fairway tree). All tiers use **constant wind strength** (not scaling with difficulty, see §1.4).
 
-### 1.4 Scaling & Minimum Force (final canonical values)
+### 1.4 Scaling & Minimum Force (final canonical values — constant, not scaling with difficulty)
 
-- `WIND_STRENGTH=180` scales sampled vector at apply time: `vel += wind * WIND_STRENGTH * dt`. Effective force is very high so wind dominates friction (`FRICTION=0.35` per `04-physics-and-collision.md`).
+- `WIND_STRENGTH=180` scales sampled vector at apply time: `vel += wind * WIND_STRENGTH * dt`. Effective force is very high so wind dominates friction (`FRICTION=0.35` per `04-physics-and-collision.md`). **Wind strength is constant for all levels** — `WIND_STRENGTH` and `MIN_WIND_FORCE` are identical for `easy`/`medium`/`hard` and `field.strength` passed to `createField` is a fixed constant (e.g. `90`) independent of `tier` or `levelNum` (no scaling `80→125` with hole index/difficulty). Earlier docs mentioning strength `80+(levelNum-1)*5` are superseded.
 - **Minimum effective force** `|wind|*WIND_STRENGTH ≥ 0.1*MAX_POWER = 60` (with `MAX_POWER=600`) for every cell and interpolated sample. Generation scales magnitudes so `magnitude ≥ 0.1*MAX_POWER/WIND_STRENGTH` (e.g. `>=0.33` at `180`). Field has **varying strength at different locations** (max ≥1.1× min, two distant samples differ >8%).
-- **High acceleration**: ball slowed to `<20` re-accelerates to `>60-80` within `0.3-0.5s`; ball never stationary >0.4s.
+- **High acceleration**: ball slowed to `<20` re-accelerates to `>60-80` within `0.3-0.5s`; ball never stationary >0.4s. Since strength is constant, medium/hard do not have stronger wind than easy — difficulty comes from shape/trees/water/doublets, not wind magnitude.
 
 ### 1.5 Determinism
 
@@ -84,7 +89,7 @@ Defaults (when counts omitted): `seed=42, nSources=1, nSinks=1, nDoublets=1, nVo
 
 ## Acceptance Criteria
 
-- [ ] `createField` signature requires `seed`+four counts (no unary); coerced outside/inside placement verified for 100 random seeds (all sources/sinks `20-60` outside, all vortexes/doublets `≥20` inside, ≥1 vortex|doublet inside except hole-1).
+- [ ] `createField` signature requires `seed`+four counts (no unary); coerced outside/inside placement verified for 100 random seeds (all sources `20-60` outside, all sinks `60-100` outside on right-third top/bottom (increased distance), all vortexes/doublets `≥20` inside, ≥1 vortex|doublet inside except hole-1).
 - [ ] `getWindAt` bilinear at cell centre equals cell, midpoint equals average ±0.01; min force `≥60` effective everywhere; varying strength max≥1.1×min.
 - [ ] DOM has three layers stacked with wind transparent; `windThree.js` uses `Points`/trails, not streak shader; broad ghost trails visible and swirl at vortex.
 - [ ] `60-80` particles uniformly distributed, `life 3.5-5.0`, trails `0.5-1.0s`, modifier-aware speed/behavior.

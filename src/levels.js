@@ -201,14 +201,25 @@ function segmentsIntersect(a, b, c, d) {
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
 
-// Helpers for REQ-034: tier distribution and shape generation
+// Helpers: explicit pacing progression (supersedes linear)
 function getTierForHole(levelNum, count, difficulty) {
-  // For 3-hole courses: uniform difficulty selected by player
-  if (count === 3 && difficulty && ['easy','medium','hard'].includes(difficulty)) {
-    return difficulty;
+  // 3-hole: always easy (campaign spec)
+  if (count === 3) return 'easy';
+  // Keep difficulty override for backwards compat only if explicitly used elsewhere, but 3 is always easy
+  if (count === 6) {
+    const pattern = ['easy','easy','medium','medium','easy','medium']; // 2E-2M-1E-1M
+    return pattern[levelNum - 1] || 'medium';
   }
-  // Linear scaling for 6,9,18 (hole 1 easy -> last hard): tierIdx = floor((levelNum-1)/count *3)
-  // 18: 1-6 easy,7-12 medium,13-18 hard; 9:1-3/4-6/7-9; 6:1-2/3-4/5-6; fallback for other counts
+  if (count === 9) {
+    const pattern = ['easy','medium','medium','easy','medium','medium','medium','easy','hard']; // 1E-2M-1E-3M-1E-1H
+    return pattern[levelNum - 1] || 'medium';
+  }
+  if (count === 18) {
+    const pattern9 = ['easy','medium','medium','easy','medium','medium','medium','easy','hard'];
+    const idx = (levelNum - 1) % 9;
+    return pattern9[idx];
+  }
+  // Fallback linear for any other count (should not occur; keeps determinism)
   const tierIdx = Math.floor((levelNum - 1) / count * 3);
   if (tierIdx <= 0) return 'easy';
   if (tierIdx === 1) return 'medium';
@@ -329,6 +340,15 @@ function sampleOnEdgeForFree(edge, rand, width, height) {
   return { x: Math.floor(rand() * (width - 40)) + 20, y: height + outside };
 }
 
+function sampleRandomOutsideEdge(width, height, rand) {
+  const outside = Math.floor(rand() * 41) + 20; // 20-60
+  const side = Math.floor(rand() * 4);
+  if (side === 0) return { x: -outside, y: Math.floor(rand() * (height - 40)) + 20 };
+  if (side === 1) return { x: width + outside, y: Math.floor(rand() * (height - 40)) + 20 };
+  if (side === 2) return { x: Math.floor(rand() * (width - 40)) + 20, y: -outside };
+  return { x: Math.floor(rand() * (width - 40)) + 20, y: height + outside };
+}
+
 function getClosestEdgeName(target, width, height) {
   const distLeft = target.x;
   const distRight = width - target.x;
@@ -413,18 +433,17 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     };
     attachNoiseToTerrain(terrain);
 
-    // Step 4: Generate treesOnFairway and waterOnFairway per tier (REQ-034 §2)
-    // First, determine required counts
+    // Step 4: Generate treesOnFairway and waterOnFairway per tier (updated: easy 2-4, medium extra source)
     let treesOnFairwayNeeded, waterOnFairwayNeeded;
     if (tier === 'easy') {
-      treesOnFairwayNeeded = 1 + Math.floor(rand() * 2); // 1-2
+      treesOnFairwayNeeded = 2 + Math.floor(rand() * 3); // 2-4 (was 1-2)
       waterOnFairwayNeeded = 0;
     } else if (tier === 'medium') {
       treesOnFairwayNeeded = 2 + Math.floor(rand() * 2); // 2-3
-      waterOnFairwayNeeded = 1;
+      waterOnFairwayNeeded = 1 + Math.floor(rand() * 2); // 1-2
     } else { // hard
       treesOnFairwayNeeded = 3 + Math.floor(rand() * 3); // 3-5
-      waterOnFairwayNeeded = 1 + Math.floor(rand() * 3); // 1-3
+      waterOnFairwayNeeded = 1 + Math.floor(rand() * 2); // 1-2
     }
 
     // Generate fairway trees via sampling points where terrainZoneAt === 'fairway'
@@ -583,35 +602,20 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     const treasureRand = mulberry32(seed + i * 7919 + 977);
     const treasure = generateTreasureForHole(obstacles, fairwayTrees, terrain, tee, hole, waterHazards, treasureRand, LOGICAL_W, LOGICAL_H);
 
-    // Field components per difficulty (REQ-034 §3) with flipped/extra sources/sinks and tighter fairway
+    // Field components per difficulty — updated: easy 2-4 trees, medium extra source, constant strength
     let sources = 1, sinks = 1, doublets = 0, vortexes = 0;
-    let flippedHard = false;
-    let extraMediumSink = false;
     if (tier === 'easy') {
       doublets = 1;
       vortexes = 0;
-      // No extra sources/sinks for easy
     } else if (tier === 'medium') {
-      doublets = 2 + Math.floor(rand() * 2); // 2-3
+      sources = 2; // extra source for medium
+      doublets = 2; // fixed
       vortexes = 1;
-      // Medium MAY add an extra sink on a free edge (60% chance)
-      extraMediumSink = rand() < 0.6;
-      if (extraMediumSink) sinks = 2;
     } else { // hard
-      doublets = 3 + Math.floor(rand() * 2); // 3-4
-      vortexes = 1 + Math.floor(rand() * 2); // 1-2
-      // Hard MAY flip sink/source (50% chance) and always add extra source/sink on free edges
-      flippedHard = rand() < 0.5;
-      sources = 2;
-      sinks = 2;
+      doublets = 3; // fixed
+      vortexes = 1; // fixed
     }
-    // Strength per old progression
-    let strength;
-    if (levelNum <= 6) strength = 80 + (levelNum - 1) * 5;
-    else {
-      strength = 105 + Math.floor((levelNum - 6) / 2) * 2 + (levelNum % 2 === 1 && levelNum > 6 ? 2 : 0);
-      if (strength > 125) strength = 125;
-    }
+    const strength = 90; // constant for all tiers — not scaling with difficulty or levelNum
 
     // Create explicit field positions: source near tee, sink near green, doublets in trees
     // We will generate these positions and pass to createField via options
@@ -620,95 +624,43 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     // Source/sink placement with flipped and extra per tier (REQ-034)
     let sourcePositions = [];
     let sinkPositions = [];
-    if (tier === 'hard' && flippedHard) {
-      // Flipped: sink near tee, source near green
-      const sinkNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
-      const sourceNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H, rand);
-      // Find free edges (the two edges not containing these points)
-      const getEdge = (pos) => {
-        if (pos.x === 0) return 'left';
-        if (pos.x === LOGICAL_W) return 'right';
-        if (pos.y === 0) return 'top';
-        return 'bottom';
-      };
-      const usedEdges = new Set([getEdge(sinkNearTee), getEdge(sourceNearGreen)]);
-      const allEdges = ['left','right','top','bottom'];
-      const freeEdges = allEdges.filter(e => !usedEdges.has(e));
-      // If only one free edge due to same edge (unlikely), pick remaining two
-      let free1 = freeEdges[0] || 'top';
-      let free2 = freeEdges[1] || 'bottom';
-      if (freeEdges.length < 2) {
-        // Pick any two not used
-        const remaining = allEdges.filter(e => e !== getEdge(sinkNearTee) && e !== getEdge(sourceNearGreen));
-        free1 = remaining[0] || 'top';
-        free2 = remaining[1] || 'bottom';
+    // Helper: sink on right third top/bottom (y outside, x in [2W/3, W]) — increased distance 60-100
+    function sinkOnRightThirdTopOrBottom() {
+      const outside = Math.floor(rand() * 41) + 60; // 60-100 increased (was 20-60)
+      const isTop = rand() < 0.5;
+      const rightThirdStart = Math.floor(LOGICAL_W * 2 / 3); // 853 at 1280
+      const x = Math.floor(rand() * (LOGICAL_W - rightThirdStart)) + rightThirdStart; // [853,1280)
+      const y = isTop ? -outside : LOGICAL_H + outside; // slightly above upper ( -60..-100 ) or below lower (780..820)
+      return { x, y };
+    }
+    if (tier === 'easy') {
+      // Easy: no head wind — source left third, sink right third top/bottom, 2-4 trees
+      const outsideSource = Math.floor(rand() * 41) + 20; // 20-60
+      const ySrc = Math.floor(rand() * (LOGICAL_H - 40)) + 20;
+      sourcePositions = [{ x: -outsideSource, y: ySrc }]; // x < W/3
+      sinkPositions = [sinkOnRightThirdTopOrBottom()]; // x∈[2W/3,W], y outside top/bottom 60-100
+    } else if (tier === 'medium') {
+      // Medium: source near tee + extra random outside edge not too close to existing source/sink
+      const sinkPos = sinkOnRightThirdTopOrBottom(); // 60-100 outside right third top/bottom
+      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand); // 20-60 outside closest to tee
+      sinkPositions = [sinkPos];
+      // Extra source randomly outside any edge (20-60) but not too close to existing source and sink
+      let extraSource = null;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const cand = sampleRandomOutsideEdge(LOGICAL_W, LOGICAL_H, rand); // random outside edge 20-60
+        const d1 = Math.hypot(cand.x - sourceNearTee.x, cand.y - sourceNearTee.y);
+        const d2 = Math.hypot(cand.x - sinkPos.x, cand.y - sinkPos.y);
+        if (d1 > 180 && d2 > 180) { extraSource = cand; break; }
+        if (attempt === 29) extraSource = cand; // fallback after retries
       }
-      const extraSource = sampleOnEdgeForFree(free1, rand, LOGICAL_W, LOGICAL_H);
-      const extraSink = sampleOnEdgeForFree(free2, rand, LOGICAL_W, LOGICAL_H);
-      // Ensure extra source/sink are on free edges (not near tee/hole)
-      sourcePositions = [sourceNearGreen, extraSource];
-      sinkPositions = [sinkNearTee, extraSink];
-    } else if (tier === 'hard') {
-      // Hard not flipped: source near tee, sink near green, plus extra source/sink on free edges
-      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
-      const sinkNearGreen = edgePointClosestTo(hole, LOGICAL_W, LOGICAL_H, rand);
-      const getEdge = (pos) => {
-        if (pos.x === 0) return 'left';
-        if (pos.x === LOGICAL_W) return 'right';
-        if (pos.y === 0) return 'top';
-        return 'bottom';
-      };
-      const usedEdges = new Set([getEdge(sourceNearTee), getEdge(sinkNearGreen)]);
-      const allEdges = ['left','right','top','bottom'];
-      const freeEdges = allEdges.filter(e => !usedEdges.has(e));
-      let free1 = freeEdges[0] || 'top';
-      let free2 = freeEdges[1] || 'bottom';
-      if (freeEdges.length < 2) {
-        const remaining = allEdges.filter(e => e !== getEdge(sourceNearTee) && e !== getEdge(sinkNearGreen));
-        free1 = remaining[0] || 'top';
-        free2 = remaining[1] || 'bottom';
-      }
-      // Randomly assign which free edge gets source vs sink
-      const extraSourceEdge = rand() < 0.5 ? free1 : free2;
-      const extraSinkEdge = extraSourceEdge === free1 ? free2 : free1;
-      const extraSource = sampleOnEdgeForFree(extraSourceEdge, rand, LOGICAL_W, LOGICAL_H);
-      const extraSink = sampleOnEdgeForFree(extraSinkEdge, rand, LOGICAL_W, LOGICAL_H);
+      // If still null (should not happen), fallback to random edge
+      if (!extraSource) extraSource = sampleRandomOutsideEdge(LOGICAL_W, LOGICAL_H, rand);
       sourcePositions = [sourceNearTee, extraSource];
-      sinkPositions = [sinkNearGreen, extraSink];
-    } else if (tier === 'medium' && extraMediumSink) {
-      // Medium with extra sink: both sinks on free edges NOT closest to green (REQ-034/REQ-003 updated)
-      const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
-      const greenClosestEdge = getClosestEdgeName(hole, LOGICAL_W, LOGICAL_H);
-      const sourceEdge = getEdgeName(sourceNearTee, LOGICAL_W, LOGICAL_H);
-      const allEdges = ['left','right','top','bottom'];
-      const freeEdges = allEdges.filter(e => e !== greenClosestEdge && e !== sourceEdge);
-      // Need 2 distinct sinks on free edges not near green
-      let sinkEdges;
-      if (freeEdges.length >= 2) {
-        // shuffle freeEdges and take first 2
-        const shuffled = [...freeEdges];
-        for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
-        sinkEdges = shuffled.slice(0, 2);
-      } else if (freeEdges.length === 1) {
-        sinkEdges = [freeEdges[0], freeEdges[0]];
-      } else {
-        sinkEdges = ['top','bottom'];
-      }
-      const sink1 = sampleOnEdgeForFree(sinkEdges[0], rand, LOGICAL_W, LOGICAL_H);
-      const sink2 = sampleOnEdgeForFree(sinkEdges[1], rand, LOGICAL_W, LOGICAL_H);
-      sourcePositions = [sourceNearTee];
-      sinkPositions = [sink1, sink2];
     } else {
-      // Easy or medium without extra: single sink on free edge NOT closest to green (REQ-034/REQ-003/REQ-010)
+      // Hard: single source near tee, single sink on right third top/bottom
       const sourceNearTee = edgePointClosestTo(tee, LOGICAL_W, LOGICAL_H, rand);
-      const greenClosestEdge = getClosestEdgeName(hole, LOGICAL_W, LOGICAL_H);
-      const sourceEdge = getEdgeName(sourceNearTee, LOGICAL_W, LOGICAL_H);
-      const allEdges = ['left','right','top','bottom'];
-      const freeEdges = allEdges.filter(e => e !== greenClosestEdge && e !== sourceEdge);
-      const sinkEdge = freeEdges.length ? freeEdges[Math.floor(rand() * freeEdges.length)] : (greenClosestEdge === 'right' ? 'top' : 'left');
-      const sinkOnFree = sampleOnEdgeForFree(sinkEdge, rand, LOGICAL_W, LOGICAL_H);
       sourcePositions = [sourceNearTee];
-      sinkPositions = [sinkOnFree];
+      sinkPositions = [sinkOnRightThirdTopOrBottom()];
     }
     // Generate doublet positions: first doublet(s) in middle of fairway trees
     const doubletPositions = [];
