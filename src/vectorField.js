@@ -463,9 +463,23 @@ export function getWindAt(worldX, worldY) {
     };
   }
 
-  // Apply modifiers in placement order (REQ-015/016/017/018)
+  // Apply modifiers in placement order (REQ-015/016/017/018 + rotate 90CW)
   let result = { ...base };
   let amplifyCount = 0;
+  // Track nullify dominance: if any nullify active, result stays 0 regardless of later rotates/flips
+  let hasNullify = false;
+  for (const mod of modifiers) {
+    const dx = worldX - mod.x;
+    const dy = worldY - mod.y;
+    if (dx * dx + dy * dy < mod.radius * mod.radius) {
+      if (mod.type === 'nullify') {
+        result.x = 0;
+        result.y = 0;
+        hasNullify = true;
+      }
+    }
+  }
+  if (hasNullify) return result;
   for (const mod of modifiers) {
     const dx = worldX - mod.x;
     const dy = worldY - mod.y;
@@ -477,12 +491,15 @@ export function getWindAt(worldX, worldY) {
           result.y *= 5;
           amplifyCount++;
         }
-      } else if (mod.type === 'nullify') {
-        result.x = 0;
-        result.y = 0;
       } else if (mod.type === 'flip') {
         result.x *= -5;
         result.y *= -5;
+      } else if (mod.type === 'rotate') {
+        // 90° clockwise: (x,y) -> (y, -x)
+        const nx = result.y;
+        const ny = -result.x;
+        result.x = nx;
+        result.y = ny;
       }
     }
   }

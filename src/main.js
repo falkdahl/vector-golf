@@ -272,7 +272,7 @@ function resetHotbarCollapsed() {
 }
 
 // Supply per REQ-020: per-type inventory, starts with one of each spatial + 0 freeShot on new game
-let supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+let supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
 let isFreeShotActive = false;
 let freeShotFlightActive = false;
 function isFreeShotActiveState() { return isFreeShotActive; }
@@ -358,7 +358,7 @@ function addToSupply(type, n = 1) {
 }
 
 function resetSupply() {
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   updateHotbarUI();
 }
@@ -484,10 +484,12 @@ function loadProgress() {
       amplify: Math.max(0, Math.floor(d.supply?.amplify ?? 1)),
       nullify: Math.max(0, Math.floor(d.supply?.nullify ?? 1)),
       flip: Math.max(0, Math.floor(d.supply?.flip ?? 1)),
+      rotate: Math.max(0, Math.floor(d.supply?.rotate ?? 1)),
       freeShot: Math.max(0, Math.floor(d.supply?.freeShot ?? 0))
     };
-    // migrated: if missing freeShot, default 0
+    // migrated: if missing freeShot/rotate, default 0/1
     if (d.supply && d.supply.freeShot === undefined) supply.freeShot = 0;
+    if (d.supply && d.supply.rotate === undefined) supply.rotate = 1;
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
     try { setWindFreeShotActive(isFreeShotActive); } catch {}
     areaUpgradeCount = Math.max(0, Math.floor(d.areaUpgradeCount || 0));
@@ -563,7 +565,7 @@ function clearProgress() {
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
 let pauseMenuVisible = false;
 let pauseMenuHover = null;
-let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
 function getRewardChosenCounts() { return { ...rewardChosenCounts }; }
 function getRewardChosenCount(type) { return Math.max(0, Math.floor(rewardChosenCounts[type] || 0)); }
 function setRewardChosenCounts(obj) {
@@ -585,7 +587,7 @@ function startNewGame() {
   // Generate fresh 18 levels with increasing difficulty per REQ-010
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
@@ -593,7 +595,7 @@ function startNewGame() {
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0);
   gameState = "AIMING";
@@ -902,7 +904,7 @@ function handleCoursePlay(courseId) {
   setActiveCourse(course);
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
@@ -910,7 +912,7 @@ function handleCoursePlay(courseId) {
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1152,13 +1154,13 @@ function startNewGameFromMain() {
   clearProgress();
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1172,14 +1174,14 @@ function endRun() {
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
   try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
   rewardPending = false; firstRewardClaimed = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
@@ -1271,7 +1273,7 @@ function bounceBall(hit, isEdge) {
 
 // Reward menu per REQ-09 : hole-start (except hole 1) + treasure near tree - 3 random of 5 pool (bouncy removed, maxAttempts replaced by freeShot Supply +5, trees always bounce)
 // Campaign deterministic rewards (12-campaign): single campaignSeed controls all offers including rerolls via seeded shuffle + counter
-const REWARD_POOL = ['amplify', 'nullify', 'flip', 'freeShot', 'areaUp'];
+const REWARD_POOL = ['amplify', 'nullify', 'flip', 'rotate', 'freeShot', 'areaUp'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
 let rewardMenuHover = null; // hovered type for visual feedback
@@ -1592,7 +1594,7 @@ function loadLevel(index) {
 function initLevel() {
   // REQ-020/022/023/024 + REQ-09 hole-start + treasure + REQ-025 reroll + REQ-028 pause stats: hole 1 no award before first attempt, holes >0 reward before first attempt
   if (currentHoleIndex === 0) {
-    supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+    supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
     clearFreeShotGlow();
     maxAttempts = 10; freeShots = 0;
     areaUpgradeCount = 0;
@@ -1607,7 +1609,7 @@ function initLevel() {
     rewardRerollHover = false;
     pauseMenuVisible = false;
     pauseMenuHover = null;
-    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
     const pauseOverlay = document.getElementById("pause-overlay");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
   } else {
@@ -1672,26 +1674,10 @@ function updateHotbarUI() {
   hotbarEl.classList.toggle("hidden", !isAiming || hideForPause);
   for (const slot of hotbarEl.querySelectorAll(".hotbar-slot")) {
     const type = slot.dataset.type;
+    // Free Shot is no longer shown in hotbar; it is displayed in HUD as Attempts Left: X (+Y)
     if (type === 'freeShot') {
-      const supplyCount = supply.freeShot ?? 0;
-      const canActivate = supplyCount > 0;
-      const isActive = isFreeShotActive;
-      slot.classList.toggle("selected", false);
-      slot.classList.toggle("active", isActive);
-      slot.classList.toggle("disabled", !canActivate && !isActive);
-      const countEl = slot.querySelector(".hotbar-count");
-      if (countEl) {
-        countEl.textContent = String(supplyCount);
-      }
-      if (isActive) {
-        slot.title = `Free Shot - Armed (press 4 to disarm) supply ${supplyCount}`;
-      } else if (!canActivate) {
-        slot.title = `Free Shot - No supply (0) press 4`;
-      } else {
-        slot.title = `Free Shot - ${supplyCount} available (press 4)`;
-      }
-      slot.dataset.supply = String(supplyCount);
-      slot.dataset.active = String(isActive ? 1 : 0);
+      // Hide legacy freeShot slot if it still exists in DOM (should have been replaced by rotate)
+      slot.style.display = 'none';
       continue;
     }
     const activeCount = modifiers.filter(m => m.type === type).length;
@@ -1705,8 +1691,7 @@ function updateHotbarUI() {
     if (countEl) {
       countEl.textContent = String(supplyCount);
     }
-    // Update label fallback if no countEl (legacy)
-    // Accessibility title
+    // Accessibility title with hotkey 1-4 for spatial
     if (!canPlaceThis) {
       if (supplyCount === 0) {
         slot.title = `${type} - No supply (0)`;
@@ -1714,12 +1699,15 @@ function updateHotbarUI() {
         slot.title = `${type} - Limit reached (${activeCount}/${supplyCount} placed)`;
       }
     } else {
-      slot.title = `${type} - ${activeCount}/${supplyCount} placed (press ${type === 'amplify' ? '1' : type === 'nullify' ? '2' : '3'})`;
+      const hotkey = type === 'amplify' ? '1' : type === 'nullify' ? '2' : type === 'flip' ? '3' : type === 'rotate' ? '4' : '?';
+      slot.title = `${type} - ${activeCount}/${supplyCount} placed (press ${hotkey})`;
     }
     // For testing: expose supply via dataset
     slot.dataset.supply = String(supplyCount);
     slot.dataset.active = String(activeCount);
   }
+  // Also update HUD attempts left display to show (+freeShot)
+  try { updateAttemptsUI(); } catch {}
 }
 
 function showGameOver() {
@@ -1767,7 +1755,7 @@ function handleGameOverReturn() {
   totalAttempts = 0;
   attempts = 0;
   maxAttempts = 10;
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   areaUpgradeCount = 0;
   rewardPending = false;
@@ -1789,7 +1777,7 @@ function handleGameOverReturn() {
   // reset bouncy legacy
   bouncyBallCount = 0;
   bouncyRemaining = 0;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   // Avoid heavy field generation when returning to main menu after Game Over — defer to next course play
   _lastCourseListSig = null;
   syncMainMenu();
@@ -1934,7 +1922,7 @@ function returnToMainMenu() {
   holeAttempts = 0;
   totalAttempts = 0;
   attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   maxAttempts = 10; freeShots = 0;
   areaUpgradeCount = 0;
@@ -1953,7 +1941,7 @@ function returnToMainMenu() {
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
@@ -2002,7 +1990,7 @@ function resetGameAfterWin() {
   totalAttempts = 0;
   attempts = 0;
   // REQ-020/022/023/024: reset supply to one of each on new game, no award before first attempt
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   maxAttempts = 10; freeShots = 0;
   areaUpgradeCount = 0;
@@ -2019,7 +2007,7 @@ function resetGameAfterWin() {
   rewardRerollHover = false;
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
   loadLevel(currentHoleIndex);
@@ -2400,8 +2388,8 @@ function render() {
     // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true);
   }
-  // HUD inside canvas on top per REQ-012/014/05 — Attempts Left
-  drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts, maxAttempts);
+  // HUD inside canvas on top per REQ-012/014/05 — Attempts Left (+freeShot)
+  drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts, maxAttempts, supply.freeShot);
   // Power bar under ball when charging per REQ-007
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
@@ -2808,9 +2796,9 @@ function init() {
   pauseMenuVisible = false; rewardMenuVisible = false;
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, freeShot: 0 };
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
   rewardPending = false; firstRewardClaimed = false; rewardOffered = []; rewardRerolled = false;
   resetHotbarCollapsed();
   updateAttemptsUI(); updateHotbarUI(); updateForceBar();
@@ -2879,12 +2867,12 @@ function init() {
         if (mainMenuVisible) return;
         if (gameState !== "AIMING" && gameState !== "CHARGING") return;
         const type = slot.dataset.type;
+        // Free Shot is no longer in hotbar; treat all remaining types (amplify/nullify/flip/rotate) uniformly
         if (type === 'freeShot') {
-          toggleFreeShot();
+          // Legacy freeShot slot should not exist; ignore
           return;
         }
         // When collapsed slots are display:none so click won't fire; no extra block needed but keep functional if called programmatically
-        if (isFreeShotActive) clearFreeShotGlow();
         if (selectedModifier === type) {
           selectedModifier = null;
         } else {
@@ -3081,25 +3069,24 @@ function init() {
       }
     }
     if (e.code === "Digit1") {
-      if (isFreeShotActive) clearFreeShotGlow();
       if (selectedModifier === 'amplify') selectedModifier = null;
       else selectedModifier = 'amplify';
       updateHotbarUI();
       e.preventDefault();
     } else if (e.code === "Digit2") {
-      if (isFreeShotActive) clearFreeShotGlow();
       if (selectedModifier === 'nullify') selectedModifier = null;
       else selectedModifier = 'nullify';
       updateHotbarUI();
       e.preventDefault();
     } else if (e.code === "Digit3") {
-      if (isFreeShotActive) clearFreeShotGlow();
       if (selectedModifier === 'flip') selectedModifier = null;
       else selectedModifier = 'flip';
       updateHotbarUI();
       e.preventDefault();
     } else if (e.code === "Digit4") {
-      if (gameState === "AIMING" || gameState === "CHARGING") toggleFreeShot();
+      if (selectedModifier === 'rotate') selectedModifier = null;
+      else selectedModifier = 'rotate';
+      updateHotbarUI();
       e.preventDefault();
     } else if ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH")) {
       // Secret: Ctrl+Shift+H / Ctrl+Shift+G / Alt+H → prompt for exact hole (hidden)

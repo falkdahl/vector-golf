@@ -837,8 +837,8 @@ export function drawAim(ctx, ball, aimAngle, charge, gameState) {
   ctx.restore();
 }
 
-export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, totalAttempts, maxAttempts = 10) {
-  // Top bar inside canvas per REQ-012/014/05 — Hole left, Attempts Left center, Total right
+export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, totalAttempts, maxAttempts = 10, freeShotSupply = 0) {
+  // Top bar inside canvas per REQ-012/014/05 — Hole left, Attempts Left (+freeShot) center, Total right
   ctx.save();
   // semi-transparent strip
   ctx.fillStyle = "rgba(0,0,0,0.25)";
@@ -850,7 +850,9 @@ export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, 
   ctx.lineJoin = "round";
   const holeText = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
   const attemptsLeft = Math.max(0, (maxAttempts ?? 10) - holeAttempts);
-  const attemptsText = `Attempts Left: ${attemptsLeft}`;
+  const freeShot = Math.max(0, Math.floor(freeShotSupply ?? 0));
+  const attemptsText = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft} (+${freeShot})`;
+  // Requirement says e.g. "Attempts Left: 5 (+5)" — show (+Y) even when 0 may be " (+0)" but we show always for testability; alternative is to hide when 0, but we keep showing to match spec
   const totalText = `Total: ${totalAttempts}`;
   // Hole left
   ctx.textAlign = "left";
@@ -943,20 +945,25 @@ export function drawModifiers(ctx, modifiers) {
       ctx.strokeStyle = "rgba(155,89,182,0.9)";
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
+    } else if (mod.type === 'rotate') {
+      ctx.fillStyle = "rgba(231,76,60,0.20)";
+      ctx.strokeStyle = "rgba(231,76,60,0.9)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
     }
     ctx.beginPath();
     ctx.arc(mod.x, mod.y, mod.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
-    // icon - flip now two opposite arrows ⇄
+    // icon
     ctx.fillStyle = "white";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
     ctx.font = "600 14px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : "⇄";
+    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : mod.type === 'flip' ? "⇄" : mod.type === 'rotate' ? "↻" : "•";
     ctx.strokeText(icon, mod.x, mod.y);
     ctx.fillText(icon, mod.x, mod.y);
     ctx.restore();
@@ -979,6 +986,9 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   } else if (type === 'flip') {
     ctx.fillStyle = "rgba(155,89,182,0.25)";
     ctx.strokeStyle = "rgba(155,89,182,0.9)";
+  } else if (type === 'rotate') {
+    ctx.fillStyle = "rgba(231,76,60,0.25)";
+    ctx.strokeStyle = "rgba(231,76,60,0.9)";
   }
   ctx.lineWidth = blocked ? 2 : 2;
   ctx.setLineDash(blocked ? [4, 6] : [6, 4]);
@@ -991,7 +1001,7 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   ctx.font = "600 14px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const icon = blocked ? "✕" : type === 'amplify' ? "»" : type === 'nullify' ? "∅" : "⇄";
+  const icon = blocked ? "✕" : type === 'amplify' ? "»" : type === 'nullify' ? "∅" : type === 'flip' ? "⇄" : type === 'rotate' ? "↻" : "•";
   ctx.fillText(icon, x, y);
   // blocked label
   if (blocked) {
@@ -1006,6 +1016,7 @@ const REWARD_TYPE_DEFS = {
   amplify: { icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.28)', fillHover: 'rgba(230,126,34,0.38)', hint: '+1 to supply' },
   nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
+  rotate: { icon: '↻', label: 'Rotate', color: '#e74c3c', border: 'rgba(231,76,60,0.9)', fill: 'rgba(231,76,60,0.28)', fillHover: 'rgba(231,76,60,0.38)', hint: '+1 to supply' },
   freeShot: { icon: '★', label: 'Free Shoot', color: '#f1c40f', border: 'rgba(241,196,15,0.9)', fill: 'rgba(241,196,15,0.28)', fillHover: 'rgba(241,196,15,0.38)', hint: 'Supply +5' },
   areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' }
 };
