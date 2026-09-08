@@ -99,8 +99,66 @@ export function warpedDist(x, y, spine, noise2D, scale = 0.008, strength = 18) {
   return sdfToSpine(wx, wy, spine);
 }
 
-// Main zone lookup per REQ-010 §5 and REQ-033 §2
-// Returns 'green' | 'fairway' | 'rough' | 'ob' | 'water'
+// Helpers for varying fairway width (thinner in middle per updated requirement)
+export function getSpineTForPoint(x, y, spine) {
+  if (!spine || spine.length < 2) return 0;
+  // Compute total length
+  let totalLen = 0;
+  const segLens = [];
+  for (let i = 0; i < spine.length - 1; i++) {
+    const len = Math.hypot(spine[i+1].x - spine[i].x, spine[i+1].y - spine[i].y);
+    segLens.push(len);
+    totalLen += len;
+  }
+  if (totalLen === 0) return 0;
+  let bestT = 0;
+  let bestDist = Infinity;
+  let acc = 0;
+  for (let i = 0; i < spine.length - 1; i++) {
+    const a = spine[i], b = spine[i+1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx*dx + dy*dy;
+    let t = len2 === 0 ? 0 : ((x - a.x)*dx + (y - a.y)*dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const projX = a.x + t*dx, projY = a.y + t*dy;
+    const d = Math.hypot(x - projX, y - projY);
+    if (d < bestDist) {
+      bestDist = d;
+      const segT = t;
+      const accT = (acc + segT * segLens[i]) / totalLen;
+      bestT = accT;
+    }
+    acc += segLens[i];
+  }
+  return Math.max(0, Math.min(1, bestT));
+}
+
+export function getEffectiveFairwayWidthAtT(t, baseWf, shape) {
+  // Thinner in middle: 28% thinner at t=0.5 (sin pi*t =1), ends full width
+  // For I-shaped holes (easy straight) width is constant per updated requirement
+  if (shape === 'I') return baseWf;
+  const factor = 1 - 0.28 * Math.sin(Math.PI * Math.max(0, Math.min(1, t)));
+  return baseWf * factor;
+}
+
+export function getEffectiveFairwayWidthAt(x, y, terrain) {
+  if (!terrain || !terrain.fairwayPath) return terrain ? terrain.widthFairway : 100;
+  const t = getSpineTForPoint(x, y, terrain.fairwayPath);
+  return getEffectiveFairwayWidthAtT(t, terrain.widthFairway, terrain.shape);
+}
+
+export function getEffectiveRoughWidthAt(x, y, terrain) {
+  if (!terrain || !terrain.fairwayPath) return terrain ? terrain.widthRough : 180;
+  const t = getSpineTForPoint(x, y, terrain.fairwayPath);
+  const baseWf = terrain.widthFairway;
+  const baseWr = terrain.widthRough;
+  const band = baseWr - baseWf; // rough band thickness constant 60-100
+  const effWf = getEffectiveFairwayWidthAtT(t, baseWf, terrain.shape);
+  return effWf + band;
+}
+
+// Main zone lookup per REQ-010 §5 and REQ-033 §2 (now with varying width thinner in middle)
+ // Returns 'green' | 'fairway' | 'rough' | 'ob' | 'water'
 export function terrainZoneAt(x, y, level) {
   // level is expected to have terrain: {green, teeBox, fairwayPath, widthFairway, widthRough, noiseSeed, warpScale, warpStrength } and waterHazards
   if (!level || !level.terrain) return 'ob';
@@ -110,18 +168,38 @@ export function terrainZoneAt(x, y, level) {
   if (inTeeMask(x, y, t.teeBox)) return 'green'; // tee box rendered as light green / fairway; treat as green for test tolerance
   // Water check: water is on top of zones but for zone query, if inside water cluster, return water
   if (isInWater(x, y, level.waterHazards)) return 'water';
-  // Compute warped distance to spine
+  // Compute warped distance to spine and effective widths varying along spine (thinner in middle)
   // Lazily create noise per level if not cached
   let d;
+  let wx = x, wy = y;
+  let noiseForWarp = null;
   if (t._noise2D) {
-    d = warpedDist(x, y, t.fairwayPath, t._noise2D, t.warpScale || 0.008, t.warpStrength || 18);
+    noiseForWarp = t._noise2D;
+    const scale = t.warpScale || 0.008;
+    const strength = t.warpStrength || 18;
+    const nx = noiseForWarp(x * scale, y * scale);
+    const ny = noiseForWarp((x + 431) * scale, (y - 217) * scale);
+    wx = x + nx * strength;
+    wy = y + ny * strength;
+    d = sdfToSpine(wx, wy, t.fairwayPath);
   } else {
     // Fallback: create noise from seed
     const n = makeNoise2D(t.noiseSeed || 12345);
-    d = warpedDist(x, y, t.fairwayPath, n, t.warpScale || 0.008, t.warpStrength || 18);
+    const scale = t.warpScale || 0.008;
+    const strength = t.warpStrength || 18;
+    const nx = n(x * scale, y * scale);
+    const ny = n((x + 431) * scale, (y - 217) * scale);
+    wx = x + nx * strength;
+    wy = y + ny * strength;
+    d = sdfToSpine(wx, wy, t.fairwayPath);
   }
-  if (d <= t.widthFairway) return 'fairway';
-  if (d <= t.widthRough) return 'rough';
+  // Effective widths at the closest point (use warped point for t), I-shaped constant
+  const tAlong = getSpineTForPoint(wx, wy, t.fairwayPath);
+  const effWf = getEffectiveFairwayWidthAtT(tAlong, t.widthFairway, t.shape);
+  const band = t.widthRough - t.widthFairway;
+  const effWr = effWf + band;
+  if (d <= effWf) return 'fairway';
+  if (d <= effWr) return 'rough';
   return 'ob';
 }
 
@@ -341,7 +419,11 @@ export function generateRoughBorderTrees(count, spine, Wf, Wr, tee, hole, waterH
       const len = Math.hypot(dx, dy) || 1;
       const nx = -dy / len, ny = dx / len;
       const sign = rand() < 0.5 ? 1 : -1;
-      const bandCenter = Wr - 14.5;
+      // Varying width thinner in middle (except I): band center varies with effectiveWr at mid point
+      const tMid = getSpineTForPoint(midX, midY, spine);
+      const effWfMid = getEffectiveFairwayWidthAtT(tMid, Wf, terrain.shape);
+      const effWrMid = effWfMid + (Wr - Wf);
+      const bandCenter = effWrMid - 14.5;
       const jitter = (rand() - 0.5) * 18;
       const dist = bandCenter + jitter;
       x = midX + nx * dist * sign;
@@ -352,7 +434,9 @@ export function generateRoughBorderTrees(count, spine, Wf, Wr, tee, hole, waterH
       y = Math.round(y + (rand() - 0.5) * 6);
     }
     const d = getD(x, y);
-    if (d < Wr - 25 - 2 || d > Wr - 4 + 2) continue;
+    // Varying width (except I): check against effectiveWr at candidate point (thinner in middle)
+    const effWrAt = getEffectiveRoughWidthAt(x, y, { fairwayPath: spine, widthFairway: Wf, widthRough: Wr, shape: terrain.shape });
+    if (d < effWrAt - 25 - 2 || d > effWrAt - 4 + 2) continue;
     const greenR = terrain && terrain.green ? terrain.green.r : 70;
     const teeR = terrain && terrain.teeBox ? terrain.teeBox.r : 70;
     const teeDist = Math.hypot(x - tee.x, y - tee.y);
@@ -377,7 +461,8 @@ export function generateRoughBorderTrees(count, spine, Wf, Wr, tee, hole, waterH
       const x = Math.floor(rand() * (width - 40)) + 20;
       const y = Math.floor(rand() * (height - 40)) + 20;
       const d = getD(x, y);
-      if (d < Wr - 27 || d > Wr - 2) continue;
+      const effWrAt2 = getEffectiveRoughWidthAt(x, y, { fairwayPath: spine, widthFairway: Wf, widthRough: Wr, shape: terrain.shape });
+      if (d < effWrAt2 - 27 || d > effWrAt2 - 2) continue;
       const greenR2 = terrain && terrain.green ? terrain.green.r : 70;
       const teeR2 = terrain && terrain.teeBox ? terrain.teeBox.r : 70;
       const teeDist = Math.hypot(x - tee.x, y - tee.y);

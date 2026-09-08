@@ -1,4 +1,50 @@
-import { sampleBezier, generateWaterClusters, generateTreesPoisson, generateRoughBorderTrees, isHoleSolvable, attachNoiseToTerrain, classifyFairwayShape, warpedDist, terrainZoneAt, isInWater } from "./terrain.js";
+import { sampleBezier, generateWaterClusters, generateTreesPoisson, generateRoughBorderTrees, isHoleSolvable, attachNoiseToTerrain, classifyFairwayShape, warpedDist, terrainZoneAt, isInWater, getSpineTForPoint as terrainGetSpineT, getEffectiveFairwayWidthAtT as terrainGetEffWf } from "./terrain.js";
+
+// Local helpers for varying fairway width (thinner in middle) and rough visibility
+function getSpineTForPointLocal(x, y, spine) {
+  if (!spine || spine.length < 2) return 0;
+  let totalLen = 0;
+  const segLens = [];
+  for (let i = 0; i < spine.length - 1; i++) {
+    const len = Math.hypot(spine[i+1].x - spine[i].x, spine[i+1].y - spine[i].y);
+    segLens.push(len);
+    totalLen += len;
+  }
+  if (totalLen === 0) return 0;
+  let bestT = 0;
+  let bestDist = Infinity;
+  let acc = 0;
+  for (let i = 0; i < spine.length - 1; i++) {
+    const a = spine[i], b = spine[i+1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx*dx + dy*dy;
+    let t = len2 === 0 ? 0 : ((x - a.x)*dx + (y - a.y)*dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const projX = a.x + t*dx, projY = a.y + t*dy;
+    const d = Math.hypot(x - projX, y - projY);
+    if (d < bestDist) {
+      bestDist = d;
+      bestT = (acc + t * segLens[i]) / totalLen;
+    }
+    acc += segLens[i];
+  }
+  return Math.max(0, Math.min(1, bestT));
+}
+function getEffectiveWfAtTLocal(t, baseWf, shape) {
+  if (shape === 'I') return baseWf;
+  const factor = 1 - 0.28 * Math.sin(Math.PI * Math.max(0, Math.min(1, t)));
+  return baseWf * factor;
+}
+function getEffectiveWfAtLocal(x, y, spine, baseWf, shape) {
+  const t = getSpineTForPointLocal(x, y, spine);
+  return getEffectiveWfAtTLocal(t, baseWf, shape);
+}
+function getEffectiveWrAtLocal(x, y, spine, baseWf, baseWr, shape) {
+  const t = getSpineTForPointLocal(x, y, spine);
+  const effWf = getEffectiveWfAtTLocal(t, baseWf, shape);
+  const band = baseWr - baseWf;
+  return effWf + band;
+}
 
 function mulberry32(a) {
   return function () {
@@ -433,6 +479,62 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     };
     attachNoiseToTerrain(terrain);
 
+    // Ensure whole rough visible in canvas: if clipped (rough extends beyond top/bottom), shift level vertically
+    {
+      const baseBand = Wr - Wf;
+      const MARGIN = 8;
+      // Compute envelope of rough along spine with varying width (thinner in middle) + warp + margin
+      let totalLen = 0;
+      const segLens = [];
+      for (let s = 0; s < spine.length - 1; s++) {
+        const len = Math.hypot(spine[s+1].x - spine[s].x, spine[s+1].y - spine[s].y);
+        segLens.push(len);
+        totalLen += len;
+      }
+      let minTop = Infinity, maxBottom = -Infinity;
+      let acc = 0;
+      for (let idx = 0; idx < spine.length; idx++) {
+        const pt = spine[idx];
+        let t = 0;
+        if (totalLen > 0) {
+          if (idx === spine.length - 1) t = 1;
+          else t = acc / totalLen;
+        }
+        const effWf = getEffectiveWfAtTLocal(t, Wf, shape);
+        const effWr = effWf + baseBand;
+        const top = pt.y - effWr - warpStrength - MARGIN;
+        const bottom = pt.y + effWr + warpStrength + MARGIN;
+        if (top < minTop) minTop = top;
+        if (bottom > maxBottom) maxBottom = bottom;
+        if (idx < spine.length - 1) acc += segLens[idx];
+      }
+      minTop = Math.min(minTop, tee.y - terrain.teeBox.r - MARGIN, hole.y - terrain.green.r - MARGIN);
+      maxBottom = Math.max(maxBottom, tee.y + terrain.teeBox.r + MARGIN, hole.y + terrain.green.r + MARGIN);
+      let shiftY = 0;
+      const topLimit = MARGIN;
+      const bottomLimit = LOGICAL_H - MARGIN;
+      const clippedTop = minTop < topLimit;
+      const clippedBottom = maxBottom > bottomLimit;
+      if (clippedTop && clippedBottom) {
+        const curCenter = (minTop + maxBottom) / 2;
+        const targetCenter = LOGICAL_H / 2;
+        shiftY = targetCenter - curCenter;
+      } else if (clippedTop) {
+        shiftY = topLimit - minTop;
+      } else if (clippedBottom) {
+        shiftY = bottomLimit - maxBottom;
+      }
+      if (shiftY !== 0) {
+        tee.y += shiftY;
+        hole.y += shiftY;
+        terrain.green.y += shiftY;
+        terrain.teeBox.y += shiftY;
+        for (const p of spine) p.y += shiftY;
+        if (p1) p1.y += shiftY;
+        if (p2) p2.y += shiftY;
+      }
+    }
+
     // Step 4: Generate treesOnFairway and waterOnFairway per tier (updated: easy 1-2 per new requirement, medium/hard unchanged)
     let treesOnFairwayNeeded, waterOnFairwayNeeded;
     if (tier === 'easy') {
@@ -460,12 +562,14 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       const dx = b.x - a.x, dy = b.y - a.y;
       const len = Math.hypot(dx, dy) || 1;
       const nx = -dy / len, ny = dx / len;
-      const offset = (rand() - 0.5) * (Wf * 0.6); // inside fairway, not near edge
+      // Varying fairway width thinner in middle (except I): compute effective width at this spine segment
+      const tMid = getSpineTForPointLocal(midX, midY, spine);
+      const effWfMid = getEffectiveWfAtTLocal(tMid, Wf, shape);
+      const offset = (rand() - 0.5) * (effWfMid * 0.6); // inside fairway, not near edge (varying width, I constant)
       const x = midX + nx * offset;
       const y = midY + ny * offset;
-      // Check is inside fairway (warped)
-      // Check is inside fairway (warped distance < Wf-8) — simplified check
-
+      // Check is inside fairway (warped) with varying width (I constant)
+      const effWfAtCandidate = getEffectiveWfAtLocal(x, y, spine, Wf, shape);
       // Simpler: check distance to spine
       let minD = Infinity;
       for (let s = 0; s < spine.length - 1; s++) {
@@ -479,10 +583,10 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
         if (d < minD) minD = d;
       }
       // Use warped check would be more accurate, but unwarped with margin should be safe
-      if (minD > Wf - 8) continue;
-      // Warped distance check for true fairway (with domain warping) — must be inside fairway
+      if (minD > effWfAtCandidate - 8) continue;
+      // Warped distance check for true fairway (with domain warping) — must be inside fairway (varying width)
       const dWarped = warpedDist(x, y, spine, terrain._noise2D, terrain.warpScale, terrain.warpStrength);
-      if (dWarped > Wf - 4) continue;
+      if (dWarped > effWfAtCandidate - 4) continue;
       // Check not in green/tee masks (use actual mask radii)
       const greenR = terrain.green.r;
       const teeR = terrain.teeBox.r;
@@ -521,9 +625,10 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
       const distTeeHoleFB = Math.hypot(hole.x - tee.x, hole.y - tee.y);
       if (Math.hypot(x - tee.x, y - tee.y) < distTeeHoleFB / 3) continue;
       if (Math.hypot(x - tee.x, y - tee.y) < teeR2 + 40 + r || Math.hypot(x - hole.x, y - hole.y) < greenR2 + 40 + r) continue;
-      // Ensure warped is still inside fairway
+      // Ensure warped is still inside fairway (varying width thinner in middle, I constant)
       const dW = warpedDist(x, y, spine, terrain._noise2D, terrain.warpScale, terrain.warpStrength);
-      if (dW > Wf - 4) continue;
+      const effWfFallback = getEffectiveWfAtLocal(x, y, spine, Wf, shape);
+      if (dW > effWfFallback - 4) continue;
       fairwayTrees.push({ type: 'circle', x, y, r });
       if (fairwayTrees.length >= treesOnFairwayNeeded) break;
     }
@@ -542,10 +647,14 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
         const dx = b.x - a.x, dy = b.y - a.y;
         const len = Math.hypot(dx, dy) || 1;
         const nx = -dy / len, ny = dx / len;
-        const offset = (rand() - 0.5) * (Wf * 0.5); // inside fairway
+        // Varying width thinner in middle for water placement too (I constant)
+        const tForMid = getSpineTForPointLocal(midX, midY, spine);
+        const effWfMidWater = getEffectiveWfAtTLocal(tForMid, Wf, shape);
+        const offset = (rand() - 0.5) * (effWfMidWater * 0.5); // inside fairway (varying, I constant)
         const x = midX + nx * offset;
         const y = midY + ny * offset;
-        // Check is inside fairway (unwarped distance < Wf-10)
+        // Check is inside fairway (unwarped distance < effWf-10) varying (I constant)
+        const effWfAtWater = getEffectiveWfAtLocal(x, y, spine, Wf, shape);
         let minD = Infinity;
         for (let s = 0; s < spine.length - 1; s++) {
           const ax = spine[s].x, ay = spine[s].y, bx = spine[s+1].x, by = spine[s+1].y;
@@ -557,7 +666,7 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
           const d = Math.hypot(x-projX, y-projY);
           if (d < minD) minD = d;
         }
-        if (minD > Wf - 12) continue;
+        if (minD > effWfAtWater - 12) continue;
         // Do not overlap tee/green masks — keep water entirely outside masks (green/tee + water radius + buffer)
         // Early coarse check before r known
         if (Math.hypot(x - hole.x, y - hole.y) < 80 || Math.hypot(x - tee.x, y - tee.y) < 80) continue;
@@ -688,10 +797,13 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
           const dx = b.x - a.x, dy = b.y - a.y;
           const len = Math.hypot(dx, dy) || 1;
           const nx = -dy / len, ny = dx / len;
-          const offset = (rand() - 0.5) * (Wf * 0.5);
+          // Varying width thinner in middle for doublet placement (I constant)
+          const tForMidDoub = getSpineTForPointLocal(midX, midY, spine);
+          const effWfForMidDoub = getEffectiveWfAtTLocal(tForMidDoub, Wf, shape);
+          const offset = (rand() - 0.5) * (effWfForMidDoub * 0.5);
           const x = midX + nx * offset;
           const y = midY + ny * offset;
-          // Check is fairway
+          // Check is fairway with varying width (I constant)
           let minD = Infinity;
           for (let s = 0; s < spine.length - 1; s++) {
             const ax = spine[s].x, ay = spine[s].y, bx = spine[s+1].x, by = spine[s+1].y;
@@ -703,7 +815,8 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
             const d = Math.hypot(x-projX, y-projY);
             if (d < minD) minD = d;
           }
-          if (minD <= Wf - 8 && Math.hypot(x - hole.x, y - hole.y) > 70 && Math.hypot(x - tee.x, y - tee.y) > 70) {
+          const effWfAtCand = getEffectiveWfAtLocal(x, y, spine, Wf, shape);
+          if (minD <= effWfAtCand - 8 && Math.hypot(x - hole.x, y - hole.y) > 70 && Math.hypot(x - tee.x, y - tee.y) > 70) {
             doubletPositions.push({ x: Math.round(x), y: Math.round(y), mu: 1.2 + rand() * 1.0, theta: rand() * Math.PI * 2 });
             placed = true;
             break;
@@ -729,7 +842,11 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
         const dx = b.x - a.x, dy = b.y - a.y;
         const len = Math.hypot(dx, dy) || 1;
         const nx = -dy / len, ny = dx / len;
-        const offset = (rand() - 0.5) * (Wr * 0.8);
+        // Varying width for vortex (rough band varies with fairway, I constant)
+        const tForMidVor = getSpineTForPointLocal(midX, midY, spine);
+        const effWfForVorMid = getEffectiveWfAtTLocal(tForMidVor, Wf, shape);
+        const effWrForMidVor = effWfForVorMid + (Wr - Wf);
+        const offset = (rand() - 0.5) * (effWrForMidVor * 0.8);
         const x = midX + nx * offset;
         const y = midY + ny * offset;
         let minD = Infinity;
@@ -743,7 +860,8 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
           const d = Math.hypot(x-projX, y-projY);
           if (d < minD) minD = d;
         }
-        if (minD <= Wr - 10 && minD >= 20 && x >= 20 && x <= LOGICAL_W-20 && y >= 20 && y <= LOGICAL_H-20) {
+        const effWrAtCand = getEffectiveWrAtLocal(x, y, spine, Wf, Wr, shape);
+        if (minD <= effWrAtCand - 10 && minD >= 20 && x >= 20 && x <= LOGICAL_W-20 && y >= 20 && y <= LOGICAL_H-20) {
           let gamma = 1.4 + rand() * 1.2;
           if (rand() < 0.5) gamma = -gamma;
           vortexPositions.push({ x: Math.round(x), y: Math.round(y), g: gamma });
