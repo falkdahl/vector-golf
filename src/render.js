@@ -1,10 +1,6 @@
 import { modifiers as vfModifiers, isInsideNullify as vfIsInsideNullify } from "./vectorField.js";
 import { terrainZoneAt, TERRAIN_COLORS, attachNoiseToTerrain } from "./terrain.js";
 
-export const PARTICLE_COUNT = 80;
-
-let particles = [];
-let showWind = true;
 let canvasW = 1280;
 let canvasH = 720;
 
@@ -46,85 +42,6 @@ function isInsideFlip(x, y) {
     }
   } catch {}
   return false;
-}
-
-function randomSpawnOutsideNullify() {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const x = Math.random() * canvasW;
-    const y = Math.random() * canvasH;
-    if (!isInsideAnyModifier(x, y)) return { x, y };
-  }
-  // Fallback if map is mostly covered — return last attempt even if inside (avoid infinite loop)
-  return { x: Math.random() * canvasW, y: Math.random() * canvasH };
-}
-
-export function initParticles(count = PARTICLE_COUNT, width = 1280, height = 720) {
-  canvasW = width;
-  canvasH = height;
-  particles = [];
-  for (let i = 0; i < count; i++) {
-    const pos = randomSpawnOutsideNullify();
-    particles.push({
-      x: pos.x,
-      y: pos.y,
-      life: Math.random() * 2,
-      maxLife: 2
-    });
-  }
-}
-
-export function updateParticles(dt, getWindAt) {
-  if (!showWind) return;
-  for (const p of particles) {
-    const prevX = p.x, prevY = p.y;
-    const wind = getWindAt(p.x, p.y);
-    const speed = 50; // particleSpeed
-    p.x += wind.x * speed * dt;
-    p.y += wind.y * speed * dt;
-    // Wrap
-    if (p.x < 0) p.x = canvasW;
-    if (p.x > canvasW) p.x = 0;
-    if (p.y < 0) p.y = canvasH;
-    if (p.y > canvasH) p.y = 0;
-    // For flip: despawn on hitting and spawn behind flip
-    const wasInsideFlip = isInsideFlip(prevX, prevY);
-    const nowInsideFlip = isInsideFlip(p.x, p.y);
-    if (!wasInsideFlip && nowInsideFlip) {
-      let hitFlip = null;
-      for (const m of vfModifiers) {
-        if (m.type === 'flip' && Math.hypot(p.x - m.x, p.y - m.y) < (m.radius ?? 54)) { hitFlip = m; break; }
-      }
-      if (hitFlip) {
-        const r = hitFlip.radius ?? 54;
-        const dx = p.x - hitFlip.x;
-        const dy = p.y - hitFlip.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = dx / len, ny = dy / len;
-        const behindDist = r + 14 + Math.random() * 10;
-        let nxPos = hitFlip.x - nx * behindDist;
-        let nyPos = hitFlip.y - ny * behindDist;
-        nxPos = Math.max(2, Math.min(canvasW - 2, nxPos));
-        nyPos = Math.max(2, Math.min(canvasH - 2, nyPos));
-        if (isInsideAnyModifier(nxPos, nyPos)) {
-          const pos = randomSpawnOutsideNullify();
-          nxPos = pos.x; nyPos = pos.y;
-        }
-        p.x = nxPos; p.y = nyPos;
-        p.life = 2; p.maxLife = 2;
-        continue;
-      }
-    }
-    // Per new requirement: do not despawn when inside amplify/nullify — just not draw while inside (handled in drawParticles)
-    p.life -= dt;
-    if (p.life <= 0) {
-      // Fade-die after 2s per REQ-004, respawn uniformly random across whole map but outside nullify
-      const pos = randomSpawnOutsideNullify();
-      p.x = pos.x;
-      p.y = pos.y;
-      p.life = 2;
-      p.maxLife = 2;
-    }
-  }
 }
 
 export function drawBackground(ctx, width, height, mode = 'terrain', level = null) {
@@ -195,75 +112,7 @@ export function drawTerrainZones(ctx, level, width, height) {
 export function drawBackgroundTiled(ctx, width, height) { return drawBackground(ctx, width, height, 'terrain'); }
 export function drawSplashCover(ctx, width, height) { return drawBackground(ctx, width, height, 'splash'); }
 
-export function drawArrows(ctx, fieldOrGetWindAt, cols, rows, cellW, cellH) {
-  if (!showWind) return;
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  // Short arrows per REQ-004 & REQ-015: reflect modified field inside modifiers, varying strength per location
-  const MIN_MAG = 0.66; // for WIND_STRENGTH 90, min force 60 (10% of 600)
-  const MAX_MAG_RANGE = 1.5; // variation from field generation (1.0*1.5)
-  // Support both old signature (field array) and new getWindAt function for modifier-aware arrows
-  const isFunction = typeof fieldOrGetWindAt === 'function';
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const cx = col * cellW + cellW / 2;
-      const cy = row * cellH + cellH / 2;
-      const vec = isFunction ? fieldOrGetWindAt(cx, cy) : fieldOrGetWindAt[row][col];
-      const mag = Math.hypot(vec.x, vec.y);
-      const angle = Math.atan2(vec.y, vec.x);
-      // Normalize magnitude to 0-1 for visual encoding, do not scale length linearly with raw mag
-      const normalizedMag = Math.max(0, Math.min(1, (mag - MIN_MAG) / MAX_MAG_RANGE));
-      const len = 10 + normalizedMag * 4; // 10-14px, max ≤16, variation ≤4px
-      const alpha = 0.55 + normalizedMag * 0.40; // 0.55-0.95 more visible
-      const headSize = 4.5 + normalizedMag * 2; // 4.5-6.5px
-      // More visible color: bright off-white / pale yellow with high contrast on grass
-      // Use white-yellow that pops on green (#3a9d23) and still distinct from water/sand/tree
-      const arrowColor = `rgba(255,255,245,${alpha})`;
-      const outlineColor = `rgba(0,0,0,0.55)`;
-      // Draw dark outline / shadow first for contrast
-      ctx.strokeStyle = outlineColor;
-      ctx.lineWidth = 3.2;
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = 3;
-      ctx.beginPath();
-      ctx.moveTo(cx - Math.cos(angle) * len * 0.4, cy - Math.sin(angle) * len * 0.4);
-      ctx.lineTo(cx + Math.cos(angle) * len * 0.6, cy + Math.sin(angle) * len * 0.6);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      // arrow line - bright
-      ctx.strokeStyle = arrowColor;
-      ctx.lineWidth = 2.1;
-      ctx.beginPath();
-      ctx.moveTo(cx - Math.cos(angle) * len * 0.4, cy - Math.sin(angle) * len * 0.4);
-      ctx.lineTo(cx + Math.cos(angle) * len * 0.6, cy + Math.sin(angle) * len * 0.6);
-      ctx.stroke();
-      // head with outline
-      const hx = cx + Math.cos(angle) * len * 0.6;
-      const hy = cy + Math.sin(angle) * len * 0.6;
-      // outline
-      ctx.fillStyle = outlineColor;
-      ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(hx - Math.cos(angle - 0.45) * (headSize + 1.2), hy - Math.sin(angle - 0.45) * (headSize + 1.2));
-      ctx.lineTo(hx - Math.cos(angle + 0.45) * (headSize + 1.2), hy - Math.sin(angle + 0.45) * (headSize + 1.2));
-      ctx.closePath();
-      ctx.fill();
-      // fill bright
-      ctx.fillStyle = arrowColor;
-      ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(hx - Math.cos(angle - 0.45) * headSize, hy - Math.sin(angle - 0.45) * headSize);
-      ctx.lineTo(hx - Math.cos(angle + 0.45) * headSize, hy - Math.sin(angle + 0.45) * headSize);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-  ctx.restore();
-}
-
 export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH) {
-  if (!showWind) return;
   if (!modifiers || !modifiers.length) return;
   if (typeof getWindAt !== 'function') return;
   ctx.save();
@@ -325,22 +174,6 @@ export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cel
       ctx.closePath();
       ctx.fill();
     }
-  }
-  ctx.restore();
-}
-
-export function drawParticles(ctx) {
-  if (!showWind) return;
-  ctx.save();
-  for (const p of particles) {
-    // Per new requirement: do not draw while inside any modifier — reappear when outside
-    if (isInsideAnyModifier(p.x, p.y)) continue;
-    // Fade over 2s per REQ-004: alpha = life / maxLife
-    const alpha = Math.max(0, Math.min(1, p.life / (p.maxLife || 2))) * 0.65;
-    ctx.fillStyle = `rgba(180,220,255,${alpha})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
-    ctx.fill();
   }
   ctx.restore();
 }
@@ -1077,7 +910,7 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
 
     // Label - white with dark stroke for good contrast against green/dim
     // Bouncy label longer, use slightly smaller font to fit 90px button
-    const labelFont = btn.type === 'bouncyBall' ? "700 11px system-ui, sans-serif" : "700 13px system-ui, sans-serif";
+    const labelFont = "700 13px system-ui, sans-serif";
     ctx.font = labelFont;
     ctx.strokeStyle = "rgba(0,0,0,0.75)";
     ctx.lineWidth = 4;
@@ -1170,184 +1003,6 @@ export function drawAttemptsBanner(ctx, width, height, attemptsLeft) {
   const n = Math.max(0, Math.floor(attemptsLeft));
   const txt = n === 1 ? "1 Attempt Left" : `${n} Attempts Left`;
   return drawCenterBanner(ctx, width, height, txt);
-}
-
-export function drawWinOverlay(ctx, width, height, holeIndex = 0, totalHoles = 1, holeAttempts = 0, totalAttempts = 0) {
-  // Victory screen - darken play field same as reward menu, Victory same font as "Choose an Upgrade", big yellow star
-  ctx.save();
-  // Darken play field like reward menu: rgba(0,0,0,0.55) full-canvas dim
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, 0, width, height);
-  const centerX = width / 2;
-  const centerY = height / 2 - 10;
-  // Three big yellow stars
-  ctx.font = "700 64px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.65)";
-  ctx.lineWidth = 4;
-  ctx.fillStyle = "#FFD700";
-  // shadow for contrast
-  ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = 6;
-  ctx.strokeText("★★★", centerX, centerY - 38);
-  ctx.fillText("★★★", centerX, centerY - 38);
-  ctx.shadowBlur = 0;
-  // Course Completed title - same as "Choose an Upgrade": 700 22px system-ui white with dark stroke 5px
-  ctx.font = "700 22px system-ui, sans-serif";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)";
-  ctx.lineWidth = 5;
-  ctx.fillStyle = "white";
-  ctx.strokeText("Course Completed!", centerX, centerY + 22);
-  ctx.fillText("Course Completed!", centerX, centerY + 22);
-  // Total only - white with stroke for readability on transparent
-  ctx.font = "600 14px system-ui, sans-serif";
-  ctx.strokeStyle = "rgba(0,0,0,0.65)";
-  ctx.lineWidth = 3;
-  ctx.fillStyle = "white";
-  const info = `Total: ${totalAttempts}`;
-  ctx.strokeText(info, centerX, centerY + 48);
-  ctx.fillText(info, centerX, centerY + 48);
-  ctx.restore();
-}
-
-export function getPauseButtonsLayout(width, height) {
-  const btnW = 140, btnH = 44;
-  const cx = width / 2, cy = height / 2 - 10;
-  const layout = {
-    resume: { x: cx - btnW / 2, y: cy - 28, w: btnW, h: btnH },
-    endRun: { x: cx - btnW / 2, y: cy + 28, w: btnW, h: btnH }
-  };
-  // alias for backward compat
-  layout.newGame = layout.endRun;
-  return layout;
-}
-
-export function drawPauseMenu(ctx, width, height, hovered = null, rewardCounts = {}) {
-  ctx.save();
-  // Dim like reward menu
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, 0, width, height);
-  // Title Paused same as Choose an Upgrade / Victory
-  ctx.font = "700 22px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)";
-  ctx.lineWidth = 5;
-  ctx.fillStyle = "white";
-  ctx.strokeText("Paused", width / 2, height / 2 - 80);
-  ctx.fillText("Paused", width / 2, height / 2 - 80);
-  const layout = getPauseButtonsLayout(width, height);
-  // Resume button
-  const isResumeHover = hovered === "resume";
-  ctx.save();
-  if (isResumeHover) { ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 6; }
-  ctx.fillStyle = isResumeHover ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.12)";
-  ctx.strokeStyle = "rgba(255,255,255,0.85)";
-  ctx.lineWidth = 2;
-  const r1 = layout.resume;
-  const br = 8;
-  ctx.beginPath();
-  ctx.moveTo(r1.x + br, r1.y); ctx.lineTo(r1.x + r1.w - br, r1.y);
-  ctx.quadraticCurveTo(r1.x + r1.w, r1.y, r1.x + r1.w, r1.y + br);
-  ctx.lineTo(r1.x + r1.w, r1.y + r1.h - br); ctx.quadraticCurveTo(r1.x + r1.w, r1.y + r1.h, r1.x + r1.w - br, r1.y + r1.h);
-  ctx.lineTo(r1.x + br, r1.y + r1.h); ctx.quadraticCurveTo(r1.x, r1.y + r1.h, r1.x, r1.y + r1.h - br);
-  ctx.lineTo(r1.x, r1.y + br); ctx.quadraticCurveTo(r1.x, r1.y, r1.x + br, r1.y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.font = "700 14px system-ui, sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-  ctx.strokeText("▶ Resume", r1.x + r1.w/2, r1.y + r1.h/2);
-  ctx.fillStyle = "white"; ctx.fillText("▶ Resume", r1.x + r1.w/2, r1.y + r1.h/2);
-  ctx.font = "600 10px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 2;
-  ctx.strokeText("[Esc]", r1.x + r1.w/2, r1.y + r1.h/2 + 12);
-  ctx.fillText("[Esc]", r1.x + r1.w/2, r1.y + r1.h/2 + 12);
-  ctx.restore();
-  // End Run button - red distinct (was New Game)
-  const isNewHover = hovered === "endRun" || hovered === "newGame";
-  ctx.save();
-  if (isNewHover) { ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 6; }
-  ctx.fillStyle = isNewHover ? "rgba(231,76,60,0.38)" : "rgba(231,76,60,0.28)";
-  ctx.strokeStyle = "rgba(231,76,60,0.9)";
-  ctx.lineWidth = 2;
-  const r2 = layout.endRun || layout.newGame;
-  ctx.beginPath();
-  ctx.moveTo(r2.x + br, r2.y); ctx.lineTo(r2.x + r2.w - br, r2.y);
-  ctx.quadraticCurveTo(r2.x + r2.w, r2.y, r2.x + r2.w, r2.y + br);
-  ctx.lineTo(r2.x + r2.w, r2.y + r2.h - br); ctx.quadraticCurveTo(r2.x + r2.w, r2.y + r2.h, r2.x + r2.w - br, r2.y + r2.h);
-  ctx.lineTo(r2.x + br, r2.y + r2.h); ctx.quadraticCurveTo(r2.x, r2.y + r2.h, r2.x, r2.y + r2.h - br);
-  ctx.lineTo(r2.x, r2.y + br); ctx.quadraticCurveTo(r2.x, r2.y, r2.x + br, r2.y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.font = "700 14px system-ui, sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-  ctx.strokeText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
-  ctx.fillStyle = "white"; ctx.fillText("✕ End Run", r2.x + r2.w/2, r2.y + r2.h/2);
-  ctx.restore();
-  // Bottom reward list - all types with xN (bouncy removed, maxAttempts replaced by freeShot)
-  const types = ['amplify','nullify','flip','freeShot','areaUp'];
-  // include sharpshooter if defined in pool but keep 5 for now
-  const listY = height / 2 + 100;
-  const gap = 8;
-  const entryW = 88, entryH = 34;
-  const cols = 3;
-  const totalW = cols * entryW + (cols - 1) * gap;
-  const startX = (width - totalW) / 2;
-  // title for list
-  ctx.font = "600 11px system-ui, sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-  ctx.strokeText("Rewards this run", width/2, listY - 16);
-  ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.fillText("Rewards this run", width/2, listY - 16);
-  for (let i = 0; i < types.length; i++) {
-    const type = types[i];
-    const def = REWARD_TYPE_DEFS[type] || { icon:'?', color:'#fff' };
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const x = startX + col * (entryW + gap);
-    const y = listY + row * (entryH + 8);
-    ctx.save();
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 1;
-    const br2 = 6;
-    ctx.beginPath();
-    ctx.moveTo(x + br2, y); ctx.lineTo(x + entryW - br2, y);
-    ctx.quadraticCurveTo(x + entryW, y, x + entryW, y + br2);
-    ctx.lineTo(x + entryW, y + entryH - br2); ctx.quadraticCurveTo(x + entryW, y + entryH, x + entryW - br2, y + entryH);
-    ctx.lineTo(x + br2, y + entryH); ctx.quadraticCurveTo(x, y + entryH, x, y + entryH - br2);
-    ctx.lineTo(x, y + br2); ctx.quadraticCurveTo(x, y, x + br2, y);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    // icon
-    ctx.font = "700 16px system-ui, sans-serif";
-    ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-    ctx.strokeText(def.icon, x + 8, y + entryH/2);
-    ctx.fillStyle = def.color; ctx.fillText(def.icon, x + 8, y + entryH/2);
-    // label + count
-    const cnt = Math.max(0, Math.floor(rewardCounts[type] || 0));
-    const label = def.label;
-    // label 11px, count 700 12px
-    ctx.font = "600 10px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 2.5;
-    ctx.strokeText(label, x + 26, y + 11);
-    ctx.fillStyle = "white"; ctx.fillText(label, x + 26, y + 11);
-    ctx.font = "700 12px system-ui, sans-serif";
-    ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-    const countText = `x${cnt}`;
-    // right align count inside entry
-    ctx.textAlign = "right";
-    ctx.strokeText(countText, x + entryW - 6, y + 11);
-    ctx.fillStyle = "white"; ctx.fillText(countText, x + entryW - 6, y + 11);
-    ctx.restore();
-  }
-  ctx.restore();
 }
 
 export function getMainMenuButtonsLayout(width, height) {

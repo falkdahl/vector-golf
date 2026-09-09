@@ -1,5 +1,5 @@
 import { LEVEL, LEVELS, generateLevels } from "./levels.js";
-import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, clearModifiers } from "./vectorField.js";
+import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers } from "./vectorField.js";
 import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING } from "./physics.js";
 import { checkObstacleCollision, isOutOfBounds, checkWaterCollision, checkTerrainCollision, checkTreasureHit, collectTreasure } from "./obstacles.js";
 import { terrainZoneAt } from "./terrain.js";
@@ -16,8 +16,6 @@ import {
   drawRewardMenu,
   getRewardButtonsLayout,
   getRewardRerollButtonLayout,
-  drawPauseMenu,
-  getPauseButtonsLayout,
   drawArrowsInModifiers,
   setCanvasSize,
   drawTerrainZones,
@@ -43,7 +41,7 @@ import {
   updateFreeShotGlow,
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
-import { COURSES_KEY, STAGES, generateCourse, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed } from "./courses.js";
+import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed } from "./courses.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -327,11 +325,6 @@ function getMaxAttempts() { return maxAttempts; }
 function setMaxAttempts(v) { maxAttempts = Math.max(10, Math.floor(v)); updateAttemptsUI(); }
 function addMaxAttempts(n = 1) { maxAttempts = Math.max(10, maxAttempts + Math.floor(n)); updateAttemptsUI(); saveProgress(); }
 function getAttemptsLeft() { return Math.max(0, maxAttempts - holeAttempts); }
-// Legacy freeShots compat (removed, kept for saves)
-let freeShots = 0;
-function getFreeShots() { return 0; }
-function setFreeShots(v) { /* removed */ }
-function addFreeShots(n = 1) { /* removed, use addMaxAttempts */ }
 
 // Modifier Area +20% per REQ-023 - additive stacking, hidden bonus
 const BASE_MODIFIER_RADIUS = MODIFIER_RADIUS; // 54 base per REQ-015 (reduced 40% from 90 = 90*0.6)
@@ -347,26 +340,9 @@ function addAreaUpgrade(n = 1) {
   syncModifiersToField();
 }
 
-// Bouncy Ball +1 per REQ-024 - additive stacking, hidden per-attempt tracker
-let bouncyBallCount = 0;
-let bouncyRemaining = 0;
-function getBouncyBallCount() { return bouncyBallCount; }
-function getBouncyRemaining() { return bouncyRemaining; }
-function getBouncyCount() { return bouncyBallCount; } // alias
-function addBouncyBall(n = 1) {
-  bouncyBallCount = Math.max(0, bouncyBallCount + Math.floor(n));
-  // REQ-024: update remaining for next attempt (if in AIMING/CHARGING, reflect immediately for test)
-  bouncyRemaining = bouncyBallCount;
-}
-function setBouncyBallCount(v) { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
-function initBouncyForAttempt() { bouncyRemaining = bouncyBallCount; }
-
 // Persistent Progress via Local Storage per REQ-027 — save on each attempt, resume on revisit
 const STORAGE_KEY = "golfVectorField.progress.v1";
 function getSavePayload() {
-  // sharpshooterCount may not exist (REQ-026 optional) — fallback 0
-  let sharpshooterVal = 0;
-  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterVal = sharpshooterCount; } catch {}
   return {
     version: 1,
     courseId: activeCourseId || (activeCourse ? activeCourse.id : null),
@@ -378,9 +354,7 @@ function getSavePayload() {
     isFreeShotActive,
     treasure: level && level.treasure ? { x: level.treasure.x, y: level.treasure.y, radius: level.treasure.radius, isCollected: !!level.treasure.isCollected } : null,
     areaUpgradeCount,
-    sharpshooterCount: sharpshooterVal,
     rewardPending,
-    firstRewardClaimed,
     rewardOffered: [...rewardOffered],
     rewardRerolled,
     rewardMenuVisible,
@@ -422,9 +396,9 @@ function loadProgress() {
     totalAttempts = Math.max(0, Math.floor(d.totalAttempts || 0));
     attempts = totalAttempts;
     maxAttempts = d.maxAttempts !== undefined ? Math.max(10, Math.floor(d.maxAttempts)) : 10;
-    // legacy freeShots -> migrate to maxAttempts if needed (freeShots 3 ≈ +? not needed)
+    // legacy  -> migrate to maxAttempts if needed ( 3 ≈ +? not needed)
     if (d.maxAttempts && d.maxAttempts > 0 && maxAttempts === 10) {
-      // ignore legacy freeShots
+      // ignore legacy 
     }
     supply = {
       amplify: Math.max(0, Math.floor(d.supply?.amplify ?? 1)),
@@ -439,15 +413,10 @@ function loadProgress() {
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
     try { setWindFreeShotActive(isFreeShotActive); } catch {}
     areaUpgradeCount = Math.max(0, Math.floor(d.areaUpgradeCount || 0));
-    // bouncy legacy
-    bouncyBallCount = d.bouncyBallCount !== undefined ? Math.max(0, Math.floor(d.bouncyBallCount || 0)) : 0;
-    bouncyRemaining = bouncyBallCount;
-    try { if (typeof sharpshooterCount !== 'undefined' && typeof d.sharpshooterCount === 'number') sharpshooterCount = Math.max(0, Math.floor(d.sharpshooterCount || 0)); } catch {}
     rewardPending = !!d.rewardPending;
-    firstRewardClaimed = !!d.firstRewardClaimed;
     rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length === 3 ? [...d.rewardOffered] : [];
-    // migrate legacy freeShots/maxAttempts offers to freeShot
-    rewardOffered = rewardOffered.map(t => t === 'freeShots' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t);
+    // migrate legacy /maxAttempts offers to freeShot
+    rewardOffered = rewardOffered.map(t => t === '' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t);
     rewardRerolled = !!d.rewardRerolled;
     rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length === 3;
     rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
@@ -494,8 +463,7 @@ function loadProgress() {
       rewardChosenCounts.nullify = Math.max(0, Math.floor(d.supply?.nullify || supply.nullify || 0));
       rewardChosenCounts.flip = Math.max(0, Math.floor(d.supply?.flip || supply.flip || 0));
       rewardChosenCounts.areaUp = Math.max(0, Math.floor(d.areaUpgradeCount || areaUpgradeCount || 0));
-      rewardChosenCounts.bouncyBall = Math.max(0, Math.floor(d.bouncyBallCount || bouncyBallCount || 0));
-      // freeShots times chosen cannot be derived, stays 0 if missing
+      //  times chosen cannot be derived, stays 0 if missing
     }
     // Do not restore paused state as visible on load — resume as AIMING
     pauseMenuVisible = false; pauseMenuHover = null;
@@ -511,7 +479,7 @@ function clearProgress() {
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
 let pauseMenuVisible = false;
 let pauseMenuHover = null;
-let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
 function getRewardChosenCounts() { return { ...rewardChosenCounts }; }
 function getRewardChosenCount(type) { return Math.max(0, Math.floor(rewardChosenCounts[type] || 0)); }
 function setRewardChosenCounts(obj) {
@@ -535,13 +503,11 @@ function startNewGame() {
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
-  maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
-  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
-  rewardPending = false; firstRewardClaimed = false;
+  maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0);
   gameState = "AIMING";
@@ -699,7 +665,6 @@ function handleContinue() {
     createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
     syncModifiersToField();
     createBall(level.tee);
-    bouncyRemaining = bouncyBallCount;
     // Restore freeShot glow after ball created
     try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {}
     gameState = "AIMING";
@@ -850,15 +815,13 @@ function handleCoursePlay(courseId) {
   setActiveCourse(course);
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
-  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
-  rewardPending = false; firstRewardClaimed = false;
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1100,13 +1063,11 @@ function startNewGameFromMain() {
   clearProgress();
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
-  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
-  rewardPending = false; firstRewardClaimed = false;
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1120,14 +1081,12 @@ function endRun() {
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
-  try { if (typeof sharpshooterCount !== 'undefined') sharpshooterCount = 0; } catch {}
-  rewardPending = false; firstRewardClaimed = false;
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
@@ -1157,8 +1116,6 @@ function selectHole(n) {
   // Hide any win state
   updateAttemptsUI();
   updateForceBar();
-  // Re-init bouncy for new hole (loadLevel already does)
-  bouncyRemaining = bouncyBallCount;
   // Check reward menu if needed for current totalAttempts
   maybeShowRewardMenu();
   saveProgress();
@@ -1225,7 +1182,6 @@ let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backw
 let rewardMenuHover = null; // hovered type for visual feedback
 let rewardOffered = []; // 3 distinct types randomly chosen from REWARD_POOL per trigger
 let rewardPending = false;
-let firstRewardClaimed = false; // kept for backward compat
 let rewardRerolled = false; // per-menu flag per REQ-025, false when menu freshly shown
 let rewardRerollHover = false; // hover for re-roll button
 let rewardSeedCounter = 0; // deterministic counter for campaign seed, persisted in STORAGE_KEY
@@ -1423,7 +1379,6 @@ function claimReward(type) {
     if (type in rewardChosenCounts) rewardChosenCounts[type] = Math.max(0, (rewardChosenCounts[type] || 0) + 1);
   }
   // Mark first and general claimed for backward compat
-  firstRewardClaimed = true;
   rewardClaimedFor = totalAttempts;
   rewardMenuVisible = false;
   rewardMenuHover = null;
@@ -1497,8 +1452,6 @@ function loadLevel(index) {
   const dx = level.hole.x - level.tee.x;
   const dy = level.hole.y - level.tee.y;
   setAimAngle(Math.atan2(dy, dx));
-  // REQ-024: re-init bouncy bounces for new hole attempt
-  bouncyRemaining = bouncyBallCount;
   // REQ-09: queue reward before first attempt on holes >0 (except first hole of course), treasure handled separately
   // Free Shot: clear armed state on hole advance per 09 §3
   if (index > 0) {
@@ -1539,12 +1492,9 @@ function initLevel() {
   if (currentHoleIndex === 0) {
     supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
     clearFreeShotGlow();
-    maxAttempts = 10; freeShots = 0;
+    maxAttempts = 10; 
     areaUpgradeCount = 0;
-    bouncyBallCount = 0;
-    bouncyRemaining = 0;
     rewardPending = false;
-    firstRewardClaimed = false;
     rewardMenuVisible = false;
     rewardClaimedFor = null;
     rewardOffered = [];
@@ -1552,12 +1502,11 @@ function initLevel() {
     rewardRerollHover = false;
     pauseMenuVisible = false;
     pauseMenuHover = null;
-    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
     const pauseOverlay = document.getElementById("pause-overlay");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
   } else {
     // For non-zero start (hole advance per-hole), reward queued before first attempt in loadLevel
-    bouncyRemaining = bouncyBallCount;
   }
   loadLevel(currentHoleIndex);
   updateAttemptsUI();
@@ -1717,10 +1666,7 @@ function handleGameOverReturn() {
   isInLevelPause = false;
   courseMenuVisible = false;
   helpVisible = false;
-  // reset bouncy legacy
-  bouncyBallCount = 0;
-  bouncyRemaining = 0;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   // Avoid heavy field generation when returning to main menu after Game Over — defer to next course play
   _lastCourseListSig = null;
   syncMainMenu();
@@ -1817,8 +1763,6 @@ function resetBall() {
   clearFreeShotFlightGlow();
   gameState = "AIMING";
   winOverlay.classList.add("hidden");
-  // REQ-024: re-init bouncy bounces for next attempt
-  bouncyRemaining = bouncyBallCount;
   updateForceBar();
   // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
   maybeShowRewardMenu();
@@ -1867,12 +1811,9 @@ function returnToMainMenu() {
   attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
-  maxAttempts = 10; freeShots = 0;
+  maxAttempts = 10; 
   areaUpgradeCount = 0;
-  bouncyBallCount = 0;
-  bouncyRemaining = 0;
   rewardPending = false;
-  firstRewardClaimed = false;
   rewardMenuVisible = false;
   rewardClaimedFor = null;
   rewardMenuHover = null;
@@ -1884,7 +1825,7 @@ function returnToMainMenu() {
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
@@ -1910,7 +1851,6 @@ function returnToMainMenu() {
     // Invalidate course list signature so next menu open re-renders with updated bestTotal/unlock (courses are read from cache)
     _lastCourseListSig = null;
   } catch {}
-  bouncyRemaining = bouncyBallCount;
   resetHotbarCollapsed();
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   syncPauseOverlay();
@@ -1935,13 +1875,10 @@ function resetGameAfterWin() {
   // REQ-020/022/023/024: reset supply to one of each on new game, no award before first attempt
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
-  maxAttempts = 10; freeShots = 0;
+  maxAttempts = 10; 
   areaUpgradeCount = 0;
-  bouncyBallCount = 0;
-  bouncyRemaining = 0;
   // REQ-021 + REQ-025 + REQ-028: reset secret counter + reward state + reroll + pause stats
   rewardPending = false;
-  firstRewardClaimed = false;
   rewardMenuVisible = false;
   rewardClaimedFor = null;
   rewardMenuHover = null;
@@ -1950,7 +1887,7 @@ function resetGameAfterWin() {
   rewardRerollHover = false;
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
   loadLevel(currentHoleIndex);
@@ -2648,7 +2585,6 @@ function init() {
         createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
         syncModifiersToField();
         createBall(level.tee);
-        bouncyRemaining = bouncyBallCount;
         try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {}
         // Handle GAME_OVER save: show Game Over screen directly
         if (data.gameState === 'GAME_OVER') {
@@ -2731,7 +2667,6 @@ function init() {
     createBall(level.tee);
     setAimAngle(0);
   }
-  bouncyRemaining = bouncyBallCount;
   gameState = "AIMING";
   mainMenuVisible = true;
   courseMenuVisible = false;
@@ -2740,9 +2675,8 @@ function init() {
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
-  maxAttempts = 10; freeShots = 0; areaUpgradeCount = 0; bouncyBallCount = 0; bouncyRemaining = 0;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, bouncyBall: 0, maxAttempts: 0 };
-  rewardPending = false; firstRewardClaimed = false; rewardOffered = []; rewardRerolled = false;
+  maxAttempts = 10; areaUpgradeCount = 0; rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardPending = false; rewardOffered = []; rewardRerolled = false;
   resetHotbarCollapsed();
   updateAttemptsUI(); updateHotbarUI(); updateForceBar();
   syncMainMenu(); syncPauseOverlay();
@@ -3099,22 +3033,6 @@ function init() {
       canvas.style.cursor = "default";
       return;
     }
-    // REQ-028: handle hover for pause menu
-    if (pauseMenuVisible) {
-      const pos = getCanvasMousePos(e);
-      mousePos = pos;
-      try {
-        const pl = getPauseButtonsLayout(LOGICAL_W, LOGICAL_H);
-        const btnNew = pl.endRun || pl.newGame;
-        const overResume = pos.x >= pl.resume.x && pos.x <= pl.resume.x + pl.resume.w && pos.y >= pl.resume.y && pos.y <= pl.resume.y + pl.resume.h;
-        const overNew = pos.x >= btnNew.x && pos.x <= btnNew.x + btnNew.w && pos.y >= btnNew.y && pos.y <= btnNew.y + btnNew.h;
-        if (overResume) pauseMenuHover = "resume";
-        else if (overNew) pauseMenuHover = "endRun";
-        else pauseMenuHover = null;
-        canvas.style.cursor = (overResume || overNew) ? "pointer" : "default";
-      } catch { pauseMenuHover = null; }
-      return;
-    }
     // REQ-021: handle hover for reward menu (random 3 offered) + REQ-025 re-roll
     if (rewardMenuVisible) {
       const pos = getCanvasMousePos(e);
@@ -3212,20 +3130,6 @@ function init() {
   canvas.addEventListener("click", (e) => {
     // REQ-029/030: main menu is HTML overlay bounded to canvas — canvas clicks while menu visible are ignored (HTML button handles New Game)
     if (mainMenuVisible) {
-      e.preventDefault();
-      return;
-    }
-    // REQ-028: handle pause menu first
-    if (pauseMenuVisible) {
-      const pos = getCanvasMousePos(e);
-      try {
-        const pl = getPauseButtonsLayout(LOGICAL_W, LOGICAL_H);
-        const btnNew = pl.endRun || pl.newGame;
-        const overResume = pos.x >= pl.resume.x && pos.x <= pl.resume.x + pl.resume.w && pos.y >= pl.resume.y && pos.y <= pl.resume.y + pl.resume.h;
-        const overNew = pos.x >= btnNew.x && pos.x <= btnNew.x + btnNew.w && pos.y >= btnNew.y && pos.y <= btnNew.y + btnNew.h;
-        if (overResume) { resumeGame(); e.preventDefault(); return; }
-        if (overNew) { endRun(); e.preventDefault(); return; }
-      } catch {}
       e.preventDefault();
       return;
     }
@@ -3346,9 +3250,6 @@ if (typeof window !== 'undefined') {
   window.__setRewardMenuVisible = setRewardMenuVisible;
   window.__getRewardOffered = getRewardOffered;
   window.__setRewardOffered = setRewardOffered;
-  window.__getFreeShots = getFreeShots;
-  window.__setFreeShots = setFreeShots;
-  window.__addFreeShots = addFreeShots;
   window.__getFreeShotSupply = () => supply.freeShot ?? 0;
   window.__setFreeShotSupply = (v) => { supply.freeShot = Math.max(0, Math.floor(v)); updateHotbarUI(); };
   window.__isFreeShotActive = isFreeShotActiveState;
@@ -3367,16 +3268,8 @@ if (typeof window !== 'undefined') {
   window.__getAreaMultiplier = getAreaMultiplier;
   window.__getEffectiveModifierRadius = getEffectiveModifierRadius;
   window.__addAreaUpgrade = addAreaUpgrade;
-  window.__getBouncyBallCount = getBouncyBallCount;
-  window.__getBouncyRemaining = getBouncyRemaining;
-  window.__getBouncyCount = getBouncyCount;
-  window.__addBouncyBall = addBouncyBall;
-  window.__setBouncyBallCount = setBouncyBallCount;
-  window.__getBouncyBallRemaining = getBouncyRemaining;
   window.__getRewardPending = () => rewardPending;
   window.__setRewardPending = (v) => { rewardPending = !!v; };
-  window.__getFirstRewardClaimed = () => firstRewardClaimed;
-  window.__setFirstRewardClaimed = (v) => { firstRewardClaimed = !!v; };
   window.__getRewardRerolled = getRewardRerolled;
   window.__setRewardRerolled = (v) => { rewardRerolled = !!v; };
   window.__rerollReward = rerollReward;
@@ -3404,10 +3297,6 @@ if (typeof window !== 'undefined') {
   window.__setMaxAttempts = setMaxAttempts;
   window.__addMaxAttempts = addMaxAttempts;
   window.__getAttemptsLeft = getAttemptsLeft;
-  Object.defineProperty(window, 'freeShots', {
-    get: () => freeShots,
-    set: (v) => setFreeShots(v)
-  });
   Object.defineProperty(window, 'rewardOffered', {
     get: () => [...rewardOffered],
     set: (v) => setRewardOffered(v)
@@ -3438,22 +3327,6 @@ if (typeof window !== 'undefined') {
       syncModifiersToField();
     }
   });
-  Object.defineProperty(window, 'bouncyBallCount', {
-    get: () => bouncyBallCount,
-    set: (v) => { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
-  });
-  Object.defineProperty(window, '__bouncyBallCount', {
-    get: () => bouncyBallCount,
-    set: (v) => { bouncyBallCount = Math.max(0, Math.floor(v)); bouncyRemaining = bouncyBallCount; }
-  });
-  Object.defineProperty(window, 'bouncyRemaining', {
-    get: () => bouncyRemaining,
-    set: (v) => { bouncyRemaining = Math.max(0, Math.floor(v)); }
-  });
-  Object.defineProperty(window, '__bouncyRemaining', {
-    get: () => bouncyRemaining,
-    set: (v) => { bouncyRemaining = Math.max(0, Math.floor(v)); }
-  });
   Object.defineProperty(window, 'rewardPending', {
     get: () => rewardPending,
     set: (v) => { rewardPending = !!v; }
@@ -3461,10 +3334,6 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, '__rewardPending', {
     get: () => rewardPending,
     set: (v) => { rewardPending = !!v; }
-  });
-  Object.defineProperty(window, 'firstRewardClaimed', {
-    get: () => firstRewardClaimed,
-    set: (v) => { firstRewardClaimed = !!v; }
   });
   Object.defineProperty(window, 'rewardRerolled', {
     get: () => rewardRerolled,
@@ -3598,11 +3467,11 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'rewardSeedCounter', { get: () => rewardSeedCounter, set: (v) => { rewardSeedCounter = Math.max(0, Math.floor(v||0)); } });
 }
 
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, holeBannerText, attemptsBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, getRewardSeedCounter, setRewardSeedCounter };
+
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
 }
-
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, freeShots, getFreeShots, setFreeShots, addFreeShots, maxAttempts, getMaxAttempts, setMaxAttempts, addMaxAttempts, getAttemptsLeft, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bouncyBallCount, bouncyRemaining, getBouncyBallCount, getBouncyRemaining, getBouncyCount, addBouncyBall, setBouncyBallCount, initBouncyForAttempt, bounceBall, selectHole, getSecretHoleFromURL, rewardPending, firstRewardClaimed, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, handleNextHole, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, holeBannerText, attemptsBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner };
