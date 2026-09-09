@@ -90,6 +90,44 @@ function deterministicNameForCourse(campaignSeedVal, holeCount) {
   return randomName(r);
 }
 
+function deterministicNameForCourseAtAttempt(campaignSeedVal, holeCount, attempt) {
+  const base = holeCount * 100 + 7 + attempt * 1009;
+  const d = deriveCourseSeed(campaignSeedVal, base);
+  const r = mulberry32(d);
+  return randomName(r);
+}
+
+function getUniqueNameForCourse(campaignSeedVal, holeCount, existingNames) {
+  const need = existingNames instanceof Set ? existingNames : new Set(existingNames || []);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const cand = deterministicNameForCourseAtAttempt(campaignSeedVal, holeCount, attempt);
+    if (!need.has(cand)) return cand;
+  }
+  // Fallback: append suffix deterministically
+  let base = deterministicNameForCourse(campaignSeedVal, holeCount);
+  let i = 2;
+  while (need.has(base + ' ' + i)) i++;
+  return base + ' ' + i;
+}
+
+function ensureUniqueCourseNames(courses, campaignSeedVal) {
+  const seen = new Set();
+  let fixed = false;
+  for (const c of courses) {
+    if (!c || typeof c.name !== 'string') continue;
+    if (seen.has(c.name)) {
+      const holeCount = c.holeCount || 3;
+      const unique = getUniqueNameForCourse(campaignSeedVal, holeCount, seen);
+      if (unique !== c.name) {
+        c.name = unique;
+        fixed = true;
+      }
+    }
+    seen.add(c.name);
+  }
+  return fixed;
+}
+
 function deterministicIdForCourse(campaignSeedVal, holeCount) {
   const d = deriveCourseSeed(campaignSeedVal, holeCount * 100 + 13);
   const r = mulberry32(d);
@@ -114,7 +152,16 @@ export function generateCampaignCourse(holeCount = 18, campaignSeedVal = getOrCr
   } else if (typeof options === 'string' && ['easy','medium','hard'].includes(options)) {
     difficulty = options;
   }
-  const name = deterministicNameForCourse(campaignSeedVal, holeCount);
+  let name;
+  if (options && typeof options === 'object' && options.existingNames) {
+    const set = options.existingNames instanceof Set ? options.existingNames : new Set(options.existingNames);
+    name = getUniqueNameForCourse(campaignSeedVal, holeCount, set);
+  } else if (options && typeof options === 'object' && Array.isArray(options.existingCourses)) {
+    const set = new Set(options.existingCourses.map(c => c && c.name).filter(Boolean));
+    name = getUniqueNameForCourse(campaignSeedVal, holeCount, set);
+  } else {
+    name = deterministicNameForCourse(campaignSeedVal, holeCount);
+  }
   const id = deterministicIdForCourse(campaignSeedVal, holeCount);
   let prevLevelsCopy = null;
   let prevLevelCopy = null;
@@ -253,8 +300,9 @@ export function ensureStagedCourses(courses, campaignSeedParam) {
       // auto-generate missing unlocked stage deterministically if campaignSeed available
       let gen;
       if (cs) {
-        if (hc === 3) gen = generateCampaignCourse(3, cs, { difficulty: 'easy' });
-        else gen = generateCampaignCourse(hc, cs);
+        const existingNames = new Set(staged.map(c => c.name));
+        if (hc === 3) gen = generateCampaignCourse(3, cs, { difficulty: 'easy', existingNames });
+        else gen = generateCampaignCourse(hc, cs, { existingNames });
       } else {
         gen = hc === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(hc, Date.now());
       }
@@ -275,6 +323,8 @@ export function ensureStagedCourses(courses, campaignSeedParam) {
     }
     staged.push(def);
   }
+  // Ensure uniqueness within campaign — if two courses have same name, pick next deterministically
+  try { ensureUniqueCourseNames(staged, cs); } catch {}
   return staged;
 }
 
@@ -318,8 +368,10 @@ export function loadCourses() {
     try { normalizeCourseTreasures(valid); } catch {}
     // Normalize to staged unlocking model — only generates if a previously-unlocked stage is missing (once per unlock)
     const staged = ensureStagedCourses(valid, campaignSeed);
-    // If staged differs (e.g. old save had 18 only, or missing 3), persist normalized with campaignSeed
-    if (staged.length !== valid.length || staged.some((c,i) => c.id !== valid[i]?.id) || d.campaignSeed === undefined) {
+    // Detect name fixes for duplicates
+    const namesChanged = staged.some((c,i) => valid[i] && c.name !== valid[i].name);
+    // If staged differs (e.g. old save had 18 only, or missing 3), or names were fixed for uniqueness, persist normalized with campaignSeed
+    if (staged.length !== valid.length || staged.some((c,i) => c.id !== valid[i]?.id) || namesChanged || d.campaignSeed === undefined) {
       try { saveCourses(staged, campaignSeed); } catch {}
       _coursesCache = staged;
       _coursesCacheRaw = localStorage.getItem(COURSES_KEY);
@@ -349,11 +401,19 @@ export function ensureNextStageUnlocked(courses) {
     const next = courses.find(c => c.holeCount === nextHC);
     if (curr && curr.bestTotal !== null && !next) {
       let gen;
-      if (cs) gen = generateCampaignCourse(nextHC, cs);
-      else gen = generateCourse(nextHC, Date.now());
+      if (cs) {
+        const existingNames = new Set(courses.map(c => c.name));
+        gen = generateCampaignCourse(nextHC, cs, { existingNames });
+        // Ensure still unique after generation (in case deterministic still collided due to stale set)
+        if (existingNames.has(gen.name)) {
+          gen.name = getUniqueNameForCourse(cs, nextHC, existingNames);
+        }
+      } else gen = generateCourse(nextHC, Date.now());
       courses.push(gen);
       // Keep staged order
       courses.sort((a,b) => STAGES.indexOf(a.holeCount) - STAGES.indexOf(b.holeCount));
+      // Final ensure uniqueness across all
+      try { ensureUniqueCourseNames(courses, cs); } catch {}
       saveCourses(courses, cs);
       return gen;
     }
@@ -385,6 +445,8 @@ export function saveCourses(courses, campaignSeedOverride) {
   campaignSeed = String(cs);
   // Never persist collected treasure - courses are definitions, run state lives in STORAGE_KEY
   try { normalizeCourseTreasures(courses); } catch {}
+  // Ensure course names within campaign are unique
+  try { ensureUniqueCourseNames(courses, cs); } catch {}
   localStorage.setItem(COURSES_KEY, JSON.stringify({ version: 1, campaignSeed: cs, courses }));
   _coursesCache = courses;
   try { _coursesCacheRaw = localStorage.getItem(COURSES_KEY); } catch {}
@@ -438,4 +500,4 @@ export function importCourse(b64) {
   return JSON.parse(JSON.stringify(c));
 }
 
-export { ADJECTIVES, NOUNS };
+export { ADJECTIVES, NOUNS, deterministicNameForCourse, deterministicNameForCourseAtAttempt, getUniqueNameForCourse, ensureUniqueCourseNames };
