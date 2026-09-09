@@ -186,7 +186,10 @@ let modifiers = [];
 let selectedModifier = null;
 let mousePos = null;
 let hotbarEl = null;
-let hotbarToggleEl = null;
+let hotbarGridEl = null;
+let golfbagContainerEl = null;
+let golfbagIconEl = null;
+let bottomBarEl = null;
 let draggingIdx = -1;
 let isDragging = false;
 let isHotbarCollapsed = false;
@@ -194,18 +197,16 @@ function isHotbarCollapsedState() { return isHotbarCollapsed; }
 function syncHotbarCollapsedUI() {
   if (!hotbarEl) return;
   hotbarEl.classList.toggle("collapsed", isHotbarCollapsed);
-  if (hotbarToggleEl) {
-    hotbarToggleEl.textContent = isHotbarCollapsed ? "▴" : "▾";
-    const label = isHotbarCollapsed ? "Expand modifiers" : "Collapse modifiers";
-    hotbarToggleEl.setAttribute("aria-label", label);
-    hotbarToggleEl.title = label;
+  if (golfbagContainerEl) {
+    golfbagContainerEl.setAttribute("aria-expanded", String(!isHotbarCollapsed));
+    golfbagContainerEl.title = isHotbarCollapsed ? "Golf bag — click to open" : "Golf bag — click to collapse";
   }
+  // Close button removed per updated spec — only golfbag toggles
 }
 function toggleHotbar() {
-  // Only meaningful during AIMING/CHARGING and when not hidden by FLYING/WIN/reward/pause/mainMenu
-  // Still allow toggle even if hidden — will be visible on next AIMING entry as collapsed state is ephemeral
+  // Toggle via golfbag click or I/Tab; close button removed
   isHotbarCollapsed = !isHotbarCollapsed;
-  // Do NOT deselect active modifier when collapsing — selection persists per updated REQ-015
+  // Do NOT deselect active modifier when collapsing — selection persists
   syncHotbarCollapsedUI();
   updateHotbarUI();
   return isHotbarCollapsed;
@@ -1676,10 +1677,21 @@ function updateAttemptsUI() {
 }
 
 function updateHotbarUI() {
-  if (!hotbarEl) return;
-  const isAiming = gameState === "AIMING" || gameState === "CHARGING";
-  const hideForPause = pauseMenuVisible || rewardMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible;
-  hotbarEl.classList.toggle("hidden", !isAiming || hideForPause);
+  if (!hotbarEl && !golfbagContainerEl && !bottomBarEl) return;
+  // Bag+hotbar are always visible during gameplay including FLYING and reward (per updated spec)
+  // Only hide during overlays/menus/banners/WIN/GAME_OVER; collapsed is handled via CSS class
+  // Bottom-bar wrapper is the centered bottom element (gap 12px to bottom)
+  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || gameState === "WIN" || gameState === "GAME_OVER";
+  const hideHotbar = isOverlayHidden;
+  const hideBag = isOverlayHidden;
+  if (bottomBarEl) bottomBarEl.classList.toggle("hidden", isOverlayHidden);
+  if (hotbarEl) {
+    // Respect collapsed: when collapsed hotbar is hidden via .collapsed display:none, but still toggle hidden for overlay
+    hotbarEl.classList.toggle("hidden", hideHotbar);
+  }
+  if (golfbagContainerEl) golfbagContainerEl.classList.toggle("hidden", hideBag);
+  // Ensure collapsed UI stays synced (grid hidden via CSS collapsed, bag remains with no background)
+  syncHotbarCollapsedUI();
   for (const slot of hotbarEl.querySelectorAll(".hotbar-slot")) {
     const type = slot.dataset.type;
     // Free Shot is no longer shown in hotbar; it is displayed in HUD as Attempts Left: X (+Y)
@@ -1694,10 +1706,10 @@ function updateHotbarUI() {
     slot.classList.toggle("selected", slot.dataset.type === selectedModifier);
     slot.classList.remove("active");
     slot.classList.toggle("disabled", !canPlaceThis);
-    // Update count badge — only current supply (REQ 07: icon + name + supply on one line)
+    // Update count badge — lower-right xN per new spec (e.g. x2)
     const countEl = slot.querySelector(".hotbar-count");
     if (countEl) {
-      countEl.textContent = String(supplyCount);
+      countEl.textContent = `x${supplyCount}`;
     }
     // Accessibility title with hotkey 1-4 for spatial
     if (!canPlaceThis) {
@@ -2456,14 +2468,26 @@ function init() {
     gameoverReturnButton.addEventListener("click", handleGameOverReturn);
   }
   hotbarEl = document.getElementById("hotbar");
-  hotbarToggleEl = document.getElementById("hotbar-toggle");
-  if (hotbarToggleEl) {
-    hotbarToggleEl.addEventListener("click", (e) => {
+  hotbarGridEl = document.getElementById("hotbar-grid");
+  golfbagContainerEl = document.getElementById("golfbag-container");
+  golfbagIconEl = document.getElementById("golfbag-icon");
+  bottomBarEl = document.getElementById("bottom-bar");
+  syncHotbarCollapsedUI();
+  if (golfbagContainerEl) {
+    const handleGolfbagToggle = (e) => {
       e.stopPropagation();
-      // Don't toggle when hidden by FLYING/WIN/reward/pause/mainMenu — toggleHotbar still works but hotbar is hidden anyway
+      // When collapsed, click opens; when expanded, click also toggles (to collapsed) — but spec says golfbag opens again when collapsed
+      // To avoid accidental collapse on expanded click, we toggle only when collapsed, otherwise collapse as well for I/Tab symmetry
+      // Spec: golfbag grows on hover and collapses via cross, opens via golfbag click. Allow both.
       toggleHotbar();
+    };
+    golfbagContainerEl.addEventListener("click", handleGolfbagToggle);
+    golfbagContainerEl.addEventListener("keydown", (e) => {
+      if (e.code === "Enter" || e.code === "Space") {
+        e.preventDefault();
+        toggleHotbar();
+      }
     });
-    syncHotbarCollapsedUI();
   }
 
   // REQ-029 root menu handlers (Continue / New Game / Help) + course submenu + help
@@ -3055,7 +3079,17 @@ function init() {
       return;
     }
     // REQ-021: when reward menu visible, 1/2/3 selects random offered reward by position, other inputs blocked; 11-banners: R rerolls (not 0)
+    // Bag remains openable while reward is showing, so allow I/Tab toggle even during reward
     if (rewardMenuVisible) {
+      if (e.code === "KeyI" || e.code === "Tab") {
+        const ae = document.activeElement;
+        const isTyping = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
+        if (!isTyping && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          toggleHotbar();
+          e.preventDefault();
+        }
+        return;
+      }
       if (e.code === "Digit1" && rewardOffered[0]) {
         claimReward(rewardOffered[0]);
         e.preventDefault();
@@ -3125,12 +3159,26 @@ function init() {
       e.preventDefault();
       return;
     }
-    // REQ-015 collapsible: M / B toggles hotbar transparency/collapse, Escape stays deselect-only
-    if ((e.code === "KeyM" || e.code === "KeyB") && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      if (!rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && (gameState === "AIMING" || gameState === "CHARGING")) {
-        toggleHotbar();
-        e.preventDefault();
-        return;
+    // Hotbar collapsible: M / B legacy plus new I / Tab per updated spec; Escape stays deselect-only
+    // Bag+hotbar are always visible during gameplay including FLYING and reward (per updated spec)
+    const isHotbarToggleKey = (e.code === "KeyM" || e.code === "KeyB" || e.code === "KeyI" || e.code === "Tab");
+    if (isHotbarToggleKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      // Ignore Tab/I while typing in input/textarea/contentEditable
+      const ae = document.activeElement;
+      const isTyping = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
+      if (!isTyping) {
+        const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || gameState === "WIN" || gameState === "GAME_OVER";
+        const bagVisible = !isOverlayHidden;
+        if (bagVisible) {
+          toggleHotbar();
+          e.preventDefault();
+          return;
+        } else if (isHotbarCollapsed && !pauseMenuVisible && !mainMenuVisible && !holeBannerVisible && !attemptsBannerVisible) {
+          // Allow toggling even when hidden due to WIN/GAME_OVER to preserve state for next AIMING
+          toggleHotbar();
+          e.preventDefault();
+          return;
+        }
       }
     }
     if (e.code === "Digit1") {

@@ -673,140 +673,186 @@ body {
 .reward-stats [data-type="bouncyBall"] .icon { color: #1abc9c; }
 .reward-stats .count { font: 700 12px system-ui, sans-serif; margin-left: 6px; }
 
-#hotbar {
+#bottom-bar {
   position: absolute;
-  bottom: 10px;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
-  justify-content: center;
   align-items: center;
-  background: rgba(0,0,0,0.35);
-  padding: 6px 10px;
-  border-radius: 10px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  z-index: 5;
-  transition: padding 0.18s ease, background 0.18s ease, transform 0.18s ease, height 0.18s ease, opacity 0.18s ease;
+  gap: 6px;
+  z-index: 6;
+  pointer-events: none;
 }
-.hotbar-slot {
+#bottom-bar.hidden { display: none !important; }
+#bottom-bar > * {
+  pointer-events: auto;
+}
+#golfbag-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 52px;
+  height: 70px;
+  border-radius: 6px;
+  background: transparent;
+  transition: transform 0.15s ease;
+  user-select: none;
+}
+#golfbag-container:focus-visible {
+  outline: 2px solid rgba(255,255,255,0.9);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+#golfbag-container.hidden { display: none !important; }
+#golfbag-icon {
+  width: auto;
+  height: 68px;
+  max-height: 70px;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.25));
+}
+#golfbag-container:hover #golfbag-icon {
+  transform: scale(1.08);
+  filter: drop-shadow(0 6px 8px rgba(0,0,0,0.45));
+}
+#golfbag-container:active #golfbag-icon {
+  transform: scale(1.02);
+}
+#hotbar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  color: white;
-  cursor: pointer;
-  font: 600 11px system-ui, sans-serif;
-  -webkit-text-stroke: 2px rgba(0,0,0,0.65);
-  paint-order: stroke fill;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.35);
-  min-width: 80px;
-  justify-content: flex-start;
-  white-space: nowrap;
-  flex-wrap: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: transform 0.15s, border-color 0.15s, background 0.15s, opacity 0.15s;
-  user-select: none;
-}
-.hotbar-slot[data-type="amplify"] { border-color: rgba(255,255,255,0.18); }
-.hotbar-slot[data-type="nullify"] { border-color: rgba(255,255,255,0.18); }
-.hotbar-slot[data-type="flip"] { border-color: rgba(255,255,255,0.18); }
-.hotbar-slot.selected {
-  border-color: rgba(255,255,255,0.85) !important;
-  background: rgba(255,255,255,0.14);
-  transform: scale(1.04);
-}
-.hotbar-slot[data-type="amplify"].selected { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9) !important; }
-.hotbar-slot[data-type="nullify"].selected { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9) !important; }
-.hotbar-slot[data-type="flip"].selected { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9) !important; }
-.hotbar-slot[data-type="rotate"].selected { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.9) !important; }
-.hotbar-slot[data-type="rotate"].active { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.95) !important; box-shadow: 0 0 10px rgba(231,76,60,0.6); transform: scale(1.04); }
-.hotbar-slot.disabled {
-  opacity: 0.45;
-  filter: grayscale(0.6);
-  cursor: not-allowed;
-}
-.hotbar-slot.disabled.selected {
-  border-color: rgba(255,255,255,0.35) !important;
-  transform: none;
-}
-.hotbar-icon { font-size: 14px; line-height: 1; }
-.hotbar-slot[data-type="amplify"] .hotbar-icon { color: #e67e22; }
-.hotbar-slot[data-type="nullify"] .hotbar-icon { color: #3498db; }
-.hotbar-slot[data-type="flip"] .hotbar-icon { color: #9b59b6; }
-.hotbar-slot[data-type="rotate"] .hotbar-icon { color: #e74c3c; }
-.hotbar-label { flex: 0 1 auto; text-align: left; white-space: nowrap; }
-.hotbar-label, .hotbar-count, .hotbar-icon { white-space: nowrap; flex-wrap: nowrap; }
-.hotbar-count {
-  font: 700 12px system-ui, sans-serif;
-  color: white;
-  background: transparent;
-  padding: 0;
-  margin-left: 6px;
-  min-width: auto;
-  text-align: right;
-  -webkit-text-stroke: 2px rgba(0,0,0,0.65);
-  paint-order: stroke fill;
-}
-.hotbar-slot.disabled .hotbar-count {
-  background: transparent;
-  color: #ffb0b0;
-}
-.hotbar-key {
-  font: 600 10px system-ui, sans-serif;
+  justify-content: center;
   background: rgba(0,0,0,0.35);
-  color: #ddd;
-  padding: 2px 5px;
-  border-radius: 4px;
-  margin-left: 4px;
-  -webkit-text-stroke: 0;
-  paint-order: normal;
-  text-shadow: none;
+  padding: 6px;
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  transition: padding 0.18s ease, background 0.18s ease, transform 0.18s ease, opacity 0.18s ease, border 0.18s ease;
+  border: 1px solid rgba(255,255,255,0.12);
 }
-#hotbar.hidden { display: none; }
+#hotbar.hidden { display: none !important; }
 #hotbar.collapsed {
-  padding: 4px 8px;
-  gap: 0;
-  height: 28px;
-  min-height: 28px;
-  background: rgba(0,0,0,0.28);
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  /* collapsed hides grid & toggle, leaves only golfbag (which is outside) => no background */
+  display: none !important;
 }
-#hotbar.collapsed .hotbar-slot {
-  display: none;
+#hotbar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  align-items: center;
 }
-#hotbar-toggle {
+.hotbar-slot {
+  position: relative;
+  width: 35px;
+  height: 35px;
+  min-width: 35px;
+  min-height: 35px;
+  aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 24px;
-  padding: 0;
-  border: 1.5px solid rgba(255,255,255,0.65);
   border-radius: 6px;
-  background: rgba(255,255,255,0.10);
+  border: 1.5px solid rgba(0,0,0,0.24);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  transition: transform 0.15s, border-color 0.15s, opacity 0.15s, filter 0.15s, box-shadow 0.15s;
+}
+.hotbar-slot[data-type="amplify"] { background: rgba(230,126,34,0.82); }
+.hotbar-slot[data-type="nullify"] { background: rgba(52,152,219,0.82); }
+.hotbar-slot[data-type="flip"] { background: rgba(155,89,182,0.82); }
+.hotbar-slot[data-type="rotate"] { background: rgba(231,76,60,0.82); }
+.hotbar-slot.selected {
+  border-color: rgba(255,255,255,0.95) !important;
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.45), 0 2px 6px rgba(0,0,0,0.30);
+  transform: scale(1.05);
+  z-index: 1;
+}
+.hotbar-slot.disabled {
+  opacity: 0.45;
+  filter: grayscale(0.35);
+  cursor: not-allowed;
+}
+.hotbar-slot.disabled.selected {
+  border-color: rgba(255,255,255,0.45) !important;
+  transform: none;
+  box-shadow: none;
+}
+.hotbar-icon {
+  font-size: 15px;
+  line-height: 1;
+  color: white;
+  -webkit-text-stroke: 1.6px rgba(0,0,0,0.55);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+.hotbar-count {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font: 700 11px system-ui, sans-serif;
+  color: white;
+  -webkit-text-stroke: 1.6px rgba(0,0,0,0.65);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  pointer-events: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+.hotbar-slot.disabled .hotbar-count {
   color: #fff;
-  font-size: 0.85rem;
+}
+#hotbar.collapsed #hotbar-grid {
+  display: none !important;
+}
+#hotbar.collapsed #hotbar-toggle {
+  display: none !important;
+}
+#hotbar-toggle {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.9);
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
   user-select: none;
   flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  transition: background 0.15s, transform 0.15s, border-color 0.15s;
+  z-index: 6;
 }
 #hotbar-toggle:hover {
-  background: rgba(255,255,255,0.20);
-  border-color: rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.75);
+  border-color: #fff;
 }
 #hotbar-toggle:active {
-  transform: scale(0.95);
-}
-#hotbar.collapsed #hotbar-toggle {
-  background: rgba(255,255,255,0.12);
+  transform: scale(0.92);
 }
 
 #campaign-seed-wrapper {
