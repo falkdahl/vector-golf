@@ -9,8 +9,7 @@
 
 - **Bottom `bgCtx` (`#bg-canvas`, `z-index:1`, opaque)** — drawn **on demand** (mode switch, resize, terrain change), not every frame (clearing every frame is allowed if ≥55fps). Content:
   1. `OB` → `Rough` → `Fairway` → `Green` (zone fills, see §2) → `Water` (blue)
-  2. Optional grass texture overlay (`globalAlpha 0.12-0.18` tiled `grass_seamless.webp`, §3)
-  3. Or splash cover when in main menu (§3)
+  2. Or splash cover when in main menu (§3)
   No dimming rect here; backdrop dimming is done by `#main-menu-overlay.with-backdrop` per `10-persistence-and-menus.md`.
 
 - **Middle `fgCtx` (`#game`, `z-index:2`, transparent, `clearRect` each frame)** — every `render()`:
@@ -18,7 +17,7 @@
 
 - **Top `windRenderer` (`#wind-canvas`, `z-index:3`, transparent, `pointer-events:none`)** — Three.js ghost trails + particles + **Free Shot golden glow** over ball (see `06-wind-system.md` & `07-modifiers.md` §5.2), `renderer.setClearColor(0x000000,0)` and own per-frame clear, above game but below HTML overlays (`#hotbar` z5, overlays z10-12).
 
-- API: `render(bgCtx, fgCtx, W, H)` plus `windRenderer.render()`; `drawBackground(bgCtx,W,H,mode)` with `mode ∈ {'grass','splash'}`.
+- API: `render(bgCtx, fgCtx, W, H)` plus `windRenderer.render()`; `drawBackground(bgCtx,W,H,mode)` with `mode ∈ {'terrain','splash'}`.
 
 ## 2. Terrain Zone Colors (normative palette, ±8 per channel)
 
@@ -30,17 +29,17 @@ Defined once here; `08-level-generation.md` references these values for generati
 - **OB** (`d > W_rough`): `#2E2E2E` `rgb(46,46,46)` (alternatives `#333`/`#3A3A3A`/`#404040`, saturation <20, luminance <35, darker than Rough)
 - **Water**: `#4A90E2` `rgb(74,144,226)` (alternatives `#3A8DDE`/`#2E86C1`/`#5AA0E8`, hue `210±10`, sat >50)
 
-Rendering order on `bgCtx` is `OB → Rough → Fairway → Green → Water`. Zone fills are dominant; grass texture at low opacity does not hide them.
+Rendering order on `bgCtx` is `OB → Rough → Fairway → Green → Water`. Zone fills are dominant.
 
 - **Trees** (circular obstacles, `r∈[18,36]`): drawn on **top canvas** above zones, trunk `#6B3A2A`, canopy `#1E7A34`, with shadow.
 - **Hole**: filled `#111`, outer rim `2px #333`, inner shadow; flag/marker optional offset.
 
 ## 3. Background Images
 
-- Assets `img/grass_seamless.webp` (tiled) and `img/gfg-splash.png` (fallback `img/gfg-spash.png`) preloaded `new Image()` at module load; fallback on `onerror` tries the typo name; relative paths only.
-- **Level mode** (`mainMenuVisible===false`): tile grass via `createPattern(img,'repeat')` covering `0,0,LOGICAL_W,LOGICAL_H`, `imageSmoothingEnabled=true`, DPR-scaled.
-- **Main-menu mode** (`mainMenuVisible===true`): show splash aspect-covered (`scale=Math.max(W/imgW,H/imgH)`, centered `drawImage`); no grass visible. No dimming backdrop in this mode (see `10-persistence-and-menus.md` entry vs pause distinction). Splash/grass switch is via `drawBackground(mode)` on mode toggle and resize.
-- Fallback solid fill (`#3a9d23` or `#2E2E2E`) is shown only while images are decoding; `#loading-screen` covers white flash (see `02-canvas-system.md`).
+- Asset `img/gfg-splash.png` preloaded `new Image()` at module load; relative path only.
+- **Level mode** (`mainMenuVisible===false`): draw zoned terrain via `drawTerrainZones` covering `0,0,LOGICAL_W,LOGICAL_H` (see `08-level-generation.md`).
+- **Main-menu mode** (`mainMenuVisible===true`): show splash aspect-covered (`scale=Math.max(W/imgW,H/imgH)`, centered `drawImage`); no terrain visible. No dimming backdrop in this mode (see `10-persistence-and-menus.md` entry vs pause distinction). Splash/terrain switch is via `drawBackground(mode)` on mode toggle and resize.
+- Fallback solid fill (`#3a9d23` or `#2E2E2E`) is shown only while image is decoding; `#loading-screen` covers white flash (see `02-canvas-system.md`).
 
 ## 4. HUD & In-Canvas UI — Attempts Left + Game Over
 
@@ -57,8 +56,8 @@ Rendering order on `bgCtx` is `OB → Rough → Fairway → Green → Water`. Zo
 ## Acceptance Criteria
 
 - [ ] Bottom canvas zones use palette within ±8 per channel; order `OB→Rough→Fairway→Green→Water`; trees on top canvas; hole black circle.
-- [ ] Level mode tiles grass without seams (DPR-sharp); main-menu mode shows splash aspect-covered, no grass, and per `10-persistence-and-menus.md` backdrop rules.
-- [ ] Draw order is `bg (zones+grass/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→HUD→reward) → wind (particles/trails) → HTML overlays` (treasure above trees, below ball).
+- [ ] Level mode draws zoned terrain; main-menu mode shows splash aspect-covered and per `10-persistence-and-menus.md` backdrop rules.
+- [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→HUD→reward) → wind (particles/trails) → HTML overlays` (treasure above trees, below ball).
 - [ ] HUD and force bar are inside canvas, visible without scroll, with correct stroke/shadow.
 - [ ] Treasure: one per hole near a tree (`level.treasure`, radius `12±2`, gold `#D4AF37`/`#FFD700`), visible on `fgCtx` when `!isCollected`, hidden after hit, never at `0,0` or overlapping tree, on `fairway`/`rough`, and `drawTreasure` called each frame.
 

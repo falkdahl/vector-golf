@@ -13,48 +13,10 @@ export function setCanvasSize(w, h) {
   canvasH = h;
 }
 
-// Background images for REQ-030 — tiled grass (level) vs splash (main menu)
-const grassImg = new Image();
-grassImg.src = './img/grass_seamless.webp';
+// Background image for splash (main menu)
 const splashImg = new Image();
 splashImg.src = './img/gfg-splash.png';
-splashImg.onerror = () => {
-  if (splashImg.src.includes('gfg-splash.png')) {
-    splashImg.src = './img/gfg-spash.png';
-  }
-};
-const GRASS_SCALE = 0.38; // scale down grass texture so strands appear smaller (1024 -> ~389)
-let grassPattern = null;
-let grassPatternCtx = null;
-let grassPatternScaledCanvas = null;
-function ensureGrassPattern(ctx) {
-  try {
-    if (grassImg.complete && grassImg.naturalWidth && ctx) {
-      // Rebuild if ctx changed (canvas resized resets context) or no pattern yet
-      if (grassPattern && grassPatternCtx !== ctx) {
-        grassPattern = null;
-        grassPatternScaledCanvas = null;
-      }
-      if (grassPattern) return;
-      // Create a scaled-down offscreen tile so grass strands appear smaller
-      const sw = Math.max(1, Math.round(grassImg.naturalWidth * GRASS_SCALE));
-      const sh = Math.max(1, Math.round(grassImg.naturalHeight * GRASS_SCALE));
-      const off = document.createElement('canvas');
-      off.width = sw;
-      off.height = sh;
-      const octx = off.getContext('2d');
-      octx.imageSmoothingEnabled = true;
-      octx.imageSmoothingQuality = 'high';
-      octx.drawImage(grassImg, 0, 0, sw, sh);
-      grassPatternScaledCanvas = off;
-      grassPattern = ctx.createPattern(off, 'repeat');
-      grassPatternCtx = ctx;
-    }
-  } catch {}
-}
-export function getGrassImage() { return grassImg; }
 export function getSplashImage() { return splashImg; }
-export function isGrassLoaded() { return grassImg.complete && grassImg.naturalWidth > 0; }
 export function isSplashLoaded() { return splashImg.complete && splashImg.naturalWidth > 0; }
 
 export function isWindVisible() {
@@ -165,8 +127,8 @@ export function updateParticles(dt, getWindAt) {
   }
 }
 
-export function drawBackground(ctx, width, height, mode = 'grass', level = null) {
-  // REQ-030 + REQ-010/033: bottom canvas — mode 'splash' gfg-splash.png cover, mode 'grass' or 'terrain' draws zoned terrain with fixed palette
+export function drawBackground(ctx, width, height, mode = 'terrain', level = null) {
+  // Bottom canvas — mode 'splash' gfg-splash.png cover, otherwise draws zoned terrain with fixed palette
   if (mode === 'splash') {
     ctx.save();
     ctx.fillStyle = '#1a1a1a';
@@ -190,46 +152,8 @@ export function drawBackground(ctx, width, height, mode = 'grass', level = null)
     drawTerrainZones(ctx, level, width, height);
     return;
   }
-  // Fallback: mode 'grass' — tiled seamless texture scaled down so strands appear smaller (legacy)
-  if (isGrassLoaded()) {
-    if (!grassPattern) ensureGrassPattern(ctx);
-    if (grassPattern) {
-      ctx.save();
-      ctx.fillStyle = grassPattern;
-      ctx.fillRect(0, 0, width, height);
-      ctx.restore();
-      return;
-    }
-    ctx.save();
-    ctx.fillStyle = '#3a9d23';
-    ctx.fillRect(0, 0, width, height);
-    try {
-      const iw = Math.round(grassImg.naturalWidth * GRASS_SCALE);
-      const ih = Math.round(grassImg.naturalHeight * GRASS_SCALE);
-      if (iw && ih) {
-        for (let y = 0; y < height; y += ih) {
-          for (let x = 0; x < width; x += iw) {
-            ctx.drawImage(grassImg, x, y, iw, ih);
-          }
-        }
-      }
-    } catch {}
-    ctx.restore();
-    return;
-  }
   ctx.fillStyle = "#3a9d23";
   ctx.fillRect(0, 0, width, height);
-  ctx.save();
-  for (let i = 0; i < 180; i++) {
-    const x = (i * 137.508) % width;
-    const y = (i * 73.273) % height;
-    const w = 18 + ((i * 31) % 24);
-    const h = 14 + ((i * 17) % 18);
-    const v = (i * 29) % 3;
-    ctx.fillStyle = v === 0 ? "rgba(0,0,0,0.05)" : v === 1 ? "rgba(255,255,255,0.04)" : "rgba(20,80,20,0.06)";
-    ctx.fillRect(x, y, w, h);
-  }
-  ctx.restore();
 }
 
 export function drawTerrainZones(ctx, level, width, height) {
@@ -266,22 +190,9 @@ export function drawTerrainZones(ctx, level, width, height) {
       }
     }
   }
-  // Optional low-opacity grass texture overlay (0.14) to keep grass feel but keep zone colors dominant per REQ-012
-  if (isGrassLoaded()) {
-    try {
-      if (!grassPattern) ensureGrassPattern(ctx);
-      if (grassPattern) {
-        ctx.save();
-        ctx.globalAlpha = 0.14;
-        ctx.fillStyle = grassPattern;
-        ctx.fillRect(0, 0, width, height);
-        ctx.restore();
-      }
-    } catch {}
-  }
 }
-// Backward compat: old call without mode still shows grass
-export function drawBackgroundTiled(ctx, width, height) { return drawBackground(ctx, width, height, 'grass'); }
+// Backward compat: old calls
+export function drawBackgroundTiled(ctx, width, height) { return drawBackground(ctx, width, height, 'terrain'); }
 export function drawSplashCover(ctx, width, height) { return drawBackground(ctx, width, height, 'splash'); }
 
 export function drawArrows(ctx, fieldOrGetWindAt, cols, rows, cellW, cellH) {

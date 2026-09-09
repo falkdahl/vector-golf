@@ -12,7 +12,7 @@ The game is a zero-dependency static site: only HTML5, CSS and vanilla JavaScrip
 1. **Files**
    - `index.html` at repo root shall load all assets via relative paths.
    - All JavaScript shall live under `src/` (e.g., `src/main.js`) and be imported via relative ESM imports (`<script type="module">`).
-   - Static image assets, if any, shall live under `img/` and be referenced via `./img/...` relative paths. Only `img/grass_seamless.webp` and `img/gfg-splash.png` (fallback `img/gfg-spash.png` typo) are allowed.
+   - Static image assets, if any, shall live under `img/` and be referenced via `./img/...` relative paths. Only `img/gfg-splash.png` and `img/logo.png` are allowed.
    - `README.md` shall document run/deploy instructions.
 
 2. **Dependencies**

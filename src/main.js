@@ -53,43 +53,15 @@ let canvas;
 let ctx;
 let bgCanvas;
 let bgCtx;
-// Background images for REQ-030: tiled grass (level) vs splash (main menu)
-const grassImg = new Image();
-grassImg.src = './img/grass_seamless.webp';
+// Background image for splash (main menu)
 const splashImg = new Image();
 splashImg.src = './img/gfg-splash.png';
-splashImg.onerror = () => {
-  // Fallback typo file in repo is gfg-spash.png
-  if (splashImg.src.includes('gfg-splash.png')) {
-    splashImg.src = './img/gfg-spash.png';
-  }
-};
-const GRASS_SCALE = 0.38; // scale down grass so strands appear smaller (1024 -> ~389)
-let grassPattern = null;
-let grassPatternScaledCanvas = null;
-function ensureGrassPattern() {
-  try {
-    if (grassImg.complete && grassImg.naturalWidth && bgCtx) {
-      const sw = Math.max(1, Math.round(grassImg.naturalWidth * GRASS_SCALE));
-      const sh = Math.max(1, Math.round(grassImg.naturalHeight * GRASS_SCALE));
-      const off = document.createElement('canvas');
-      off.width = sw;
-      off.height = sh;
-      const octx = off.getContext('2d');
-      octx.imageSmoothingEnabled = true;
-      octx.imageSmoothingQuality = 'high';
-      octx.drawImage(grassImg, 0, 0, sw, sh);
-      grassPatternScaledCanvas = off;
-      grassPattern = bgCtx.createPattern(off, 'repeat');
-    }
-  } catch {}
-}
 function hideLoadingScreen() {
   const ls = document.getElementById('loading-screen');
   if (ls) ls.classList.add('hidden');
 }
 function maybeHideLoadingAfterSplash() {
-  // Hide once splash is decoded/complete; grass not required
+  // Hide once splash is decoded/complete
   try {
     if (splashImg.complete && splashImg.naturalWidth) {
       hideLoadingScreen();
@@ -104,9 +76,8 @@ function maybeHideLoadingAfterSplash() {
   return false;
 }
 if (typeof window !== 'undefined') {
-  grassImg.onload = () => { ensureGrassPattern(); redrawBottom(); };
   splashImg.onload = () => { redrawBottom(); maybeHideLoadingAfterSplash(); };
-  splashImg.onerror = () => { /* try fallback already */ setTimeout(() => { redrawBottom(); hideLoadingScreen(); }, 50); };
+  splashImg.onerror = () => { setTimeout(() => { redrawBottom(); hideLoadingScreen(); }, 50); };
   // Also attempt hide after short timeout to avoid stuck Loading... if image cached
   setTimeout(() => { if (splashImg.complete && splashImg.naturalWidth) hideLoadingScreen(); }, 500);
   // Ensure fallback hide even if image fails completely
@@ -114,8 +85,6 @@ if (typeof window !== 'undefined') {
 }
 function redrawBottom() {
   if (!bgCanvas || !bgCtx) return;
-  // Ensure pattern exists
-  if (!grassPattern) ensureGrassPattern();
   const dpr = window.devicePixelRatio || 1;
   // Use helper from render if available, else fallback
   try {
@@ -124,7 +93,7 @@ function redrawBottom() {
     bgCtx.save();
     bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (mainMenuVisible && !isInLevelPause) {
-      // splash cover only for entry menu (no active run or after End Run); in-level pause keeps grass
+      // splash cover only for entry menu (no active run or after End Run); in-level pause keeps terrain
       bgCtx.fillStyle = '#1a1a1a';
       bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
       if (splashImg.complete && splashImg.naturalWidth) {
@@ -148,31 +117,8 @@ function redrawBottom() {
         bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
       }
     } else {
-      // grass tiled scaled down so strands appear smaller (legacy fallback)
-      if (!grassPattern) ensureGrassPattern();
-      if (grassPattern) {
-        bgCtx.fillStyle = grassPattern;
-        bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-      } else if (grassImg.complete && grassImg.naturalWidth) {
-        // fallback manual tiled scaled
-        try {
-          const iw = Math.round(grassImg.naturalWidth * GRASS_SCALE);
-          const ih = Math.round(grassImg.naturalHeight * GRASS_SCALE);
-          bgCtx.fillStyle = '#3a9d23';
-          bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-          for (let y = 0; y < LOGICAL_H; y += ih) {
-            for (let x = 0; x < LOGICAL_W; x += iw) {
-              bgCtx.drawImage(grassImg, x, y, iw, ih);
-            }
-          }
-        } catch {
-          bgCtx.fillStyle = '#3a9d23';
-          bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-        }
-      } else {
-        bgCtx.fillStyle = '#3a9d23';
-        bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-      }
+      bgCtx.fillStyle = '#3a9d23';
+      bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
     }
     bgCtx.restore();
   } catch {}
@@ -763,7 +709,7 @@ function handleContinue() {
     updateHotbarUI();
     syncMainMenu();
     syncPauseOverlay();
-    // draw grass now
+    // draw terrain now
     redrawBottom();
   } catch (e) { console.warn('continue resume failed', e); return false; }
   return true;
@@ -1032,7 +978,7 @@ function syncMainMenu() {
   } else {
     syncCampaignEditOverlay();
   }
-  // Ensure bottom background reflects mode (splash vs grass) per REQ-030
+  // Ensure bottom background reflects mode (splash vs terrain)
   redrawBottom();
   // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop)
   try { const showWind = !mainMenuVisible && !pauseMenuVisible; setWindVisible(!showWind ? false : true); } catch {}
@@ -1531,9 +1477,6 @@ function setupCanvas() {
   if (ctx) ctx.imageSmoothingEnabled = true;
   if (bgCtx) bgCtx.imageSmoothingEnabled = true;
   setCanvasSize(LOGICAL_W, LOGICAL_H);
-  // Invalidate grass pattern so it is recreated for new DPR/context (scaled)
-  grassPattern = null;
-  grassPatternScaledCanvas = null;
   // Redraw bottom layer for current mode after DPR change
   redrawBottom();
 }
@@ -2367,7 +2310,7 @@ function render() {
 
   // Draw order on TOP canvas (transparent): obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers
   // Wind is rendered on separate transparent Three.js overlay (#wind-canvas) via fragment shader + particles, not here
-  // Background is on BOTTOM canvas (tiled grass via redrawBottom), not drawn here
+  // Background is on BOTTOM canvas (zoned terrain via redrawBottom), not drawn here
   drawModifiers(ctx, modifiers);
   // Per new requirement: show field direction and strength as arrows inside modifiers, no particles inside
   try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH); } catch {}
