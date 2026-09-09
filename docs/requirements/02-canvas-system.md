@@ -54,7 +54,7 @@ body { display:flex; align-items:center; justify-content:center; min-height:100v
 
 - `src/main.js` implements `requestAnimationFrame` loop with `FIXED_DT=1/60` accumulator, `update(FIXED_DT)` then `render()` once, max 5 steps per frame, `dt` in seconds.
 - Separate concerns: `bgCtx` drawn on demand (mode/resize change, see `03-rendering.md`), `fgCtx` cleared each frame (`clearRect`) for dynamic content, `windRenderer` cleared by Three.js (`setClearColor(0x000000,0)`).
-- Loop is pausable (`visibilitychange`, `WIN`, `mainMenuVisible`); `updateWind` still runs while paused but `updateBall` is frozen (see `05-input-and-states.md` and `10-persistence-and-menus.md`). No `setInterval`/`setTimeout` for main loop.
+- Loop is pausable (`visibilitychange`, `WIN`, `mainMenuVisible`); `updateWind` still runs while paused but `updateBall` is frozen (see `05-input-and-states.md` and `09-persistence-and-campaign.md`). No `setInterval`/`setTimeout` for main loop.
 
 ## 5. HiDPI & Resize
 

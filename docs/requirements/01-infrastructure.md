@@ -25,7 +25,7 @@ The game is a zero-dependency static site: only HTML5, CSS and vanilla JavaScrip
    - `file://` CORS for ESM is not supported; documentation shall recommend http serving.
 
 4. **Constraints inheritance**
-   - Every file defined in `02-canvas-system.md` through `10-persistence-and-menus.md` shall obey this file's constraints.
+   - Every file defined in `02-canvas-system.md` through `09-persistence-and-campaign.md` shall obey this file's constraints.
 
 ## Acceptance Criteria
 

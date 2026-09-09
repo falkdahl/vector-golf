@@ -1,14 +1,14 @@
 # 08 — Level Generation (Levels, Terrain Pipeline & Difficulty)
 
-- **ID:** 08-level-generation
+- **ID:** 07-level-generation
 - **Supersedes:** REQ-010, REQ-033, REQ-034
 - **Type:** Procedural Generation / Balancing
-- **References:** `02-canvas-system.md` (logical size), `03-rendering.md` (palette), `04-physics-and-collision.md` (obstacles/water fatal), `06-wind-system.md` (field placement per difficulty)
+- **References:** `02-canvas-system.md` (logical size), `03-rendering.md` (palette), `04-physics-and-collision.md` (obstacles/water fatal), `06-wind-system.md` (field placement per difficulty — canonical table)
 
 ## 1. Entry Point `src/levels.js` / `src/terrain.js`
 
 - Export `LEVELS: Level[]` and `generateLevels(seed?:number, count?:3|6|9|18, options?:{difficulty?:'easy'|'medium'|'hard'}): Level[]` (aliases `createLevels`/`generateProceduralLevels` allowed). `src/main.js` calls it via `generateCourse` on every new-game start (`startNewGameFromMain`, `resetGameAfterWin`, initial load with no save) **before** `loadLevel(0)`.
-- `count` must be `3`, `6`, `9` or `18` (see `10-persistence-and-menus.md` for course holeCount). Seed is `Date.now()` / `Math.random()*1e9` for fresh games or `?seed=` for debug; generation is deterministic for same seed+count(+difficulty).
+- `count` must be `3`, `6`, `9` or `18` (see `09-persistence-and-campaign.md` for course holeCount). Seed is `Date.now()` / `Math.random()*1e9` for fresh games or `?seed=` for debug; generation is deterministic for same seed+count(+difficulty).
 - After generation `LEVELS.length === count` and `LEVELS[i].id === "hole-1"…"hole-count"`:
 
 ```js
@@ -35,11 +35,11 @@ Legacy `rect` obstacles are deprecated for newly generated levels (all trees are
 
 ### Step 1 — Layout & Pathing (Bézier or directed A*)
 
-For each hole: pick `tee`/`hole` per §2, place 1-2 control points between them with **tier-dependent larger bends — toned down from loopback**:
+For each hole: pick `tee`/`hole` per §2, place 1-2 control points between them with tier-dependent bends:
 
-- **Easy `I`**: no control point or offset `<15px` (straight), max deviation from `tee→hole` `<30` and total angular change `<15°`, axis-aligned `±15°` of horizontal/vertical. `W_fairway` is baseline `90-140` (see Step 2), not tightened.
-- **Medium `L/V/U` with larger bends and more hard L**: `L` **50% of medium** with hard 90° edge — `125-175` single offset (toned down from `140-200`), often placed at L-corner `(hole.x,tee.y)` or `(tee.x,hole.y)` for sharp edge; `V` `105-150`; `U` `135-185` same-side. Still ~1.8× legacy (`60-100`), giving harder edges but not extreme.
-- **Hard `S/Z` larger but NOT bending back over itself**: `S/Z` two opposite-side offsets `155-220` with `longFactor 0.24-0.32` (was `115-170` legacy, now larger but toned down from `320-430` loopback). Both controls stay **between** tee/hole (`mx ± dx*longFactor` inside, clamped `30-1250/30-690`), so centerline is continuous without backtrack, still with strong inflection (`maxDev 60-90`).
+- **Easy `I`**: no control point or offset `<15px` (straight), max deviation `<30` and total angular change `<15°`, axis-aligned `±15°`. `W_fairway` baseline `90-140` (see Step 2), not tightened.
+- **Medium `L/V/U`**: `L` `125-175` single offset at L-corner `(hole.x,tee.y)` or `(tee.x,hole.y)` for sharp edge; `V` `105-150`; `U` `135-185` same-side.
+- **Hard `S/Z`**: two opposite-side offsets `155-220` with `longFactor 0.24-0.32`. Both controls stay **between** tee/hole (`mx ± dx*longFactor` inside, clamped `30-1250/30-690`), so centerline is continuous without backtrack, with strong inflection (`maxDev 60-90`).
 
 Sample ~50 spine points along quadratic/cubic Bézier `t∈[0,1] step 0.02` via `getBezierPoint(t,p0,p1,p2[,p3])` (directed A* grid with lateral random cost is also allowed if comparable dog-leg). Result `terrain.fairwayPath` is continuous, non-self-intersecting, endpoints within `60` of `tee`/`hole`.
 
@@ -74,7 +74,7 @@ warpedDist(x,y, spine, warpScale=0.008, warpStrength=18){
 
 ### Step 4 — Hazards & Trees (Cellular Automata for water, Poisson Disc for trees)
 
-- **Water blue clusters** (rendered per `03-rendering.md`, fatal per `04-physics-and-collision.md` — bigger, never overlap tee/green): small clusters via Cellular Automata (`8×8` grid, `fill 0.42`, 4 smoothing iters) or thresholded Perlin (`>0.6`), partly **on fairway per difficulty** (see §6) with centre `d ≤ W_fairway-10` strictly on fairway (see §6), area **`2000-6000px²` as rect `w×h` or `r 28-48`** (was `800-3000`/`18-32`, now bigger), stored `waterHazards`. **Water SHALL NOT overlap tee or green**: `dist(water,tee) ≥ teeBox.r + r +10` and `dist(water,hole) ≥ green.r + r +10` (early coarse `<80` plus strict `green.r+ r +10`). Never completely block fairway (see Step 5).
+- **Water blue clusters** (rendered per `03-rendering.md`, fatal per `04-physics-and-collision.md`, never overlap tee/green): small clusters via Cellular Automata (`8×8` grid, `fill 0.42`, 4 iters) or thresholded Perlin (`>0.6`), partly **on fairway per difficulty** (see §6) with centre `d ≤ W_fairway-10` strictly on fairway, area **`2000-6000px²` as rect `w×h` or `r 28-48`**, stored `waterHazards`. **Water SHALL NOT overlap tee or green**: `dist(water,tee) ≥ teeBox.r + r +10` and `dist(water,hole) ≥ green.r + r +10`. Never completely block fairway (see Step 5).
 - **Trees** (`type:'circle' r 18-36`, trunk `#6B3A2A` canopy `#1E7A34`): partly **on fairway** per tier (see §6) with `treesOnFairway` strictly on fairway (`terrainZoneAt==='fairway'` and `d ≤ W_fairway-4` not in Green/Tee mask). **Fairway trees SHALL be placed at least one third of the distance between tee and green from the tee**: for each fairway tree `hypot(tree.x - tee.x, tree.y - tee.y) ≥ dist(tee,hole)/3` (Euclidean; `dist(tee,hole)=hypot(hole.x-tee.x, hole.y-tee.y)`). This applies to every counted `treesOnFairway`; sampling that fails the ≥1/3 rule is rejected and re-sampled. All fairway trees still respect `≥40` clearance from tee/green masks (`teeBox.r+40+r`, `green.r+40+r`) and `≥ r1+r2+6` between trees (Poisson Bridson `minDist 45±15 k=30`, controls clamped to `30-1250/30-690` to keep fairway inside canvas despite extreme S bends).
 - **Non-fairway trees (rough-border trees)**: any trees **not** counted in `treesOnFairway` (extras for aesthetics/bounce) **SHALL be placed on the rough, spread around the border between rough and out of bounds** so the player can bounce on them (see `04-physics-and-collision.md` §5 bounce). Concretely they SHALL satisfy `terrainZoneAt==='rough'` **and** `d ∈ [W_rough - 25, W_rough - 4]` (i.e. within `~20px` inside the rough side of the `W_rough` transition; `d = warpedDist(x,y)` per Step 2, so `W_rough - 25 ≤ d ≤ W_rough - 4`). Placement is via rejection sampling constrained to that annulus around the warped fairway border; `≥40` clearance from tee/green masks and `≥ r1+r2+6` between trees still applies. The set is spread (Poisson `minDist 45±15`, `k=30`) around the entire perimeter of the rough/OB border, not clustered on one side, to give bounce opportunities against the OB wall from multiple approach angles. Trees SHALL NOT be placed strictly in OB (`d > W_rough`) — extras are **rough-border only** (`rough` zone, near OB edge), not deep OB or deep rough. Total extras may be `0-10` (overall total with `treesOnFairway` typically `5-15`) but normative counts remain `treesOnFairway` per tier; extras are optional for bounce strategy and shall not violate validation.
 
@@ -95,18 +95,17 @@ If fail, regenerate hole (new control points/noise/hazards) ≤15 attempts until
 - `generateLevels` runs Steps 1-5 per hole; `generateTerrain(seed,tee,hole,spine,Wf,Wr)` may be factored in `src/terrain.js` exporting `sdfToSpine`, `warpedDist`, `terrainZoneAt`, `isHoleSolvable`, `generateWaterClusters`, `generateTreesPoisson`, noise helpers.
 - Vendor `simplex-noise` may be vendored in `src/vendor/` per `01-infrastructure.md`.
 
-## 5. Difficulty & Field Budgets (normative per-tier)
+## 5. Difficulty & Field Budgets (normative per-tier — wind counts canonical in `06-wind-system.md` §1.3)
 
-See also `06-wind-system.md` §1.3 for per-difficulty field placement with outside `20-60px`.
+This section defines **terrain/hazard pacing** only; field `sources,sinks,doublets,vortexes` per tier are defined once in `06-wind-system.md` §1.3 and shall not be re-defined here. Reference table:
 
-| Tier    | Shape                | `treesOnFairway` | `waterOnFairway` | Field `sources,sinks,doublets,vortexes` (incl. mandatory outside) |
-|---------|----------------------|------------------|------------------|-------------------------------------------------------------------------|
-| **Easy**   | `I` (straight, `<15` off) | `1-2`            | `0`              | `1,1,1,0` (total 3) — **source slightly outside left third** (`x = -OUTSIDE`, `OUTSIDE 20-60`, left edge) and **sink slightly above top edge (`y=-OUTSIDE_SINK`) or below bottom edge (`y=H+OUTSIDE_SINK`) on middle third (`x∈[W/3,2*W/3]`, `OUTSIDE_SINK 60-100` increased distance)** — no head wind (tail wind left→right), one doublet on fairway and **in a fairway tree ≤2px** (trees≥1 always). **Wind strength constant** (not scaling with difficulty, see `06` §1.4) |
-| **Medium** | `L/V/U` bigger `>45`      | `2-3`            | `1-2`            | `2,1,2,1` (total 6) — `sources=2` (one near tee outside `OUTSIDE 20-60` + **one extra source randomly outside canvas edge `OUTSIDE 20-60` but not too close to existing source and sink (`dist>180`)**) + sink 1 slightly above top or below bottom on middle third (`x∈[W/3,2*W/3]`, `y=-OUTSIDE_SINK` or `H+OUTSIDE_SINK`, `OUTSIDE_SINK 60-100` increased, `rand()<0.5` top/bottom) — **extra source added**, `doublets=2` fixed + `vortexes 1` — ≥1 doublet in fairway tree. **Wind strength constant** same as easy/hard |
-| **Hard**   | `S/Z` even bigger `>55`, tighter `W_fairway` `-15-25` | `3-5`            | `1-2`            | `1,1,3,1` (total 6) — `sources=1` near tee outside (`OUTSIDE 20-60`) + **sink 1 slightly above top or below bottom on middle third (`x∈[W/3,2*W/3]`, `y=-OUTSIDE_SINK` or `H+OUTSIDE_SINK`, `OUTSIDE_SINK 60-100`)** — **no extra sink/source** (removed, always `1,1` not `2,2`), `doublets=3` fixed + `vortexes 1` — ≥1 doublet in tree (up to 2 if ≥3 trees). **Wind strength constant** same as easy/medium |
+| Tier | Shape | `treesOnFairway` | `waterOnFairway` |
+|------|-------|------------------|------------------|
+| **Easy** | `I` (straight `<15` off) | `1-2` | `0` |
+| **Medium** | `L/V/U` | `2-3` | `1-2` |
+| **Hard** | `S/Z` | `3-5` | `1-2` |
 
-- **Doublet-in-tree rule**: if `treesOnFairway≥1` then at least one doublet satisfies `hypot(doublet-tree) ≤2`. Remaining doublets/vortexes interior `20` from edge (`≥15` for hard) and not `OB` (`fairway` or `rough`).
-- **Source outside `20-60` / sink outside `60-100` (increased distance)** — sources use `OUTSIDE=20-60` (`30+rand*20`), sinks use `OUTSIDE_SINK=60-100` (`60+rand*41`) for increased gap to canvas edge. **Easy** source is always `x=-OUTSIDE` (left edge, left third). **Every level has at least one sink** (`sinks=1`) placed **slightly above upper edge (`y=-OUTSIDE_SINK`) or slightly below lower edge (`y=H+OUTSIDE_SINK`) on middle third (`x∈[W/3,2*W/3]`)**, `rand()<0.5` top vs bottom, `OUTSIDE_SINK 60-100` — guarantees `sink.x∈[W/3,2*W/3]` (`x∈[426,853]` at `W=1280`) and `sink.y∈[-100,-60]` or `[780,820]` at `W=1280,H=720` (middle-third top/bottom, increased distance).
+Field budgets per tier (`sources,sinks,doublets,vortexes`) are `1,1,1,0` / `2,1,2,1` / `1,1,3,1` as normative in `06-wind-system.md` §1.3 (including `doublet-in-tree ≤2px` and `OUTSIDE 20-60` / `OUTSIDE_SINK 60-100` middle-third sinks). Wind strength constant across tiers (see `06-wind-system.md` §1.4).
 - **Tier assignment — explicit pacing progression (supersedes linear)**:
   - `3`-hole course: **all easy** → `[E,E,E]` ( `options.difficulty` for `3` is ignored; `3` is always `easy` uniform `I` ).
   - `6`-hole course: `[E,E,M,M,E,M]` ( `2×Easy-2×Medium-1×Easy-1×Medium` ) → `levelNum 1:E,2:E,3:M,4:M,5:E,6:M`
@@ -116,7 +115,7 @@ See also `06-wind-system.md` §1.3 for per-difficulty field placement with outsi
 
 ## 6. Hole Count & Course Wrapper
 
-- Variable `count` via `10-persistence-and-menus.md` `generateCourse(holeCount)`. `LEVELS` after generation equals `activeCourse.holes`.
+- Variable `count` via `08-rewards-and-progression.md` `generateCourse(holeCount)`. `LEVELS` after generation equals `activeCourse.holes`.
 
 ## Acceptance Criteria
 
@@ -129,7 +128,7 @@ See also `06-wind-system.md` §1.3 for per-difficulty field placement with outsi
 - [ ] **Fairway trees ≥1/3 from tee**: for every generated level, every `treesOnFairway` tree satisfies `hypot(tree.x-tee.x, tree.y-tee.y) ≥ dist(tee,hole)/3` (within `±1px` tolerance) and `terrainZoneAt==='fairway'` with `≥40` clearance from tee/green masks and not in Green/Tee mask. No fairway tree is within `dist/3` of the tee.
 - [ ] **Rough-border trees**: every non-fairway tree (extras beyond `treesOnFairway`) satisfies `terrainZoneAt==='rough'` and `warpedDist ∈ [W_rough-25, W_rough-4]` (rough side of the rough/OB border, `±2px` tolerance), `≥40` clearance from tee/green masks, `≥ r1+r2+6` between trees, and is spread (over 100 samples `stddev` of angular position around spine center > 60° and not all within one quadrant). No non-fairway tree is in `fairway`/`green`/`teeBox` or strictly in `ob` (`d>W_rough`).
 - [ ] **Treasure near tree**: every level has exactly one `treasure` (`x,y,radius 10-14, isCollected false` initially) with `12 ≤ x ≤ LOGICAL_W-12` and `12 ≤ y ≤ LOGICAL_H-12`, `hypot(treasure - nearestTree) ∈ [tree.r+8+treasure.r, tree.r+28+treasure.r]` (i.e. `18-42px` from tree edge, within `±2px`), nearest tree is a generated tree (`dist < 60`), `treasure` not overlapping any tree (`>= tree.r + treasure.r +4`), not in water/green/tee (`dist(hole) >= green.r+20`, `dist(tee)>= teeBox.r+20`), zone `fairway`/`rough` (not `ob`/`water`), and deterministic for same seed (same `x,y` within `1px` for same `seed+holeIndex`).
-- [ ] **Every level has at least one sink on middle-third top/bottom (increased distance) + medium extra source**: every level `sinks=1` at `x∈[W/3,2*W/3]` (`W=1280 → x∈[426,853]`) and `y=-OUTSIDE_SINK` (`OUTSIDE_SINK 60-100`, `y∈[-100,-60]`) or `y=H+OUTSIDE_SINK` (`y∈[780,820]`), increased distance outside (never strictly inside, never exactly on edge `x==0` or `y==0` within `1px`); **easy `sources=1` at `x=-OUTSIDE` (`OUTSIDE 20-60`, `x<0`, left third) + `treesOnFairway` 1-2**; **medium `sources=2` (one near tee outside `OUTSIDE 20-60` + one extra randomly outside `OUTSIDE 20-60` with `dist>180` from existing source and sink)**; hard `sources=1` near tee outside (`OUTSIDE 20-60`, closest edge), `sinks` never `2` (medium now `2` sources), sources/sinks never exactly on edge; ≥1 doublet in fairway tree `≤2px` from a fairway tree that itself satisfies the ≥1/3 rule; **wind strength constant** across tiers (no scaling `80→125`, same `field.strength` for all).
+- [ ] **Wind field per tier** per `06-wind-system.md` §1.3: every level `sinks=1` middle-third top/bottom `60-100` outside, `sources` `1`/`2`/`1` per easy/medium/hard with `OUTSIDE 20-60`; ≥1 doublet `≤2px` in fairway tree; sources/sinks never on edge; wind strength constant.
 - [ ] 100 random seeds → 0 unsolvable holes (`isHoleSolvable` spine + first-drive ring + corridor).
 
 ## File Paths
