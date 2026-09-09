@@ -58,9 +58,12 @@ export function deriveCourseSeed(campaignSeed, holeCount) {
 
 export function generateCampaignSeed() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    try { return crypto.randomUUID().slice(0, 8); } catch {}
+    try { return crypto.randomUUID().slice(0, 8).toLowerCase(); } catch {}
   }
-  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4);
+  // Fallback: generate 8 hex chars [0-9a-f]
+  let hex = '';
+  for (let i = 0; i < 8; i++) hex += Math.floor(Math.random() * 16).toString(16);
+  return hex;
 }
 
 let campaignSeed = null;

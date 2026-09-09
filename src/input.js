@@ -25,9 +25,24 @@ export function getAimAngle() {
   return aimAngle;
 }
 
+function isTypingInInput() {
+  const ae = document.activeElement;
+  if (!ae) return false;
+  const tag = ae.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || ae.isContentEditable) return true;
+  // Also check for seed input specifically (may be inside shadow or not yet focused but handling)
+  if (ae.id === 'campaign-seed-input' || ae.id === 'import-input') return true;
+  return false;
+}
+
 export function initInput(gameStateGetter, callbacks) {
   // callbacks: { onLaunch(angle, power), onReset(), onToggleWind() }
   window.addEventListener("keydown", (e) => {
+    if (isTypingInInput()) {
+      // Allow all valid seed characters [0-9a-f] and normal editing keys to be typed into input boxes
+      // Do not intercept game keys while typing in an input
+      return;
+    }
     if (e.code === "ArrowLeft" || e.code === "KeyA") {
       keys.ArrowLeft = true;
       keys.KeyA = true;
@@ -57,6 +72,9 @@ export function initInput(gameStateGetter, callbacks) {
   });
 
   window.addEventListener("keyup", (e) => {
+    if (isTypingInInput()) {
+      return;
+    }
     if (e.code === "ArrowLeft" || e.code === "KeyA") {
       keys.ArrowLeft = false;
       keys.KeyA = false;

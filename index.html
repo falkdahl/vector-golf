@@ -85,13 +85,31 @@
     <div id="campaign-edit-overlay" class="hidden">
       <div class="campaign-edit-card">
         <h3>Campaign Seed</h3>
-        <p class="campaign-edit-help">Current seed: <span id="campaign-edit-current-seed">-</span></p>
+        <p class="campaign-edit-help hidden">Current seed: <span id="campaign-edit-current-seed">-</span></p>
         <div id="campaign-edit-row">
-          <input id="campaign-seed-input" type="text" placeholder="Enter seed" />
-          <button id="campaign-seed-apply">Apply Seed</button>
+          <input id="campaign-seed-input" type="text" placeholder="Enter seed" maxlength="8" pattern="[0-9a-f]*" autocomplete="off" spellcheck="false" autocapitalize="off" />
+          <button id="campaign-seed-refresh" title="Refresh seed" aria-label="Refresh seed">↻</button>
+          <!-- legacy alias hidden but functional for backward compat -->
+          <button id="campaign-regenerate-button" class="hidden" tabindex="-1" aria-hidden="true">Re-generate Seed</button>
         </div>
-        <button id="campaign-regenerate-button">Re-generate Seed</button>
-        <button id="campaign-edit-close">Close</button>
+        <div id="campaign-edit-error" class="hidden"></div>
+        <div id="campaign-edit-actions">
+          <button id="campaign-seed-ok">OK</button>
+          <button id="campaign-seed-cancel">Cancel</button>
+          <!-- legacy aliases -->
+          <button id="campaign-seed-apply" class="hidden" tabindex="-1" aria-hidden="true">Apply Seed</button>
+          <button id="campaign-edit-close" class="hidden" tabindex="-1" aria-hidden="true">Close</button>
+        </div>
+      </div>
+    </div>
+    <div id="campaign-confirm-overlay" class="hidden">
+      <div class="campaign-confirm-card">
+        <h3>Regenerate campaign?</h3>
+        <p class="campaign-confirm-text">Refreshing the seed will re-generate all levels and all campaign progress will be lost. You will lose your progress. Continue?</p>
+        <div class="campaign-confirm-actions">
+          <button id="campaign-confirm-ok">Confirm</button>
+          <button id="campaign-confirm-cancel">Cancel</button>
+        </div>
       </div>
     </div>
     <div id="pause-overlay" class="hidden">

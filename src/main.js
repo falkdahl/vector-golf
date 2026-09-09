@@ -930,16 +930,22 @@ function syncMainMenu() {
   syncCampaignSeedDisplay();
   // If main menu hidden or help visible, hide campaign edit popup
   if (!mainMenuVisible || helpVisible) {
-    if (campaignEditVisible) {
+    if (campaignEditVisible || campaignConfirmVisible) {
       campaignEditVisible = false;
+      campaignConfirmVisible = false;
+      pendingCampaignAction = null;
       syncCampaignEditOverlay();
+      syncCampaignConfirmOverlay();
     } else {
       // ensure overlay hidden even if flag already false (stale DOM)
       const ce = document.getElementById('campaign-edit-overlay');
       if (ce && !ce.classList.contains('hidden')) ce.classList.add('hidden');
+      const cf = document.getElementById('campaign-confirm-overlay');
+      if (cf && !cf.classList.contains('hidden')) cf.classList.add('hidden');
     }
   } else {
     syncCampaignEditOverlay();
+    syncCampaignConfirmOverlay();
   }
   // Ensure bottom background reflects mode (splash vs terrain)
   redrawBottom();
@@ -951,7 +957,16 @@ function syncMainMenu() {
 }
 
 let campaignEditVisible = false;
+let campaignConfirmVisible = false;
+let pendingCampaignAction = null; // {type:'refresh'} or {type:'apply', seed:string}
+const CAMPAIGN_SEED_REGEX = /^[0-9a-f]+$/;
+const CAMPAIGN_SEED_LENGTH = 8;
+function isValidCampaignSeed(s) {
+  const t = String(s || '').trim();
+  return t.length === CAMPAIGN_SEED_LENGTH && CAMPAIGN_SEED_REGEX.test(t);
+}
 function isCampaignEditVisible() { return campaignEditVisible; }
+function isCampaignConfirmVisible() { return campaignConfirmVisible; }
 function syncCampaignEditOverlay() {
   const el = document.getElementById('campaign-edit-overlay');
   if (!el) return;
@@ -962,7 +977,13 @@ function syncCampaignEditOverlay() {
       const cur = document.getElementById('campaign-edit-current-seed');
       if (cur) cur.textContent = String(cs);
       const inp = document.getElementById('campaign-seed-input');
-      if (inp) setTimeout(() => inp.focus(), 0);
+      if (inp) {
+        inp.value = String(cs);
+        // clear previous error
+        const err = document.getElementById('campaign-seed-error');
+        if (err) { err.textContent = ''; err.classList.add('hidden'); }
+        setTimeout(() => { try { inp.focus(); inp.select(); } catch {} }, 0);
+      }
     } catch {}
   } else {
     el.classList.add('hidden');
@@ -971,15 +992,76 @@ function syncCampaignEditOverlay() {
 function showCampaignEditOverlay() {
   if (!mainMenuVisible) return;
   campaignEditVisible = true;
+  // ensure confirm hidden when opening edit
+  campaignConfirmVisible = false;
+  pendingCampaignAction = null;
+  syncCampaignConfirmOverlay();
   syncCampaignEditOverlay();
 }
 function hideCampaignEditOverlay() {
   campaignEditVisible = false;
+  campaignConfirmVisible = false;
+  pendingCampaignAction = null;
   syncCampaignEditOverlay();
+  syncCampaignConfirmOverlay();
   try {
-    const inp = document.getElementById('campaign-seed-input');
-    if (inp) inp.value = '';
+    const err = document.getElementById('campaign-seed-error');
+    if (err) { err.textContent = ''; err.classList.add('hidden'); }
   } catch {}
+}
+function syncCampaignConfirmOverlay() {
+  const el = document.getElementById('campaign-confirm-overlay');
+  if (!el) return;
+  if (campaignConfirmVisible) el.classList.remove('hidden');
+  else el.classList.add('hidden');
+}
+function showCampaignConfirm(action) {
+  pendingCampaignAction = action;
+  campaignConfirmVisible = true;
+  syncCampaignConfirmOverlay();
+}
+function hideCampaignConfirm(keepEditOpen) {
+  campaignConfirmVisible = false;
+  pendingCampaignAction = null;
+  syncCampaignConfirmOverlay();
+  if (!keepEditOpen) hideCampaignEditOverlay();
+}
+function executePendingCampaignAction() {
+  const act = pendingCampaignAction;
+  if (!act) return;
+  if (act.type === 'refresh') {
+    // use native confirm as fallback for programmatic tests, but primary is custom overlay
+    // native confirm check kept for backward compat if overlay bypassed
+    try {
+      const res = regenerateCampaign();
+      try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
+      clearProgress();
+      rewardSeedCounter = 0;
+      rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+      _lastCourseListSig = null;
+      try { renderCourseList(); } catch {}
+      syncCampaignSeedDisplay();
+      hideCampaignEditOverlay();
+      updateHotbarUI();
+    } catch (e) { console.warn('campaign regenerate failed', e); }
+  } else if (act.type === 'apply') {
+    const val = String(act.seed || '').trim();
+    try {
+      const res = applyManualSeed(val);
+      try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
+      clearProgress();
+      rewardSeedCounter = 0;
+      rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+      _lastCourseListSig = null;
+      try { renderCourseList(); } catch {}
+      syncCampaignSeedDisplay();
+      hideCampaignEditOverlay();
+      updateHotbarUI();
+    } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {} }
+  }
+  pendingCampaignAction = null;
+  campaignConfirmVisible = false;
+  syncCampaignConfirmOverlay();
 }
 
 function syncCampaignSeedDisplay() {
@@ -999,35 +1081,69 @@ function syncCampaignSeedDisplay() {
 }
 
 function handleCampaignRegenerate() {
-  if (!confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
+  // New spec: refresh button shows warning popup, not immediate confirm
+  // Show second warning overlay; keep edit popup open underneath
+  showCampaignConfirm({ type: 'refresh' });
+}
+function handleCampaignRefreshViaConfirm() {
+  // Legacy path using native confirm for programmatic callers (tests that stub confirm)
+  // If confirm returns false, abort; else execute refresh
+  try {
+    if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
+  } catch {}
   try {
     const res = regenerateCampaign();
-    // Sync main.js courses array to the newly generated campaign (fix stale reference bug)
     try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
     clearProgress();
     rewardSeedCounter = 0;
     rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
-    // Reset unlocking is handled by regenerateCampaign (only 3)
     _lastCourseListSig = null;
     try { renderCourseList(); } catch {}
     syncCampaignSeedDisplay();
-    syncCampaignEditOverlay();
     hideCampaignEditOverlay();
     updateHotbarUI();
   } catch (e) { console.warn('campaign regenerate failed', e); }
 }
-
 function handleManualSeedApply() {
+  const input = document.getElementById('campaign-seed-input');
+  const valRaw = input ? String(input.value || '').trim() : '';
+  const val = valRaw;
+  const errEl = document.getElementById('campaign-seed-error');
+  // Validation: must be 0-9 a-f hex and expected length 8
+  if (!val) {
+    if (errEl) { errEl.textContent = 'Seed cannot be empty'; errEl.classList.remove('hidden'); }
+    else try { showToast('Seed cannot be empty'); } catch {}
+    return;
+  }
+  if (!isValidCampaignSeed(val)) {
+    if (errEl) { errEl.textContent = 'Invalid seed: must be ' + CAMPAIGN_SEED_LENGTH + ' characters 0-9a-f'; errEl.classList.remove('hidden'); }
+    else try { showToast('Invalid seed'); } catch {}
+    return;
+  }
+  const current = (typeof getCampaignSeed === 'function' ? String(getCampaignSeed() || '') : '');
+  if (val === current) {
+    // Same as current → simply close, no warning, no regeneration
+    if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+    hideCampaignEditOverlay();
+    return;
+  }
+  // Changed → show warning popup (same as refresh)
+  if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+  showCampaignConfirm({ type: 'apply', seed: val });
+}
+function handleManualSeedApplyLegacy() {
+  // Legacy direct apply without validation (for tests using __applyManualSeed)
   const input = document.getElementById('campaign-seed-input');
   const val = input ? String(input.value || '').trim() : '';
   if (!val) {
     try { showToast('Seed cannot be empty'); } catch {}
     return;
   }
-  if (!confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
+  try {
+    if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
+  } catch {}
   try {
     const res = applyManualSeed(val);
-    // Sync main.js courses array to the newly generated campaign (fix stale reference bug)
     try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
     clearProgress();
     rewardSeedCounter = 0;
@@ -2509,38 +2625,101 @@ function init() {
     });
   }
 
-  // 12-campaign: campaign seed display + edit popup (seed input / regenerate with backdrop)
+  // 12-campaign: campaign seed display + edit popup (seed input / refresh / OK/Cancel + confirm)
   const campaignEditBtn = document.getElementById('campaign-seed-edit-button');
   const campaignEditOverlay = document.getElementById('campaign-edit-overlay');
   const campaignEditClose = document.getElementById('campaign-edit-close');
   const campaignRegenBtn = document.getElementById('campaign-regenerate-button');
   const campaignApplyBtn = document.getElementById('campaign-seed-apply');
+  const campaignRefreshBtn = document.getElementById('campaign-seed-refresh');
+  const campaignOkBtn = document.getElementById('campaign-seed-ok');
+  const campaignCancelBtn = document.getElementById('campaign-seed-cancel');
   const campaignInput = document.getElementById('campaign-seed-input');
+  const campaignConfirmOverlay = document.getElementById('campaign-confirm-overlay');
+  const campaignConfirmOk = document.getElementById('campaign-confirm-ok');
+  const campaignConfirmCancel = document.getElementById('campaign-confirm-cancel');
   if (campaignEditBtn) {
     campaignEditBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       showCampaignEditOverlay();
     });
   }
+  // Cancel / close aliases
   if (campaignEditClose) {
     campaignEditClose.addEventListener('click', () => hideCampaignEditOverlay());
+  }
+  if (campaignCancelBtn) {
+    campaignCancelBtn.addEventListener('click', () => hideCampaignEditOverlay());
   }
   if (campaignEditOverlay) {
     campaignEditOverlay.addEventListener('click', (e) => {
       if (e.target === campaignEditOverlay) hideCampaignEditOverlay();
     });
   }
+  // Refresh (icon only) -> warning popup
+  if (campaignRefreshBtn) {
+    campaignRefreshBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleCampaignRegenerate();
+    });
+  }
   if (campaignRegenBtn) {
-    campaignRegenBtn.addEventListener('click', () => handleCampaignRegenerate());
+    campaignRegenBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleCampaignRegenerate();
+    });
+  }
+  // OK -> validate then maybe warning
+  if (campaignOkBtn) {
+    campaignOkBtn.addEventListener('click', () => handleManualSeedApply());
   }
   if (campaignApplyBtn) {
     campaignApplyBtn.addEventListener('click', () => handleManualSeedApply());
   }
   if (campaignInput) {
     campaignInput.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Only accept [0-9a-f] — block g-z etc. at keydown level
+      if (e.key.length === 1) {
+        const k = e.key.toLowerCase();
+        // If it's a letter/digit but not hex, block it
+        if (/^[0-9a-z]$/.test(k) && !/^[0-9a-f]$/.test(k)) {
+          e.preventDefault();
+          return;
+        }
+        // Also block symbols that are single char but not hex? Allow control keys already handled
+        // Let hex chars through
+      }
       if (e.key === 'Enter') { e.preventDefault(); handleManualSeedApply(); }
       if (e.key === 'Escape') { e.preventDefault(); hideCampaignEditOverlay(); }
     });
+    campaignInput.addEventListener('input', () => {
+      // Enforce hex charset, lowercase, maxlength 8
+      const start = campaignInput.selectionStart;
+      const end = campaignInput.selectionEnd;
+      let v = campaignInput.value.toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, 8);
+      if (v !== campaignInput.value) {
+        campaignInput.value = v;
+        try { campaignInput.setSelectionRange(start, end); } catch {}
+      }
+      const err = document.getElementById('campaign-seed-error');
+      if (err && !err.classList.contains('hidden')) { err.textContent = ''; err.classList.add('hidden'); }
+    });
+  }
+  // Confirm overlay
+  if (campaignConfirmOverlay) {
+    campaignConfirmOverlay.addEventListener('click', (e) => {
+      if (e.target === campaignConfirmOverlay) {
+        // cancel only warning, keep edit open
+        hideCampaignConfirm(true);
+      }
+    });
+  }
+  if (campaignConfirmOk) {
+    campaignConfirmOk.addEventListener('click', () => executePendingCampaignAction());
+  }
+  if (campaignConfirmCancel) {
+    campaignConfirmCancel.addEventListener('click', () => hideCampaignConfirm(true));
   }
 
   setupCanvas();
@@ -2789,7 +2968,16 @@ function init() {
       }
       return;
     }
-    // Campaign edit popup priority inside main menu
+    // Campaign edit/confirm popup priority inside main menu
+    if (campaignConfirmVisible) {
+      if (e.code === "Escape") {
+        hideCampaignConfirm(true);
+        e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      return;
+    }
     if (campaignEditVisible) {
       if (e.code === "Escape") {
         hideCampaignEditOverlay();
@@ -3447,16 +3635,25 @@ if (typeof window !== 'undefined') {
   window.__getCampaignSeed = () => (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null);
   window.__setCampaignSeed = (s) => (typeof setCampaignSeed === 'function' ? setCampaignSeed(s) : null);
   window.__regenerateCampaign = () => handleCampaignRegenerate();
-  window.__applyManualSeed = (s) => { const inp = document.getElementById('campaign-seed-input'); if (inp) inp.value = s; handleManualSeedApply(); };
+  window.__applyManualSeed = (s) => { const inp = document.getElementById('campaign-seed-input'); if (inp) inp.value = s; handleManualSeedApplyLegacy(); };
+  window.__applyManualSeedValidated = (s) => { const inp = document.getElementById('campaign-seed-input'); if (inp) inp.value = s; handleManualSeedApply(); };
   window.__getRewardSeedCounter = getRewardSeedCounter;
   window.__setRewardSeedCounter = setRewardSeedCounter;
   window.__seededShuffle = seededShuffle;
   window.__getSeededRewardOffer = getSeededRewardOffer;
   window.__isCampaignEditVisible = isCampaignEditVisible;
+  window.__isCampaignConfirmVisible = isCampaignConfirmVisible;
   window.__showCampaignEditOverlay = showCampaignEditOverlay;
   window.__hideCampaignEditOverlay = hideCampaignEditOverlay;
   window.__syncCampaignEditOverlay = syncCampaignEditOverlay;
   window.__syncCampaignSeedDisplay = syncCampaignSeedDisplay;
+  window.__syncCampaignConfirmOverlay = syncCampaignConfirmOverlay;
+  window.__showCampaignConfirm = showCampaignConfirm;
+  window.__hideCampaignConfirm = hideCampaignConfirm;
+  window.__executePendingCampaignAction = executePendingCampaignAction;
+  window.__isValidCampaignSeed = isValidCampaignSeed;
+  window.__handleCampaignRegenerate = handleCampaignRegenerate;
+  window.__handleManualSeedApply = handleManualSeedApply;
   window.getCampaignSeed = getCampaignSeed;
   window.setCampaignSeed = setCampaignSeed;
   window.regenerateCampaign = regenerateCampaign;

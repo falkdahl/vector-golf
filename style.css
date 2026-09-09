@@ -906,6 +906,34 @@ body {
   outline: none;
 }
 #campaign-seed-input::placeholder { color: #888; }
+#campaign-seed-refresh {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 16px system-ui, sans-serif;
+  line-height: 1;
+  color: white;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+#campaign-seed-refresh:hover { background: rgba(255,255,255,0.22); }
+#campaign-edit-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+#campaign-seed-ok,
+#campaign-seed-cancel,
 #campaign-seed-apply,
 #campaign-regenerate-button,
 #campaign-edit-close {
@@ -921,6 +949,10 @@ body {
   paint-order: stroke fill;
   transition: background 0.15s;
 }
+#campaign-seed-ok { background: #27ae60; border-color: #1e8449; min-width: 80px; }
+#campaign-seed-ok:hover { background: #1e8449; }
+#campaign-seed-cancel { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.35); min-width: 80px; }
+#campaign-seed-cancel:hover { background: rgba(255,255,255,0.22); }
 #campaign-seed-apply:hover,
 #campaign-regenerate-button:hover { background: #2980b9; }
 #campaign-regenerate-button {
@@ -936,3 +968,85 @@ body {
   min-width: 100px;
 }
 #campaign-edit-close:hover { background: rgba(255,255,255,0.22); }
+#campaign-edit-close.hidden,
+#campaign-seed-apply.hidden,
+#campaign-regenerate-button.hidden { display: none !important; }
+#campaign-edit-error {
+  font: 600 11px system-ui, sans-serif;
+  color: #ff8a8a;
+  background: rgba(255,0,0,0.12);
+  border: 1px solid rgba(255,0,0,0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
+  width: 100%;
+  text-align: center;
+  -webkit-text-stroke: 0;
+}
+#campaign-edit-error.hidden { display: none !important; }
+.campaign-edit-help.hidden { display: none !important; }
+#campaign-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  border-radius: 8px;
+  z-index: 15;
+}
+#campaign-confirm-overlay.hidden { display: none !important; }
+.campaign-confirm-card {
+  background: rgba(0,0,0,0.88);
+  color: white;
+  padding: 18px 20px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  width: min(340px, 90%);
+  max-width: 90%;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  text-align: center;
+}
+.campaign-confirm-card h3 {
+  margin: 0;
+  font: 700 14px system-ui, sans-serif;
+  color: white;
+}
+.campaign-confirm-text {
+  margin: 0;
+  font: 500 12px system-ui, sans-serif;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.9);
+}
+.campaign-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  width: 100%;
+}
+#campaign-confirm-ok {
+  flex: 1;
+  max-width: 120px;
+  padding: 8px 16px;
+  font: 700 11px system-ui, sans-serif;
+  color: white;
+  background: #e74c3c;
+  border: 1px solid #c0392b;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#campaign-confirm-ok:hover { background: #c0392b; }
+#campaign-confirm-cancel {
+  flex: 1;
+  max-width: 120px;
+  padding: 8px 16px;
+  font: 700 11px system-ui, sans-serif;
+  color: white;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 6px;
+  cursor: pointer;
+}
+#campaign-confirm-cancel:hover { background: rgba(255,255,255,0.22); }
