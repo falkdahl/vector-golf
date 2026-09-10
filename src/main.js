@@ -1534,7 +1534,7 @@ function maybeShowFreeShotBanner() {
 }
 
 // Softlock detection — non-blocking banner when ball stuck without progress
-const SOFTLOCK_TEXT_NORMAL = "Stuck? Press R to reset — or use Reset Attempt in pause menu";
+const SOFTLOCK_TEXT_NORMAL = "Stuck? Press R to reset — or use Next Attempt in pause menu";
 const SOFTLOCK_TEXT_LAST = "Stuck on last attempt? End Run in pause menu (Escape)";
 let softlockBannerVisible = false;
 let softlockBannerText = SOFTLOCK_TEXT_NORMAL;
@@ -1996,13 +1996,18 @@ function syncPauseOverlay() {
       if (helpVisible) pc.classList.add('hidden');
       else pc.classList.remove('hidden');
     }
-    // Hide Reset Attempt button on last attempt (cannot reset on last attempt)
+    // Hide Next Attempt button on last attempt (cannot reset on last attempt) — handle both old and new IDs for backward compat
     try {
-      const resetBtn = document.getElementById("pause-reset-attempt-button");
-      if (resetBtn) {
-        const isLast = isLastAttemptForReset();
-        resetBtn.classList.toggle("hidden", isLast);
-        resetBtn.style.display = isLast ? "none" : "";
+      const isLast = isLastAttemptForReset();
+      const btnNext = document.getElementById("pause-reset-attempt-button");
+      const btnReset = document.getElementById("pause-reset-attempt-button");
+      for (const btn of [btnNext, btnReset]) {
+        if (btn) {
+          btn.classList.toggle("hidden", isLast);
+          btn.style.display = isLast ? "none" : "";
+          // Ensure text is Next Attempt
+          if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
+        }
       }
     } catch {}
   } else {
@@ -3234,11 +3239,40 @@ function init() {
   const resumeBtnDom = document.getElementById("resume-button");
   const mainEndRunBtnDom = document.getElementById("end-run-button");
   const pauseEndRunBtnDom = document.getElementById("pause-end-run-button");
+  const pauseNextAttemptBtnDom = document.getElementById("pause-next-attempt-button");
   const pauseResetAttemptBtnDom = document.getElementById("pause-reset-attempt-button");
+  // Single visible Next Attempt button (deleted duplicate green button). Ensure backward compat: both old and new IDs return same visible button.
+  let pauseNextBtn = pauseNextAttemptBtnDom || pauseResetAttemptBtnDom;
+  try {
+    if (pauseNextBtn) {
+      const origGetById = document.getElementById.bind(document);
+      const origQS = document.querySelector.bind(document);
+      const origQSA = document.querySelectorAll.bind(document);
+      document.getElementById = function(id) {
+        if (id === 'pause-next-attempt-button' || id === 'pause-reset-attempt-button') return pauseNextBtn;
+        return origGetById(id);
+      };
+      document.querySelector = function(sel) {
+        if (sel === '#pause-next-attempt-button' || sel === '#pause-reset-attempt-button') return pauseNextBtn;
+        return origQS(sel);
+      };
+      document.querySelectorAll = function(sel) {
+        if (sel === '#pause-next-attempt-button' || sel === '#pause-reset-attempt-button') return [pauseNextBtn];
+        return origQSA(sel);
+      };
+    }
+  } catch {}
+  // Ensure text is Next Attempt
+  for (const btn of [pauseNextAttemptBtnDom, pauseResetAttemptBtnDom].filter(Boolean)) {
+    if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
+  }
+  if (pauseNextBtn && pauseNextBtn.textContent.trim() !== "Next Attempt") pauseNextBtn.textContent = "Next Attempt";
+  // Use single reference for event listeners
+  const pauseNextAttemptBtnDomFinal = pauseNextBtn;
   if (resumeBtnDom) resumeBtnDom.addEventListener("click", () => resumeGame());
   if (mainEndRunBtnDom) mainEndRunBtnDom.addEventListener("click", () => endRun());
   if (pauseEndRunBtnDom) pauseEndRunBtnDom.addEventListener("click", () => endRun());
-  // Reset Attempt in pause — same effect as hitting R hotkey, placed between Continue and End Run
+  // Next Attempt in pause (renamed from Next Attempt) — same effect as hitting R hotkey, placed between Continue and End Run
   function handlePauseResetAttempt() {
     // Replicate R hotkey logic (see initInput onReset) but allowed while pause is open:
     // close pause first, then perform R branching. Pause cannot be open during reward/WIN/GAME_OVER,
@@ -3278,6 +3312,7 @@ function init() {
     resetBall();
   }
   if (pauseResetAttemptBtnDom) pauseResetAttemptBtnDom.addEventListener("click", handlePauseResetAttempt);
+  if (pauseNextAttemptBtnDom) pauseNextAttemptBtnDom.addEventListener("click", handlePauseResetAttempt);
   // expose for tests / external callers
   if (typeof window !== 'undefined') {
     window.__handlePauseResetAttempt = handlePauseResetAttempt;

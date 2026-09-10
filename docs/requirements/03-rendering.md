@@ -55,9 +55,9 @@ This section defines **rendering** only; state is canonical in `05-input-and-sta
 - **Hole & Attempts Banners** (`src/render.js:drawCenterBanner`, see `05-input-and-states.md` §6): transient dim `rgba(0,0,0,0.55)` `700 22px white stroke 5px` `1000ms`; `Hole N` before reward, `Last Attempt` when `attemptsLeft===1 && freeShot===0` after counter decreased, `Free Shot!` when `attemptsLeft===1 && freeShot>0` after counter decreased. Mutually exclusive with `drawRewardMenu`. Both block input.
 - **Free Shot Banner** (`src/render.js:drawCenterBanner` with text `Free Shot!`, see `05-input-and-states.md` §6): same style as Last Attempt, `700 22px` `Free Shot!` `1000ms`, shown when counter just decreased to `1` and `freeShot>0`, turns on `isFreeShotActive` free modifier. Blocks like Last Attempt.
 - **Softlock Banner** (`src/render.js:drawSoftlockBanner`, see `05-input-and-states.md` §7): non-blocking small banner in middle of screen, a bit higher than center (`y~height/2-60,h~28` `rgba(0,0,0,0.65)`) with `700 13px` white `stroke 4px` text:
-  - Normal: `Stuck? Press R to reset — or use Reset Attempt in pause menu` (must contain `Press R` and `pause`+`Reset`)
+  - Normal: `Stuck? Press R to reset — or use Next Attempt in pause menu` (must contain `Press R` and `pause`+`Next Attempt`)
   - Last attempt (`getAttemptsLeft()===1 && freeShot===0`): exactly `Stuck on last attempt? End Run in pause menu (Escape)` (must equal that string, contains `last attempt`, `End Run`, `pause menu`, `Escape`, no `Press R`),
-  rendered on `fgCtx` after `drawHUD` when `softlockBannerVisible===true`; does NOT dim full canvas, allows ball to keep moving; hidden during `WIN`/`GAME_OVER`/reward/pause/main-menu and removed on hole completed. On last attempt `Reset Attempt` is hidden so banner just informs with last-attempt text. Attempts now decrement on reset, so `Free Shot!`/`Last Attempt` banners appear after reset when `left===1`.
+  rendered on `fgCtx` after `drawHUD` when `softlockBannerVisible===true`; does NOT dim full canvas, allows ball to keep moving; hidden during `WIN`/`GAME_OVER`/reward/pause/main-menu and removed on hole completed. On last attempt `Next Attempt` is hidden so banner just informs with last-attempt text. Attempts now decrement on reset, so `Free Shot!`/`Last Attempt` banners appear after reset when `left===1`.
 - **No DOM HUD** (`#hole-counter`/`#force-bar-container` removed); no `<h1>`/`#instructions`; overlays bounded to container.
 
 ## Acceptance Criteria
@@ -67,7 +67,7 @@ This section defines **rendering** only; state is canonical in `05-input-and-sta
 - [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→HUD→softlock→reward) → wind (particles/trails) → HTML overlays` (treasure above trees, below ball, softlock in middle, a bit higher than center, above reward dim).
 - [ ] HUD and force bar are inside canvas, visible without scroll, with correct stroke/shadow.
 - [ ] Treasure: one per hole near a tree (`level.treasure`, radius `12±2`, gold `#D4AF37`/`#FFD700`), visible on `fgCtx` when `!isCollected`, hidden after hit, never at `0,0` or overlapping tree, on `fairway`/`rough`, and `drawTreasure` called each frame.
-- [ ] Softlock banner: when confined `<75px` over `6s` after `8s` flight, shows `Stuck? Press R…pause menu` non-blocking in middle of screen, a bit higher than center, keeps shot moving, removed on hole completed or reset; on last attempt shows exactly `Stuck on last attempt? End Run in pause menu (Escape)` variant (contains `last attempt`, `End Run`, `Escape`, no `Press R`), pause `Reset Attempt` hidden.
+- [ ] Softlock banner: when confined `<75px` over `6s` after `8s` flight, shows `Stuck? Press R…pause menu` non-blocking in middle of screen, a bit higher than center, keeps shot moving, removed on hole completed or reset; on last attempt shows exactly `Stuck on last attempt? End Run in pause menu (Escape)` variant (contains `last attempt`, `End Run`, `Escape`, no `Press R`), pause `Next Attempt` hidden.
 
 ## File Paths
 
