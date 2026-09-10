@@ -839,24 +839,28 @@ body {
 }
 .hotbar-count {
   position: absolute;
-  right: 3px;
-  bottom: 1px;
-  font: 700 12px system-ui, sans-serif;
+  right: -6px;
+  bottom: -6px;
+  font: 800 13px system-ui, sans-serif;
   color: white;
-  -webkit-text-stroke: 1.6px rgba(0,0,0,0.65);
-  paint-order: stroke fill;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
-  pointer-events: none;
+  background: rgba(0,0,0,0.92);
+  border: 1.5px solid rgba(255,255,255,0.98);
+  border-radius: 6px;
+  padding: 1px 5px;
   line-height: 1;
   white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.55);
+  z-index: 3;
 }
 .hotbar-hotkey {
   position: absolute;
-  left: -5px;
-  bottom: -5px;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: 4px;
   background: rgba(0,0,0,0.85);
   border: 1.5px solid rgba(255,255,255,0.95);
   color: white;
@@ -871,11 +875,11 @@ body {
 }
 .golfbag-hotkey {
   position: absolute;
+  top: -3px;
   left: -3px;
-  bottom: -3px;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: 4px;
   background: rgba(0,0,0,0.85);
   border: 1.5px solid rgba(255,255,255,0.95);
   color: white;
