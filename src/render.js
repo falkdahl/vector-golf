@@ -1005,6 +1005,26 @@ export function drawAttemptsBanner(ctx, width, height, attemptsLeft) {
   return drawCenterBanner(ctx, width, height, txt);
 }
 
+export function drawSoftlockBanner(ctx, width, height, text) {
+  const msg = text || "Stuck? Press R to reset — or use Reset Attempt in pause menu";
+  ctx.save();
+  // Middle of screen, a bit higher than center: centered banner (not top HUD)
+  const barH = 28;
+  const barY = Math.floor(height / 2 - 60 - barH / 2); // middle - ~60px higher
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(0, barY, width, barH);
+  ctx.font = "700 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.lineWidth = 4;
+  ctx.fillStyle = "white";
+  ctx.strokeText(msg, width / 2, barY + barH / 2);
+  ctx.fillText(msg, width / 2, barY + barH / 2);
+  ctx.restore();
+}
+
 export function getMainMenuButtonsLayout(width, height) {
   const btnW = 160, btnH = 48;
   return { newGame: { x: width / 2 - btnW / 2, y: height / 2 - 10, w: btnW, h: btnH } };

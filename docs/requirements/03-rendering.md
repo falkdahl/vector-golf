@@ -13,7 +13,7 @@
   No dimming rect here; backdrop dimming is done by `#main-menu-overlay.with-backdrop` per `09-persistence-and-campaign.md`.
 
 - **Middle `fgCtx` (`#game`, `z-index:2`, transparent, `clearRect` each frame)** — every `render()`:
-  1. Trees / circular obstacles, 2. Hole + flag, 3. **Treasure** (`level.treasure` gold chest/star `r 10-14`, see §5, hidden after `isCollected`), 4. Ball (with shadow, `z` lift), 5. Aim orbit+line+indicator (when `AIMING`/`CHARGING`), 6. Modifier circles + preview, 7. Force bar under ball (when `CHARGING`), 8. HUD `Hole/Attempts Left/Total` (canvas), 9. Reward menu canvas overlay (when visible), 10. Pause/Game Over dim (if canvas mode, else DOM)
+  1. Trees / circular obstacles, 2. Hole + flag, 3. **Treasure** (`level.treasure` gold chest/star `r 10-14`, see §5, hidden after `isCollected`), 4. Ball (with shadow, `z` lift), 5. Aim orbit+line+indicator (when `AIMING`/`CHARGING`), 6. Modifier circles + preview, 7. Force bar under ball (when `CHARGING`), 8. HUD `Hole/Attempts Left/Total` (canvas), 9. **Softlock banner** (`Stuck? Press R…` middle of screen, a bit higher than center, when `softlockBannerVisible`, see `05-input-and-states.md` §7), 10. Reward menu canvas overlay (when visible), 11. Pause/Game Over dim (if canvas mode, else DOM)
 
 - **Top `windRenderer` (`#wind-canvas`, `z-index:3`, transparent, `pointer-events:none`)** — Three.js ghost trails + particles + **Free Shot golden glow** over ball (see `06-wind-system.md` §2 & §7.2), `renderer.setClearColor(0x000000,0)` and own per-frame clear, above game but below HTML overlays (`#hotbar` z5, overlays z10-12).
 
@@ -52,19 +52,25 @@ This section defines **rendering** only; state is canonical in `05-input-and-sta
 - **Aim visuals** (see `05-input-and-states.md` §2): orbit `28-32px` dashed `rgba(0,0,0,0.2)`, aim line `30px` (+ `charge*50`), indicator dot.
 - **Modifier circles & preview** (spatial): see `06-wind-system.md` §4 & §7; Free Shot gold glow rendered in Three.js layer (see `06-wind-system.md` §2), not on `game` canvas.
 - **Treasure** (`src/render.js:drawTreasure`): one per hole `level.treasure` gold chest `r 10-14` (see `07-level-generation.md` §4 for placement; rendering here). Rendered on `fgCtx` above trees/hole, below ball/aim, chest `#D4AF37`/`#FFD700` `r 12±2` with shadow `rgba(0,0,0,0.18)`; hidden when `isCollected===true`.
-- **Hole & Attempts Banners** (`src/render.js:drawCenterBanner`, see `05-input-and-states.md` §6): transient dim `rgba(0,0,0,0.55)` `700 22px white stroke 5px` `1000ms`; `Hole N` before reward, `Last Attempt` before last counted attempt when `freeShot===0`. Mutually exclusive with `drawRewardMenu`.
+- **Hole & Attempts Banners** (`src/render.js:drawCenterBanner`, see `05-input-and-states.md` §6): transient dim `rgba(0,0,0,0.55)` `700 22px white stroke 5px` `1000ms`; `Hole N` before reward, `Last Attempt` when `attemptsLeft===1 && freeShot===0` after counter decreased, `Free Shot!` when `attemptsLeft===1 && freeShot>0` after counter decreased. Mutually exclusive with `drawRewardMenu`. Both block input.
+- **Free Shot Banner** (`src/render.js:drawCenterBanner` with text `Free Shot!`, see `05-input-and-states.md` §6): same style as Last Attempt, `700 22px` `Free Shot!` `1000ms`, shown when counter just decreased to `1` and `freeShot>0`, turns on `isFreeShotActive` free modifier. Blocks like Last Attempt.
+- **Softlock Banner** (`src/render.js:drawSoftlockBanner`, see `05-input-and-states.md` §7): non-blocking small banner in middle of screen, a bit higher than center (`y~height/2-60,h~28` `rgba(0,0,0,0.65)`) with `700 13px` white `stroke 4px` text:
+  - Normal: `Stuck? Press R to reset — or use Reset Attempt in pause menu` (must contain `Press R` and `pause`+`Reset`)
+  - Last attempt (`getAttemptsLeft()===1 && freeShot===0`): exactly `Stuck on last attempt? End Run in pause menu (Escape)` (must equal that string, contains `last attempt`, `End Run`, `pause menu`, `Escape`, no `Press R`),
+  rendered on `fgCtx` after `drawHUD` when `softlockBannerVisible===true`; does NOT dim full canvas, allows ball to keep moving; hidden during `WIN`/`GAME_OVER`/reward/pause/main-menu and removed on hole completed. On last attempt `Reset Attempt` is hidden so banner just informs with last-attempt text. Attempts now decrement on reset, so `Free Shot!`/`Last Attempt` banners appear after reset when `left===1`.
 - **No DOM HUD** (`#hole-counter`/`#force-bar-container` removed); no `<h1>`/`#instructions`; overlays bounded to container.
 
 ## Acceptance Criteria
 
 - [ ] Bottom canvas zones use palette within ±8 per channel; order `OB→Rough→Fairway→Green→Water`; trees on top canvas; hole black circle.
 - [ ] Level mode draws zoned terrain; main-menu mode shows splash aspect-covered and per `08-rewards-and-progression.md` backdrop rules.
-- [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→HUD→reward) → wind (particles/trails) → HTML overlays` (treasure above trees, below ball).
+- [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→HUD→softlock→reward) → wind (particles/trails) → HTML overlays` (treasure above trees, below ball, softlock in middle, a bit higher than center, above reward dim).
 - [ ] HUD and force bar are inside canvas, visible without scroll, with correct stroke/shadow.
 - [ ] Treasure: one per hole near a tree (`level.treasure`, radius `12±2`, gold `#D4AF37`/`#FFD700`), visible on `fgCtx` when `!isCollected`, hidden after hit, never at `0,0` or overlapping tree, on `fairway`/`rough`, and `drawTreasure` called each frame.
+- [ ] Softlock banner: when confined `<75px` over `6s` after `8s` flight, shows `Stuck? Press R…pause menu` non-blocking in middle of screen, a bit higher than center, keeps shot moving, removed on hole completed or reset; on last attempt shows exactly `Stuck on last attempt? End Run in pause menu (Escape)` variant (contains `last attempt`, `End Run`, `Escape`, no `Press R`), pause `Reset Attempt` hidden.
 
 ## File Paths
 
-- `src/render.js:1` (`drawBackground`, `drawDynamic`, `drawHUD`, `drawForceBar`, `drawObstacles`, `drawHole`, `drawTreasure`)
+- `src/render.js:1` (`drawBackground`, `drawDynamic`, `drawHUD`, `drawForceBar`, `drawObstacles`, `drawHole`, `drawTreasure`, `drawSoftlockBanner`)
 - `src/terrain.js:1` (exports `terrainZoneAt` used by `drawBackground` zone fill)
 - `index.html:30` (no extra DOM for HUD), `style.css:1` (container/overlay bounds)

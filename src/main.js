@@ -24,6 +24,7 @@ import {
   drawCenterBanner,
   drawHoleBanner,
   drawAttemptsBanner,
+  drawSoftlockBanner,
 } from "./render.js";
 import {
   initWindOverlay,
@@ -504,6 +505,8 @@ function startNewGame() {
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
+  hideSoftlockBanner();
+  resetSoftlockDetection();
   maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
@@ -682,7 +685,7 @@ function handleContinue() {
 }
 function openInLevelPause() {
   // Show pause menu (separate overlay) with backdrop, works even in FLYING
-  if (rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
+  if (rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
   if (pauseMenuVisible) return false;
   if (mainMenuVisible) return false;
   if (!activeCourse && !hasRestorableSave()) return false;
@@ -821,6 +824,7 @@ function handleCoursePlay(courseId) {
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
+  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
@@ -1180,7 +1184,7 @@ function startNewGameFromMain() {
   clearProgress();
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
@@ -1198,11 +1202,14 @@ function endRun() {
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
+  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
+  hideSoftlockBanner();
+  resetSoftlockDetection();
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
@@ -1344,7 +1351,7 @@ function getSeededRerollOffer() {
 function getRewardSeedCounter() { return rewardSeedCounter; }
 function setRewardSeedCounter(v) { rewardSeedCounter = Math.max(0, Math.floor(v || 0)); }
 
-// 11-banners: hole banner 1s, attempts banner 1s (Last Attempt) — Last Attempt suppressed while freeShot supply >0
+// 11-banners: hole banner 1s, attempts banner 1s (Last Attempt) — Last Attempt suppressed while freeShot supply >0, Free Shot banner similar
 let holeBannerVisible = false;
 let holeBannerText = "";
 let holeBannerTimer = 0;
@@ -1354,6 +1361,11 @@ let attemptsBannerText = "";
 let attemptsBannerTimer = 0;
 const attemptsBannerDuration = 1000;
 let lastAttemptsBannerValue = null;
+let freeShotBannerVisible = false;
+let freeShotBannerText = "Free Shot!";
+let freeShotBannerTimer = 0;
+const freeShotBannerDuration = 1000;
+let lastFreeShotBannerValue = null;
 
 function getRewardRerolled() { return rewardRerolled; }
 function rerollReward() {
@@ -1394,6 +1406,7 @@ function maybeShowRewardMenu() {
   if (rewardMenuVisible) return;
   if (holeBannerVisible) return;
   if (attemptsBannerVisible) return;
+  if (freeShotBannerVisible) return;
   // Reward blocked when out of attempts at attempt-start — Game Over is deferred to next attempt start (handleLaunch)
   // Allow treasure reward during last flight (FLYING) even with attemptsLeft 0, since last shot is allowed to finish
   if (getAttemptsLeft() <= 0 && gameState !== "FLYING") {
@@ -1428,7 +1441,9 @@ function showHoleBanner(index, total) {
   holeBannerVisible = true;
   holeBannerTimer = holeBannerDuration;
   attemptsBannerVisible = false;
+  freeShotBannerVisible = false;
   attemptsBannerTimer = 0;
+  freeShotBannerTimer = 0;
   rewardMenuVisible = false;
   updateHotbarUI();
   return true;
@@ -1446,7 +1461,7 @@ function isAttemptsBannerVisible() { return attemptsBannerVisible; }
 function getAttemptsBannerText() { return attemptsBannerText; }
 function showAttemptsBanner(attemptsLeft) {
   if (pauseMenuVisible || mainMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
-  if (rewardMenuVisible || holeBannerVisible) return false;
+  if (rewardMenuVisible || holeBannerVisible || freeShotBannerVisible) return false;
   if ((supply.freeShot ?? 0) > 0) return false;
   const v = Math.max(1, Math.min(3, Math.floor(attemptsLeft)));
   if (v !== 1) return false;
@@ -1454,6 +1469,8 @@ function showAttemptsBanner(attemptsLeft) {
   attemptsBannerVisible = true;
   attemptsBannerTimer = attemptsBannerDuration;
   lastAttemptsBannerValue = v;
+  freeShotBannerVisible = false;
+  freeShotBannerTimer = 0;
   updateHotbarUI();
   return true;
 }
@@ -1465,7 +1482,7 @@ function hideAttemptsBanner() {
 }
 function maybeShowAttemptsBanner() {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
-  if (pauseMenuVisible || mainMenuVisible || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible) return false;
+  if (pauseMenuVisible || mainMenuVisible || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
   if (gameState === "WIN" || gameState === "GAME_OVER") return false;
   const left = getAttemptsLeft();
   if (left !== 1) return false;
@@ -1474,6 +1491,144 @@ function maybeShowAttemptsBanner() {
   // Do not show if hole banner just finished and reward pending will show— attempts banner after reward? Attempts banner has lower priority than reward.
   if (rewardPending) return false;
   return showAttemptsBanner(left);
+}
+function isFreeShotBannerVisible() { return freeShotBannerVisible; }
+function getFreeShotBannerText() { return freeShotBannerText; }
+function showFreeShotBanner() {
+  if (pauseMenuVisible || mainMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
+  if (rewardMenuVisible || holeBannerVisible || attemptsBannerVisible) return false;
+  if ((supply.freeShot ?? 0) <= 0) return false;
+  const left = getAttemptsLeft();
+  if (left !== 1) return false;
+  if (lastFreeShotBannerValue === left) return false;
+  if (rewardPending) return false;
+  freeShotBannerText = "Free Shot!";
+  freeShotBannerVisible = true;
+  freeShotBannerTimer = freeShotBannerDuration;
+  lastFreeShotBannerValue = left;
+  attemptsBannerVisible = false;
+  attemptsBannerTimer = 0;
+  // Turn on free shot modifier as required when counter decreased to 1 with free shots
+  isFreeShotActive = true;
+  syncFreeShotGlow();
+  updateHotbarUI();
+  saveProgress();
+  return true;
+}
+function hideFreeShotBanner() {
+  if (!freeShotBannerVisible) return false;
+  freeShotBannerVisible = false;
+  freeShotBannerTimer = 0;
+  return true;
+}
+function maybeShowFreeShotBanner() {
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
+  if (pauseMenuVisible || mainMenuVisible || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
+  if (gameState === "WIN" || gameState === "GAME_OVER") return false;
+  const left = getAttemptsLeft();
+  if (left !== 1) return false;
+  if ((supply.freeShot ?? 0) <= 0) return false;
+  if (lastFreeShotBannerValue === left) return false;
+  if (rewardPending) return false;
+  return showFreeShotBanner();
+}
+
+// Softlock detection — non-blocking banner when ball stuck without progress
+const SOFTLOCK_TEXT_NORMAL = "Stuck? Press R to reset — or use Reset Attempt in pause menu";
+const SOFTLOCK_TEXT_LAST = "Stuck on last attempt? End Run in pause menu (Escape)";
+let softlockBannerVisible = false;
+let softlockBannerText = SOFTLOCK_TEXT_NORMAL;
+let softlockFlightTime = 0;
+let softlockHistory = []; // {x,y}
+let softlockSampleAccum = 0;
+const SOFTLOCK_MIN_TIME = 8.0;
+const SOFTLOCK_WINDOW = 6.0;
+const SOFTLOCK_SAMPLE_INTERVAL = 0.5;
+const SOFTLOCK_THRESHOLD = 75;
+const SOFTLOCK_MAX_SAMPLES = Math.ceil(SOFTLOCK_WINDOW / SOFTLOCK_SAMPLE_INTERVAL);
+
+function isLastAttemptForSoftlock() {
+  const left = getAttemptsLeft();
+  const free = supply.freeShot ?? 0;
+  // Last attempt state is set when attempts left is one and no free shots (checked after counter decreased on reset)
+  return left === 1 && free === 0;
+}
+function isLastAttemptForReset() {
+  const left = getAttemptsLeft();
+  const free = supply.freeShot ?? 0;
+  // Last attempt state: attempts left is one and no free shots -> cannot reset on last attempt (R disabled after launch, pause Reset hidden)
+  if (free > 0) return false;
+  return left === 1;
+}
+function getSoftlockTextForCurrentState() {
+  return isLastAttemptForSoftlock() ? SOFTLOCK_TEXT_LAST : SOFTLOCK_TEXT_NORMAL;
+}
+function isSoftlockBannerVisible() { return softlockBannerVisible; }
+function getSoftlockBannerText() { return softlockBannerText; }
+function showSoftlockBanner() {
+  if (softlockBannerVisible) {
+    // Update text if last-attempt state changed while banner visible
+    const desired = getSoftlockTextForCurrentState();
+    if (softlockBannerText !== desired) softlockBannerText = desired;
+    return false;
+  }
+  if (gameState !== "FLYING") return false;
+  if (pauseMenuVisible || mainMenuVisible || helpVisible || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
+  softlockBannerText = getSoftlockTextForCurrentState();
+  softlockBannerVisible = true;
+  return true;
+}
+function hideSoftlockBanner() {
+  if (!softlockBannerVisible) return false;
+  softlockBannerVisible = false;
+  return true;
+}
+function resetSoftlockDetection() {
+  softlockFlightTime = 0;
+  softlockSampleAccum = 0;
+  softlockHistory = [];
+  softlockBannerVisible = false;
+}
+function updateSoftlockDetection(dt) {
+  if (gameState !== "FLYING") return false;
+  if (pauseMenuVisible || mainMenuVisible || helpVisible || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER") {
+    // do not accumulate while blocked overlays, but keep flight time? Pause freezes physics already, but we still don't want to trigger while paused
+    return false;
+  }
+  softlockFlightTime += dt;
+  softlockSampleAccum += dt;
+  if (softlockSampleAccum >= SOFTLOCK_SAMPLE_INTERVAL) {
+    softlockSampleAccum -= SOFTLOCK_SAMPLE_INTERVAL;
+    softlockHistory.push({ x: ball.pos.x, y: ball.pos.y });
+    if (softlockHistory.length > SOFTLOCK_MAX_SAMPLES) softlockHistory.shift();
+  }
+  if (softlockBannerVisible) {
+    // Keep text in sync with last-attempt state (e.g. after launch on last attempt)
+    const desired = getSoftlockTextForCurrentState();
+    if (softlockBannerText !== desired) softlockBannerText = desired;
+    return true;
+  }
+  if (softlockFlightTime < SOFTLOCK_MIN_TIME) return false;
+  if (softlockHistory.length < 10) return false;
+  // compute confinement: max distance from current pos to any history point, and bounding box
+  let maxDist = 0;
+  let minX = ball.pos.x, maxX = ball.pos.x, minY = ball.pos.y, maxY = ball.pos.y;
+  for (const p of softlockHistory) {
+    const d = Math.hypot(ball.pos.x - p.x, ball.pos.y - p.y);
+    if (d > maxDist) maxDist = d;
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const boxW = maxX - minX;
+  const boxH = maxY - minY;
+  // Consider softlocked if both bounding box small and max displacement small -> confined drift
+  if (maxDist < SOFTLOCK_THRESHOLD && boxW < SOFTLOCK_THRESHOLD && boxH < SOFTLOCK_THRESHOLD) {
+    showSoftlockBanner();
+    return true;
+  }
+  return false;
 }
 
 function claimReward(type) {
@@ -1597,6 +1752,7 @@ function loadLevel(index) {
   attemptsBannerTimer = 0;
   holeBannerVisible = false;
   holeBannerTimer = 0;
+  resetSoftlockDetection();
   updateHotbarUI();
   // Redraw terrain for new hole (zoned background per REQ-010/033)
   try { redrawBottom(); } catch {}
@@ -1681,7 +1837,7 @@ function updateHotbarUI() {
   // Bag+hotbar are always visible during gameplay including FLYING and reward (per updated spec)
   // Only hide during overlays/menus/banners/WIN/GAME_OVER; collapsed is handled via CSS class
   // Bottom-bar wrapper is the centered bottom element (gap 12px to bottom)
-  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || gameState === "WIN" || gameState === "GAME_OVER";
+  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER";
   const hideHotbar = isOverlayHidden;
   const hideBag = isOverlayHidden;
   if (bottomBarEl) bottomBarEl.classList.toggle("hidden", isOverlayHidden);
@@ -1733,6 +1889,8 @@ function updateHotbarUI() {
 function showGameOver() {
   if (gameState === "GAME_OVER") return;
   clearFreeShotFlightGlow();
+  hideSoftlockBanner();
+  resetSoftlockDetection();
   // Hide and clear any pending reward — Game Over takes precedence over reward screen
   rewardMenuVisible = false;
   rewardPending = false;
@@ -1787,6 +1945,9 @@ function handleGameOverReturn() {
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
+  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
+  hideSoftlockBanner();
+  resetSoftlockDetection();
   modifiers = [];
   syncModifiersToField();
   selectedModifier = null;
@@ -1835,6 +1996,15 @@ function syncPauseOverlay() {
       if (helpVisible) pc.classList.add('hidden');
       else pc.classList.remove('hidden');
     }
+    // Hide Reset Attempt button on last attempt (cannot reset on last attempt)
+    try {
+      const resetBtn = document.getElementById("pause-reset-attempt-button");
+      if (resetBtn) {
+        const isLast = isLastAttemptForReset();
+        resetBtn.classList.toggle("hidden", isLast);
+        resetBtn.style.display = isLast ? "none" : "";
+      }
+    } catch {}
   } else {
     po.classList.add("hidden");
     po.classList.remove("with-backdrop");
@@ -1854,7 +2024,7 @@ function getCanvasMousePos(e) {
 }
 
 function placeModifier(x, y) {
-  if (holeBannerVisible || attemptsBannerVisible) return;
+  if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (!selectedModifier) return;
   if (!canPlace(selectedModifier)) {
@@ -1884,17 +2054,83 @@ function removeModifierAt(x, y) {
 }
 
 function resetBall() {
+  const wasFlying = gameState === "FLYING" || ball.isMoving;
+  const wasFreeFlight = freeShotFlightActive;
   physicsResetBall(level.tee);
   resetCharge();
   // Keep aimAngle between attempts per REQ-019 - do NOT reset to tee->hole
   // Clear flight glow but keep armed freeShot per REQ (armed survives death)
   clearFreeShotFlightGlow();
+  hideSoftlockBanner();
+  resetSoftlockDetection();
+  // Handle attempt counter decrement on failure reset (not on launch)
+  // Only count as attempt if we were flying (had launched). R in AIMING does not consume attempt.
+  if (wasFlying) {
+    if (wasFreeFlight) {
+      // Free shot flight does not consume counted attempt
+      freeShotFlightActive = false;
+      syncFreeShotGlow();
+      updateAttemptsUI();
+      // After free flight failure, check if now on last attempt (left==1 with no free remaining -> Last Attempt)
+      const left = getAttemptsLeft();
+      const free = supply.freeShot ?? 0;
+      if (left === 1) {
+        if (free > 0) {
+          try { showFreeShotBanner(); } catch {}
+          if (!isFreeShotActive) {
+            isFreeShotActive = true;
+            syncFreeShotGlow();
+            updateHotbarUI();
+            saveProgress();
+          }
+        } else {
+          try { showAttemptsBanner(1); } catch {}
+          try { syncPauseOverlay(); } catch {}
+        }
+      }
+    } else {
+      // Normal attempt: decrement attempts left by incrementing holeAttempts
+      holeAttempts++;
+      totalAttempts++;
+      attempts = totalAttempts;
+      updateAttemptsUI();
+      saveProgress();
+      const left = getAttemptsLeft();
+      const free = supply.freeShot ?? 0;
+      if (left === 0 && free === 0) {
+        // No attempts remaining -> Game Over (do not return to AIMING)
+        // set state to GAME_OVER via showGameOver after resetting physics already done
+        // Need to ensure we don't stay in AIMING
+        showGameOver();
+        return;
+      } else if (left === 1) {
+        if (free > 0) {
+          // Free Shot! banner and turn on free shot modifier
+          // showFreeShotBanner will also set isFreeShotActive true
+          try { showFreeShotBanner(); } catch {}
+          // If banner not shown due to dedup or other block, still ensure free shot armed
+          if (!isFreeShotActive) {
+            isFreeShotActive = true;
+            syncFreeShotGlow();
+            updateHotbarUI();
+            saveProgress();
+          }
+        } else {
+          // Last Attempt banner
+          try { showAttemptsBanner(1); } catch {}
+        }
+        // Ensure pause overlay hide logic updated
+        try { syncPauseOverlay(); } catch {}
+      }
+    }
+  }
   gameState = "AIMING";
   winOverlay.classList.add("hidden");
   updateForceBar();
   // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
   maybeShowRewardMenu();
   saveProgress();
+  try { syncPauseOverlay(); } catch {}
 }
 
 function advanceHole() {
@@ -1951,6 +2187,9 @@ function returnToMainMenu() {
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
+  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
+  hideSoftlockBanner();
+  resetSoftlockDetection();
   pauseMenuVisible = false;
   pauseMenuHover = null;
   rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
@@ -2042,6 +2281,7 @@ function handleLaunch(angle, power) {
   if (rewardMenuVisible) return;
   if (holeBannerVisible) return;
   if (attemptsBannerVisible) return;
+  if (freeShotBannerVisible) return;
   if (pauseMenuVisible) return;
   if (mainMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
@@ -2058,15 +2298,14 @@ function handleLaunch(angle, power) {
     return;
   }
   launchBall(angle, power);
-  // Free Shot: if armed and supply available, this attempt does not decrease Attempts Left — keep glow during flight, persist if supply remains
+  // Free Shot: if armed and supply available, this launch is free — consume supply, mark flight as free, does NOT decrement counter now nor on reset
   if (isFreeShotActive && (supply.freeShot ?? 0) > 0) {
     supply.freeShot = Math.max(0, supply.freeShot - 1);
     // Persist armed while supply remains, only clear when supply reaches 0
     if (supply.freeShot > 0) {
-      // keep isFreeShotActive true for next attempt, but hide ball glow during current flight
+      // keep isFreeShotActive true for next free, but hide ball glow during current flight
       isFreeShotActive = true;
       freeShotFlightActive = true;
-      // Ball glow hidden during flight, edge glow visible via flight flag
       try { setWindFreeShotBallActive(false); } catch {}
       try { setWindFreeShotEdgeActive(true); } catch {}
       try { setWindFreeShotActive(true); } catch {}
@@ -2075,33 +2314,26 @@ function handleLaunch(angle, power) {
       freeShotFlightActive = true;
       syncFreeShotGlow();
     }
-    // Do NOT increment holeAttempts/totalAttempts
     updateHotbarUI();
     updateAttemptsUI();
   } else {
-    // Normal counted launch
-    // If freeShot was armed but supply empty, treat as normal and clear active
+    // Normal launch — no counter decrement at launch (decrement happens on failure reset, see handleAttemptFailure)
     if (isFreeShotActive) {
       isFreeShotActive = false;
       syncFreeShotGlow();
     }
-    // Ensure no flight glow on normal launch (in case previous flight glow lingered, clear it now for new normal flight)
     if (freeShotFlightActive) {
-      // freeShotFlightActive should already have been cleared on previous flight end; but clear here as safety for consecutive normal launches
-      // keep flight glow only for the free shot that is currently being launched, so clear before normal flight
-      // do not clear here yet — we will clear after previous flight ended; ensure normal flight does not show glow
       freeShotFlightActive = false;
       syncFreeShotGlow();
     }
-    holeAttempts += 1;
-    totalAttempts += 1;
-    attempts = totalAttempts;
+    // Do NOT increment holeAttempts/totalAttempts here; handled on reset
+    updateHotbarUI();
     updateAttemptsUI();
   }
-  // Game Over is deferred — last shot where attemptsLeft becomes 0 is allowed to finish; next handleLaunch will trigger Game Over
   gameState = "FLYING";
   try { lastLaunchTime = performance.now(); } catch { lastLaunchTime = Date.now(); }
   resetCharge();
+  resetSoftlockDetection();
   updateForceBar();
   saveProgress();
 }
@@ -2119,6 +2351,8 @@ function checkWin() {
       ball.z = 0;
       ball.vz = 0;
       clearFreeShotFlightGlow();
+      hideSoftlockBanner();
+      resetSoftlockDetection();
       // Directly advance without entering WIN state
       advanceHole();
       return true;
@@ -2131,6 +2365,8 @@ function checkWin() {
     ball.vz = 0;
     // Clear flight glow on win (glow was for motion; keep briefly then clear or keep until next hole? Clear to avoid edge glow persisting under WIN dim)
     clearFreeShotFlightGlow();
+    hideSoftlockBanner();
+    resetSoftlockDetection();
     gameState = "WIN";
     updateAttemptsUI();
     winOverlay.classList.remove("hidden");
@@ -2230,6 +2466,7 @@ function update(dt) {
       // auto-transition to reward menu if pending (holes >0)
       try { maybeShowRewardMenu(); } catch {}
       if (!rewardMenuVisible) try { maybeShowAttemptsBanner(); } catch {}
+      if (!rewardMenuVisible && !attemptsBannerVisible) try { maybeShowFreeShotBanner(); } catch {}
     }
     if (charging) {
       resetCharge();
@@ -2251,6 +2488,20 @@ function update(dt) {
     }
     return;
   }
+  if (freeShotBannerVisible) {
+    tickWind();
+    updateHotbarUI();
+    freeShotBannerTimer -= dt * 1000;
+    if (freeShotBannerTimer <= 0) {
+      freeShotBannerVisible = false;
+      freeShotBannerTimer = 0;
+    }
+    if (charging) {
+      resetCharge();
+      gameState = "AIMING";
+    }
+    return;
+  }
 
   // Update input
   updateInput(dt, gameState);
@@ -2261,10 +2512,15 @@ function update(dt) {
   }
 
   updateHotbarUI();
-  // 11-banners: maybe show attempts banner before last three attempts (3/2/1)
-  if ((gameState === "AIMING" || gameState === "CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible) {
+  // 11-banners: maybe show attempts/freeShot banner (triggered after counter decreased to 1)
+  if ((gameState === "AIMING" || gameState === "CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible) {
     try { maybeShowAttemptsBanner(); } catch {}
     if (attemptsBannerVisible) {
+      if (charging) { resetCharge(); gameState = "AIMING"; }
+      return;
+    }
+    try { maybeShowFreeShotBanner(); } catch {}
+    if (freeShotBannerVisible) {
       if (charging) { resetCharge(); gameState = "AIMING"; }
       return;
     }
@@ -2325,13 +2581,8 @@ function update(dt) {
     }
     const edgeOut = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
     if (terrainHit || waterHit || edgeOut) {
-      // Fatal terrain/water/edge — if last counted attempt has just failed (attemptsLeft<=0), show Game Over immediately
-      // instead of resetting to tee and waiting for next launch. Allows last shot to finish (checkWin already ran) but fails fast.
-      // (water already filtered for airborne, so this is ground water)
-      if (getAttemptsLeft() <= 0) {
-        showGameOver();
-        return;
-      }
+      // Fatal terrain/water/edge — handle attempt consumption on reset (not on launch)
+      // resetBall will increment holeAttempts (unless free flight) and show Game Over if left becomes 0
       resetBall();
       return;
     }
@@ -2341,6 +2592,9 @@ function update(dt) {
       bounceBall(hit, false);
       // remain FLYING, do not reset
     }
+
+    // Softlock detection: show banner if ball confined without progress
+    try { updateSoftlockDetection(dt); } catch {}
 
     // No auto-reset on rest - ball continues drifting per REQ-005
 
@@ -2402,11 +2656,17 @@ function render() {
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
   }
-  // 11-banners: hole/attempts banners share reward backdrop/style, auto-hide 2s; hole banner transitions to reward
+  // Softlock banner (non-blocking) below HUD — informs player they can reset via R or pause menu
+  if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !helpVisible && gameState === "FLYING") {
+    try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch {}
+  }
+  // 11-banners: hole/attempts/freeShot banners share reward backdrop/style, auto-hide 1s; hole banner transitions to reward
   if (holeBannerVisible) {
     try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch {}
   } else if (attemptsBannerVisible) {
     try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, attemptsBannerText); } catch {}
+  } else if (freeShotBannerVisible) {
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, freeShotBannerText); } catch {}
   } else if (rewardMenuVisible) {
     drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover, rewardRerolled, rewardRerollHover);
   }
@@ -2905,7 +3165,7 @@ function init() {
       onReset: () => {
         // REQ-021: block R while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners: block on last attempt
         if (rewardMenuVisible) return;
-        if (holeBannerVisible || attemptsBannerVisible) return;
+        if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
         if (gameState === "GAME_OVER") {
@@ -2919,9 +3179,8 @@ function init() {
             handleNextHole();
           }
         } else {
-          // Last attempt: reset disabled during last attempt's flight, ball must play out (attemptsLeft ===0)
-          // Fix: previously blocked on second-to-last flight where attemptsLeft was 1 after that launch; now only block when 0
-          if (getAttemptsLeft() === 0) {
+          // Last attempt: reset disabled after ball is launched on last attempt
+          if (gameState === "FLYING" && isLastAttemptForReset()) {
             return;
           }
           resetBall();
@@ -2942,7 +3201,7 @@ function init() {
       slot.addEventListener("click", () => {
         // REQ-021: block hotbar selection while reward menu visible; REQ-028: block while pause; REQ-029: block while main menu; 11-banners block
         if (rewardMenuVisible) return;
-        if (holeBannerVisible || attemptsBannerVisible) return;
+        if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
         if (gameState !== "AIMING" && gameState !== "CHARGING") return;
@@ -2989,7 +3248,7 @@ function init() {
       rerollReward();
       return;
     }
-    if (holeBannerVisible || attemptsBannerVisible) return;
+    if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
     // Close pause overlay before performing R effect so ball resets in resumed state
     const wasPaused = pauseMenuVisible || isInLevelPause;
     if (wasPaused) {
@@ -3012,8 +3271,8 @@ function init() {
       }
       return;
     }
-    // Last attempt: reset disabled during last attempt's flight, ball must play out (attemptsLeft ===0)
-    if (getAttemptsLeft() === 0) {
+    // Last attempt: reset disabled on last attempt (cannot reset on last attempt), ball must play out or End Run via pause (Escape)
+    if (isLastAttemptForReset()) {
       return;
     }
     resetBall();
@@ -3213,7 +3472,7 @@ function init() {
       const ae = document.activeElement;
       const isTyping = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
       if (!isTyping) {
-        const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || gameState === "WIN" || gameState === "GAME_OVER";
+        const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER";
         const bagVisible = !isOverlayHidden;
         if (bagVisible) {
           toggleHotbar();
@@ -3725,6 +3984,40 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, '__holeBannerVisible', { get: () => holeBannerVisible, set: (v) => { holeBannerVisible = !!v; } });
   Object.defineProperty(window, 'attemptsBannerVisible', { get: () => attemptsBannerVisible, set: (v) => { attemptsBannerVisible = !!v; } });
   Object.defineProperty(window, '__attemptsBannerVisible', { get: () => attemptsBannerVisible, set: (v) => { attemptsBannerVisible = !!v; } });
+  Object.defineProperty(window, 'freeShotBannerVisible', { get: () => freeShotBannerVisible, set: (v) => { freeShotBannerVisible = !!v; } });
+  Object.defineProperty(window, '__freeShotBannerVisible', { get: () => freeShotBannerVisible, set: (v) => { freeShotBannerVisible = !!v; } });
+  window.__isFreeShotBannerVisible = isFreeShotBannerVisible;
+  window.__getFreeShotBannerText = getFreeShotBannerText;
+  window.__showFreeShotBanner = showFreeShotBanner;
+  window.__hideFreeShotBanner = hideFreeShotBanner;
+  window.__maybeShowFreeShotBanner = maybeShowFreeShotBanner;
+  window.isFreeShotBannerVisible = isFreeShotBannerVisible;
+  window.showFreeShotBanner = showFreeShotBanner;
+  window.hideFreeShotBanner = hideFreeShotBanner;
+  // Softlock banner exports
+  window.__isSoftlockBannerVisible = isSoftlockBannerVisible;
+  window.__getSoftlockBannerText = getSoftlockBannerText;
+  window.__showSoftlockBanner = showSoftlockBanner;
+  window.__hideSoftlockBanner = hideSoftlockBanner;
+  window.__resetSoftlockDetection = resetSoftlockDetection;
+  window.__updateSoftlockDetection = updateSoftlockDetection;
+  window.isSoftlockBannerVisible = isSoftlockBannerVisible;
+  window.showSoftlockBanner = showSoftlockBanner;
+  window.hideSoftlockBanner = hideSoftlockBanner;
+  window.resetSoftlockDetection = resetSoftlockDetection;
+  Object.defineProperty(window, 'softlockBannerVisible', { get: () => softlockBannerVisible, set: (v) => { softlockBannerVisible = !!v; } });
+  Object.defineProperty(window, '__softlockBannerVisible', { get: () => softlockBannerVisible, set: (v) => { softlockBannerVisible = !!v; } });
+  Object.defineProperty(window, 'softlockBannerText', { get: () => softlockBannerText, set: (v) => { softlockBannerText = String(v); } });
+  window.__isLastAttemptForSoftlock = isLastAttemptForSoftlock;
+  window.__isLastAttemptForReset = isLastAttemptForReset;
+  window.__getSoftlockTextForCurrentState = getSoftlockTextForCurrentState;
+  window.__SOFTLOCK_TEXT_NORMAL = SOFTLOCK_TEXT_NORMAL;
+  window.__SOFTLOCK_TEXT_LAST = SOFTLOCK_TEXT_LAST;
+  window.isLastAttemptForSoftlock = isLastAttemptForSoftlock;
+  window.isLastAttemptForReset = isLastAttemptForReset;
+  window.getSoftlockTextForCurrentState = getSoftlockTextForCurrentState;
+  window.SOFTLOCK_TEXT_NORMAL = SOFTLOCK_TEXT_NORMAL;
+  window.SOFTLOCK_TEXT_LAST = SOFTLOCK_TEXT_LAST;
   // 12-campaign
   window.__getCampaignSeed = () => (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null);
   window.__setCampaignSeed = (s) => (typeof setCampaignSeed === 'function' ? setCampaignSeed(s) : null);
@@ -3758,7 +4051,7 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'rewardSeedCounter', { get: () => rewardSeedCounter, set: (v) => { rewardSeedCounter = Math.max(0, Math.floor(v||0)); } });
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, holeBannerText, attemptsBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, getRewardSeedCounter, setRewardSeedCounter };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
