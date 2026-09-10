@@ -9,13 +9,13 @@
 
 - Hole `hole={x,y,radius:14}` (12-16 tunable). Position per `07-level-generation.md`.
 - **Win check every tick:** `hypot(ball.pos-hole) < hole.radius + BALL_RADIUS` (edge grazing counts).
-  - On **non-final hole** win: auto-advance immediately — `vel=0`, `isMoving=false`, consume spatial supply per `06-wind-system.md` §8, `modifiers=[]`, `currentHoleIndex++`, `holeAttempts=0` (keep `totalAttempts`), `isFreeShotActive=false`, regenerate `treasure` uncollected, `loadLevel(next)`, `gameState='AIMING'`, `saveProgress()`. No `WIN` overlay, no `Next` button. HUD `Hole: N/M` updates.
+  - On **non-final hole** win: auto-advance immediately — `vel=0`, `isMoving=false`, `modifiers` cleared **without extra supply decrement** (already consumed on placement per `06-wind-system.md` §8), `currentHoleIndex++`, `holeAttempts=0` (keep `totalAttempts`), `isFreeShotActive=false`, regenerate `treasure` uncollected, `loadLevel(next)`, `gameState='AIMING'`, `saveProgress()`. No `WIN` overlay, no `Next` button. HUD `Hole: N/M` updates.
   - On **final hole** win: `vel=0`, `isMoving=false`, `gameState='WIN'`, Victory overlay per `03-rendering.md` §4 (`★★★` + `Course Completed!` + `Total: Y` + green `Continue`) → `clearProgress()` → entry menu. Victory only for last hole.
 
 ## 2. Hole Advancement
 
-- **Non-final:** auto-advance on hole entry → before clearing modifiers consume spatial supply (`supply[type]=max(0,supply[type]-1)` per placed spatial), `freeShot` not consumed on win, then `modifiers=[]`, `currentHoleIndex++`, `holeAttempts=0` (keep `totalAttempts`), `isFreeShotActive=false`, regenerate `treasure` uncollected, `loadLevel(next)`, `AIMING`. Legacy `Next` not used for intermediate holes.
-- **Final:** same spatial consumption (then moot — `clearProgress()` resets supply to `{1,1,1,1,0}`), `clearProgress()` + `mainMenuVisible=true` keep `COURSES_KEY`/`bestTotal` intact; `bestTotal` updated only here (see `09-persistence-and-campaign.md` §5).
+- **Non-final:** auto-advance on hole entry → `modifiers` cleared **without refund** (supply already decremented on placement, so no extra `supply--`), `freeShot` not consumed on win, then `currentHoleIndex++`, `holeAttempts=0` (keep `totalAttempts`), `isFreeShotActive=false`, regenerate `treasure` uncollected, `loadLevel(next)`, `AIMING`. Legacy `Next` not used for intermediate holes.
+- **Final:** same clearing without extra consumption (then moot — `clearProgress()` resets supply to `{1,1,1,1,0}`), `clearProgress()` + `mainMenuVisible=true` keep `COURSES_KEY`/`bestTotal` intact; `bestTotal` updated only here (see `09-persistence-and-campaign.md` §5).
 
 ## 3. Reward Triggers — Hole-Start (except hole 1) + Treasure Hit
 

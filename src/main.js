@@ -289,8 +289,7 @@ function clearFreeShotFlightGlow() {
 function canPlace(type) {
   if (!type || !(type in supply)) return false;
   if (type === 'freeShot') return false;
-  const activeCount = modifiers.filter(m => m.type === type).length;
-  return activeCount < supply[type];
+  return (supply[type] ?? 0) > 0;
 }
 
 function getSupply() {
@@ -310,14 +309,9 @@ function resetSupply() {
 }
 
 function consumePlacedModifiersFromSupply() {
+  // Inventory model: supply already decremented on placement, win just clears modifiers without extra decrement or refund.
+  // Kept for backward compat; no supply change.
   if (!modifiers || !modifiers.length) return;
-  // REQ-035: each placed modifier consumed from supply on level win, clamped >=0, exactly once per win
-  const snapshot = [...modifiers];
-  for (const m of snapshot) {
-    if (m.type && m.type in supply) {
-      supply[m.type] = Math.max(0, supply[m.type] - 1);
-    }
-  }
   updateHotbarUI();
 }
 
@@ -1875,7 +1869,7 @@ function updateHotbarUI() {
     }
     const activeCount = modifiers.filter(m => m.type === type).length;
     const supplyCount = supply[type] ?? 0;
-    const canPlaceThis = activeCount < supplyCount;
+    const canPlaceThis = (supplyCount ?? 0) > 0;
     slot.classList.toggle("selected", slot.dataset.type === selectedModifier);
     slot.classList.remove("active");
     slot.classList.toggle("disabled", !canPlaceThis);
@@ -1884,16 +1878,12 @@ function updateHotbarUI() {
     if (countEl) {
       countEl.textContent = `x${supplyCount}`;
     }
-    // Accessibility title with hotkey 1-4 for spatial
+    // Accessibility title with hotkey 1-4 for spatial (inventory model: supply is remaining)
     if (!canPlaceThis) {
-      if (supplyCount === 0) {
-        slot.title = `${type} - No supply (0)`;
-      } else {
-        slot.title = `${type} - Limit reached (${activeCount}/${supplyCount} placed)`;
-      }
+      slot.title = `${type} - No supply (0)`;
     } else {
       const hotkey = type === 'amplify' ? '1' : type === 'nullify' ? '2' : type === 'flip' ? '3' : type === 'rotate' ? '4' : '?';
-      slot.title = `${type} - ${activeCount}/${supplyCount} placed (press ${hotkey})`;
+      slot.title = `${type} - ${supplyCount} available, ${activeCount} placed (press ${hotkey})`;
     }
     // For testing: expose supply via dataset
     slot.dataset.supply = String(supplyCount);
@@ -2054,7 +2044,9 @@ function placeModifier(x, y) {
     updateHotbarUI();
     return;
   }
-  modifiers.push({ id: Date.now() + Math.random(), type: selectedModifier, x, y, radius: getEffectiveModifierRadius() });
+  const type = selectedModifier;
+  supply[type] = Math.max(0, (supply[type] ?? 0) - 1);
+  modifiers.push({ id: Date.now() + Math.random(), type, x, y, radius: getEffectiveModifierRadius() });
   syncModifiersToField();
   // Deselect after placement per requirement
   selectedModifier = null;
@@ -2066,7 +2058,10 @@ function placeModifier(x, y) {
 function removeModifierAt(x, y) {
   const idx = modifiers.findIndex(m => Math.hypot(m.x - x, m.y - y) < m.radius);
   if (idx !== -1) {
-    modifiers.splice(idx, 1);
+    const [removed] = modifiers.splice(idx, 1);
+    if (removed && removed.type && removed.type in supply) {
+      supply[removed.type] = Math.max(0, (supply[removed.type] ?? 0) + 1);
+    }
     syncModifiersToField();
     updateHotbarUI();
     saveProgress();
@@ -3568,9 +3563,12 @@ function init() {
         else if (input.trim() !== "") alert(`Invalid hole. Enter 1-${LEVELS.length}`);
       }
     } else if (e.code === "Delete" || e.code === "Backspace") {
-      // Remove last modifier
+      // Remove last modifier and refund supply (inventory model)
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
-        modifiers.pop();
+        const removed = modifiers.pop();
+        if (removed && removed.type && removed.type in supply) {
+          supply[removed.type] = Math.max(0, (supply[removed.type] ?? 0) + 1);
+        }
         syncModifiersToField();
         updateHotbarUI();
         saveProgress();
