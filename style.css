@@ -861,16 +861,16 @@ body {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  background: rgba(0,0,0,0.85);
-  border: 1.5px solid rgba(255,255,255,0.95);
-  color: white;
-  font: 700 9px system-ui, sans-serif;
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.78);
+  font: 600 9px system-ui, sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
   pointer-events: none;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  box-shadow: none;
   z-index: 2;
 }
 .golfbag-hotkey {
@@ -880,16 +880,16 @@ body {
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  background: rgba(0,0,0,0.85);
-  border: 1.5px solid rgba(255,255,255,0.95);
-  color: white;
-  font: 700 10px system-ui, sans-serif;
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.78);
+  font: 600 10px system-ui, sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
   pointer-events: none;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  box-shadow: none;
   z-index: 2;
 }
 .hotbar-slot.disabled .hotbar-count {
