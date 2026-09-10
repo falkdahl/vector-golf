@@ -769,7 +769,7 @@ const REWARD_TYPE_DEFS = {
   nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
   rotate: { icon: '↻', label: 'Rotate', color: '#e74c3c', border: 'rgba(231,76,60,0.9)', fill: 'rgba(231,76,60,0.28)', fillHover: 'rgba(231,76,60,0.38)', hint: '+1 to supply' },
-  freeShot: { icon: '★', label: 'Free Shoot', color: '#f1c40f', border: 'rgba(241,196,15,0.9)', fill: 'rgba(241,196,15,0.28)', fillHover: 'rgba(241,196,15,0.38)', hint: 'Supply +5' },
+  freeShot: { icon: '★', label: 'Free Shoot', color: '#f1c40f', border: 'rgba(241,196,15,0.9)', fill: 'rgba(241,196,15,0.28)', fillHover: 'rgba(241,196,15,0.38)', hint: 'Supply +3' },
   areaUp: { icon: '◯', label: 'Area +20%', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+20% area' }
 };
 

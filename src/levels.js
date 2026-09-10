@@ -122,9 +122,8 @@ function getTierForHole(levelNum, count, difficulty) {
     return pattern[levelNum - 1] || 'medium';
   }
   if (count === 18) {
-    const pattern9 = ['easy','medium','medium','easy','medium','medium','medium','easy','hard'];
-    const idx = (levelNum - 1) % 9;
-    return pattern9[idx];
+    const pattern = ['easy','medium','medium','easy','medium','medium','medium','easy','hard','medium','medium','medium','hard','medium','medium','hard','medium','hard'];
+    return pattern[levelNum - 1] || 'medium';
   }
   // Fallback linear for any other count (should not occur; keeps determinism)
   const tierIdx = Math.floor((levelNum - 1) / count * 3);
@@ -308,6 +307,16 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     const holeX = Math.floor(rand() * 100) + (LOGICAL_W - 140);
     const holeY = Math.floor(rand() * (LOGICAL_H - 160)) + 80;
     const hole = { x: Math.max(LOGICAL_W - 180, Math.min(LOGICAL_W - 40, holeX)), y: holeY, radius: 14 };
+    // Easy angle limit: |atan2(dY,dX)| <=20° (0° = same y) to prevent overly long tilted easy holes
+    if (tier === 'easy') {
+      const dX = hole.x - tee.x;
+      const maxDeltaY = dX * Math.tan(20 * Math.PI / 180); // ~0.364 * dX
+      const dY = hole.y - tee.y;
+      if (Math.abs(dY) > maxDeltaY) {
+        const clampedY = tee.y + Math.sign(dY) * maxDeltaY;
+        hole.y = Math.max(80, Math.min(LOGICAL_H - 80, Math.round(clampedY)));
+      }
+    }
 
     // Step 1: Generate fairway shape per tier
     const { spine, p1, p2, shape } = generateFairwayShape(tier, tee, hole, rand);

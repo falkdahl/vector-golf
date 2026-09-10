@@ -141,7 +141,7 @@ Visualization on `game` canvas: `amplify` orange `rgba(230,126,34,0.25)` `»` wh
 - `supply = { amplify, nullify, flip, rotate, freeShot }` in `src/main.js`. Initialized to `{1,1,1,1,0}` on new game. Persists through death/`R` and hole advances minus win-consumption (spatial) and minus launch-consumption (`freeShot`).
 - **Placement guard (spatial):** `canPlace(type) => type!=='freeShot' && modifiers.filter(m=>type).length < supply[type]`. Place allowed iff true; otherwise rejected, disabled slot + desaturated preview. `freeShot` never uses `canPlace`. Dragging does not check/consume. Right-click removal frees slot.
 - **No hotkey guard for freeShot:** `4` is `rotate`; `canActivateFreeShot()` only for auto-arm check.
-- `addToSupply(type,n)` increments counter (used by rewards). For `freeShot`, `n=5` via `Free Shot Supply +5`; for `rotate`, `n=1`.
+- `addToSupply(type,n)` increments counter (used by rewards). For `freeShot`, `n=3` via `Free Shot Supply +3`; for `rotate`, `n=1`.
 
 ### Consumption on Win
 

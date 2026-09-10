@@ -1298,7 +1298,7 @@ function bounceBall(hit, isEdge) {
   ball.isMoving = true;
 }
 
-// Reward menu per REQ-09 : hole-start (except hole 1) + treasure near tree - 3 random of 5 pool (bouncy removed, maxAttempts replaced by freeShot Supply +5, trees always bounce)
+// Reward menu per REQ-09 : hole-start (except hole 1) + treasure near tree - 3 random of 5 pool (bouncy removed, maxAttempts replaced by freeShot Supply +3, trees always bounce)
 // Campaign deterministic rewards (12-campaign): single campaignSeed controls all offers including rerolls via seeded shuffle + counter
 const REWARD_POOL = ['amplify', 'nullify', 'flip', 'rotate', 'freeShot', 'areaUp'];
 let rewardMenuVisible = false;
@@ -1338,7 +1338,9 @@ function getSeededRewardOffer() {
   rewardSeedCounter++;
   const copy = [...REWARD_POOL];
   seededShuffle(copy, seedStr);
-  return copy.slice(0, 3);
+  let offer = copy.slice(0, 3);
+  offer = maybeFilterAreaUp(offer, seedStr);
+  return offer;
 }
 function getSeededRerollOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
@@ -1346,7 +1348,22 @@ function getSeededRerollOffer() {
   rewardSeedCounter++;
   const copy = [...REWARD_POOL];
   seededShuffle(copy, seedStr);
-  return copy.slice(0, 3);
+  let offer = copy.slice(0, 3);
+  offer = maybeFilterAreaUp(offer, seedStr);
+  return offer;
+}
+function maybeFilterAreaUp(offer, seedStr) {
+  if (!offer.includes('areaUp')) return offer;
+  const filterSeed = hashSeedString(seedStr + ':filter');
+  const r = mulberry32Reward(filterSeed)();
+  if (r >= 0.25) return offer;
+  const notInOffer = REWARD_POOL.filter(t => !offer.includes(t));
+  if (!notInOffer.length) return offer;
+  const pickSeed = hashSeedString(seedStr + ':filterPick');
+  const pr = mulberry32Reward(pickSeed)();
+  const pickIdx = Math.floor(pr * notInOffer.length);
+  const replacement = notInOffer[Math.max(0, Math.min(notInOffer.length - 1, pickIdx))];
+  return offer.map(t => t === 'areaUp' ? replacement : t);
 }
 function getRewardSeedCounter() { return rewardSeedCounter; }
 function setRewardSeedCounter(v) { rewardSeedCounter = Math.max(0, Math.floor(v || 0)); }
@@ -1636,11 +1653,11 @@ function claimReward(type) {
   if (!rewardOffered.includes(type)) return false;
   // Idempotent: only once per trigger (rewardMenuVisible guards double-click)
   if (type === 'freeShot') {
-    addToSupply('freeShot', 5); // Free Shoot Supply +5
+    addToSupply('freeShot', 3); // Free Shoot Supply +3
     rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
   } else if (type === 'maxAttempts') {
     // legacy: migrate old maxAttempts reward to freeShot
-    addToSupply('freeShot', 5);
+    addToSupply('freeShot', 3);
     rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
   } else if (type === 'areaUp') {
     addAreaUpgrade(1); // REQ-023: Area +20% additive (addAreaUpgrade handles retroactive grow + sync)

@@ -30,6 +30,7 @@ Legacy `rect` obstacles are deprecated for newly generated levels (all trees are
 
 - `tee.x∈[40,180]` (left side), `hole.x∈[LOGICAL_W-180, LOGICAL_W-40]` (right side), guarantee `hole.x - tee.x ≥ LOGICAL_W*0.6` (≥768 at 1280).
 - `tee.y`/`hole.y` sampled independently via seeded PRNG `rand()*(LOGICAL_H-160)+80` → `y∈[80,LOGICAL_H-80]`; ≥10 distinct values across 18 holes; deterministic for same seed.
+- **Easy angle limit:** for `tier==='easy'` (`I`-shaped) the vertical angle between tee and hole shall satisfy `|atan2(hole.y-tee.y, hole.x-tee.x)| ≤ 20°` (`0°` is same `y`). If sampled `|Δy|` exceeds `Δx * tan(20°) ≈ Δx*0.364`, clamp `hole.y` to `tee.y ± Δx*tan(20°)` (nearest bound) while keeping `hole.y∈[80,LOGICAL_H-80]` and deterministic for same seed. This prevents overly long tilted easy holes.
 
 ## 3. Five-Step Pipeline (normative)
 
@@ -107,11 +108,11 @@ This section defines **terrain/hazard pacing** only; field `sources,sinks,double
 
 Field budgets per tier (`sources,sinks,doublets,vortexes`) are `1,1,1,0` / `2,1,2,1` / `1,1,3,1` as normative in `06-wind-system.md` §1.3 (including `doublet-in-tree ≤2px` and `OUTSIDE 20-60` / `OUTSIDE_SINK 60-100` middle-third sinks). Wind strength constant across tiers (see `06-wind-system.md` §1.4).
 - **Tier assignment — explicit pacing progression (supersedes linear)**:
-  - `3`-hole course: **all easy** → `[E,E,E]` ( `options.difficulty` for `3` is ignored; `3` is always `easy` uniform `I` ).
-  - `6`-hole course: `[E,E,M,M,E,M]` ( `2×Easy-2×Medium-1×Easy-1×Medium` ) → `levelNum 1:E,2:E,3:M,4:M,5:E,6:M`
-  - `9`-hole course: `[E,M,M,E,M,M,M,E,H]` ( `1×Easy-2×Medium-1×Easy-3×Medium-1×Easy-1×Hard` ) → `1:E,2:M,3:M,4:E,5:M,6:M,7:M,8:E,9:H`
-  - `18`-hole course: **two × 9-hole progression** → `[E,M,M,E,M,M,M,E,H, E,M,M,E,M,M,M,E,H]` (first 9 same as 9-hole, next 9 repeats)
-  - `level.difficulty = {shape,shapeTier,fieldComponents,treesOnFairway,waterOnFairway,tier,score}` where `score = shapeTier+fieldTier+treeTier+waterTier` (0-8, monotonic). Field strength is **constant** (not scaling with `tier` or `levelNum`).
+   - `3`-hole course: **all easy** → `[E,E,E]` ( `options.difficulty` for `3` is ignored; `3` is always `easy` uniform `I` ).
+   - `6`-hole course: `[E,E,M,M,E,M]` ( `2×Easy-2×Medium-1×Easy-1×Medium` ) → `levelNum 1:E,2:E,3:M,4:M,5:E,6:M`
+   - `9`-hole course: `[E,M,M,E,M,M,M,E,H]` ( `1×Easy-2×Medium-1×Easy-3×Medium-1×Easy-1×Hard` ) → `1:E,2:M,3:M,4:E,5:M,6:M,7:M,8:E,9:H`
+   - `18`-hole course: `[E,M,M,E,M,M,M,E,H,M,M,M,H,M,M,H,M,H]` → `1:E,2:M,3:M,4:E,5:M,6:M,7:M,8:E,9:H,10:M,11:M,12:M,13:H,14:M,15:M,16:H,17:M,18:H`
+   - `level.difficulty = {shape,shapeTier,fieldComponents,treesOnFairway,waterOnFairway,tier,score}` where `score = shapeTier+fieldTier+treeTier+waterTier` (0-8, monotonic). Field strength is **constant** (not scaling with `tier` or `levelNum`).
 
 ## 6. Hole Count & Course Wrapper
 
@@ -122,7 +123,7 @@ Field budgets per tier (`sources,sinks,doublets,vortexes`) are `1,1,1,0` / `2,1,
 - [ ] `generateLevels(seed,count)` length `count`; `tee` left/`hole` right with `≥10` distinct `y`; `fairwayPath≥20` pts, endpoints `≤60` from tee/hole.
 - [ ] `terrainZoneAt` returns Green at hole, Fairway at `tee+40` along spine, Rough at `W_fairway+30`, OB at `W_rough+40` per `03-rendering.md` colors; water blue; no wrong palette.
 - [ ] Warping deviates `≥8 RMS ≤35 max`; same seed identical, different seed differs for ≥50% holes.
-- [ ] `treesOnFairway`/`waterOnFairway` per tier budgets enforced; **pacing progression enforced**: `3`-hole all `easy`, `6`-hole `E,E,M,M,E,M`, `9`-hole `E,M,M,E,M,M,M,E,H`, `18`-hole `9×2`; **easy `treesOnFairway` 1-2** (not 0-2), medium 2-3, hard 3-5; no hard has `0` water on fairway; `waterOnFairway` now `0` for easy, `1-2` for medium/hard (not `1` fixed / `1-3`); hard `W_fairway` avg ≥12 smaller than easy; shapes per progression with bigger bends per §3.
+- [ ] `treesOnFairway`/`waterOnFairway` per tier budgets enforced; **pacing progression enforced**: `3`-hole all `easy`, `6`-hole `E,E,M,M,E,M`, `9`-hole `E,M,M,E,M,M,M,E,H`, `18`-hole `[E,M,M,E,M,M,M,E,H,M,M,M,H,M,M,H,M,H]`; **easy `treesOnFairway` 1-2** (not 0-2), medium 2-3, hard 3-5; no hard has `0` water on fairway; `waterOnFairway` now `0` for easy, `1-2` for medium/hard (not `1` fixed / `1-3`); hard `W_fairway` avg ≥12 smaller than easy; shapes per progression with bigger bends per §3; **easy angle `|atan2(Δy,Δx)| ≤20°`** for all `easy` holes.
 - [ ] **Varying fairway width thinner in middle (except I-shaped)**: for every non-I level (L/V/U/S/Z), `terrainZoneAt` uses `Wf_eff(t)=Wf_base*(1-0.28*sin(π*t))` (28% thinner at middle) and `Wr_eff=Wf_eff+(Wr_base-Wf_base)`. At `t=0`/`1` width equals base `Wf`, at `t=0.5` width is `0.72*Wf` (±3% tolerance). For **I-shaped** holes `Wf_eff(t)=Wf_base` constant (no variation, middle width equals ends within ±2%). Verify by sampling `terrainZoneAt` at `t=0,0.5,1` along spine: fairway at `Wf_eff-10` true, at `Wf_eff+10` false (rough), and for non-I middle width < ends by ≥20%, for I middle width == ends.
 - [ ] **Whole rough visible - vertical shift**: for every generated level across 100 random seeds, rough envelope `y ∈ [spine_y ± Wr_eff(t) ± warpStrength]` plus `teeBox`/`green` radii is fully inside canvas with ≥8px margin: `minTop ≥8` and `maxBottom ≤ H-8`. No clipping at top/bottom edge. If initial spine would clip, level is shifted vertically (all `y` coordinates) to satisfy margin; `tee`/`hole`/`fairwayPath` shifted accordingly, deterministic for same seed.
 - [ ] **Fairway trees ≥1/3 from tee**: for every generated level, every `treesOnFairway` tree satisfies `hypot(tree.x-tee.x, tree.y-tee.y) ≥ dist(tee,hole)/3` (within `±1px` tolerance) and `terrainZoneAt==='fairway'` with `≥40` clearance from tee/green masks and not in Green/Tee mask. No fairway tree is within `dist/3` of the tee.

@@ -31,12 +31,12 @@
 
 ## 5. Reward Menu — Random 3-of-6 Inside Canvas
 
-- Pool `POOL=['amplify','nullify','flip','rotate','freeShot','areaUp']` (6 types; `rotate` red `↻` `#e74c3c`, `freeShot` replaces legacy `Max Attempts +5`, bouncy removed). Per trigger pick **3 distinct** uniformly without replacement via seeded `mulberry32` using `campaignSeed+rewardSeedCounter` per `09-persistence-and-campaign.md` §4, not `Math.random`, same pool for reroll.
+- Pool `POOL=['amplify','nullify','flip','rotate','freeShot','areaUp']` (6 types; `rotate` red `↻` `#e74c3c`, `freeShot` replaces legacy `Max Attempts +5`, bouncy removed). Per trigger pick **3 distinct** without replacement via seeded `mulberry32` using `campaignSeed+rewardSeedCounter` per `09-persistence-and-campaign.md` §4, not `Math.random`, same pool for reroll, but **`areaUp` appears 25% less frequently** than uniform: selection is weighted so `areaUp` inclusion probability is `0.75×` uniform (`≈37.5%` vs `50%`). Implementation: uniform 3-of-6 shuffle then if `areaUp` in offer, with deterministic `25%` chance (seeded from `campaignSeed+counter`) replace it with a random non-`areaUp` type not already in offer; alternatively equivalent weighted sampling `w(areaUp)=0.75` vs `1` for others.
 - State per menu `rewardOffered` (current 3), `rewardRerolled=false` when freshly shown, `rewardMenuVisible` blocks input. Triggers are hole-start and treasure hit; 3-of-6 selection identical.
 - **Inside-canvas overlay** `drawRewardMenu(ctx,W,H,offered,hovered,rerolled,rerollHovered)` when `rewardMenuVisible`: dim `rgba(0,0,0,0.55)`, title `Choose an Upgrade` 22px `700` white `stroke 5px` centered, three `90×110` buttons centered (`340×220` gap 12):
-  - `amplify` orange `#e67e22`, `nullify` blue `#3498db`, `flip` purple `#9b59b6`, `rotate` red `#e74c3c` `↻` hint `+1 to supply`, `freeShot` gold `★` `#f1c40f` hint `Supply +5`, `areaUp` amber `◯` `#f39c12` hint `+20% area`. All labels white with stroke `4px`; no `Total Attempts: N` subtitle.
+  - `amplify` orange `#e67e22`, `nullify` blue `#3498db`, `flip` purple `#9b59b6`, `rotate` red `#e74c3c` `↻` hint `+1 to supply`, `freeShot` gold `★` `#f1c40f` hint `Supply +3`, `areaUp` amber `◯` `#f39c12` hint `+20% area`. All labels white with stroke `4px`; no `Total Attempts: N` subtitle.
 - **Blocking:** while visible, aim/charge/launch/modifier `1-4` placement ignored; only `1`/`2`/`3` by offered order or click selects; hotbar visible but disabled; gold glow hidden.
-- **Selection** (once per menu): click or `1`/`2`/`3` → `amplify`/`nullify`/`flip`/`rotate` `supply[t]++`, `freeShot` `supply.freeShot+=5` (passive `Attempts Left: X (+Y)`), `areaUp` `areaUpgradeCount+=1` (`areaMultiplier=1+0.2*areaUpgradeCount`, retroactively grows spatial via `getEffectiveModifierRadius()`, see `06-wind-system.md` §6; base `54` → `64.8/75.6/...`), then `rewardPending=false; rewardMenuVisible=false; rewardOffered=[]`. Save via `saveProgress()`. For treasure menus, `isCollected` remains `true`.
+- **Selection** (once per menu): click or `1`/`2`/`3` → `amplify`/`nullify`/`flip`/`rotate` `supply[t]++`, `freeShot` `supply.freeShot+=3` (passive `Attempts Left: X (+Y)`), `areaUp` `areaUpgradeCount+=1` (`areaMultiplier=1+0.2*areaUpgradeCount`, retroactively grows spatial via `getEffectiveModifierRadius()`, see `06-wind-system.md` §6; base `54` → `64.8/75.6/...`), then `rewardPending=false; rewardMenuVisible=false; rewardOffered=[]`. Save via `saveProgress()`. For treasure menus, `isCollected` remains `true`.
 
 ## 6. Re-roll — Once per Menu for 1 Counted Attempt (never free)
 
@@ -57,10 +57,10 @@
 
 ## Acceptance Criteria
 
-- [ ] New game hole 1: no reward menu before first attempt, one uncollected treasure near tree, `maxAttempts=10` `Attempts Left: 10` (no `(+Y)` when `freeShot=0`) and `Attempts Left: 10 (+5)` when `freeShot=5`, `supply.rotate=1` red.
+- [ ] New game hole 1: no reward menu before first attempt, one uncollected treasure near tree, `maxAttempts=10` `Attempts Left: 10` (no `(+Y)` when `freeShot=0`) and `Attempts Left: 10 (+3)` when `freeShot=3`, `supply.rotate=1` red.
 - [ ] Hole 2..N: `maybeShowRewardMenu()` shows `Choose an Upgrade` before first attempt; hole 1 never shows.
 - [ ] Treasure: one per hole near tree, `hypot < BALL_RADIUS+radius` collects `isCollected=true`, `rewardPending=true`, shows immediately even in `FLYING`; second hit no-op.
-- [ ] Reward 3-of-6 grants: `amplify`/`nullify`/`flip`/`rotate` `+1`, `freeShot` `+5`, `areaUp` `+20%` retroactively grows; no `Max Attempts +5`/bouncy.
+- [ ] Reward 3-of-6 grants: `amplify`/`nullify`/`flip`/`rotate` `+1`, `freeShot` `+3`, `areaUp` `+20%` retroactively grows (areaUp 25% less frequent); no `Max Attempts +5`/bouncy.
 - [ ] Attempts: normal increments `holeAttempts`/`totalAttempts` on attempt reset (failure via OB/water/edge/`R` while `FLYING`, not on `handleLaunch`); free attempt reset does not increment and `supply.freeShot` consumed on launch, persists while supply remains; after counter decreases to `1` with `freeShot>0` show `Free Shot!` banner and turn on `isFreeShotActive`, else when `freeShot===0` show `Last Attempt` banner, hide `Next Attempt`, update softlock text and disable `R` after launch; last-attempt failure immediate `GAME_OVER` after decrement to `0` without returning to `AIMING`; fallback `handleLaunch` while `attemptsLeft<=0` also shows Game Over; treasure hit never increments.
 - [ ] Re-roll button once `R`/click increments `holeAttempts`/`totalAttempts` counted (never free); if `attemptsLeft→0` shows Game Over, otherwise replaces offer and disables; second `R` no-ops. `Total` 11 after one reroll after hole-start.
 - [ ] No white card; dim `0.55` high-contrast buttons; HUD underneath shows `Attempts Left`; treasure gold on `game` canvas.

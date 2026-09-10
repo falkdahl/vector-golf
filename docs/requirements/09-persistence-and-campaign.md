@@ -24,7 +24,7 @@
 
 ### Save triggers
 
-- `handleLaunch` (free launches via auto-arm do not decrement `attemptsLeft` but still `saveProgress()` after consuming `freeShot`), `claimReward` (`Free Shot +5` or `Rotate +1` or `Area +20%`), `rerollReward` (costs 1 counted attempt, never free), `placeModifier`/removal/drag (including `rotate` via `4`), `collectTreasure`, `advanceHole`/`loadLevel` (including hole-start `rewardPending` and fresh `treasure`), `maybeShowRewardMenu` when creating fresh `rewardOffered`, and on `GAME_OVER`. `toggleFreeShot` via `4` removed (`4` is `rotate`).
+- `handleLaunch` (free launches via auto-arm do not decrement `attemptsLeft` but still `saveProgress()` after consuming `freeShot`), `claimReward` (`Free Shot +3` or `Rotate +1` or `Area +20%`), `rerollReward` (costs 1 counted attempt, never free), `placeModifier`/removal/drag (including `rotate` via `4`), `collectTreasure`, `advanceHole`/`loadLevel` (including hole-start `rewardPending` and fresh `treasure`), `maybeShowRewardMenu` when creating fresh `rewardOffered`, and on `GAME_OVER`. `toggleFreeShot` via `4` removed (`4` is `rotate`).
 
 ### Load & Resume — Auto-resume, no Continue button
 
