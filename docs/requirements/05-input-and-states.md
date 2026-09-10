@@ -57,6 +57,7 @@ States: `AIMING`, `CHARGING`, `FLYING` (covers drifting), `WIN`, `GAME_OVER`. Tr
 - In `WIN`/`GAME_OVER` → `R` or green `Continue` → `clearProgress()` → entry menu.
 - When `rewardMenuVisible` → `R` = **re-roll** (see `08-rewards-and-progression.md` §6), not reset.
 - When `mainMenuVisible` → `R` blocked.
+- **Pause `Reset Attempt` button (`#pause-reset-attempt-button`)** between `Continue` and `End Run` in `#pause-overlay` → same effect as `R` (see `09-persistence-and-campaign.md` §6): implemented as closing pause then performing `R` logic above, so visible result is `resetBall()` (or re-roll/`clearProgress` branching if applicable, though pause cannot be open during `rewardMenuVisible`/`WIN`/`GAME_OVER`).
 
 Hole progression: non-final win → auto-advance → consume supply, clear modifiers, `currentHoleIndex++`, `holeAttempts=0`, `loadLevel(next)`, `AIMING`; final win → Victory → `R`/`Continue` → `clearProgress()` → main menu (see `08-rewards-and-progression.md`).
 

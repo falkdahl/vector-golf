@@ -2975,9 +2975,55 @@ function init() {
   const resumeBtnDom = document.getElementById("resume-button");
   const mainEndRunBtnDom = document.getElementById("end-run-button");
   const pauseEndRunBtnDom = document.getElementById("pause-end-run-button");
+  const pauseResetAttemptBtnDom = document.getElementById("pause-reset-attempt-button");
   if (resumeBtnDom) resumeBtnDom.addEventListener("click", () => resumeGame());
   if (mainEndRunBtnDom) mainEndRunBtnDom.addEventListener("click", () => endRun());
   if (pauseEndRunBtnDom) pauseEndRunBtnDom.addEventListener("click", () => endRun());
+  // Reset Attempt in pause — same effect as hitting R hotkey, placed between Continue and End Run
+  function handlePauseResetAttempt() {
+    // Replicate R hotkey logic (see initInput onReset) but allowed while pause is open:
+    // close pause first, then perform R branching. Pause cannot be open during reward/WIN/GAME_OVER,
+    // but handle those for completeness.
+    if (rewardMenuVisible) {
+      // R while reward = re-roll (see 08 §6)
+      rerollReward();
+      return;
+    }
+    if (holeBannerVisible || attemptsBannerVisible) return;
+    // Close pause overlay before performing R effect so ball resets in resumed state
+    const wasPaused = pauseMenuVisible || isInLevelPause;
+    if (wasPaused) {
+      pauseMenuVisible = false;
+      isInLevelPause = false;
+      helpVisible = false;
+      syncPauseOverlay();
+      syncHelpOverlay();
+    }
+    if (mainMenuVisible) return;
+    if (gameState === "GAME_OVER") {
+      handleGameOverReturn();
+      return;
+    }
+    if (gameState === "WIN") {
+      if (currentHoleIndex === LEVELS.length - 1) {
+        returnToMainMenu();
+      } else {
+        handleNextHole();
+      }
+      return;
+    }
+    // Last attempt: reset disabled during last attempt's flight, ball must play out (attemptsLeft ===0)
+    if (getAttemptsLeft() === 0) {
+      return;
+    }
+    resetBall();
+  }
+  if (pauseResetAttemptBtnDom) pauseResetAttemptBtnDom.addEventListener("click", handlePauseResetAttempt);
+  // expose for tests / external callers
+  if (typeof window !== 'undefined') {
+    window.__handlePauseResetAttempt = handlePauseResetAttempt;
+    window.handlePauseResetAttempt = handlePauseResetAttempt;
+  }
   // legacy alias
   const newGameBtnDom = document.getElementById("new-game-button");
   if (newGameBtnDom) newGameBtnDom.addEventListener("click", () => { /* New Game shows course list, not End Run */ });

@@ -199,7 +199,13 @@ body {
   paint-order: stroke fill;
   text-shadow: 0 1px 6px rgba(0,0,0,0.35);
 }
-#resume-button {
+#resume-button,
+#pause-reset-attempt-button,
+#end-run-button,
+#pause-end-run-button {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
   padding: 10px 24px;
   font: 700 14px system-ui, sans-serif;
   color: white;
@@ -207,26 +213,23 @@ body {
   border: 2px solid rgba(255,255,255,0.85);
   border-radius: 8px;
   cursor: pointer;
-  min-width: 140px;
   transition: background 0.15s;
   -webkit-text-stroke: 2px rgba(0,0,0,0.65);
   paint-order: stroke fill;
+  box-sizing: border-box;
+  text-align: center;
+  white-space: nowrap;
 }
-#resume-button:hover { background: rgba(255,255,255,0.22); }
-#end-run-button, #pause-end-run-button {
-  padding: 10px 24px;
-  font: 700 14px system-ui, sans-serif;
-  color: white;
-  background: #e74c3c;
-  border: 2px solid #c0392b;
-  border-radius: 8px;
-  cursor: pointer;
-  min-width: 140px;
-  transition: background 0.15s;
-  -webkit-text-stroke: 2px rgba(0,0,0,0.65);
-  paint-order: stroke fill;
+#resume-button:hover,
+#pause-reset-attempt-button:hover,
+#end-run-button:hover,
+#pause-end-run-button:hover { background: rgba(255,255,255,0.22); }
+/* Ensure pause menu buttons are equal width and visually identical — overrides any prior red styling for End Run inside pause overlay */
+#pause-overlay .pause-content button {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
 }
-#end-run-button:hover, #pause-end-run-button:hover { background: #c0392b; }
 
 #main-menu-overlay {
   position: absolute;
