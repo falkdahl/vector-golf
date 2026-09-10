@@ -16,15 +16,18 @@
     <canvas id="game" width="1280" height="720"></canvas>
     <canvas id="wind-canvas"></canvas>
     <div id="bottom-bar">
-      <div id="golfbag-container" title="Golf bag — click to toggle inventory" aria-label="Golf bag — click to toggle" role="button" tabindex="0">
-        <img id="golfbag-icon" src="./img/golfbag.png" alt="golfbag">
+      <div id="golfbag-wrapper">
+        <div id="golfbag-container" title="Golf bag — click to toggle inventory (I)" aria-label="Golf bag — click to toggle" role="button" tabindex="0">
+          <img id="golfbag-icon" src="./img/golfbag.png" alt="golfbag">
+        </div>
+        <span class="golfbag-hotkey">I</span>
       </div>
       <div id="hotbar">
         <div id="hotbar-grid">
-          <div class="hotbar-slot" data-type="amplify" title="Amplify (1)"><span class="hotbar-icon">»</span><span class="hotbar-count">x1</span></div>
-          <div class="hotbar-slot" data-type="nullify" title="Nullify (2)"><span class="hotbar-icon">∅</span><span class="hotbar-count">x1</span></div>
-          <div class="hotbar-slot" data-type="flip" title="Flip (3)"><span class="hotbar-icon">⇄</span><span class="hotbar-count">x1</span></div>
-          <div class="hotbar-slot" data-type="rotate" title="Rotate (4)"><span class="hotbar-icon">↻</span><span class="hotbar-count">x1</span></div>
+          <div class="hotbar-slot" data-type="amplify" title="Amplify (1)"><span class="hotbar-icon">»</span><span class="hotbar-count">x1</span><span class="hotbar-hotkey">1</span></div>
+          <div class="hotbar-slot" data-type="nullify" title="Nullify (2)"><span class="hotbar-icon">∅</span><span class="hotbar-count">x1</span><span class="hotbar-hotkey">2</span></div>
+          <div class="hotbar-slot" data-type="flip" title="Flip (3)"><span class="hotbar-icon">⇄</span><span class="hotbar-count">x1</span><span class="hotbar-hotkey">3</span></div>
+          <div class="hotbar-slot" data-type="rotate" title="Rotate (4)"><span class="hotbar-icon">↻</span><span class="hotbar-count">x1</span><span class="hotbar-hotkey">4</span></div>
         </div>
       </div>
     </div>

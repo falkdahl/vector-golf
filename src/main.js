@@ -195,9 +195,9 @@ let isDragging = false;
 let isHotbarCollapsed = false;
 function isHotbarCollapsedState() { return isHotbarCollapsed; }
 function syncHotbarCollapsedUI() {
-  if (!hotbarEl) return;
-  hotbarEl.classList.toggle("collapsed", isHotbarCollapsed);
+  if (hotbarEl) hotbarEl.classList.toggle("collapsed", isHotbarCollapsed);
   if (golfbagContainerEl) {
+    golfbagContainerEl.classList.toggle("collapsed", isHotbarCollapsed);
     golfbagContainerEl.setAttribute("aria-expanded", String(!isHotbarCollapsed));
     golfbagContainerEl.title = isHotbarCollapsed ? "Golf bag — click to open" : "Golf bag — click to collapse";
   }
