@@ -38,19 +38,19 @@ function isInsideAnyModifier(x, y) {
   }
   return false;
 }
-function isInsideNullify(x, y) {
+function isInsideLiquifier(x, y) {
   for (const m of currentModifiers) {
-    if (m.type !== 'nullify') continue;
+    if (m.type !== 'liquifier' && m.type !== 'nullify') continue;
     const r = m.radius ?? 54;
     if (Math.hypot(x - m.x, y - m.y) < r) return true;
   }
   return false;
 }
-function getNonNullifyModifiers() {
-  return currentModifiers.filter(m => m.type !== 'nullify');
+function getNonLiquifierModifiers() {
+  return currentModifiers.filter(m => m.type !== 'liquifier' && m.type !== 'nullify');
 }
-function isInsideNonNullify(x, y) {
-  for (const m of getNonNullifyModifiers()) {
+function isInsideNonLiquifier(x, y) {
+  for (const m of getNonLiquifierModifiers()) {
     const r = m.radius ?? 54;
     if (Math.hypot(x - m.x, y - m.y) < r) return true;
   }
@@ -58,7 +58,7 @@ function isInsideNonNullify(x, y) {
 }
 function isInsideFlip(x, y) {
   for (const m of currentModifiers) {
-    if (m.type !== 'flip') continue;
+    if (m.type !== 'deflector' && m.type !== 'flip') continue;
     const r = m.radius ?? 54;
     if (Math.hypot(x - m.x, y - m.y) < r) return true;
   }
@@ -66,14 +66,17 @@ function isInsideFlip(x, y) {
 }
 function isInsideAmplify(x, y) {
   for (const m of currentModifiers) {
-    if (m.type !== 'amplify') continue;
+    if (m.type !== 'magnifier' && m.type !== 'amplify') continue;
     const r = m.radius ?? 54;
     if (Math.hypot(x - m.x, y - m.y) < r) return true;
   }
   return false;
 }
+// legacy aliases
+const isInsideDeflector = isInsideFlip;
+const isInsideMagnifier = isInsideAmplify;
 function randomPointInUnion() {
-  const mods = getNonNullifyModifiers();
+  const mods = getNonLiquifierModifiers();
   if (!mods.length) return null;
   // Compute bounding box of union of non-nullify modifiers only
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -96,7 +99,7 @@ function randomPointInUnion() {
       const r = m.radius ?? 54;
       if (Math.hypot(x - m.x, y - m.y) < r) { inside = true; break; }
     }
-    if (inside && !isInsideNullify(x, y)) return { x, y };
+    if (inside && !isInsideLiquifier(x, y)) return { x, y };
   }
   // Fallback: pick random non-nullify modifier and random point inside it (outside nullify)
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -105,7 +108,7 @@ function randomPointInUnion() {
     const ang = Math.random() * Math.PI * 2;
     const x = m.x + r * Math.cos(ang);
     const y = m.y + r * Math.sin(ang);
-    if (!isInsideNullify(x, y)) return { x, y };
+    if (!isInsideLiquifier(x, y)) return { x, y };
   }
   return null;
 }
@@ -591,14 +594,14 @@ export function updateWindUniforms(dt, getWindAt) {
         p.trail[t].y = p.y;
       }
     }
-    // For flip: despawn on hitting and spawn behind flip per new requirement
+    // For deflector: despawn on hitting and spawn behind flip per new requirement
     if (!respawned) {
       const wasInsideFlip = isInsideFlip(prevX, prevY);
       const nowInsideFlip = isInsideFlip(p.x, p.y);
       if (!wasInsideFlip && nowInsideFlip) {
         let hitFlip = null;
         for (const m of currentModifiers) {
-          if (m.type === 'flip' && Math.hypot(p.x - m.x, p.y - m.y) < (m.radius ?? 54)) { hitFlip = m; break; }
+          if (m.type === 'deflector' && Math.hypot(p.x - m.x, p.y - m.y) < (m.radius ?? 54)) { hitFlip = m; break; }
         }
         if (hitFlip) {
           const r = hitFlip.radius ?? 54;
@@ -729,10 +732,10 @@ export function setWindUniformsFromField(components, modifiers, windStrength) {
         uniforms.uModifierPos.value[i].set(m.x, m.y);
         uniforms.uModifierRadius.value[i] = m.radius ?? 54;
         let t = 0;
-        if (m.type === 'nullify') t = 1;
-        else if (m.type === 'flip') t = 2;
-        else if (m.type === 'rotate') t = 3;
-        else t = 0;
+        if (m.type === 'liquifier' || m.type === 'nullify') t = 1;
+        else if (m.type === 'deflector' || m.type === 'flip') t = 2;
+        else if (m.type === 'rotator' || m.type === 'rotate') t = 3;
+        else t = 0; // magnifier/amplify
         uniforms.uModifierType.value[i] = t;
       } else {
         uniforms.uModifierPos.value[i].set(0, 0);

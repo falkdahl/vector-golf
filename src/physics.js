@@ -1,4 +1,4 @@
-import { isInsideNullify } from "./vectorField.js";
+import { isInsideLiquifier } from "./vectorField.js";
 
 // Tunable constants at top per REQ-005 - tuned for very high wind acceleration - fast
 // Visual air arc: ball goes up, casts shadow, bounces on ground (radius kept small)
@@ -66,7 +66,7 @@ export function resetBall(tee) {
 export function updateBall(dt, getWindAt, windStrength, canvasW, canvasH) {
   if (!ball.isMoving) return { status: "idle" };
 
-  // --- Vertical air arc (independent of wind/nullify) ---
+  // --- Vertical air arc (independent of wind/liquifier) ---
   ball.vz -= GRAVITY * dt;
   ball.z += ball.vz * dt;
   if (ball.z <= 0) {
@@ -84,8 +84,8 @@ export function updateBall(dt, getWindAt, windStrength, canvasW, canvasH) {
   // Clamp z
   if (ball.z < 0) ball.z = 0;
 
-  // Nullify: keep same direction and speed as when entered - no wind, no friction per REQ-017 (horizontal only)
-  if (isInsideNullify(ball.pos.x, ball.pos.y)) {
+  // Liquifier: keep same direction and speed as when entered - no wind, no friction per REQ-017 (horizontal only, legacy Nullify)
+  if (isInsideLiquifier(ball.pos.x, ball.pos.y)) {
     ball.pos.x += ball.vel.x * dt;
     ball.pos.y += ball.vel.y * dt;
     return { status: "moving", z: ball.z, vz: ball.vz, isAirborne: ball.z > 0.5 };

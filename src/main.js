@@ -397,8 +397,16 @@ function resetHotbarCollapsed() {
   syncHotbarCollapsedUI();
 }
 
-// Supply per REQ-020: per-type inventory, starts with one of each spatial + 0 freeShot on new game
-let supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
+// Supply per REQ-020: per-type inventory, starts with one of each spatial + 0 freeShot on new game (renamed: magnifier←amplify, liquifier←nullify, deflector←flip, rotator←rotate)
+let supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
+function normalizeSupplyType(type) {
+  if (type === 'amplify') return 'magnifier';
+  if (type === 'nullify') return 'liquifier';
+  if (type === 'flip') return 'deflector';
+  if (type === 'rotate') return 'rotator';
+  return type;
+}
+function denormalizeSupplyType(type) { return type; } // kept for alias checks
 let isFreeShotActive = false;
 let freeShotFlightActive = false;
 function isFreeShotActiveState() { return isFreeShotActive; }
@@ -467,23 +475,26 @@ function clearFreeShotFlightGlow() {
 }
 
 function canPlace(type) {
-  if (!type || !(type in supply)) return false;
-  if (type === 'freeShot') return false;
-  return (supply[type] ?? 0) > 0;
+  const t = normalizeSupplyType(type);
+  if (!t || !(t in supply)) return false;
+  if (t === 'freeShot') return false;
+  return (supply[t] ?? 0) > 0;
 }
 
 function getSupply() {
-  return { ...supply };
+  // Return with legacy aliases for backward compat tests that check old keys
+  return { ...supply, amplify: supply.magnifier, nullify: supply.liquifier, flip: supply.deflector, rotate: supply.rotator };
 }
 
 function addToSupply(type, n = 1) {
-  if (!(type in supply)) return;
-  supply[type] = Math.max(0, supply[type] + n);
+  const t = normalizeSupplyType(type);
+  if (!(t in supply)) return;
+  supply[t] = Math.max(0, supply[t] + n);
   updateHotbarUI();
 }
 
 function resetSupply() {
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
   clearFreeShotGlow();
   updateHotbarUI();
 }
@@ -507,7 +518,7 @@ const BASE_MODIFIER_RADIUS = MODIFIER_RADIUS; // 54 base per REQ-015 (reduced 40
 const BASE_MODIFIER_STRENGTH = 5;
 let areaUpgradeCount = 0; // legacy alias — mirrors fieldExtenderCount
 let fieldExtenderCount = 0; // new name, 0 on new game, +10% radius per stack
-let powerCellCount = 0; // new — +10% wind strength per stack for amplify/flip/rotate
+let powerCellCount = 0; // new — +10% wind strength per stack for magnifier/deflector/rotator (legacy amplify/flip/rotate)
 function getAreaUpgradeCount() { return fieldExtenderCount; }
 function getFieldExtenderCount() { return fieldExtenderCount; }
 function getPowerCellCount() { return powerCellCount; }
@@ -595,15 +606,15 @@ function loadProgress() {
       // ignore legacy 
     }
     supply = {
-      amplify: Math.max(0, Math.floor(d.supply?.amplify ?? 1)),
-      nullify: Math.max(0, Math.floor(d.supply?.nullify ?? 1)),
-      flip: Math.max(0, Math.floor(d.supply?.flip ?? 1)),
-      rotate: Math.max(0, Math.floor(d.supply?.rotate ?? 1)),
+      magnifier: Math.max(0, Math.floor(d.supply?.magnifier ?? d.supply?.amplify ?? 1)),
+      liquifier: Math.max(0, Math.floor(d.supply?.liquifier ?? d.supply?.nullify ?? 1)),
+      deflector: Math.max(0, Math.floor(d.supply?.deflector ?? d.supply?.flip ?? 1)),
+      rotator: Math.max(0, Math.floor(d.supply?.rotator ?? d.supply?.rotate ?? 1)),
       freeShot: Math.max(0, Math.floor(d.supply?.freeShot ?? 0))
     };
     // migrated: if missing freeShot/rotate, default 0/1
     if (d.supply && d.supply.freeShot === undefined) supply.freeShot = 0;
-    if (d.supply && d.supply.rotate === undefined) supply.rotate = 1;
+    if (d.supply && d.supply.rotator === undefined) supply.rotator = 1;
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
     try { setWindFreeShotActive(isFreeShotActive); } catch {};
     // Field Extender: support both legacy areaUpgradeCount and new fieldExtenderCount
@@ -615,8 +626,8 @@ function loadProgress() {
     try { setFieldPowerCellCount(powerCellCount); } catch {};
     rewardPending = !!d.rewardPending;
     rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length === 3 ? [...d.rewardOffered] : [];
-    // migrate legacy /maxAttempts offers to freeShot
-    rewardOffered = rewardOffered.map(t => t === '' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t);
+    // migrate legacy /maxAttempts offers to freeShot and legacy modifier names to new names
+    rewardOffered = rewardOffered.map(t => t === '' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t === 'amplify' ? 'magnifier' : t === 'nullify' ? 'liquifier' : t === 'flip' ? 'deflector' : t === 'rotate' ? 'rotator' : t);
     rewardRerolled = !!d.rewardRerolled;
     rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length === 3;
     rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
@@ -640,9 +651,10 @@ function loadProgress() {
     }
     if (Array.isArray(d.modifiers)) {
       const effR = getEffectiveModifierRadius();
+      const normType = (t) => t === 'amplify' ? 'magnifier' : t === 'nullify' ? 'liquifier' : t === 'flip' ? 'deflector' : t === 'rotate' ? 'rotator' : t;
       modifiers = d.modifiers.filter(m => m && typeof m.x === 'number' && typeof m.y === 'number' && typeof m.type === 'string').map(m => ({
         id: m.id ?? (Date.now() + Math.random()),
-        type: m.type,
+        type: normType(m.type),
         x: Math.max(0, Math.min(LOGICAL_W, Number(m.x))),
         y: Math.max(0, Math.min(LOGICAL_H, Number(m.y))),
         radius: effR
@@ -657,11 +669,17 @@ function loadProgress() {
       for (const k of Object.keys(rewardChosenCounts)) {
         if (k in d.rewardChosenCounts) rewardChosenCounts[k] = Math.max(0, Math.floor(d.rewardChosenCounts[k] || 0));
       }
+      // legacy mapping for old modifier names
+      if ('amplify' in d.rewardChosenCounts && !('magnifier' in d.rewardChosenCounts)) rewardChosenCounts.magnifier = Math.max(0, Math.floor(d.rewardChosenCounts.amplify || 0));
+      if ('nullify' in d.rewardChosenCounts && !('liquifier' in d.rewardChosenCounts)) rewardChosenCounts.liquifier = Math.max(0, Math.floor(d.rewardChosenCounts.nullify || 0));
+      if ('flip' in d.rewardChosenCounts && !('deflector' in d.rewardChosenCounts)) rewardChosenCounts.deflector = Math.max(0, Math.floor(d.rewardChosenCounts.flip || 0));
+      if ('rotate' in d.rewardChosenCounts && !('rotator' in d.rewardChosenCounts)) rewardChosenCounts.rotator = Math.max(0, Math.floor(d.rewardChosenCounts.rotate || 0));
     } else if (d.version === 1) {
       // Derive from existing counters for old saves
-      rewardChosenCounts.amplify = Math.max(0, Math.floor(d.supply?.amplify || supply.amplify || 0));
-      rewardChosenCounts.nullify = Math.max(0, Math.floor(d.supply?.nullify || supply.nullify || 0));
-      rewardChosenCounts.flip = Math.max(0, Math.floor(d.supply?.flip || supply.flip || 0));
+      rewardChosenCounts.magnifier = Math.max(0, Math.floor(d.supply?.magnifier ?? d.supply?.amplify ?? supply.magnifier ?? 0));
+      rewardChosenCounts.liquifier = Math.max(0, Math.floor(d.supply?.liquifier ?? d.supply?.nullify ?? supply.liquifier ?? 0));
+      rewardChosenCounts.deflector = Math.max(0, Math.floor(d.supply?.deflector ?? d.supply?.flip ?? supply.deflector ?? 0));
+      rewardChosenCounts.rotator = Math.max(0, Math.floor(d.supply?.rotator ?? d.supply?.rotate ?? supply.rotator ?? 0));
       const derivedField = Math.max(0, Math.floor((d.fieldExtenderCount ?? d.areaUpgradeCount) || fieldExtenderCount || areaUpgradeCount || 0));
       rewardChosenCounts.areaUp = derivedField;
       rewardChosenCounts.fieldExtender = derivedField;
@@ -688,7 +706,7 @@ function clearProgress() {
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
 let pauseMenuVisible = false;
 let pauseMenuHover = null;
-let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+let rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
 function getRewardChosenCounts() { return { ...rewardChosenCounts }; }
 function getRewardChosenCount(type) { return Math.max(0, Math.floor(rewardChosenCounts[type] || 0)); }
 function setRewardChosenCounts(obj) {
@@ -710,7 +728,7 @@ function startNewGame() {
   // Generate fresh 18 levels with increasing difficulty per REQ-010
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
   clearFreeShotGlow();
   hideSoftlockBanner();
   resetSoftlockDetection();
@@ -718,7 +736,7 @@ function startNewGame() {
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0);
   gameState = "AIMING";
@@ -1026,14 +1044,14 @@ function handleCoursePlay(courseId) {
   setActiveCourse(course);
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1393,11 +1411,11 @@ function startNewGameFromMain() {
   clearProgress();
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1411,7 +1429,7 @@ function endRun() {
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
@@ -1419,7 +1437,7 @@ function endRun() {
   freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
   hideSoftlockBanner();
   resetSoftlockDetection();
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
@@ -1509,9 +1527,9 @@ function bounceBall(hit, isEdge) {
 
 // Reward menu per REQ-09 : hole-start (except hole 1) + treasure near tree - 3 random of 5 pool (bouncy removed, maxAttempts replaced by freeShot Supply +3, trees always bounce)
 // Campaign deterministic rewards (12-campaign): single campaignSeed controls all offers including rerolls via seeded shuffle + counter
-const REWARD_POOL = ['amplify', 'nullify', 'flip', 'rotate', 'freeShot', 'fieldExtender', 'powerCell'];
+const REWARD_POOL = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'fieldExtender', 'powerCell'];
 // keep legacy alias for backward compat tests
-const REWARD_POOL_LEGACY = ['amplify', 'nullify', 'flip', 'rotate', 'freeShot', 'areaUp'];
+const REWARD_POOL_LEGACY = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'areaUp'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
 let rewardMenuHover = null; // hovered type for visual feedback
@@ -1548,7 +1566,7 @@ function getSeededRewardOffer() {
   const seedStr = cs + ':' + rewardSeedCounter;
   rewardSeedCounter++;
   // Field Extender and Power Cell share one slot (combined) with same probability as other items, never together
-  const basePool = ['amplify','nullify','flip','rotate','freeShot'];
+  const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
   const effectivePool = [...basePool, 'COMBINED'];
   seededShuffle(effectivePool, seedStr);
   let offer = effectivePool.slice(0, 3);
@@ -1568,7 +1586,7 @@ function getSeededRewardOffer() {
       const pick = notInOffer[Math.floor(rr * notInOffer.length)];
       offer[dupIdx] = pick;
     } else {
-      offer[dupIdx] = 'amplify';
+      offer[dupIdx] = 'magnifier';
     }
   }
   return offer;
@@ -1577,7 +1595,7 @@ function getSeededRerollOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':reroll:' + rewardSeedCounter;
   rewardSeedCounter++;
-  const basePool = ['amplify','nullify','flip','rotate','freeShot'];
+  const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
   const effectivePool = [...basePool, 'COMBINED'];
   seededShuffle(effectivePool, seedStr);
   let offer = effectivePool.slice(0, 3);
@@ -1596,7 +1614,7 @@ function getSeededRerollOffer() {
       const pick = notInOffer[Math.floor(rr * notInOffer.length)];
       offer[dupIdx] = pick;
     } else {
-      offer[dupIdx] = 'amplify';
+      offer[dupIdx] = 'magnifier';
     }
   }
   return offer;
@@ -1727,39 +1745,39 @@ function syncRewardOverlay() {
     // Build buttons
     btnContainer.innerHTML = '';
     const iconMap = {
-      amplify: './img/amplify-icon.png',
-      nullify: './img/nullify-icon.png',
-      flip: './img/flip-icon.png',
-      rotate: './img/rotate-icon.png',
+      magnifier: './img/magnifier-icon.png',
+      liquifier: './img/liquifier-icon.png',
+      deflector: './img/deflector-icon.png',
+      rotator: './img/rotator-icon.png',
       fieldExtender: './img/field-extender-icon.png',
       areaUp: './img/field-extender-icon.png',
       powerCell: './img/power-cell-icon.png'
     };
     const labelMap = {
-      amplify: 'Amplify',
-      nullify: 'Nullify',
-      flip: 'Flip',
-      rotate: 'Rotate',
+      magnifier: 'Magnifier',
+      liquifier: 'Liquifier',
+      deflector: 'Deflector',
+      rotator: 'Rotator',
       freeShot: 'Free Shot',
       fieldExtender: 'Field Extender',
       areaUp: 'Field Extender',
       powerCell: 'Power Cell'
     };
     const hintMap = {
-      amplify: '+1 to supply',
-      nullify: '+1 to supply',
-      flip: '+1 to supply',
-      rotate: '+1 to supply',
+      magnifier: '+1 to supply',
+      liquifier: '+1 to supply',
+      deflector: '+1 to supply',
+      rotator: '+1 to supply',
       freeShot: 'Supply +3',
       fieldExtender: '+15% area',
       areaUp: '+15% area',
       powerCell: '+15% strength'
     };
     const colorMap = {
-      amplify: '#e67e22',
-      nullify: '#3498db',
-      flip: '#9b59b6',
-      rotate: '#e74c3c',
+      magnifier: '#e67e22',
+      liquifier: '#3498db',
+      deflector: '#9b59b6',
+      rotator: '#e74c3c',
       freeShot: '#f1c40f',
       fieldExtender: '#808080',
       areaUp: '#808080',
@@ -1788,7 +1806,7 @@ function syncRewardOverlay() {
           img.style.display = 'none';
           const fb = document.createElement('div');
           fb.className = 'reward-button-icon fallback';
-          const sym = type==='amplify'?'\u00BB': type==='nullify'?'\u2205': type==='flip'?'\u21C4': type==='rotate'?'\u21BB': type==='fieldExtender'?'\u25EF': type==='powerCell'?'\u26A1': '•';
+          const sym = type==='magnifier'?'\u00BB': type==='liquifier'?'\u2205': type==='deflector'?'\u21C4': type==='rotator'?'\u21BB': type==='fieldExtender'?'\u25EF': type==='powerCell'?'\u26A1': '•';
           fb.textContent = sym;
           btn.insertBefore(fb, img);
         };
@@ -2036,9 +2054,11 @@ function updateSoftlockDetection(dt) {
 
 function claimReward(type) {
   if (!rewardMenuVisible) return false;
-  // support legacy areaUp alias
-  const normalized = type === 'areaUp' ? 'fieldExtender' : type;
-  if (!rewardOffered.includes(type) && !rewardOffered.includes(normalized)) return false;
+  // support legacy aliases (amplify→magnifier, nullify→liquifier, flip→deflector, rotate→rotator, areaUp→fieldExtender)
+  const legacyNormalize = (t) => t === 'areaUp' ? 'fieldExtender' : (t === 'amplify' ? 'magnifier' : t === 'nullify' ? 'liquifier' : t === 'flip' ? 'deflector' : t === 'rotate' ? 'rotator' : t);
+  const normalized = legacyNormalize(type);
+  const normOffered = rewardOffered.map(legacyNormalize);
+  if (!rewardOffered.includes(type) && !normOffered.includes(normalized)) return false;
   // Idempotent: only once per trigger (rewardMenuVisible guards double-click)
   if (type === 'freeShot' || normalized === 'freeShot') {
     addToSupply('freeShot', 3); // Free Shoot Supply +3
@@ -2175,7 +2195,7 @@ function loadLevel(index) {
 function initLevel() {
   // REQ-020/022/023/024 + REQ-09 hole-start + treasure + REQ-025 reroll + REQ-028 pause stats: hole 1 no award before first attempt, holes >0 reward before first attempt
   if (currentHoleIndex === 0) {
-    supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
+    supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
     clearFreeShotGlow();
     maxAttempts = 10; 
   areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
@@ -2187,7 +2207,7 @@ function initLevel() {
     rewardRerollHover = false;
     pauseMenuVisible = false;
     pauseMenuHover = null;
-    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+    rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
     const pauseOverlay = document.getElementById("pause-overlay");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
   } else {
@@ -2358,7 +2378,7 @@ function handleGameOverReturn() {
   totalAttempts = 0;
   attempts = 0;
   maxAttempts = 10;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
   clearFreeShotGlow();
   areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
   rewardPending = false;
@@ -2380,7 +2400,7 @@ function handleGameOverReturn() {
   isInLevelPause = false;
   courseMenuVisible = false;
   helpVisible = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   // Avoid heavy field generation when returning to main menu after Game Over — defer to next course play
   _lastCourseListSig = null;
   syncMainMenu();
@@ -2463,7 +2483,7 @@ function placeModifier(x, y) {
     updateHotbarUI();
     return;
   }
-  const type = selectedModifier;
+  const type = normalizeSupplyType(selectedModifier);
   supply[type] = Math.max(0, (supply[type] ?? 0) - 1);
   modifiers.push({ id: Date.now() + Math.random(), type, x, y, radius: getEffectiveModifierRadius() });
   syncModifiersToField();
@@ -2478,8 +2498,11 @@ function removeModifierAt(x, y) {
   const idx = modifiers.findIndex(m => Math.hypot(m.x - x, m.y - y) < m.radius);
   if (idx !== -1) {
     const [removed] = modifiers.splice(idx, 1);
-    if (removed && removed.type && removed.type in supply) {
-      supply[removed.type] = Math.max(0, (supply[removed.type] ?? 0) + 1);
+    if (removed && removed.type) {
+      const t = normalizeSupplyType(removed.type);
+      if (t in supply) {
+        supply[t] = Math.max(0, (supply[t] ?? 0) + 1);
+      }
     }
     syncModifiersToField();
     updateHotbarUI();
@@ -2609,7 +2632,7 @@ function returnToMainMenu() {
   holeAttempts = 0;
   totalAttempts = 0;
   attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
   clearFreeShotGlow();
   maxAttempts = 10; 
   areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
@@ -2628,7 +2651,7 @@ function returnToMainMenu() {
   resetSoftlockDetection();
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
@@ -2676,7 +2699,7 @@ function resetGameAfterWin() {
   totalAttempts = 0;
   attempts = 0;
   // REQ-020/022/023/024: reset supply to one of each on new game, no award before first attempt
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
   clearFreeShotGlow();
   maxAttempts = 10; 
   areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
@@ -2690,7 +2713,7 @@ function resetGameAfterWin() {
   rewardRerollHover = false;
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
   loadLevel(currentHoleIndex);
@@ -3578,8 +3601,8 @@ function init() {
   pauseMenuVisible = false; rewardMenuVisible = false;
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
-  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  supply = { magnifier: 1, liquifier: 1, deflector: 1, rotator: 1, freeShot: 0 };
+  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   rewardPending = false; rewardOffered = []; rewardRerolled = false;
   resetHotbarCollapsed();
   updateAttemptsUI(); updateHotbarUI(); updateForceBar();
@@ -3647,7 +3670,7 @@ function init() {
         if (mainMenuVisible) return;
         if (gameState !== "AIMING" && gameState !== "CHARGING") return;
         const type = slot.dataset.type;
-        // Free Shot is no longer in hotbar; treat all remaining types (amplify/nullify/flip/rotate) uniformly
+        // Free Shot is no longer in hotbar; treat all remaining types (magnifier/liquifier/deflector/rotator (legacy amplify/nullify/flip/rotate)) uniformly
         if (type === 'freeShot') {
           // Legacy freeShot slot should not exist; ignore
           return;
@@ -3962,23 +3985,23 @@ function init() {
       }
     }
     if (e.code === "Digit1") {
-      if (selectedModifier === 'amplify') selectedModifier = null;
-      else selectedModifier = 'amplify';
+      if (selectedModifier === 'liquifier') selectedModifier = null;
+      else selectedModifier = 'liquifier';
       updateHotbarUI();
       e.preventDefault();
     } else if (e.code === "Digit2") {
-      if (selectedModifier === 'nullify') selectedModifier = null;
-      else selectedModifier = 'nullify';
+      if (selectedModifier === 'deflector') selectedModifier = null;
+      else selectedModifier = 'deflector';
       updateHotbarUI();
       e.preventDefault();
     } else if (e.code === "Digit3") {
-      if (selectedModifier === 'flip') selectedModifier = null;
-      else selectedModifier = 'flip';
+      if (selectedModifier === 'rotator') selectedModifier = null;
+      else selectedModifier = 'rotator';
       updateHotbarUI();
       e.preventDefault();
     } else if (e.code === "Digit4") {
-      if (selectedModifier === 'rotate') selectedModifier = null;
-      else selectedModifier = 'rotate';
+      if (selectedModifier === 'magnifier') selectedModifier = null;
+      else selectedModifier = 'magnifier';
       updateHotbarUI();
       e.preventDefault();
     } else if ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH")) {
@@ -4226,9 +4249,10 @@ function init() {
 // Helpers for REQ-020 testing / external acquisition
 function setSupply(newSupply) {
   supply = {
-    amplify: Math.max(0, newSupply.amplify ?? 0),
-    nullify: Math.max(0, newSupply.nullify ?? 0),
-    flip: Math.max(0, newSupply.flip ?? 0),
+    magnifier: Math.max(0, newSupply.magnifier ?? newSupply.amplify ?? 0),
+    liquifier: Math.max(0, newSupply.liquifier ?? newSupply.nullify ?? 0),
+    deflector: Math.max(0, newSupply.deflector ?? newSupply.flip ?? 0),
+    rotator: Math.max(0, newSupply.rotator ?? newSupply.rotate ?? 0),
     freeShot: Math.max(0, newSupply.freeShot ?? 0),
   };
   updateHotbarUI();

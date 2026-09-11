@@ -1,4 +1,4 @@
-import { modifiers as vfModifiers, isInsideNullify as vfIsInsideNullify } from "./vectorField.js";
+import { modifiers as vfModifiers, isInsideLiquifier as vfIsInsideNullify } from "./vectorField.js";
 import { terrainZoneAt, TERRAIN_COLORS, attachNoiseToTerrain } from "./terrain.js";
 
 let canvasW = 1280;
@@ -17,10 +17,10 @@ export function isSplashLoaded() { return splashImg.complete && splashImg.natura
 
 // Reward menu icons - use ./img icons for hotbar/reward, keep field canvas text icons
 const rewardIconPaths = {
-  amplify: './img/amplify-icon.png',
-  nullify: './img/nullify-icon.png',
-  flip: './img/flip-icon.png',
-  rotate: './img/rotate-icon.png',
+  magnifier: './img/magnifier-icon.png',
+  liquifier: './img/liquifier-icon.png',
+  deflector: './img/deflector-icon.png',
+  rotator: './img/rotator-icon.png',
   fieldExtender: './img/field-extender-icon.png',
   areaUp: './img/field-extender-icon.png',
   powerCell: './img/power-cell-icon.png'
@@ -41,7 +41,7 @@ export function toggleWind() {
   showWind = !showWind;
 }
 
-function isInsideNullify(x, y) {
+function isInsideLiquifier(x, y) {
   try { return vfIsInsideNullify(x, y); } catch { return false; }
 }
 function isInsideAnyModifier(x, y) {
@@ -55,12 +55,14 @@ function isInsideAnyModifier(x, y) {
 function isInsideFlip(x, y) {
   try {
     for (const m of vfModifiers) {
-      if (m.type !== 'flip') continue;
+      if (m.type !== 'deflector' && m.type !== 'flip') continue;
       if (Math.hypot(x - m.x, y - m.y) < (m.radius ?? 54)) return true;
     }
   } catch {}
   return false;
 }
+// legacy alias
+const isInsideDeflector = isInsideFlip;
 
 export function drawBackground(ctx, width, height, mode = 'terrain', level = null) {
   // Bottom canvas — mode 'splash' gfg-splash.png cover, otherwise draws zoned terrain with fixed palette
@@ -156,7 +158,7 @@ export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cel
       const alpha = 0.55 + normalizedMag * 0.40;
       const headSize = 4.5 + normalizedMag * 2;
       // Do not draw any arrows for nullify per new requirement
-      if (insideMod.type === 'nullify') continue;
+      if (insideMod.type === 'liquifier') continue;
       // White arrows for amplify/flip per latest request (good contrast on tinted modifier)
       const arrowColor = `rgba(255,255,245,${alpha})`;
       const outlineColor = `rgba(0,0,0,0.55)`;
@@ -692,22 +694,22 @@ export function drawForceBar(ctx, ball, charge) {
 export function drawModifiers(ctx, modifiers) {
   for (const mod of modifiers) {
     ctx.save();
-    if (mod.type === 'amplify') {
+    if (mod.type === 'magnifier') {
       ctx.fillStyle = "rgba(230,126,34,0.20)";
       ctx.strokeStyle = "rgba(230,126,34,0.9)";
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
-    } else if (mod.type === 'nullify') {
+    } else if (mod.type === 'liquifier') {
       ctx.fillStyle = "rgba(52,152,219,0.18)";
       ctx.strokeStyle = "rgba(52,152,219,0.9)";
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
-    } else if (mod.type === 'flip') {
+    } else if (mod.type === 'deflector') {
       ctx.fillStyle = "rgba(155,89,182,0.20)";
       ctx.strokeStyle = "rgba(155,89,182,0.9)";
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
-    } else if (mod.type === 'rotate') {
+    } else if (mod.type === 'rotator') {
       ctx.fillStyle = "rgba(231,76,60,0.20)";
       ctx.strokeStyle = "rgba(231,76,60,0.9)";
       ctx.lineWidth = 2;
@@ -719,8 +721,8 @@ export function drawModifiers(ctx, modifiers) {
     ctx.stroke();
     ctx.setLineDash([]);
     // icon - rotate red, others white (per updated requirement)
-    const icon = mod.type === 'amplify' ? "»" : mod.type === 'nullify' ? "∅" : mod.type === 'flip' ? "⇄" : mod.type === 'rotate' ? "↻" : "•";
-    const isRotate = mod.type === 'rotate';
+    const icon = mod.type === 'magnifier' ? "»" : mod.type === 'liquifier' ? "∅" : mod.type === 'deflector' ? "⇄" : mod.type === 'rotator' ? "↻" : "•";
+    const isRotate = mod.type === 'rotator';
     ctx.fillStyle = isRotate ? "#e74c3c" : "white";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
@@ -740,16 +742,16 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   if (blocked) {
     ctx.fillStyle = "rgba(120,120,120,0.20)";
     ctx.strokeStyle = "rgba(180,40,40,0.9)";
-  } else if (type === 'amplify') {
+  } else if (type === 'magnifier') {
     ctx.fillStyle = "rgba(230,126,34,0.25)";
     ctx.strokeStyle = "rgba(230,126,34,0.9)";
-  } else if (type === 'nullify') {
+  } else if (type === 'liquifier') {
     ctx.fillStyle = "rgba(52,152,219,0.25)";
     ctx.strokeStyle = "rgba(52,152,219,0.9)";
-  } else if (type === 'flip') {
+  } else if (type === 'deflector') {
     ctx.fillStyle = "rgba(155,89,182,0.25)";
     ctx.strokeStyle = "rgba(155,89,182,0.9)";
-  } else if (type === 'rotate') {
+  } else if (type === 'rotator') {
     ctx.fillStyle = "rgba(231,76,60,0.25)";
     ctx.strokeStyle = "rgba(231,76,60,0.9)";
   }
@@ -760,18 +762,18 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   ctx.fill();
   ctx.stroke();
   ctx.setLineDash([]);
-  const isRotatePreview = !blocked && type === 'rotate';
+  const isRotatePreview = !blocked && type === 'rotator';
   ctx.fillStyle = blocked ? "rgba(255,80,80,0.95)" : isRotatePreview ? "#e74c3c" : "white";
   // Add subtle stroke for red icon to ensure contrast on light fill
   if (isRotatePreview) {
     ctx.strokeStyle = "rgba(0,0,0,0.5)";
     ctx.lineWidth = 2.5;
-    ctx.strokeText(type === 'rotate' ? "↻" : "•", x, y);
+    ctx.strokeText(type === 'rotator' ? "↻" : "•", x, y);
   }
   ctx.font = "600 14px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const icon = blocked ? "✕" : type === 'amplify' ? "»" : type === 'nullify' ? "∅" : type === 'flip' ? "⇄" : type === 'rotate' ? "↻" : "•";
+  const icon = blocked ? "✕" : type === 'magnifier' ? "»" : type === 'liquifier' ? "∅" : type === 'deflector' ? "⇄" : type === 'rotator' ? "↻" : "•";
   ctx.fillText(icon, x, y);
   // blocked label
   if (blocked) {
@@ -783,10 +785,10 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
 }
 
 const REWARD_TYPE_DEFS = {
-  amplify: { icon: '»', label: 'Amplify', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.28)', fillHover: 'rgba(230,126,34,0.38)', hint: '+1 to supply' },
-  nullify: { icon: '∅', label: 'Nullify', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
-  flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
-  rotate: { icon: '↻', label: 'Rotate', color: '#e74c3c', border: 'rgba(231,76,60,0.9)', fill: 'rgba(231,76,60,0.28)', fillHover: 'rgba(231,76,60,0.38)', hint: '+1 to supply' },
+  magnifier: { icon: '»', label: 'Magnifier', color: '#e67e22', border: 'rgba(230,126,34,0.9)', fill: 'rgba(230,126,34,0.28)', fillHover: 'rgba(230,126,34,0.38)', hint: '+1 to supply' },
+  liquifier: { icon: '∅', label: 'Liquifier', color: '#3498db', border: 'rgba(52,152,219,0.9)', fill: 'rgba(52,152,219,0.28)', fillHover: 'rgba(52,152,219,0.38)', hint: '+1 to supply' },
+  deflector: { icon: '⇄', label: 'Deflector', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
+  rotator: { icon: '↻', label: 'Rotator', color: '#e74c3c', border: 'rgba(231,76,60,0.9)', fill: 'rgba(231,76,60,0.28)', fillHover: 'rgba(231,76,60,0.38)', hint: '+1 to supply' },
   freeShot: { icon: '★', label: 'Free Shoot', color: '#f1c40f', border: 'rgba(241,196,15,0.9)', fill: 'rgba(241,196,15,0.28)', fillHover: 'rgba(241,196,15,0.38)', hint: 'Supply +3' },
   areaUp: { icon: '◯', label: 'Field Extender', color: '#808080', border: 'rgba(128,128,128,0.9)', fill: 'rgba(128,128,128,0.28)', fillHover: 'rgba(128,128,128,0.38)', hint: '+15% area' },
   fieldExtender: { icon: '◯', label: 'Field Extender', color: '#808080', border: 'rgba(128,128,128,0.9)', fill: 'rgba(128,128,128,0.28)', fillHover: 'rgba(128,128,128,0.38)', hint: '+15% area' },
@@ -794,8 +796,8 @@ const REWARD_TYPE_DEFS = {
 };
 
 export function getRewardButtonsLayout(width, height, offered = null) {
-  // REQ-021/023: 3 random of 5 pool (bouncy removed); if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
-  const types = Array.isArray(offered) && offered.length === 3 ? offered : ['amplify', 'nullify', 'flip'];
+  // REQ-021/023: 3 random of 5 pool (bouncy removed); if offered null, fallback to default 3 (magnifier/liquifier/deflector) for backward compat (legacy amplify/nullify/flip)
+  const types = Array.isArray(offered) && offered.length === 3 ? offered : ['magnifier', 'liquifier', 'deflector'];
   const cardW = 520;
   const cardH = 360;
   const cardX = (width - cardW) / 2;
@@ -807,7 +809,7 @@ export function getRewardButtonsLayout(width, height, offered = null) {
   const startX = cardX + (cardW - totalBtnW) / 2;
   const btnY = cardY + 75;
   return types.map((type, i) => {
-    const def = REWARD_TYPE_DEFS[type] || REWARD_TYPE_DEFS.amplify;
+    const def = REWARD_TYPE_DEFS[type] || REWARD_TYPE_DEFS.magnifier;
     return {
       x: startX + i * (btnW + gap),
       y: btnY,
@@ -846,19 +848,19 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
     offered = offeredOrTotal;
   } else if (typeof offeredOrTotal === 'number' && hoveredType === null) {
     // old call with totalAttempts number, no hovered
-    offered = ['amplify', 'nullify', 'flip'];
+    offered = ['magnifier', 'liquifier', 'deflector'];
   } else if (Array.isArray(hoveredType)) {
     // shouldn't happen
     offered = offeredOrTotal;
     hovered = null;
   } else {
     // offeredOrTotal is offered array, hoveredType is hover string
-    offered = Array.isArray(offeredOrTotal) ? offeredOrTotal : ['amplify', 'nullify', 'flip'];
+    offered = Array.isArray(offeredOrTotal) ? offeredOrTotal : ['magnifier', 'liquifier', 'deflector'];
     // hoveredType already set
   }
   // Ensure 3 distinct
   if (!Array.isArray(offered) || offered.length !== 3) {
-    offered = ['amplify', 'nullify', 'flip'];
+    offered = ['magnifier', 'liquifier', 'deflector'];
   }
   ctx.save();
   // Dim background full canvas - preserves green context but ensures contrast

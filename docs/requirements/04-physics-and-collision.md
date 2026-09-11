@@ -15,7 +15,7 @@
 Order per tick:
 
 1. **Sample wind** `wind = getWindAt(pos)` (includes live modifiers, see `06-wind-system.md` §7). Wind is scaled with `WIND_STRENGTH=180` (normative, per `06-wind-system.md` §1.4). Effective force `|wind|*WIND_STRENGTH` is very high so a ball slowed to `20 px/s` re-accelerates to `>80 px/s` within `0.3s`.
-2. **Nullify exception**: if inside a `nullify` modifier (`isInsideNullify`), **skip** both wind and friction for this tick; just `pos += vel*dt` preserving entry `vel` (see `06-wind-system.md` §7).
+2. **Liquifier exception**: if inside a `liquifier` (legacy `nullify`) modifier (`isInsideLiquifier` legacy `isInsideNullify`), **skip** both wind and friction for this tick; just `pos += vel*dt` preserving entry `vel` (see `06-wind-system.md` §7).
 3. Otherwise **apply wind**: `vel += wind * WIND_STRENGTH * dt`.
 4. Otherwise **apply friction**: `vel *= (1 - FRICTION * dt)`.
 5. **Integrate**: `pos += vel * dt`.
@@ -65,7 +65,7 @@ Order per tick:
 - [ ] Ball at rest is drifted by wind within 0.2s and reaches >80 px/s within 0.3s (very fast wind with `180/0.35/28`).
 - [ ] No reset on rest; only tree bounce vs water/OB/edge death or hole win terminates. Treasure hit does **not** terminate (no bounce, no reset).
 - [ ] Edge grazing (`dist==radius+0.1`) no false positive; `+1px` overlap triggers bounce (tree) or reset (water/OB/edge); treasure edge `dist==BALL_RADIUS+treasure.radius+0.1` no hit, `+1px` collects.
-- [ ] `nullify` preserves entry velocity (±5% over 0.5s inside, see `06-wind-system.md` §7).
+- [ ] `liquifier` (legacy `nullify`) preserves entry velocity (±5% over 0.5s inside, see `06-wind-system.md` §7).
 - [ ] Tree hit always bounces (position re-clamped to `hit.r+radius+0.5`, velocity reflected with `BOUNCE_DAMPING=0.7`, remains `FLYING`); no limit. Water hit while airborne (`z>5`) does not trigger death; same spot with `z=0` does.
 - [ ] Treasure: one per hole near tree, `hypot(ball-treasure) < BALL_RADIUS+12` collects, sets `isCollected=true` and queues reward menu; second hit no-op; does not affect `holeAttempts`.
 

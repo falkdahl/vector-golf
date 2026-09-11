@@ -21,16 +21,31 @@ export const DEFAULT_VORTEXES = 1;
 export const SOFTENING_A = 28; // reduced from 30 for even stronger near-field
 
 export let modifiers = [];
-export function setModifiers(mods) { modifiers = mods; }
+function normalizeModifierType(t) {
+  if (t === 'amplify') return 'magnifier';
+  if (t === 'nullify') return 'liquifier';
+  if (t === 'flip') return 'deflector';
+  if (t === 'rotate') return 'rotator';
+  return t;
+}
+export function setModifiers(mods) {
+  if (Array.isArray(mods)) {
+    modifiers = mods.map(m => m && m.type ? { ...m, type: normalizeModifierType(m.type) } : m);
+  } else {
+    modifiers = mods;
+  }
+}
 export function clearModifiers() { modifiers = []; }
 export function getModifiers() { return modifiers; }
-export function isInsideNullify(x, y) {
+export function isInsideLiquifier(x, y) {
   for (const mod of modifiers) {
-    if (mod.type === 'nullify' && Math.hypot(x - mod.x, y - mod.y) < mod.radius) return true;
+    const tp = mod.type === 'nullify' ? 'liquifier' : mod.type === 'amplify' ? 'magnifier' : mod.type === 'flip' ? 'deflector' : mod.type === 'rotate' ? 'rotator' : mod.type;
+    if (tp === 'liquifier' && Math.hypot(x - mod.x, y - mod.y) < mod.radius) return true;
   }
   return false;
 }
-
+// legacy alias
+export const isInsideNullify = isInsideLiquifier;
 export let field = [];
 export let cols = DEFAULT_COLS;
 export let rows = DEFAULT_ROWS;
@@ -469,30 +484,31 @@ export function getWindAt(worldX, worldY) {
     };
   }
 
-  // Apply modifiers - updated per new requirement: rotate includes one amplify (5×), stacked rotate/flip deduped to one amplify, CCW, scaled by Power Cell
-  // Normative: BASE_STRENGTH=5, powerMultiplier=1+0.15*powerCellCount, totalFactor = 5**(amplifyCount + (hasRotFlip?1:0)) * (hasActive?powerMultiplier:1), rotation = (rotateCount*90 CCW + flipCount*180) %360 CCW, nullify dominates, radius = BASE_MODIFIER_RADIUS*(1+0.15*fieldExtenderCount)
-  let amplifyCount = 0;
-  let flipCount = 0;
-  let rotateCount = 0;
-  let hasNullify = false;
+  // Apply modifiers - updated per new requirement: rotator includes one magnifier (5×), stacked rotate/flip deduped to one amplify, CCW, scaled by Power Cell
+  // Normative: BASE_STRENGTH=5, powerMultiplier=1+0.15*powerCellCount, totalFactor = 5**(magnifierCount + (hasRotDef?1:0)) * (hasActive?powerMultiplier:1), rotation = (rotatorCount*90 CCW + deflectorCount*180) %360 CCW, liquifier dominates, radius = BASE_MODIFIER_RADIUS*(1+0.15*fieldExtenderCount)
+  let magnifierCount = 0;
+  let deflectorCount = 0;
+  let rotatorCount = 0;
+  let hasLiquifier = false;
   for (const mod of modifiers) {
     const dx = worldX - mod.x;
     const dy = worldY - mod.y;
     if (dx * dx + dy * dy < mod.radius * mod.radius) {
-      if (mod.type === 'nullify') hasNullify = true;
-      else if (mod.type === 'amplify') amplifyCount++;
-      else if (mod.type === 'flip') flipCount++;
-      else if (mod.type === 'rotate') rotateCount++;
+      const tp = mod.type === 'amplify' ? 'magnifier' : mod.type === 'nullify' ? 'liquifier' : mod.type === 'flip' ? 'deflector' : mod.type === 'rotate' ? 'rotator' : mod.type;
+      if (tp === 'liquifier') hasLiquifier = true;
+      else if (tp === 'magnifier') magnifierCount++;
+      else if (tp === 'deflector') deflectorCount++;
+      else if (tp === 'rotator') rotatorCount++;
     }
   }
-  if (hasNullify) return { x: 0, y: 0 };
-  const hasRotFlip = (flipCount + rotateCount) > 0;
-  const hasActive = amplifyCount > 0 || hasRotFlip;
+  if (hasLiquifier) return { x: 0, y: 0 };
+  const hasRotDef = (deflectorCount + rotatorCount) > 0;
+  const hasActive = magnifierCount > 0 || hasRotDef;
   const powerMultiplier = hasActive ? (1 + 0.15 * powerCellCount) : 1;
-  const totalFactor = Math.pow(5, amplifyCount + (hasRotFlip ? 1 : 0)) * powerMultiplier;
+  const totalFactor = Math.pow(5, magnifierCount + (hasRotDef ? 1 : 0)) * powerMultiplier;
   let result = { x: base.x * totalFactor, y: base.y * totalFactor };
   // Apply combined rotation: rotateCount*90 CCW + flipCount*180 = totalQuarterTurns*90 CCW
-  const totalQuarterTurns = (rotateCount + 2 * flipCount) % 4;
+  const totalQuarterTurns = (rotatorCount + 2 * deflectorCount) % 4;
   if (totalQuarterTurns === 1) {
     const nx = -result.y;
     const ny = result.x;

@@ -12,7 +12,7 @@ The game is a zero-dependency static site: only HTML5, CSS and vanilla JavaScrip
 1. **Files**
    - `index.html` at repo root shall load all assets via relative paths.
    - All JavaScript shall live under `src/` (e.g., `src/main.js`) and be imported via relative ESM imports (`<script type="module">`).
-   - Static image assets, if any, shall live under `img/` and be referenced via `./img/...` relative paths. Allowed: `img/gfg-splash.png`, `img/logo.png`, `img/golfbag.png` and modifier icons `img/amplify-icon.png`, `img/nullify-icon.png`, `img/flip-icon.png`, `img/rotate-icon.png`, `img/field-extender-icon.png`, `img/power-cell-icon.png` (all relative `./img/...`). No other image assets.
+   - Static image assets, if any, shall live under `img/` and be referenced via `./img/...` relative paths. Allowed: `img/gfg-splash.png`, `img/logo.png`, `img/golfbag.png` and modifier icons `img/magnifier-icon.png`, `img/liquifier-icon.png`, `img/deflector-icon.png`, `img/rotator-icon.png`, `img/field-extender-icon.png`, `img/power-cell-icon.png` (all relative `./img/...`). Legacy names `img/amplify-icon.png`, `img/nullify-icon.png`, `img/flip-icon.png`, `img/rotate-icon.png` kept for backward compat but shall map to new names (magnifier/liquifier/deflector/rotator). No other image assets.
    - `README.md` shall document run/deploy instructions.
 
 2. **Dependencies**

@@ -755,6 +755,11 @@ body {
   justify-content: space-between;
 }
 .reward-stats .icon { font-size: 14px; }
+.reward-stats [data-type="magnifier"] .icon { color: #e67e22; }
+.reward-stats [data-type="liquifier"] .icon { color: #3498db; }
+.reward-stats [data-type="deflector"] .icon { color: #9b59b6; }
+.reward-stats [data-type="rotator"] .icon { color: #e74c3c; }
+/* legacy */
 .reward-stats [data-type="amplify"] .icon { color: #e67e22; }
 .reward-stats [data-type="nullify"] .icon { color: #3498db; }
 .reward-stats [data-type="flip"] .icon { color: #9b59b6; }
@@ -899,6 +904,11 @@ body {
   filter: brightness(1.08);
   box-shadow: 0 2px 8px rgba(0,0,0,0.30);
 }
+.hotbar-slot[data-type="magnifier"] { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9); }
+.hotbar-slot[data-type="liquifier"] { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9); }
+.hotbar-slot[data-type="deflector"] { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9); }
+.hotbar-slot[data-type="rotator"] { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.9); }
+/* legacy aliases */
 .hotbar-slot[data-type="amplify"] { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9); }
 .hotbar-slot[data-type="nullify"] { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9); }
 .hotbar-slot[data-type="flip"] { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9); }
@@ -1114,6 +1124,11 @@ body {
   box-shadow: 0 4px 12px rgba(0,0,0,0.35);
   border-color: rgba(255,255,255,0.95) !important;
 }
+.reward-button[data-type="magnifier"] { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9); }
+.reward-button[data-type="liquifier"] { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9); }
+.reward-button[data-type="deflector"] { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9); }
+.reward-button[data-type="rotator"] { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.9); }
+/* legacy aliases */
 .reward-button[data-type="amplify"] { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9); }
 .reward-button[data-type="nullify"] { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9); }
 .reward-button[data-type="flip"] { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9); }
