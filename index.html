@@ -12,6 +12,12 @@
 
 <body>
   <div id="game-container">
+    <div id="parallax-scene" class="hidden" aria-hidden="true">
+      <div class="parallax-layer" data-depth="background"><img src="./img/splash/background-gfg-splash.png" alt="" draggable="false"></div>
+      <div class="parallax-layer" data-depth="middleground"><img src="./img/splash/middleground-gfg-splash.png" alt="" draggable="false"></div>
+      <div class="parallax-layer" data-depth="foreground"><img src="./img/splash/foreground-gfg-splash.png" alt="" draggable="false"></div>
+      <div class="parallax-layer" data-depth="may"><img src="./img/splash/may-gfg-splash.png" alt="" draggable="false"></div>
+    </div>
     <canvas id="bg-canvas" width="1280" height="720"></canvas>
     <canvas id="game" width="1280" height="720"></canvas>
     <canvas id="wind-canvas"></canvas>
@@ -61,6 +67,11 @@
     </div>
     <div id="main-menu-overlay" class="hidden">
       <button id="help-button" class="help-corner-button" title="Help">?</button>
+      <div id="menu-title" class="menu-title" aria-hidden="true">
+        <span class="title-line">Gale</span>
+        <span class="title-line">Force</span>
+        <span class="title-line">Golf</span>
+      </div>
       <div id="campaign-seed-wrapper" class="hidden">
         <div id="campaign-seed-display">Seed: -</div>
         <button id="campaign-seed-edit-button" title="Edit seed">✎</button>

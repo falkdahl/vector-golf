@@ -52,21 +52,56 @@ let canvas;
 let ctx;
 let bgCanvas;
 let bgCtx;
-// Background image for splash (main menu)
+// Background image for splash (main menu) - legacy fallback
 const splashImg = new Image();
 splashImg.src = './img/gfg-splash.png';
+
+// Parallax layered splash scene - may is closest, foreground almost as close, middleground bit further, background far
+let parallaxSceneEl = null;
+let parallaxLayers = [];
+let parallaxTargetX = 0;
+let parallaxTargetY = 0;
+let parallaxCurrentX = 0;
+let parallaxCurrentY = 0;
+let parallaxRafId = null;
+let parallaxInitialized = false;
+const PARALLAX_DEPTHS = {
+  background: 7,
+  middleground: 13,
+  foreground: 20,
+  may: 28
+};
+
+function isParallaxReady() {
+  try {
+    const imgs = document.querySelectorAll('#parallax-scene img');
+    if (!imgs.length) return false;
+    for (const img of imgs) {
+      if (!img.complete || !img.naturalWidth) return false;
+    }
+    return true;
+  } catch { return false; }
+}
 function hideLoadingScreen() {
   const ls = document.getElementById('loading-screen');
   if (ls) ls.classList.add('hidden');
 }
 function maybeHideLoadingAfterSplash() {
-  // Hide once splash is decoded/complete
+  // Hide once parallax layers decoded/complete (or fallback splash)
   try {
-    if (splashImg.complete && splashImg.naturalWidth) {
+    const parallaxOk = isParallaxReady();
+    const splashOk = splashImg.complete && splashImg.naturalWidth;
+    if (parallaxOk || splashOk) {
       hideLoadingScreen();
       return true;
     }
-    // Try decode promise
+    // Try decode promises for parallax layers if available
+    const imgs = document.querySelectorAll('#parallax-scene img');
+    if (imgs.length) {
+      const decodes = Array.from(imgs).map(img => img.decode ? img.decode().catch(()=>{}) : Promise.resolve());
+      Promise.all(decodes).then(hideLoadingScreen).catch(hideLoadingScreen);
+      return false;
+    }
     if (splashImg.decode) {
       splashImg.decode().then(hideLoadingScreen).catch(hideLoadingScreen);
       return false;
@@ -81,30 +116,175 @@ if (typeof window !== 'undefined') {
   setTimeout(() => { if (splashImg.complete && splashImg.naturalWidth) hideLoadingScreen(); }, 500);
   // Ensure fallback hide even if image fails completely
   setTimeout(() => hideLoadingScreen(), 3000);
+  // Attach parallax image load listeners once DOM is ready
+  const attachParallaxLoad = () => {
+    const imgs = document.querySelectorAll('#parallax-scene img');
+    imgs.forEach(img => {
+      img.addEventListener('load', () => { try { redrawBottom(); } catch {}; maybeHideLoadingAfterSplash(); });
+      img.addEventListener('error', () => { setTimeout(hideLoadingScreen, 300); });
+    });
+    // also try after a tick in case cached
+    setTimeout(() => { if (isParallaxReady()) { try { redrawBottom(); } catch {}; hideLoadingScreen(); } }, 600);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachParallaxLoad);
+  } else {
+    setTimeout(attachParallaxLoad, 0);
+  }
 }
+
+function initParallax() {
+  if (parallaxInitialized) return;
+  parallaxSceneEl = document.getElementById('parallax-scene');
+  if (!parallaxSceneEl) return;
+  parallaxLayers = Array.from(parallaxSceneEl.querySelectorAll('.parallax-layer'));
+  parallaxInitialized = true;
+  // Mouse tracking on game-container only when main menu visible
+  const container = document.getElementById('game-container');
+  if (container) {
+    container.addEventListener('mousemove', handleParallaxMouseMove);
+    container.addEventListener('mouseleave', handleParallaxMouseLeave);
+    // Touch support - subtle follow on touch move
+    container.addEventListener('touchmove', (e) => {
+      if (!mainMenuVisible || isInLevelPause) return;
+      const t = e.touches[0];
+      if (!t) return;
+      handleParallaxMouseMove(t);
+    }, { passive: true });
+  }
+  // Respect reduced motion
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (const k in PARALLAX_DEPTHS) PARALLAX_DEPTHS[k] = 0;
+    }
+  } catch {}
+  startParallaxLoop();
+}
+
+function handleParallaxMouseMove(e) {
+  if (!mainMenuVisible || isInLevelPause) return;
+  if (!parallaxSceneEl || parallaxSceneEl.classList.contains('hidden')) return;
+  const container = document.getElementById('game-container');
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  // Normalize to [-1, 1] (subtle: limit to [-1,1] with clamp)
+  const nx = Math.max(-1, Math.min(1, (e.clientX - cx) / (rect.width / 2)));
+  const ny = Math.max(-1, Math.min(1, (e.clientY - cy) / (rect.height / 2)));
+  // Small dampening: keep target in subtle range (-1 to 1 will be scaled by depth)
+  parallaxTargetX = nx;
+  parallaxTargetY = ny;
+}
+
+function handleParallaxMouseLeave() {
+  parallaxTargetX = 0;
+  parallaxTargetY = 0;
+}
+
+function applyParallaxTransforms() {
+  if (!parallaxLayers.length) return;
+  // Lerp current toward target for smooth subtle motion
+  const lerp = 0.08;
+  parallaxCurrentX += (parallaxTargetX - parallaxCurrentX) * lerp;
+  parallaxCurrentY += (parallaxTargetY - parallaxCurrentY) * lerp;
+  // Clamp very small values to zero to avoid jitter
+  if (Math.abs(parallaxCurrentX) < 0.001) parallaxCurrentX = 0;
+  if (Math.abs(parallaxCurrentY) < 0.001) parallaxCurrentY = 0;
+  for (const layer of parallaxLayers) {
+    const depth = layer.dataset.depth;
+    const d = PARALLAX_DEPTHS[depth] ?? 10;
+    // Parallax: closer layers move more, in direction of mouse (subtle, not inverted)
+    // Use translate3d for GPU compositing
+    const x = parallaxCurrentX * d;
+    const y = parallaxCurrentY * d * 0.55; // vertical a bit less pronounced for subtlety
+    layer.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  }
+}
+
+function startParallaxLoop() {
+  if (parallaxRafId) return;
+  const tick = () => {
+    // Only animate when visible to save CPU
+    if (parallaxSceneEl && !parallaxSceneEl.classList.contains('hidden') && mainMenuVisible && !isInLevelPause) {
+      applyParallaxTransforms();
+    } else if (parallaxCurrentX !== 0 || parallaxCurrentY !== 0) {
+      // Ease back to center when hidden
+      applyParallaxTransforms();
+      if (Math.abs(parallaxCurrentX) < 0.005 && Math.abs(parallaxCurrentY) < 0.005) {
+        parallaxCurrentX = 0; parallaxCurrentY = 0;
+        parallaxTargetX = 0; parallaxTargetY = 0;
+      }
+    }
+    parallaxRafId = requestAnimationFrame(tick);
+  };
+  parallaxRafId = requestAnimationFrame(tick);
+}
+
+function syncParallaxVisibility() {
+  if (!parallaxSceneEl) parallaxSceneEl = document.getElementById('parallax-scene');
+  if (!parallaxSceneEl) return;
+  const shouldShow = !!(mainMenuVisible && !isInLevelPause);
+  parallaxSceneEl.classList.toggle('hidden', !shouldShow);
+  parallaxSceneEl.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+  if (shouldShow) {
+    // Ensure layers are positioned and start loop
+    if (!parallaxInitialized) initParallax();
+    // Kick one frame to avoid flash at 0
+    applyParallaxTransforms();
+  } else {
+    // Reset to center when hidden
+    parallaxTargetX = 0; parallaxTargetY = 0;
+  }
+}
+// Expose for debug / testing subtle parallax
+try {
+  if (typeof window !== 'undefined') {
+    window.__parallax = {
+      getDepths: () => ({ ...PARALLAX_DEPTHS }),
+      getTarget: () => ({ x: parallaxTargetX, y: parallaxTargetY }),
+      getCurrent: () => ({ x: parallaxCurrentX, y: parallaxCurrentY }),
+      isReady: isParallaxReady,
+      isVisible: () => {
+        const el = document.getElementById('parallax-scene');
+        return el ? !el.classList.contains('hidden') : false;
+      }
+    };
+    window.__getParallaxDepths = () => ({ ...PARALLAX_DEPTHS });
+  }
+} catch {}
 function redrawBottom() {
   if (!bgCanvas || !bgCtx) return;
   const dpr = window.devicePixelRatio || 1;
   // Use helper from render if available, else fallback
   try {
+    // Sync parallax scene visibility for main menu
+    try { syncParallaxVisibility(); } catch {}
     // drawBackground is imported from render.js — but to avoid circular deps we handle inline
     // Use logical W/H with DPR transform already set in setupCanvases
     bgCtx.save();
     bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (mainMenuVisible && !isInLevelPause) {
-      // splash cover only for entry menu (no active run or after End Run); in-level pause keeps terrain
-      bgCtx.fillStyle = '#1a1a1a';
-      bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-      if (splashImg.complete && splashImg.naturalWidth) {
-        const scale = Math.max(LOGICAL_W / splashImg.naturalWidth, LOGICAL_H / splashImg.naturalHeight);
-        const w = splashImg.naturalWidth * scale;
-        const h = splashImg.naturalHeight * scale;
-        const x = (LOGICAL_W - w) / 2;
-        const y = (LOGICAL_H - h) / 2;
-        bgCtx.drawImage(splashImg, x, y, w, h);
+      // layered parallax scene handles splash visuals; bgCanvas is hidden via CSS when parallax visible
+      const parallaxOk = isParallaxReady();
+      if (parallaxOk) {
+        // Keep bg transparent / clear so parallax layers show through
+        bgCtx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
       } else {
-        bgCtx.fillStyle = '#2c3e50';
+        // fallback to legacy single splash while parallax loads/fails
+        bgCtx.fillStyle = '#1a1a1a';
         bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+        if (splashImg.complete && splashImg.naturalWidth) {
+          const scale = Math.max(LOGICAL_W / splashImg.naturalWidth, LOGICAL_H / splashImg.naturalHeight);
+          const w = splashImg.naturalWidth * scale;
+          const h = splashImg.naturalHeight * scale;
+          const x = (LOGICAL_W - w) / 2;
+          const y = (LOGICAL_H - h) / 2;
+          bgCtx.drawImage(splashImg, x, y, w, h);
+        } else {
+          bgCtx.fillStyle = '#2c3e50';
+          bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+        }
       }
     } else if (level && level.terrain && level.terrain.fairwayPath) {
       // New pipeline: zoned terrain with fixed palette per REQ-010/033
@@ -979,6 +1159,8 @@ function syncMainMenu() {
     syncCampaignEditOverlay();
     syncCampaignConfirmOverlay();
   }
+  // Parallax layered background
+  try { syncParallaxVisibility(); } catch {}
   // Ensure bottom background reflects mode (splash vs terrain)
   redrawBottom();
   // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop)
@@ -3260,6 +3442,9 @@ function init() {
   if (campaignConfirmCancel) {
     campaignConfirmCancel.addEventListener('click', () => hideCampaignConfirm(true));
   }
+
+  // Parallax layered menu background - subtle mouse parallax with 4 splash layers
+  try { initParallax(); } catch (e) { console.warn('parallax init failed', e); }
 
   setupCanvas();
   // REQ-031: load courses collection before progress (so courseId can be resolved)
