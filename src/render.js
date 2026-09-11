@@ -15,6 +15,24 @@ splashImg.src = './img/gfg-splash.png';
 export function getSplashImage() { return splashImg; }
 export function isSplashLoaded() { return splashImg.complete && splashImg.naturalWidth > 0; }
 
+// Reward menu icons - use ./img icons for hotbar/reward, keep field canvas text icons
+const rewardIconPaths = {
+  amplify: './img/amplify-icon.png',
+  nullify: './img/nullify-icon.png',
+  flip: './img/flip-icon.png',
+  rotate: './img/rotate-icon.png',
+  fieldExtender: './img/field-extender-icon.png',
+  areaUp: './img/field-extender-icon.png',
+  powerCell: './img/power-cell-icon.png'
+};
+const rewardIconImgs = {};
+for (const [k, src] of Object.entries(rewardIconPaths)) {
+  const img = new Image();
+  img.src = src;
+  rewardIconImgs[k] = img;
+}
+export function getRewardIconImg(type) { return rewardIconImgs[type] || null; }
+
 export function isWindVisible() {
   return showWind;
 }
@@ -778,13 +796,13 @@ const REWARD_TYPE_DEFS = {
 export function getRewardButtonsLayout(width, height, offered = null) {
   // REQ-021/023: 3 random of 5 pool (bouncy removed); if offered null, fallback to default 3 (amplify/nullify/flip) for backward compat
   const types = Array.isArray(offered) && offered.length === 3 ? offered : ['amplify', 'nullify', 'flip'];
-  const cardW = 340;
-  const cardH = 220;
+  const cardW = 520;
+  const cardH = 360;
   const cardX = (width - cardW) / 2;
   const cardY = (height - cardH) / 2;
-  const btnW = 90;
-  const btnH = 110;
-  const gap = 12;
+  const btnW = 150;
+  const btnH = 195;
+  const gap = 18;
   const totalBtnW = types.length * btnW + (types.length - 1) * gap;
   const startX = cardX + (cardW - totalBtnW) / 2;
   const btnY = cardY + 75;
@@ -808,14 +826,14 @@ export function getRewardButtonsLayout(width, height, offered = null) {
 }
 
 export function getRewardRerollButtonLayout(width, height) {
-  // REQ-025: re-roll centered below 3 cards, below options (options occupy cardY+75 to cardY+185) - widened to cover full text, moved down further per user request
-  const cardW = 340;
-  const cardH = 220;
+  // REQ-025: re-roll centered below 3 cards, below options (options occupy cardY+75 to cardY+270) - widened to cover full text, moved down further per user request
+  const cardW = 520;
+  const cardH = 360;
   const cardY = (height - cardH) / 2;
   const btnW = 190; // was 110 - widened to fully cover "↻ Re-roll (1 attempt) [0]" text
   const btnH = 30; // was 28 - slightly taller for padding
   const x = width / 2 - btnW / 2;
-  const y = cardY + 192; // was 188, moved down ~4px further (now 7px below options bottom, was 3px)
+  const y = cardY + 295; // buttons occupy cardY+75 to cardY+270, reroll 25 below
   return { x, y, w: btnW, h: btnH };
 }
 
@@ -849,8 +867,8 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
 
   // No white card background per updated requirement - text/buttons drawn directly
   // with high-contrast colors for readability on green (#3a9d23) + dim
-  const cardW = 340;
-  const cardH = 220;
+  const cardW = 520;
+  const cardH = 360;
   const cardX = (width - cardW) / 2;
   const cardY = (height - cardH) / 2;
 
@@ -895,48 +913,123 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
     ctx.fill();
     ctx.stroke();
 
-    // Icon - keep modifier color but add dark outline and shadow for contrast on green/dim
-    ctx.font = "700 24px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(0,0,0,0.65)";
-    ctx.lineWidth = 4;
-    ctx.strokeText(btn.icon, btn.x + btn.w / 2, btn.y + 28);
-    ctx.fillStyle = btn.color;
-    // brighten icon slightly for contrast
-    ctx.shadowColor = "rgba(0,0,0,0.45)";
-    ctx.shadowBlur = 6;
-    ctx.fillText(btn.icon, btn.x + btn.w / 2, btn.y + 28);
-    ctx.shadowColor = "transparent";
+    // Icon - use ./img icons for reward/hotbar, keep color identity background; field circles keep text icons (reward icons even bigger with gap to text)
+    const iconImg = rewardIconImgs[btn.type];
+    if (iconImg && iconImg.complete && iconImg.naturalWidth) {
+      const size = 88;
+      const ix = btn.x + btn.w / 2 - size / 2;
+      const iy = btn.y + 18;
+      // Blueish gray gradient background behind icon
+      const bgSize = size + 18;
+      const bgX = btn.x + btn.w / 2 - bgSize / 2;
+      const bgY = iy - 9;
+      const grad = ctx.createLinearGradient(bgX, bgY, bgX + bgSize, bgY + bgSize);
+      grad.addColorStop(0, '#6b7c99');
+      grad.addColorStop(0.5, '#8a9ab5');
+      grad.addColorStop(1, '#b8c4d6');
+      ctx.save();
+      ctx.fillStyle = grad;
+      ctx.shadowColor = "rgba(0,0,0,0.25)";
+      ctx.shadowBlur = 6;
+      const r = 12;
+      ctx.beginPath();
+      ctx.moveTo(bgX + r, bgY);
+      ctx.lineTo(bgX + bgSize - r, bgY);
+      ctx.quadraticCurveTo(bgX + bgSize, bgY, bgX + bgSize, bgY + r);
+      ctx.lineTo(bgX + bgSize, bgY + bgSize - r);
+      ctx.quadraticCurveTo(bgX + bgSize, bgY + bgSize, bgX + bgSize - r, bgY + bgSize);
+      ctx.lineTo(bgX + r, bgY + bgSize);
+      ctx.quadraticCurveTo(bgX, bgY + bgSize, bgX, bgY + bgSize - r);
+      ctx.lineTo(bgX, bgY + r);
+      ctx.quadraticCurveTo(bgX, bgY, bgX + r, bgY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 4;
+      ctx.drawImage(iconImg, ix, iy, size, size);
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+    } else {
+      // Blueish gray gradient background for fallback icon as well (even bigger)
+      const fbSize = 88;
+      const fbBgSize = fbSize + 18;
+      const fbIx = btn.x + btn.w / 2 - fbSize / 2;
+      const fbIy = btn.y + 20;
+      const fbBgX = btn.x + btn.w / 2 - fbBgSize / 2;
+      const fbBgY = fbIy - 9;
+      const fbGrad = ctx.createLinearGradient(fbBgX, fbBgY, fbBgX + fbBgSize, fbBgY + fbBgSize);
+      fbGrad.addColorStop(0, '#6b7c99');
+      fbGrad.addColorStop(0.5, '#8a9ab5');
+      fbGrad.addColorStop(1, '#b8c4d6');
+      ctx.save();
+      ctx.fillStyle = fbGrad;
+      ctx.shadowColor = "rgba(0,0,0,0.25)";
+      ctx.shadowBlur = 6;
+      const fbR = 12;
+      ctx.beginPath();
+      ctx.moveTo(fbBgX + fbR, fbBgY);
+      ctx.lineTo(fbBgX + fbBgSize - fbR, fbBgY);
+      ctx.quadraticCurveTo(fbBgX + fbBgSize, fbBgY, fbBgX + fbBgSize, fbBgY + fbR);
+      ctx.lineTo(fbBgX + fbBgSize, fbBgY + fbBgSize - fbR);
+      ctx.quadraticCurveTo(fbBgX + fbBgSize, fbBgY + fbBgSize, fbBgX + fbBgSize - fbR, fbBgY + fbBgSize);
+      ctx.lineTo(fbBgX + fbR, fbBgY + fbBgSize);
+      ctx.quadraticCurveTo(fbBgX, fbBgY + fbBgSize, fbBgX, fbBgY + fbBgSize - fbR);
+      ctx.lineTo(fbBgX, fbBgY + fbR);
+      ctx.quadraticCurveTo(fbBgX, fbBgY, fbBgX + fbR, fbBgY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+      ctx.font = "700 36px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0,0,0,0.65)";
+      ctx.lineWidth = 4;
+      // Center fallback text where 88px icon would be (btn.y+20 +44) with gap to text
+      ctx.strokeText(btn.icon, btn.x + btn.w / 2, btn.y + 64);
+      ctx.fillStyle = btn.color;
+      ctx.shadowColor = "rgba(0,0,0,0.45)";
+      ctx.shadowBlur = 6;
+      ctx.fillText(btn.icon, btn.x + btn.w / 2, btn.y + 64);
+      ctx.shadowColor = "transparent";
+    }
 
-    // Label - white with dark stroke for good contrast against green/dim
-    // Bouncy label longer, use slightly smaller font to fit 90px button
+    // Label - white with dark stroke for good contrast against green/dim (buttons enlarged to 150×195, icons 88 with gap to text)
     const labelFont = "700 13px system-ui, sans-serif";
     ctx.font = labelFont;
     ctx.strokeStyle = "rgba(0,0,0,0.75)";
     ctx.lineWidth = 4;
     ctx.lineJoin = "round";
-    ctx.strokeText(btn.label, btn.x + btn.w / 2, btn.y + 55);
+    // Gap between icon (iy+88) and text: icon bottom ~ btn.y+106, label at 128 leaves ~22px gap
+    ctx.strokeText(btn.label, btn.x + btn.w / 2, btn.y + 128);
     ctx.fillStyle = "white";
-    ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + 55);
+    ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + 128);
 
     // Supply hint - uses per-type hint (+1 to supply or +3 free shots) with high contrast
     ctx.font = "600 11px system-ui, sans-serif";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
-    ctx.strokeText(btn.hint, btn.x + btn.w / 2, btn.y + 72);
+    ctx.strokeText(btn.hint, btn.x + btn.w / 2, btn.y + 146);
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.fillText(btn.hint, btn.x + btn.w / 2, btn.y + 72);
+    ctx.fillText(btn.hint, btn.x + btn.w / 2, btn.y + 146);
 
-    // Key hint - positional 1/2/3 for random offered order
+    // Key hint - positional 1/2/3 for random offered order (buttons enlarged to 150×195)
     const key = String(idx + 1);
     ctx.font = "600 11px system-ui, sans-serif";
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 3;
-    ctx.strokeText(`[${key}]`, btn.x + btn.w / 2, btn.y + 88);
+    ctx.strokeText(`[${key}]`, btn.x + btn.w / 2, btn.y + 166);
     ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.fillText(`[${key}]`, btn.x + btn.w / 2, btn.y + 88);
+    ctx.fillText(`[${key}]`, btn.x + btn.w / 2, btn.y + 166);
 
     ctx.restore();
   }
