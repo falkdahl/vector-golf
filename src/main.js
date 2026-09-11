@@ -1,5 +1,5 @@
 import { LEVEL, LEVELS, generateLevels } from "./levels.js";
-import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers } from "./vectorField.js";
+import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, setPowerCellCount as setFieldPowerCellCount, getPowerCellCount as getFieldPowerCellCount, BASE_STRENGTH } from "./vectorField.js";
 import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING } from "./physics.js";
 import { checkObstacleCollision, isOutOfBounds, checkWaterCollision, checkTerrainCollision, checkTreasureHit, collectTreasure } from "./obstacles.js";
 import { terrainZoneAt } from "./terrain.js";
@@ -71,7 +71,7 @@ function maybeHideLoadingAfterSplash() {
       splashImg.decode().then(hideLoadingScreen).catch(hideLoadingScreen);
       return false;
     }
-  } catch {}
+  } catch {};
   return false;
 }
 if (typeof window !== 'undefined') {
@@ -120,7 +120,7 @@ function redrawBottom() {
       bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
     }
     bgCtx.restore();
-  } catch {}
+  } catch {};
 }
 let gameState = "AIMING"; // AIMING, CHARGING, FLYING, WIN, GAME_OVER
 let accumulator = 0;
@@ -165,7 +165,7 @@ function setActiveCourse(course) {
         LEVEL.terrain = LEVELS[0].terrain;
         LEVEL.difficulty = LEVELS[0].difficulty;
       }
-    } catch {}
+    } catch {};
   }
 }
 function loadCourses() {
@@ -178,7 +178,7 @@ function loadCourses() {
   return courses;
 }
 function saveCourses() {
-  try { saveCoursesToStorage(courses); } catch {}
+  try { saveCoursesToStorage(courses); } catch {};
 }
 function findCourseById(id) { return courses.find(c => c.id === id) || null; }
 
@@ -229,14 +229,14 @@ function syncFreeShotGlow() {
   const ballActive = isFreeShotActive;
   try {
     setWindFreeShotActive(edgeActive);
-    try { setWindFreeShotBallActive(ballActive); } catch {}
-    try { setWindFreeShotEdgeActive(edgeActive); } catch {}
+    try { setWindFreeShotBallActive(ballActive); } catch {};
+    try { setWindFreeShotEdgeActive(edgeActive); } catch {};
     if (ballActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0);
     else if (!ballActive) {
       // ensure ball glow hidden when not armed (edge may still be visible)
-      try { setWindFreeShotBallActive(false); } catch {}
+      try { setWindFreeShotBallActive(false); } catch {};
     }
-  } catch {}
+  } catch {};
 }
 function setFreeShotActive(v) {
   if (!v) {
@@ -277,9 +277,9 @@ function toggleFreeShot() {
 function clearFreeShotGlow() {
   isFreeShotActive = false;
   freeShotFlightActive = false;
-  try { setWindFreeShotActive(false); } catch {}
-  try { setWindFreeShotBallActive(false); } catch {}
-  try { setWindFreeShotEdgeActive(false); } catch {}
+  try { setWindFreeShotActive(false); } catch {};
+  try { setWindFreeShotBallActive(false); } catch {};
+  try { setWindFreeShotEdgeActive(false); } catch {};
 }
 function clearFreeShotFlightGlow() {
   freeShotFlightActive = false;
@@ -322,19 +322,35 @@ function setMaxAttempts(v) { maxAttempts = Math.max(10, Math.floor(v)); updateAt
 function addMaxAttempts(n = 1) { maxAttempts = Math.max(10, maxAttempts + Math.floor(n)); updateAttemptsUI(); saveProgress(); }
 function getAttemptsLeft() { return Math.max(0, maxAttempts - holeAttempts); }
 
-// Modifier Area +20% per REQ-023 - additive stacking, hidden bonus
+// Modifier Area +10% (Field Extender) and Power Cell +10% strength per REQ-023/06 — renamed from Area Up
 const BASE_MODIFIER_RADIUS = MODIFIER_RADIUS; // 54 base per REQ-015 (reduced 40% from 90 = 90*0.6)
-let areaUpgradeCount = 0;
-function getAreaUpgradeCount() { return areaUpgradeCount; }
-function getAreaMultiplier() { return (5 + areaUpgradeCount) / 5; }
-function getEffectiveModifierRadius() { return (BASE_MODIFIER_RADIUS * (10 + 2 * areaUpgradeCount)) / 10; }
-function addAreaUpgrade(n = 1) {
-  areaUpgradeCount = Math.max(0, areaUpgradeCount + Math.floor(n));
-  // Retroactively grow existing modifiers per REQ-023 (if called via helper or reward)
+const BASE_MODIFIER_STRENGTH = 5;
+let areaUpgradeCount = 0; // legacy alias — mirrors fieldExtenderCount
+let fieldExtenderCount = 0; // new name, 0 on new game, +10% radius per stack
+let powerCellCount = 0; // new — +10% wind strength per stack for amplify/flip/rotate
+function getAreaUpgradeCount() { return fieldExtenderCount; }
+function getFieldExtenderCount() { return fieldExtenderCount; }
+function getPowerCellCount() { return powerCellCount; }
+function getAreaMultiplier() { return (10 + fieldExtenderCount) / 10; } // 1 + 0.1*n (was 1+0.2n)
+function getEffectiveModifierRadius() { return (BASE_MODIFIER_RADIUS * (10 + fieldExtenderCount)) / 10; }
+function getPowerMultiplier() { return (10 + powerCellCount) / 10; } // 1 + 0.1*n
+function getEffectiveModifierStrength() { return BASE_MODIFIER_STRENGTH * getPowerMultiplier(); }
+function addAreaUpgrade(n = 1) { return addFieldExtender(n); }
+function addFieldExtender(n = 1) {
+  fieldExtenderCount = Math.max(0, fieldExtenderCount + Math.floor(n));
+  areaUpgradeCount = fieldExtenderCount;
   const newR = getEffectiveModifierRadius();
   for (const m of modifiers) m.radius = newR;
   syncModifiersToField();
+  updateHotbarUI();
 }
+function addPowerCell(n = 1) {
+  powerCellCount = Math.max(0, powerCellCount + Math.floor(n));
+  syncModifiersToField();
+  updateHotbarUI();
+}
+// keep legacy aliases for save compat
+function getFieldExtenderCountAlias() { return fieldExtenderCount; }
 
 // Persistent Progress via Local Storage per REQ-027 — save on each attempt, resume on revisit
 const STORAGE_KEY = "golfVectorField.progress.v1";
@@ -349,7 +365,9 @@ function getSavePayload() {
     supply: { ...supply },
     isFreeShotActive,
     treasure: level && level.treasure ? { x: level.treasure.x, y: level.treasure.y, radius: level.treasure.radius, isCollected: !!level.treasure.isCollected } : null,
-    areaUpgradeCount,
+    areaUpgradeCount: fieldExtenderCount,
+    fieldExtenderCount,
+    powerCellCount,
     rewardPending,
     rewardOffered: [...rewardOffered],
     rewardRerolled,
@@ -407,8 +425,14 @@ function loadProgress() {
     if (d.supply && d.supply.freeShot === undefined) supply.freeShot = 0;
     if (d.supply && d.supply.rotate === undefined) supply.rotate = 1;
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
-    try { setWindFreeShotActive(isFreeShotActive); } catch {}
-    areaUpgradeCount = Math.max(0, Math.floor(d.areaUpgradeCount || 0));
+    try { setWindFreeShotActive(isFreeShotActive); } catch {};
+    // Field Extender: support both legacy areaUpgradeCount and new fieldExtenderCount
+    if (d.fieldExtenderCount !== undefined) fieldExtenderCount = Math.max(0, Math.floor(d.fieldExtenderCount));
+    else if (d.areaUpgradeCount !== undefined) fieldExtenderCount = Math.max(0, Math.floor(d.areaUpgradeCount));
+    else fieldExtenderCount = 0;
+    areaUpgradeCount = fieldExtenderCount;
+    powerCellCount = Math.max(0, Math.floor(d.powerCellCount ?? 0));
+    try { setFieldPowerCellCount(powerCellCount); } catch {};
     rewardPending = !!d.rewardPending;
     rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length === 3 ? [...d.rewardOffered] : [];
     // migrate legacy /maxAttempts offers to freeShot
@@ -417,7 +441,7 @@ function loadProgress() {
     rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length === 3;
     rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
     if (d.campaignSeed && typeof setCampaignSeed === 'function') {
-      try { setCampaignSeed(String(d.campaignSeed)); } catch {}
+      try { setCampaignSeed(String(d.campaignSeed)); } catch {};
     }
     // Restore treasure collected state for current hole (one per hole near tree, see 08 §4)
     // Only mutate runtime LEVELS/level, not the stored course definition (which stays false for future runs)
@@ -426,7 +450,7 @@ function loadProgress() {
         if (LEVELS[currentHoleIndex] && LEVELS[currentHoleIndex].treasure) LEVELS[currentHoleIndex].treasure.isCollected = !!d.treasure.isCollected;
         if (typeof level !== 'undefined' && level && level.treasure) level.treasure.isCollected = !!d.treasure.isCollected;
       }
-    } catch {}
+    } catch {};
     // Restore gameState, handle legacy saves
     if (d.gameState === 'GAME_OVER') {
       gameState = 'GAME_OVER';
@@ -447,7 +471,7 @@ function loadProgress() {
       modifiers = [];
     }
     if (typeof d.aimAngle === 'number' && Number.isFinite(d.aimAngle)) {
-      try { setAimAngle(d.aimAngle); } catch {}
+      try { setAimAngle(d.aimAngle); } catch {};
     }
     if (d.rewardChosenCounts && typeof d.rewardChosenCounts === 'object') {
       for (const k of Object.keys(rewardChosenCounts)) {
@@ -458,8 +482,17 @@ function loadProgress() {
       rewardChosenCounts.amplify = Math.max(0, Math.floor(d.supply?.amplify || supply.amplify || 0));
       rewardChosenCounts.nullify = Math.max(0, Math.floor(d.supply?.nullify || supply.nullify || 0));
       rewardChosenCounts.flip = Math.max(0, Math.floor(d.supply?.flip || supply.flip || 0));
-      rewardChosenCounts.areaUp = Math.max(0, Math.floor(d.areaUpgradeCount || areaUpgradeCount || 0));
+      const derivedField = Math.max(0, Math.floor((d.fieldExtenderCount ?? d.areaUpgradeCount) || fieldExtenderCount || areaUpgradeCount || 0));
+      rewardChosenCounts.areaUp = derivedField;
+      rewardChosenCounts.fieldExtender = derivedField;
+      rewardChosenCounts.powerCell = Math.max(0, Math.floor(d.powerCellCount || powerCellCount || 0));
       //  times chosen cannot be derived, stays 0 if missing
+    }
+    // Ensure areaUp / fieldExtender stay synced for backward compat
+    if (rewardChosenCounts.fieldExtender !== rewardChosenCounts.areaUp) {
+      const v = Math.max(rewardChosenCounts.areaUp || 0, rewardChosenCounts.fieldExtender || 0);
+      rewardChosenCounts.areaUp = v;
+      rewardChosenCounts.fieldExtender = v;
     }
     // Do not restore paused state as visible on load — resume as AIMING
     pauseMenuVisible = false; pauseMenuHover = null;
@@ -469,13 +502,13 @@ function loadProgress() {
   }
 }
 function clearProgress() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+  try { localStorage.removeItem(STORAGE_KEY); } catch {};
 }
 
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
 let pauseMenuVisible = false;
 let pauseMenuHover = null;
-let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+let rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
 function getRewardChosenCounts() { return { ...rewardChosenCounts }; }
 function getRewardChosenCount(type) { return Math.max(0, Math.floor(rewardChosenCounts[type] || 0)); }
 function setRewardChosenCounts(obj) {
@@ -495,17 +528,17 @@ function resumeGame() {
 function startNewGame() {
   clearProgress();
   // Generate fresh 18 levels with increasing difficulty per REQ-010
-  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   hideSoftlockBanner();
   resetSoftlockDetection();
-  maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
+  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0);
   gameState = "AIMING";
@@ -560,7 +593,7 @@ function renderMainMenuRootVisibility() {
     const sig = _courseListSignature();
     if (sig !== _lastCourseListSig) {
       _lastCourseListSig = sig;
-      try { renderCourseList(); } catch {}
+      try { renderCourseList(); } catch {};
     }
   }
 }
@@ -612,7 +645,7 @@ function showCourseMenu() {
   if (ia) ia.classList.add('hidden');
   if (cmf) cmf.classList.remove('hidden');
   if (ie) { ie.textContent = ''; ie.classList.add('hidden'); }
-  try { renderCourseList(); } catch {}
+  try { renderCourseList(); } catch {};
 }
 function showHelpOverlay() {
   helpVisible = true;
@@ -664,7 +697,7 @@ function handleContinue() {
     syncModifiersToField();
     createBall(level.tee);
     // Restore freeShot glow after ball created
-    try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {}
+    try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
     gameState = "AIMING";
     if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
     resetHotbarCollapsed();
@@ -702,9 +735,9 @@ function getHighScore() {
   } catch { return null; }
 }
 function setHighScore(n) {
-  try { localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify({ version: 1, bestTotal: Math.max(0, Math.floor(n)) })); } catch {}
+  try { localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify({ version: 1, bestTotal: Math.max(0, Math.floor(n)) })); } catch {};
 }
-function clearHighScore() { try { localStorage.removeItem(HIGH_SCORE_KEY); } catch {} }
+function clearHighScore() { try { localStorage.removeItem(HIGH_SCORE_KEY); } catch {}; }
 function maybeUpdateHighScore() {
   if (!activeCourse) return;
   if (currentHoleIndex !== activeCourse.holes.length - 1 || gameState !== "WIN") return;
@@ -716,18 +749,18 @@ function maybeUpdateHighScore() {
   if (activeCourse.bestTotal == null || totalAttempts < activeCourse.bestTotal) {
     activeCourse.bestTotal = totalAttempts;
     updated = true;
-    try { saveCourses(); } catch {}
+    try { saveCourses(); } catch {};
     // Re-render course list to show new record
-    try { renderCourseList(); } catch {}
+    try { renderCourseList(); } catch {};
   }
   // Auto-generate next stage if this stage was just cleared (or already cleared)
   if (activeCourse.bestTotal !== null) {
     const next = ensureNextStageUnlocked(courses);
     if (next) {
-      try { renderCourseList(); } catch {}
+      try { renderCourseList(); } catch {};
     } else if (updated) {
       // still re-render to show unlock
-      try { renderCourseList(); } catch {}
+      try { renderCourseList(); } catch {};
     }
   }
 }
@@ -799,12 +832,12 @@ function renderCourseList() {
     }
   }
   // Cache signature after render to avoid re-rendering on every help close / menu toggle
-  try { _lastCourseListSig = _courseListSignature(); } catch {}
+  try { _lastCourseListSig = _courseListSignature(); } catch {};
   // After rendering, ensure Continue remains hidden (removed) — auto-resume handles saves
   try {
     const contBtn = document.getElementById('continue-button');
     if (contBtn) contBtn.classList.add('hidden');
-  } catch {}
+  } catch {};
 }
 
 function handleCoursePlay(courseId) {
@@ -813,14 +846,14 @@ function handleCoursePlay(courseId) {
   setActiveCourse(course);
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -846,7 +879,7 @@ function exportCourseById(courseId) {
         ta.value = b64;
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); } catch {}
+        try { document.execCommand('copy'); } catch {};
         document.body.removeChild(ta);
         showToast('copied to clipboard');
       });
@@ -860,7 +893,7 @@ function exportCourseById(courseId) {
       ta.value = b64;
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); } catch {}
+      try { document.execCommand('copy'); } catch {};
       document.body.removeChild(ta);
       window.__lastExported = b64;
       showToast('copied to clipboard');
@@ -910,7 +943,7 @@ function syncMainMenu() {
         if (nccDiff2) nccDiff2.classList.add('hidden');
         if (ia2) ia2.classList.add('hidden');
         if (cmf2) cmf2.classList.remove('hidden');
-        try { renderCourseList(); } catch {}
+        try { renderCourseList(); } catch {};
         if (mmc) mmc.classList.remove('hidden');
       } else {
         if (root) root.classList.remove('hidden');
@@ -949,9 +982,9 @@ function syncMainMenu() {
   // Ensure bottom background reflects mode (splash vs terrain)
   redrawBottom();
   // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop)
-  try { const showWind = !mainMenuVisible && !pauseMenuVisible; setWindVisible(!showWind ? false : true); } catch {}
+  try { const showWind = !mainMenuVisible && !pauseMenuVisible; setWindVisible(!showWind ? false : true); } catch {};
   // Actually wind should be visible on level and also while paused (dimmed), hidden only on main menu entry
-  try { const showWind2 = !mainMenuVisible; setWindVisible(showWind2 || pauseMenuVisible); } catch {}
+  try { const showWind2 = !mainMenuVisible; setWindVisible(showWind2 || pauseMenuVisible); } catch {};
   updateHotbarUI();
 }
 
@@ -981,9 +1014,9 @@ function syncCampaignEditOverlay() {
         // clear previous error
         const err = document.getElementById('campaign-seed-error');
         if (err) { err.textContent = ''; err.classList.add('hidden'); }
-        setTimeout(() => { try { inp.focus(); inp.select(); } catch {} }, 0);
+        setTimeout(() => { try { inp.focus(); inp.select(); } catch {}; }, 0);
       }
-    } catch {}
+    } catch {};
   } else {
     el.classList.add('hidden');
   }
@@ -1006,7 +1039,7 @@ function hideCampaignEditOverlay() {
   try {
     const err = document.getElementById('campaign-seed-error');
     if (err) { err.textContent = ''; err.classList.add('hidden'); }
-  } catch {}
+  } catch {};
 }
 function syncCampaignConfirmOverlay() {
   const el = document.getElementById('campaign-confirm-overlay');
@@ -1038,7 +1071,7 @@ function executePendingCampaignAction() {
       rewardSeedCounter = 0;
       rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
       _lastCourseListSig = null;
-      try { renderCourseList(); } catch {}
+      try { renderCourseList(); } catch {};
       syncCampaignSeedDisplay();
       hideCampaignEditOverlay();
       updateHotbarUI();
@@ -1052,11 +1085,11 @@ function executePendingCampaignAction() {
       rewardSeedCounter = 0;
       rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
       _lastCourseListSig = null;
-      try { renderCourseList(); } catch {}
+      try { renderCourseList(); } catch {};
       syncCampaignSeedDisplay();
       hideCampaignEditOverlay();
       updateHotbarUI();
-    } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {} }
+    } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {}; }
   }
   pendingCampaignAction = null;
   campaignConfirmVisible = false;
@@ -1076,7 +1109,7 @@ function syncCampaignSeedDisplay() {
     // also update popup current seed if visible
     const cur = document.getElementById('campaign-edit-current-seed');
     if (cur) cur.textContent = String(cs);
-  } catch {}
+  } catch {};
 }
 
 function handleCampaignRegenerate() {
@@ -1089,7 +1122,7 @@ function handleCampaignRefreshViaConfirm() {
   // If confirm returns false, abort; else execute refresh
   try {
     if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
-  } catch {}
+  } catch {};
   try {
     const res = regenerateCampaign();
     try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
@@ -1097,7 +1130,7 @@ function handleCampaignRefreshViaConfirm() {
     rewardSeedCounter = 0;
     rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
     _lastCourseListSig = null;
-    try { renderCourseList(); } catch {}
+    try { renderCourseList(); } catch {};
     syncCampaignSeedDisplay();
     hideCampaignEditOverlay();
     updateHotbarUI();
@@ -1111,12 +1144,12 @@ function handleManualSeedApply() {
   // Validation: must be 0-9 a-f hex and expected length 8
   if (!val) {
     if (errEl) { errEl.textContent = 'Seed cannot be empty'; errEl.classList.remove('hidden'); }
-    else try { showToast('Seed cannot be empty'); } catch {}
+    else try { showToast('Seed cannot be empty'); } catch {};
     return;
   }
   if (!isValidCampaignSeed(val)) {
     if (errEl) { errEl.textContent = 'Invalid seed: must be ' + CAMPAIGN_SEED_LENGTH + ' characters 0-9a-f'; errEl.classList.remove('hidden'); }
-    else try { showToast('Invalid seed'); } catch {}
+    else try { showToast('Invalid seed'); } catch {};
     return;
   }
   const current = (typeof getCampaignSeed === 'function' ? String(getCampaignSeed() || '') : '');
@@ -1135,12 +1168,12 @@ function handleManualSeedApplyLegacy() {
   const input = document.getElementById('campaign-seed-input');
   const val = input ? String(input.value || '').trim() : '';
   if (!val) {
-    try { showToast('Seed cannot be empty'); } catch {}
+    try { showToast('Seed cannot be empty'); } catch {};
     return;
   }
   try {
     if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
-  } catch {}
+  } catch {};
   try {
     const res = applyManualSeed(val);
     try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
@@ -1148,11 +1181,11 @@ function handleManualSeedApplyLegacy() {
     rewardSeedCounter = 0;
     rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
     _lastCourseListSig = null;
-    try { renderCourseList(); } catch {}
+    try { renderCourseList(); } catch {};
     syncCampaignSeedDisplay();
     hideCampaignEditOverlay();
     updateHotbarUI();
-  } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {} }
+  } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {}; }
 }
 
 function syncHelpOverlay() {
@@ -1176,13 +1209,13 @@ function syncHelpOverlay() {
 function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {
   clearProgress();
-  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1196,7 +1229,7 @@ function endRun() {
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   clearProgress();
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; rewardPending = false; 
+  supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
@@ -1204,7 +1237,7 @@ function endRun() {
   freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
   hideSoftlockBanner();
   resetSoftlockDetection();
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
@@ -1238,7 +1271,7 @@ function selectHole(n) {
   maybeShowRewardMenu();
   saveProgress();
   // Update URL hash for sharing without reload (secret but visible)
-  try { history.replaceState(null, "", `#hole-${idx+1}`); } catch {}
+  try { history.replaceState(null, "", `#hole-${idx+1}`); } catch {};
   return true;
 }
 
@@ -1250,7 +1283,7 @@ function getSecretHoleFromURL() {
     const hash = window.location.hash || "";
     const m = hash.match(/hole[-_]?(\d+)/i) || hash.match(/#(\d+)$/);
     if (m) return parseInt(m[1],10);
-  } catch {}
+  } catch {};
   return null;
 }
 
@@ -1294,7 +1327,9 @@ function bounceBall(hit, isEdge) {
 
 // Reward menu per REQ-09 : hole-start (except hole 1) + treasure near tree - 3 random of 5 pool (bouncy removed, maxAttempts replaced by freeShot Supply +3, trees always bounce)
 // Campaign deterministic rewards (12-campaign): single campaignSeed controls all offers including rerolls via seeded shuffle + counter
-const REWARD_POOL = ['amplify', 'nullify', 'flip', 'rotate', 'freeShot', 'areaUp'];
+const REWARD_POOL = ['amplify', 'nullify', 'flip', 'rotate', 'freeShot', 'fieldExtender', 'powerCell'];
+// keep legacy alias for backward compat tests
+const REWARD_POOL_LEGACY = ['amplify', 'nullify', 'flip', 'rotate', 'freeShot', 'areaUp'];
 let rewardMenuVisible = false;
 let rewardClaimedFor = null; // last totalAttempts value claimed, kept for backward compat/debug
 let rewardMenuHover = null; // hovered type for visual feedback
@@ -1347,18 +1382,22 @@ function getSeededRerollOffer() {
   return offer;
 }
 function maybeFilterAreaUp(offer, seedStr) {
-  if (!offer.includes('areaUp')) return offer;
+  // Handles both legacy areaUp and new fieldExtender (weighted 25% less)
+  const hasField = offer.includes('fieldExtender') || offer.includes('areaUp');
+  if (!hasField) return offer;
   const filterSeed = hashSeedString(seedStr + ':filter');
   const r = mulberry32Reward(filterSeed)();
   if (r >= 0.25) return offer;
-  const notInOffer = REWARD_POOL.filter(t => !offer.includes(t));
+  const notInOffer = REWARD_POOL.filter(t => !offer.includes(t) && t !== 'areaUp');
+  // ensure we don't pick fieldExtender again if already present
   if (!notInOffer.length) return offer;
   const pickSeed = hashSeedString(seedStr + ':filterPick');
   const pr = mulberry32Reward(pickSeed)();
   const pickIdx = Math.floor(pr * notInOffer.length);
   const replacement = notInOffer[Math.max(0, Math.min(notInOffer.length - 1, pickIdx))];
-  return offer.map(t => t === 'areaUp' ? replacement : t);
+  return offer.map(t => (t === 'fieldExtender' || t === 'areaUp') ? replacement : t);
 }
+function maybeFilterFieldExtender(offer, seedStr) { return maybeFilterAreaUp(offer, seedStr); }
 function getRewardSeedCounter() { return rewardSeedCounter; }
 function setRewardSeedCounter(v) { rewardSeedCounter = Math.max(0, Math.floor(v || 0)); }
 
@@ -1465,7 +1504,7 @@ function hideHoleBanner() {
   holeBannerTimer = 0;
   // auto-transition to reward if pending (hole >0) — called from update timer expiry; also allow immediate maybeShowRewardMenu
   // Defer to next tick to keep dim continuous
-  setTimeout(() => { try { maybeShowRewardMenu(); } catch {} }, 0);
+  setTimeout(() => { try { maybeShowRewardMenu(); } catch {}; }, 0);
   return true;
 }
 function isAttemptsBannerVisible() { return attemptsBannerVisible; }
@@ -1644,22 +1683,29 @@ function updateSoftlockDetection(dt) {
 
 function claimReward(type) {
   if (!rewardMenuVisible) return false;
-  if (!rewardOffered.includes(type)) return false;
+  // support legacy areaUp alias
+  const normalized = type === 'areaUp' ? 'fieldExtender' : type;
+  if (!rewardOffered.includes(type) && !rewardOffered.includes(normalized)) return false;
   // Idempotent: only once per trigger (rewardMenuVisible guards double-click)
-  if (type === 'freeShot') {
+  if (type === 'freeShot' || normalized === 'freeShot') {
     addToSupply('freeShot', 3); // Free Shoot Supply +3
     rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
   } else if (type === 'maxAttempts') {
     // legacy: migrate old maxAttempts reward to freeShot
     addToSupply('freeShot', 3);
     rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
-  } else if (type === 'areaUp') {
-    addAreaUpgrade(1); // REQ-023: Area +20% additive (addAreaUpgrade handles retroactive grow + sync)
+  } else if (type === 'areaUp' || normalized === 'fieldExtender' || type === 'fieldExtender') {
+    addFieldExtender(1); // Field Extender +10% (was Area +20%)
+    rewardChosenCounts.fieldExtender = Math.max(0, (rewardChosenCounts.fieldExtender || 0) + 1);
     rewardChosenCounts.areaUp = Math.max(0, (rewardChosenCounts.areaUp || 0) + 1);
+  } else if (normalized === 'powerCell' || type === 'powerCell') {
+    addPowerCell(1); // Power Cell +10% strength
+    rewardChosenCounts.powerCell = Math.max(0, (rewardChosenCounts.powerCell || 0) + 1);
   } else {
-    if (!(type in supply)) return false;
-    addToSupply(type, 1);
-    if (type in rewardChosenCounts) rewardChosenCounts[type] = Math.max(0, (rewardChosenCounts[type] || 0) + 1);
+    if (!(type in supply) && !(normalized in supply)) return false;
+    const t = (type in supply) ? type : normalized;
+    addToSupply(t, 1);
+    if (t in rewardChosenCounts) rewardChosenCounts[t] = Math.max(0, (rewardChosenCounts[t] || 0) + 1);
   }
   // Mark first and general claimed for backward compat
   rewardClaimedFor = totalAttempts;
@@ -1766,9 +1812,9 @@ function loadLevel(index) {
   resetSoftlockDetection();
   updateHotbarUI();
   // Redraw terrain for new hole (zoned background per REQ-010/033)
-  try { redrawBottom(); } catch {}
+  try { redrawBottom(); } catch {};
   // 11-banners: show Hole N banner for 2s before reward (same dim, auto-transition)
-  try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {}
+  try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {};
 }
 
 function initLevel() {
@@ -1777,7 +1823,7 @@ function initLevel() {
     supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
     clearFreeShotGlow();
     maxAttempts = 10; 
-    areaUpgradeCount = 0;
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
     rewardPending = false;
     rewardMenuVisible = false;
     rewardClaimedFor = null;
@@ -1786,7 +1832,7 @@ function initLevel() {
     rewardRerollHover = false;
     pauseMenuVisible = false;
     pauseMenuHover = null;
-    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+    rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
     const pauseOverlay = document.getElementById("pause-overlay");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
   } else {
@@ -1867,30 +1913,46 @@ function updateHotbarUI() {
       slot.style.display = 'none';
       continue;
     }
+    // Passive slots: Field Extender and Power Cell
+    if (type === 'fieldExtender' || type === 'areaUp' || type === 'powerCell') {
+      const isField = type === 'fieldExtender' || type === 'areaUp';
+      const count = isField ? fieldExtenderCount : powerCellCount;
+      const countEl = slot.querySelector(".hotbar-count");
+      if (countEl) countEl.textContent = `x${count}`;
+      slot.classList.remove("selected", "disabled", "active");
+      slot.classList.add("passive");
+      slot.style.cursor = "default";
+      // hide hotkey badge if present (passive have no hotkey)
+      const hotkeyEl = slot.querySelector(".hotbar-hotkey");
+      if (hotkeyEl) hotkeyEl.style.display = "none";
+      slot.removeAttribute('title');
+      slot.dataset.supply = String(count);
+      slot.dataset.count = String(count);
+      continue;
+    }
+    // Active spatial slots
     const activeCount = modifiers.filter(m => m.type === type).length;
     const supplyCount = supply[type] ?? 0;
     const canPlaceThis = (supplyCount ?? 0) > 0;
     slot.classList.toggle("selected", slot.dataset.type === selectedModifier);
     slot.classList.remove("active");
     slot.classList.toggle("disabled", !canPlaceThis);
+    slot.classList.remove("passive");
+    slot.style.cursor = "";
+    const hotkeyEl2 = slot.querySelector(".hotbar-hotkey");
+    if (hotkeyEl2) hotkeyEl2.style.display = "";
     // Update count badge — lower-right xN per new spec (e.g. x2)
     const countEl = slot.querySelector(".hotbar-count");
     if (countEl) {
       countEl.textContent = `x${supplyCount}`;
     }
-    // Accessibility title with hotkey 1-4 for spatial (inventory model: supply is remaining)
-    if (!canPlaceThis) {
-      slot.title = `${type} - No supply (0)`;
-    } else {
-      const hotkey = type === 'amplify' ? '1' : type === 'nullify' ? '2' : type === 'flip' ? '3' : type === 'rotate' ? '4' : '?';
-      slot.title = `${type} - ${supplyCount} available, ${activeCount} placed (press ${hotkey})`;
-    }
+    slot.removeAttribute('title');
     // For testing: expose supply via dataset
     slot.dataset.supply = String(supplyCount);
     slot.dataset.active = String(activeCount);
   }
   // Also update HUD attempts left display to show (+freeShot)
-  try { updateAttemptsUI(); } catch {}
+  try { updateAttemptsUI(); } catch {};
 }
 
 function showGameOver() {
@@ -1942,7 +2004,7 @@ function handleGameOverReturn() {
   maxAttempts = 10;
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
-  areaUpgradeCount = 0;
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
   rewardPending = false;
   rewardOffered = [];
   rewardMenuVisible = false;
@@ -1962,7 +2024,7 @@ function handleGameOverReturn() {
   isInLevelPause = false;
   courseMenuVisible = false;
   helpVisible = false;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   // Avoid heavy field generation when returning to main menu after Game Over — defer to next course play
   _lastCourseListSig = null;
   syncMainMenu();
@@ -1971,10 +2033,10 @@ function handleGameOverReturn() {
   updateHotbarUI();
   if (LEVELS.length) {
     level = LEVELS[0];
-    try { createBall(level.tee); } catch {}
+    try { createBall(level.tee); } catch {};
   } else if (courses.length) {
     level = courses[0].holes[0];
-    try { createBall(level.tee); } catch {}
+    try { createBall(level.tee); } catch {};
   }
   // ensure win overlay hidden
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -1982,13 +2044,14 @@ function handleGameOverReturn() {
 
 function syncModifiersToField() {
   setModifiers(modifiers);
+  try { setFieldPowerCellCount(powerCellCount); } catch {};
   syncWindFieldToShader();
 }
 function syncWindFieldToShader() {
   try {
     const comps = getFieldComponents();
     setWindUniformsFromField(comps, modifiers, windStrength);
-  } catch {}
+  } catch {};
 }
 
 function syncPauseOverlay() {
@@ -2016,7 +2079,7 @@ function syncPauseOverlay() {
           if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
         }
       }
-    } catch {}
+    } catch {};
   } else {
     po.classList.add("hidden");
     po.classList.remove("with-backdrop");
@@ -2093,7 +2156,7 @@ function resetBall() {
       const free = supply.freeShot ?? 0;
       if (left === 1) {
         if (free > 0) {
-          try { showFreeShotBanner(); } catch {}
+          try { showFreeShotBanner(); } catch {};
           if (!isFreeShotActive) {
             isFreeShotActive = true;
             syncFreeShotGlow();
@@ -2101,8 +2164,8 @@ function resetBall() {
             saveProgress();
           }
         } else {
-          try { showAttemptsBanner(1); } catch {}
-          try { syncPauseOverlay(); } catch {}
+          try { showAttemptsBanner(1); } catch {};
+          try { syncPauseOverlay(); } catch {};
         }
       }
     } else {
@@ -2124,7 +2187,7 @@ function resetBall() {
         if (free > 0) {
           // Free Shot! banner and turn on free shot modifier
           // showFreeShotBanner will also set isFreeShotActive true
-          try { showFreeShotBanner(); } catch {}
+          try { showFreeShotBanner(); } catch {};
           // If banner not shown due to dedup or other block, still ensure free shot armed
           if (!isFreeShotActive) {
             isFreeShotActive = true;
@@ -2134,10 +2197,10 @@ function resetBall() {
           }
         } else {
           // Last Attempt banner
-          try { showAttemptsBanner(1); } catch {}
+          try { showAttemptsBanner(1); } catch {};
         }
         // Ensure pause overlay hide logic updated
-        try { syncPauseOverlay(); } catch {}
+        try { syncPauseOverlay(); } catch {};
       }
     }
   }
@@ -2147,7 +2210,7 @@ function resetBall() {
   // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
   maybeShowRewardMenu();
   saveProgress();
-  try { syncPauseOverlay(); } catch {}
+  try { syncPauseOverlay(); } catch {};
 }
 
 function advanceHole() {
@@ -2193,7 +2256,7 @@ function returnToMainMenu() {
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   maxAttempts = 10; 
-  areaUpgradeCount = 0;
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
   rewardPending = false;
   rewardMenuVisible = false;
   rewardClaimedFor = null;
@@ -2209,7 +2272,7 @@ function returnToMainMenu() {
   resetSoftlockDetection();
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
@@ -2226,15 +2289,15 @@ function returnToMainMenu() {
       level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
     }
     // Defer ball/field creation — not needed while splash is visible; create minimal ball for HUD
-    try { createBall(level.tee); } catch {}
+    try { createBall(level.tee); } catch {};
     try {
       const dx = level.hole.x - level.tee.x;
       const dy = level.hole.y - level.tee.y;
       setAimAngle(Math.atan2(dy, dx));
-    } catch {}
+    } catch {};
     // Invalidate course list signature so next menu open re-renders with updated bestTotal/unlock (courses are read from cache)
     _lastCourseListSig = null;
-  } catch {}
+  } catch {};
   resetHotbarCollapsed();
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   syncPauseOverlay();
@@ -2251,7 +2314,7 @@ function resetGameAfterWin() {
     return returnToMainMenu();
   }
   clearProgress();
-  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {}
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0;
   holeAttempts = 0;
   totalAttempts = 0;
@@ -2260,7 +2323,7 @@ function resetGameAfterWin() {
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
   clearFreeShotGlow();
   maxAttempts = 10; 
-  areaUpgradeCount = 0;
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
   // REQ-021 + REQ-025 + REQ-028: reset secret counter + reward state + reroll + pause stats
   rewardPending = false;
   rewardMenuVisible = false;
@@ -2271,7 +2334,7 @@ function resetGameAfterWin() {
   rewardRerollHover = false;
   pauseMenuVisible = false;
   pauseMenuHover = null;
-  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   const pauseOverlay2 = document.getElementById("pause-overlay");
   if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
   loadLevel(currentHoleIndex);
@@ -2323,9 +2386,9 @@ function handleLaunch(angle, power) {
       // keep isFreeShotActive true for next free, but hide ball glow during current flight
       isFreeShotActive = true;
       freeShotFlightActive = true;
-      try { setWindFreeShotBallActive(false); } catch {}
-      try { setWindFreeShotEdgeActive(true); } catch {}
-      try { setWindFreeShotActive(true); } catch {}
+      try { setWindFreeShotBallActive(false); } catch {};
+      try { setWindFreeShotEdgeActive(true); } catch {};
+      try { setWindFreeShotActive(true); } catch {};
     } else {
       isFreeShotActive = false;
       freeShotFlightActive = true;
@@ -2438,7 +2501,7 @@ function handleNextHole() {
 
 function update(dt) {
   // REQ-004: wind shader + particles advance even when menu is blocking ball physics
-  const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {} try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {} };
+  const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {}; try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
   // REQ-021: when reward menu visible, block aiming/charging but still animate wind
   if (rewardMenuVisible) {
     // Still allow wind animation, but block ball physics and charging transition
@@ -2481,9 +2544,9 @@ function update(dt) {
       holeBannerVisible = false;
       holeBannerTimer = 0;
       // auto-transition to reward menu if pending (holes >0)
-      try { maybeShowRewardMenu(); } catch {}
-      if (!rewardMenuVisible) try { maybeShowAttemptsBanner(); } catch {}
-      if (!rewardMenuVisible && !attemptsBannerVisible) try { maybeShowFreeShotBanner(); } catch {}
+      try { maybeShowRewardMenu(); } catch {};
+      if (!rewardMenuVisible) try { maybeShowAttemptsBanner(); } catch {};
+      if (!rewardMenuVisible && !attemptsBannerVisible) try { maybeShowFreeShotBanner(); } catch {};
     }
     if (charging) {
       resetCharge();
@@ -2531,12 +2594,12 @@ function update(dt) {
   updateHotbarUI();
   // 11-banners: maybe show attempts/freeShot banner (triggered after counter decreased to 1)
   if ((gameState === "AIMING" || gameState === "CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible) {
-    try { maybeShowAttemptsBanner(); } catch {}
+    try { maybeShowAttemptsBanner(); } catch {};
     if (attemptsBannerVisible) {
       if (charging) { resetCharge(); gameState = "AIMING"; }
       return;
     }
-    try { maybeShowFreeShotBanner(); } catch {}
+    try { maybeShowFreeShotBanner(); } catch {};
     if (freeShotBannerVisible) {
       if (charging) { resetCharge(); gameState = "AIMING"; }
       return;
@@ -2554,12 +2617,12 @@ function update(dt) {
           saveProgress();
           maybeShowRewardMenu();
         }
-      } catch {}
+      } catch {};
     }
   }
 
   if (gameState === "FLYING") {
-    try { updateWindUniforms(dt, getWindAt); } catch {}
+    try { updateWindUniforms(dt, getWindAt); } catch {};
     updateBall(dt, getWindAt, windStrength, LOGICAL_W, LOGICAL_H);
 
     // Check win every tick - immediate, regardless of speed (REQ-009)
@@ -2581,7 +2644,7 @@ function update(dt) {
           // If reward menu is now visible, freeze physics immediately (do not process OOB/bounce this tick)
           if (rewardMenuVisible) return;
         }
-      } catch {}
+      } catch {};
     }
 
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
@@ -2611,19 +2674,19 @@ function update(dt) {
     }
 
     // Softlock detection: show banner if ball confined without progress
-    try { updateSoftlockDetection(dt); } catch {}
+    try { updateSoftlockDetection(dt); } catch {};
 
     // No auto-reset on rest - ball continues drifting per REQ-005
 
   } else if (gameState === "WIN") {
     // paused physics, still animate wind
-    try { updateWindUniforms(dt, getWindAt); } catch {}
+    try { updateWindUniforms(dt, getWindAt); } catch {};
   } else if (gameState === "GAME_OVER") {
     // frozen, still animate wind dimmed
-    try { updateWindUniforms(dt, getWindAt); } catch {}
+    try { updateWindUniforms(dt, getWindAt); } catch {};
   } else {
     // AIMING/CHARGING - animate wind anyway
-    try { updateWindUniforms(dt, getWindAt); } catch {}
+    try { updateWindUniforms(dt, getWindAt); } catch {};
   }
 }
 
@@ -2649,11 +2712,11 @@ function render() {
   // Background is on BOTTOM canvas (zoned terrain via redrawBottom), not drawn here
   drawModifiers(ctx, modifiers);
   // Per new requirement: show field direction and strength as arrows inside modifiers, no particles inside
-  try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH); } catch {}
+  try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH); } catch {};
   drawObstacles(ctx, level.obstacles);
   drawHole(ctx, level.hole);
   if (level.treasure) {
-    try { drawTreasure(ctx, level.treasure); } catch {}
+    try { drawTreasure(ctx, level.treasure); } catch {};
   }
   drawBall(ctx, ball);
   if (!rewardMenuVisible) {
@@ -2675,21 +2738,21 @@ function render() {
   }
   // Softlock banner (non-blocking) below HUD — informs player they can reset via R or pause menu
   if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !helpVisible && gameState === "FLYING") {
-    try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch {}
+    try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch {};
   }
   // 11-banners: hole/attempts/freeShot banners share reward backdrop/style, auto-hide 1s; hole banner transitions to reward
   if (holeBannerVisible) {
-    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch {}
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch {};
   } else if (attemptsBannerVisible) {
-    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, attemptsBannerText); } catch {}
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, attemptsBannerText); } catch {};
   } else if (freeShotBannerVisible) {
-    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, freeShotBannerText); } catch {}
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, freeShotBannerText); } catch {};
   } else if (rewardMenuVisible) {
     drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover, rewardRerolled, rewardRerollHover);
   }
   // REQ-028: pause menu is DOM-only (#pause-overlay) to avoid duplicate rendering; canvas pause draw disabled
   // Render wind overlay (Three.js shader lines + particles) on top of game canvas, transparent
-  try { renderWind(); } catch {}
+  try { renderWind(); } catch {};
 }
 
 function loop(now) {
@@ -2902,7 +2965,7 @@ function init() {
         if (existing) {
           try {
             imported.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});
-          } catch {}
+          } catch {};
           imported.name = imported.name + ' (Import)';
         }
         courses.push(imported);
@@ -3001,7 +3064,7 @@ function init() {
       let v = campaignInput.value.toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, 8);
       if (v !== campaignInput.value) {
         campaignInput.value = v;
-        try { campaignInput.setSelectionRange(start, end); } catch {}
+        try { campaignInput.setSelectionRange(start, end); } catch {};
       }
       const err = document.getElementById('campaign-seed-error');
       if (err && !err.classList.contains('hidden')) { err.textContent = ''; err.classList.add('hidden'); }
@@ -3026,7 +3089,7 @@ function init() {
   setupCanvas();
   // REQ-031: load courses collection before progress (so courseId can be resolved)
   try { loadCourses(); } catch (e) { console.warn('loadCourses failed', e); }
-  try { syncCampaignSeedDisplay(); } catch {}
+  try { syncCampaignSeedDisplay(); } catch {};
   // No immediate auto-create if courses empty — allow empty per updated REQ-031 (persist [])
   // loadCourses already created default on first ever missing key; empty from delete stays empty
   // Ensure activeCourse defaults to first course if available
@@ -3040,7 +3103,7 @@ function init() {
       courses[0].bestTotal = legacy;
       saveCourses();
     }
-  } catch {}
+  } catch {};
   // REQ-004: init Three.js wind overlay (transparent shader + particles) on top of game canvas
   try {
     const container = document.getElementById('game-container');
@@ -3054,7 +3117,7 @@ function init() {
     try {
       const _secretHole = getSecretHoleFromURL();
       if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
-        try { clearProgress(); } catch {}
+        try { clearProgress(); } catch {};
         throw new Error('secret hole overrides save');
       }
       const data = loadProgress();
@@ -3065,7 +3128,7 @@ function init() {
         createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
         syncModifiersToField();
         createBall(level.tee);
-        try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {}
+        try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
         // Handle GAME_OVER save: show Game Over screen directly
         if (data.gameState === 'GAME_OVER') {
           gameState = 'GAME_OVER';
@@ -3106,7 +3169,7 @@ function init() {
         updateAttemptsUI(); updateHotbarUI(); updateForceBar();
         syncMainMenu(); syncPauseOverlay();
         redrawBottom();
-        try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch {}
+        try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch {};
         // Mark that we auto-resumed so main-menu block below is skipped
         window.__autoResumed = true;
       } else {
@@ -3125,7 +3188,7 @@ function init() {
   // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden) — clear save and set hole behind menu
   const _secretHole = getSecretHoleFromURL();
   if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
-    try { clearProgress(); } catch {}
+    try { clearProgress(); } catch {};
     currentHoleIndex = _secretHole - 1;
   } else {
     currentHoleIndex = 0;
@@ -3155,13 +3218,13 @@ function init() {
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { amplify: 1, nullify: 1, flip: 1, rotate: 1, freeShot: 0 };
-  maxAttempts = 10; areaUpgradeCount = 0; rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0 };
+  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardChosenCounts = { amplify: 0, nullify: 0, flip: 0, rotate: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   rewardPending = false; rewardOffered = []; rewardRerolled = false;
   resetHotbarCollapsed();
   updateAttemptsUI(); updateHotbarUI(); updateForceBar();
   syncMainMenu(); syncPauseOverlay();
   // Hide loading after splash is ready (also handled via image onload)
-  try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch {}
+  try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch {};
   }
   if (window.__autoResumed) {
     // Clean up flag after auto-resume
@@ -3228,6 +3291,10 @@ function init() {
           // Legacy freeShot slot should not exist; ignore
           return;
         }
+        // Passive modifiers: Field Extender and Power Cell are not selectable, no hotkey, show tooltip only
+        if (type === 'fieldExtender' || type === 'areaUp' || type === 'powerCell') {
+          return;
+        }
         // When collapsed slots are display:none so click won't fire; no extra block needed but keep functional if called programmatically
         if (selectedModifier === type) {
           selectedModifier = null;
@@ -3273,7 +3340,7 @@ function init() {
         return origQSA(sel);
       };
     }
-  } catch {}
+  } catch {};
   // Ensure text is Next Attempt
   for (const btn of [pauseNextAttemptBtnDom, pauseResetAttemptBtnDom].filter(Boolean)) {
     if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
@@ -3735,7 +3802,7 @@ function init() {
           e.preventDefault();
           return;
         }
-      } catch {}
+      } catch {};
       const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H, rewardOffered);
       for (const btn of layout) {
         if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
@@ -3782,7 +3849,7 @@ function init() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       setupCanvas();
-      try { resizeWindOverlay(); } catch {}
+      try { resizeWindOverlay(); } catch {};
     }, 200);
   });
 
@@ -3856,9 +3923,15 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'freeShotFlightActive', { get: () => freeShotFlightActive, set: (v) => { freeShotFlightActive = !!v; syncFreeShotGlow(); } });
   Object.defineProperty(window, '__freeShotFlightActive', { get: () => freeShotFlightActive, set: (v) => { freeShotFlightActive = !!v; syncFreeShotGlow(); } });
   window.__getAreaUpgradeCount = getAreaUpgradeCount;
+  window.__getFieldExtenderCount = getFieldExtenderCount;
+  window.__getPowerCellCount = getPowerCellCount;
   window.__getAreaMultiplier = getAreaMultiplier;
+  window.__getPowerMultiplier = getPowerMultiplier;
   window.__getEffectiveModifierRadius = getEffectiveModifierRadius;
+  window.__getEffectiveModifierStrength = getEffectiveModifierStrength;
   window.__addAreaUpgrade = addAreaUpgrade;
+  window.__addFieldExtender = addFieldExtender;
+  window.__addPowerCell = addPowerCell;
   window.__getRewardPending = () => rewardPending;
   window.__setRewardPending = (v) => { rewardPending = !!v; };
   window.__getRewardRerolled = getRewardRerolled;
@@ -3904,6 +3977,7 @@ if (typeof window !== 'undefined') {
     get: () => areaUpgradeCount,
     set: (v) => {
       areaUpgradeCount = Math.max(0, Math.floor(v));
+      fieldExtenderCount = areaUpgradeCount;
       const newR = getEffectiveModifierRadius();
       for (const m of modifiers) m.radius = newR;
       syncModifiersToField();
@@ -3913,9 +3987,48 @@ if (typeof window !== 'undefined') {
     get: () => areaUpgradeCount,
     set: (v) => {
       areaUpgradeCount = Math.max(0, Math.floor(v));
+      fieldExtenderCount = areaUpgradeCount;
       const newR = getEffectiveModifierRadius();
       for (const m of modifiers) m.radius = newR;
       syncModifiersToField();
+    }
+  });
+  Object.defineProperty(window, 'fieldExtenderCount', {
+    get: () => fieldExtenderCount,
+    set: (v) => {
+      fieldExtenderCount = Math.max(0, Math.floor(v));
+      areaUpgradeCount = fieldExtenderCount;
+      const newR = getEffectiveModifierRadius();
+      for (const m of modifiers) m.radius = newR;
+      syncModifiersToField();
+      updateHotbarUI();
+    }
+  });
+  Object.defineProperty(window, '__fieldExtenderCount', {
+    get: () => fieldExtenderCount,
+    set: (v) => {
+      fieldExtenderCount = Math.max(0, Math.floor(v));
+      areaUpgradeCount = fieldExtenderCount;
+      const newR = getEffectiveModifierRadius();
+      for (const m of modifiers) m.radius = newR;
+      syncModifiersToField();
+      updateHotbarUI();
+    }
+  });
+  Object.defineProperty(window, 'powerCellCount', {
+    get: () => powerCellCount,
+    set: (v) => {
+      powerCellCount = Math.max(0, Math.floor(v));
+      try { setFieldPowerCellCount(powerCellCount); } catch {}
+      updateHotbarUI();
+    }
+  });
+  Object.defineProperty(window, '__powerCellCount', {
+    get: () => powerCellCount,
+    set: (v) => {
+      powerCellCount = Math.max(0, Math.floor(v));
+      try { setFieldPowerCellCount(powerCellCount); } catch {}
+      updateHotbarUI();
     }
   });
   Object.defineProperty(window, 'rewardPending', {
@@ -4101,7 +4214,7 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'rewardSeedCounter', { get: () => rewardSeedCounter, set: (v) => { rewardSeedCounter = Math.max(0, Math.floor(v||0)); } });
 }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, getAreaUpgradeCount, getAreaMultiplier, getEffectiveModifierRadius, addAreaUpgrade, BASE_MODIFIER_RADIUS, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {

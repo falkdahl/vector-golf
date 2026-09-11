@@ -6,6 +6,12 @@ export const MAX_POWER_REF = 600; // for min force calc per REQ-003
 export const MIN_WIND_FORCE = 80; // increased from 60 for faster drift (13% of max power)
 
 export const MODIFIER_RADIUS = 54; // reduced 40% from 90 (90*0.6) per user request
+export const BASE_STRENGTH = 5;
+let powerCellCount = 0;
+export function setPowerCellCount(n) { powerCellCount = Math.max(0, Math.floor(n ?? 0)); }
+export function getPowerCellCount() { return powerCellCount; }
+export function getPowerMultiplier() { return 1 + 0.1 * powerCellCount; }
+export function getEffectiveBaseStrength() { return BASE_STRENGTH * getPowerMultiplier(); }
 
 // Defaults for superposition REQ-003 - no unary, edge sources/sinks, interior vortex/doublet
 export const DEFAULT_SOURCES = 1;
@@ -463,8 +469,8 @@ export function getWindAt(worldX, worldY) {
     };
   }
 
-  // Apply modifiers - updated per new requirement: rotate includes one amplify (5×), stacked rotate/flip deduped to one amplify, CCW
-  // Normative: totalFactor = 5**(amplifyCount + (hasRotFlip?1:0)), rotation = (rotateCount*90 CCW + flipCount*180) %360 CCW, nullify dominates
+  // Apply modifiers - updated per new requirement: rotate includes one amplify (5×), stacked rotate/flip deduped to one amplify, CCW, scaled by Power Cell
+  // Normative: BASE_STRENGTH=5, powerMultiplier=1+0.1*powerCellCount, totalFactor = 5**(amplifyCount + (hasRotFlip?1:0)) * (hasActive?powerMultiplier:1), rotation = (rotateCount*90 CCW + flipCount*180) %360 CCW, nullify dominates, radius = BASE_MODIFIER_RADIUS*(1+0.1*fieldExtenderCount)
   let amplifyCount = 0;
   let flipCount = 0;
   let rotateCount = 0;
@@ -481,7 +487,9 @@ export function getWindAt(worldX, worldY) {
   }
   if (hasNullify) return { x: 0, y: 0 };
   const hasRotFlip = (flipCount + rotateCount) > 0;
-  const totalFactor = Math.pow(5, amplifyCount + (hasRotFlip ? 1 : 0));
+  const hasActive = amplifyCount > 0 || hasRotFlip;
+  const powerMultiplier = hasActive ? (1 + 0.1 * powerCellCount) : 1;
+  const totalFactor = Math.pow(5, amplifyCount + (hasRotFlip ? 1 : 0)) * powerMultiplier;
   let result = { x: base.x * totalFactor, y: base.y * totalFactor };
   // Apply combined rotation: rotateCount*90 CCW + flipCount*180 = totalQuarterTurns*90 CCW
   const totalQuarterTurns = (rotateCount + 2 * flipCount) % 4;

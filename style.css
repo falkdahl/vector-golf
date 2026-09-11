@@ -779,7 +779,7 @@ body {
 #hotbar:not(.collapsed) {
   opacity: 1;
   transform: scaleX(1);
-  max-width: 300px;
+  max-width: 420px;
   transition: opacity 0.22s ease 0.22s, transform 0.22s ease 0.22s, max-width 0.22s ease 0.22s, padding 0.22s ease 0.22s, background 0.18s ease, border 0.18s ease;
 }
 #hotbar.collapsed {
@@ -787,7 +787,7 @@ body {
 }
 #hotbar-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   align-items: center;
 }
@@ -812,6 +812,10 @@ body {
 .hotbar-slot[data-type="nullify"] { background: rgba(52,152,219,0.82); border-color: #1a4a6b; }
 .hotbar-slot[data-type="flip"] { background: rgba(155,89,182,0.82); border-color: #4a235a; }
 .hotbar-slot[data-type="rotate"] { background: rgba(231,76,60,0.82); border-color: #6e1a12; }
+.hotbar-slot[data-type="fieldExtender"] { background: rgba(243,156,18,0.82); border-color: #b7791f; cursor: default; }
+.hotbar-slot[data-type="powerCell"] { background: rgba(142,68,173,0.82); border-color: #7d3c98; cursor: default; }
+.hotbar-slot.passive { cursor: default; }
+.hotbar-slot.passive:hover { filter: brightness(1.05); }
 .hotbar-slot.selected {
   border-color: rgba(255,255,255,0.95) !important;
   box-shadow: 0 0 0 1.5px rgba(255,255,255,0.45), 0 2px 6px rgba(0,0,0,0.30);
@@ -841,12 +845,12 @@ body {
   position: absolute;
   right: -6px;
   bottom: -6px;
-  font: 800 13px system-ui, sans-serif;
+  font: 800 11px system-ui, sans-serif;
   color: white;
   background: rgba(0,0,0,0.92);
   border: 1.5px solid rgba(255,255,255,0.98);
   border-radius: 6px;
-  padding: 1px 5px;
+  padding: 1px 4px;
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;

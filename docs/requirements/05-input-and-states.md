@@ -61,7 +61,7 @@ States: `AIMING`, `CHARGING`, `FLYING` (covers drifting), `WIN`, `GAME_OVER`. Tr
 - `FLYING`: physics updates, wind always applied, collision/edge/hole checked each tick; no aiming/charging/modifier input; persists while drifting.
 - `WIN`: ball entered **final** hole per `08-rewards-and-progression.md` §1; `WIN` state frozen, Victory overlay per `03-rendering.md` §4. Non-final holes auto-advance without `WIN`.
 
-`resetBall()` (idempotent): `ball.pos={...tee}; vel={0,0}; isMoving=false; charge=0; charging=false; state='AIMING';` clear overlays if not `WIN`/`GAME_OVER`; do NOT touch `aimAngle`, `holeAttempts`/`totalAttempts`/`maxAttempts`, `supply`/`isFreeShotActive`/`areaUpgradeCount`, `modifiers`, `treasure`.
+`resetBall()` (idempotent): `ball.pos={...tee}; vel={0,0}; isMoving=false; charge=0; charging=false; state='AIMING';` clear overlays if not `WIN`/`GAME_OVER`; do NOT touch `aimAngle`, `holeAttempts`/`totalAttempts`/`maxAttempts`, `supply`/`isFreeShotActive`/`fieldExtenderCount` (alias `areaUpgradeCount`)/`powerCellCount`, `modifiers`, `treasure`.
 
 `R` key:
 - In `AIMING` → `resetBall()` (always, does not consume attempt if ball not yet launched).
