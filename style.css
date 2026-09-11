@@ -793,10 +793,10 @@ body {
 }
 .hotbar-slot {
   position: relative;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
@@ -812,8 +812,8 @@ body {
 .hotbar-slot[data-type="nullify"] { background: rgba(52,152,219,0.82); border-color: #1a4a6b; }
 .hotbar-slot[data-type="flip"] { background: rgba(155,89,182,0.82); border-color: #4a235a; }
 .hotbar-slot[data-type="rotate"] { background: rgba(231,76,60,0.82); border-color: #6e1a12; }
-.hotbar-slot[data-type="fieldExtender"] { background: rgba(243,156,18,0.82); border-color: #b7791f; cursor: default; }
-.hotbar-slot[data-type="powerCell"] { background: rgba(142,68,173,0.82); border-color: #7d3c98; cursor: default; }
+.hotbar-slot[data-type="fieldExtender"] { background: rgba(128,128,128,0.82); border-color: #7a7a7a; cursor: default; }
+.hotbar-slot[data-type="powerCell"] { background: rgba(128,128,128,0.82); border-color: #7a7a7a; cursor: default; }
 .hotbar-slot.passive { cursor: default; }
 .hotbar-slot.passive:hover { filter: brightness(1.05); }
 .hotbar-slot.selected {
@@ -842,8 +842,8 @@ body {
   pointer-events: none;
 }
 .hotbar-icon-img {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
   display: block;
   pointer-events: none;
@@ -963,6 +963,149 @@ body {
 }
 #hotbar-toggle:active {
   transform: scale(0.92);
+}
+
+#reward-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  border-radius: 8px;
+  z-index: 5;
+  padding: 16px;
+}
+#reward-overlay.hidden { display: none !important; }
+.reward-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 90%;
+  max-height: 90%;
+}
+.reward-title {
+  margin: 0 0 4px;
+  font: 700 22px system-ui, sans-serif;
+  color: white;
+  -webkit-text-stroke: 5px rgba(0,0,0,0.75);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+  text-align: center;
+}
+.reward-buttons {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.reward-button {
+  width: 150px;
+  height: 195px;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px 8px 8px;
+  gap: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s, filter 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+  text-align: center;
+  user-select: none;
+}
+.reward-button:hover {
+  filter: brightness(1.12);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  border-color: rgba(255,255,255,0.95) !important;
+}
+.reward-button[data-type="amplify"] { background: rgba(230,126,34,0.28); border-color: rgba(230,126,34,0.9); }
+.reward-button[data-type="nullify"] { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9); }
+.reward-button[data-type="flip"] { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9); }
+.reward-button[data-type="rotate"] { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.9); }
+.reward-button[data-type="freeShot"] { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.9); }
+.reward-button[data-type="fieldExtender"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
+.reward-button[data-type="powerCell"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
+.reward-button-icon {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35));
+  margin-top: 6px;
+  pointer-events: none;
+}
+.reward-button-icon.fallback {
+  width: 88px;
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 36px system-ui, sans-serif;
+  color: white;
+  -webkit-text-stroke: 3px rgba(0,0,0,0.65);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  margin-top: 6px;
+  pointer-events: none;
+}
+.reward-button-label {
+  margin-top: 14px;
+  font: 700 13px system-ui, sans-serif;
+  color: white;
+  -webkit-text-stroke: 4px rgba(0,0,0,0.75);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+.reward-button-hint {
+  font: 600 11px system-ui, sans-serif;
+  color: rgba(255,255,255,0.95);
+  -webkit-text-stroke: 3px rgba(0,0,0,0.6);
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+.reward-button-key {
+  font: 600 11px system-ui, sans-serif;
+  color: rgba(255,255,255,0.85);
+  -webkit-text-stroke: 3px rgba(0,0,0,0.6);
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+.reward-reroll-row {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+}
+.reward-reroll-button {
+  width: 190px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.12);
+  color: white;
+  font: 700 12px system-ui, sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-text-stroke: 2px rgba(0,0,0,0.65);
+  paint-order: stroke fill;
+  transition: background 0.15s;
+}
+.reward-reroll-button:hover { background: rgba(255,255,255,0.22); }
+.reward-reroll-button:disabled,
+.reward-reroll-button.disabled {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.45);
+  cursor: not-allowed;
+  -webkit-text-stroke: 0;
 }
 
 #campaign-seed-wrapper {

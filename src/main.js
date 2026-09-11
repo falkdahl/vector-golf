@@ -331,9 +331,9 @@ let powerCellCount = 0; // new — +10% wind strength per stack for amplify/flip
 function getAreaUpgradeCount() { return fieldExtenderCount; }
 function getFieldExtenderCount() { return fieldExtenderCount; }
 function getPowerCellCount() { return powerCellCount; }
-function getAreaMultiplier() { return (10 + fieldExtenderCount) / 10; } // 1 + 0.1*n (was 1+0.2n)
-function getEffectiveModifierRadius() { return (BASE_MODIFIER_RADIUS * (10 + fieldExtenderCount)) / 10; }
-function getPowerMultiplier() { return (10 + powerCellCount) / 10; } // 1 + 0.1*n
+function getAreaMultiplier() { return 1 + 0.15 * fieldExtenderCount; } // 1 + 0.15*n
+function getEffectiveModifierRadius() { return BASE_MODIFIER_RADIUS * getAreaMultiplier(); }
+function getPowerMultiplier() { return 1 + 0.15 * powerCellCount; } // 1 + 0.15*n
 function getEffectiveModifierStrength() { return BASE_MODIFIER_STRENGTH * getPowerMultiplier(); }
 function addAreaUpgrade(n = 1) { return addFieldExtender(n); }
 function addFieldExtender(n = 1) {
@@ -1365,37 +1365,73 @@ function getSeededRewardOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':' + rewardSeedCounter;
   rewardSeedCounter++;
-  const copy = [...REWARD_POOL];
-  seededShuffle(copy, seedStr);
-  let offer = copy.slice(0, 3);
-  offer = maybeFilterAreaUp(offer, seedStr);
+  // Field Extender and Power Cell share one slot (combined) with same probability as other items, never together
+  const basePool = ['amplify','nullify','flip','rotate','freeShot'];
+  const effectivePool = [...basePool, 'COMBINED'];
+  seededShuffle(effectivePool, seedStr);
+  let offer = effectivePool.slice(0, 3);
+  if (offer.includes('COMBINED')) {
+    const pickSeed = hashSeedString(seedStr + ':pick');
+    const r = mulberry32Reward(pickSeed)();
+    const resolved = r < 0.5 ? 'fieldExtender' : 'powerCell';
+    offer = offer.map(t => t === 'COMBINED' ? resolved : t);
+  }
+  // Ensure never both fieldExtender and powerCell together (legacy guard)
+  if (offer.includes('fieldExtender') && offer.includes('powerCell')) {
+    const dupIdx = offer.indexOf('powerCell');
+    const notInOffer = REWARD_POOL.filter(x => !offer.includes(x));
+    if (notInOffer.length) {
+      const pickSeed2 = hashSeedString(seedStr + ':dedup');
+      const rr = mulberry32Reward(pickSeed2)();
+      const pick = notInOffer[Math.floor(rr * notInOffer.length)];
+      offer[dupIdx] = pick;
+    } else {
+      offer[dupIdx] = 'amplify';
+    }
+  }
   return offer;
 }
 function getSeededRerollOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':reroll:' + rewardSeedCounter;
   rewardSeedCounter++;
-  const copy = [...REWARD_POOL];
-  seededShuffle(copy, seedStr);
-  let offer = copy.slice(0, 3);
-  offer = maybeFilterAreaUp(offer, seedStr);
+  const basePool = ['amplify','nullify','flip','rotate','freeShot'];
+  const effectivePool = [...basePool, 'COMBINED'];
+  seededShuffle(effectivePool, seedStr);
+  let offer = effectivePool.slice(0, 3);
+  if (offer.includes('COMBINED')) {
+    const pickSeed = hashSeedString(seedStr + ':pick');
+    const r = mulberry32Reward(pickSeed)();
+    const resolved = r < 0.5 ? 'fieldExtender' : 'powerCell';
+    offer = offer.map(t => t === 'COMBINED' ? resolved : t);
+  }
+  if (offer.includes('fieldExtender') && offer.includes('powerCell')) {
+    const dupIdx = offer.indexOf('powerCell');
+    const notInOffer = REWARD_POOL.filter(x => !offer.includes(x));
+    if (notInOffer.length) {
+      const pickSeed2 = hashSeedString(seedStr + ':dedup');
+      const rr = mulberry32Reward(pickSeed2)();
+      const pick = notInOffer[Math.floor(rr * notInOffer.length)];
+      offer[dupIdx] = pick;
+    } else {
+      offer[dupIdx] = 'amplify';
+    }
+  }
   return offer;
 }
 function maybeFilterAreaUp(offer, seedStr) {
-  // Handles both legacy areaUp and new fieldExtender (weighted 25% less)
-  const hasField = offer.includes('fieldExtender') || offer.includes('areaUp');
-  if (!hasField) return offer;
-  const filterSeed = hashSeedString(seedStr + ':filter');
-  const r = mulberry32Reward(filterSeed)();
-  if (r >= 0.25) return offer;
-  const notInOffer = REWARD_POOL.filter(t => !offer.includes(t) && t !== 'areaUp');
-  // ensure we don't pick fieldExtender again if already present
-  if (!notInOffer.length) return offer;
-  const pickSeed = hashSeedString(seedStr + ':filterPick');
-  const pr = mulberry32Reward(pickSeed)();
-  const pickIdx = Math.floor(pr * notInOffer.length);
-  const replacement = notInOffer[Math.max(0, Math.min(notInOffer.length - 1, pickIdx))];
-  return offer.map(t => (t === 'fieldExtender' || t === 'areaUp') ? replacement : t);
+  // Legacy: Field Extender + Power Cell now combined slot, never together. Keep guard for legacy saves.
+  if (offer.includes('fieldExtender') && offer.includes('powerCell')) {
+    const idx = offer.indexOf('powerCell');
+    const notInOffer = REWARD_POOL.filter(t => !offer.includes(t));
+    if (notInOffer.length) {
+      const pickSeed = hashSeedString(seedStr + ':filter');
+      const r = mulberry32Reward(pickSeed)();
+      const replacement = notInOffer[Math.floor(r * notInOffer.length)];
+      return offer.map((t,i) => i===idx ? replacement : t);
+    }
+  }
+  return offer;
 }
 function maybeFilterFieldExtender(offer, seedStr) { return maybeFilterAreaUp(offer, seedStr); }
 function getRewardSeedCounter() { return rewardSeedCounter; }
@@ -1436,6 +1472,7 @@ function rerollReward() {
   rewardOffered = getSeededRerollOffer();
   rewardMenuHover = null;
   rewardRerollHover = false;
+  syncRewardOverlay();
   saveProgress();
   return true;
 }
@@ -1474,10 +1511,144 @@ function maybeShowRewardMenu() {
     rewardRerolled = false;
     rewardRerollHover = false;
     updateHotbarUI();
+    syncRewardOverlay();
     saveProgress();
     return;
   }
 }
+
+// HTML Reward Overlay (replaces canvas drawRewardMenu)
+function syncRewardOverlay() {
+  const overlay = document.getElementById('reward-overlay');
+  const btnContainer = document.getElementById('reward-buttons');
+  const rerollBtn = document.getElementById('reward-reroll-button');
+  if (!overlay || !btnContainer) return;
+  // Idempotent check: if overlay already visible with same offer, skip rebuild to avoid hover flicker
+  const currentTypes = Array.from(btnContainer.children).map(b => b.dataset.type).join(',');
+  const desiredTypes = Array.isArray(rewardOffered) ? rewardOffered.join(',') : '';
+  const isVisible = !overlay.classList.contains('hidden');
+  const shouldBeVisible = !!(rewardMenuVisible && Array.isArray(rewardOffered) && rewardOffered.length === 3);
+  if (shouldBeVisible && isVisible && currentTypes === desiredTypes) {
+    // Just update reroll state, no rebuild
+    if (rerollBtn) {
+      const shouldDisable = !!rewardRerolled;
+      if (rerollBtn.disabled !== shouldDisable) {
+        rerollBtn.disabled = shouldDisable;
+        rerollBtn.classList.toggle('disabled', shouldDisable);
+        rerollBtn.textContent = shouldDisable ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
+      }
+    }
+    return;
+  }
+  if (shouldBeVisible) {
+    overlay.classList.remove('hidden');
+    // Build buttons
+    btnContainer.innerHTML = '';
+    const iconMap = {
+      amplify: './img/amplify-icon.png',
+      nullify: './img/nullify-icon.png',
+      flip: './img/flip-icon.png',
+      rotate: './img/rotate-icon.png',
+      fieldExtender: './img/field-extender-icon.png',
+      areaUp: './img/field-extender-icon.png',
+      powerCell: './img/power-cell-icon.png'
+    };
+    const labelMap = {
+      amplify: 'Amplify',
+      nullify: 'Nullify',
+      flip: 'Flip',
+      rotate: 'Rotate',
+      freeShot: 'Free Shot',
+      fieldExtender: 'Field Extender',
+      areaUp: 'Field Extender',
+      powerCell: 'Power Cell'
+    };
+    const hintMap = {
+      amplify: '+1 to supply',
+      nullify: '+1 to supply',
+      flip: '+1 to supply',
+      rotate: '+1 to supply',
+      freeShot: 'Supply +3',
+      fieldExtender: '+15% area',
+      areaUp: '+15% area',
+      powerCell: '+15% strength'
+    };
+    const colorMap = {
+      amplify: '#e67e22',
+      nullify: '#3498db',
+      flip: '#9b59b6',
+      rotate: '#e74c3c',
+      freeShot: '#f1c40f',
+      fieldExtender: '#808080',
+      areaUp: '#808080',
+      powerCell: '#808080'
+    };
+    rewardOffered.forEach((type, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'reward-button';
+      btn.dataset.type = type;
+      // Apply color via inline style for border/background handled in CSS per type
+      const isFree = type === 'freeShot';
+      const iconSrc = iconMap[type];
+      if (isFree) {
+        const iconFallback = document.createElement('div');
+        iconFallback.className = 'reward-button-icon fallback';
+        iconFallback.textContent = '★';
+        iconFallback.style.color = colorMap[type] || '#f1c40f';
+        btn.appendChild(iconFallback);
+      } else if (iconSrc) {
+        const img = document.createElement('img');
+        img.className = 'reward-button-icon';
+        img.src = iconSrc;
+        img.alt = type;
+        // Fallback to text if image fails
+        img.onerror = () => {
+          img.style.display = 'none';
+          const fb = document.createElement('div');
+          fb.className = 'reward-button-icon fallback';
+          const sym = type==='amplify'?'\u00BB': type==='nullify'?'\u2205': type==='flip'?'\u21C4': type==='rotate'?'\u21BB': type==='fieldExtender'?'\u25EF': type==='powerCell'?'\u26A1': '•';
+          fb.textContent = sym;
+          btn.insertBefore(fb, img);
+        };
+        btn.appendChild(img);
+      } else {
+        const fb = document.createElement('div');
+        fb.className = 'reward-button-icon fallback';
+        fb.textContent = type;
+        btn.appendChild(fb);
+      }
+      const label = document.createElement('div');
+      label.className = 'reward-button-label';
+      label.textContent = labelMap[type] || type;
+      btn.appendChild(label);
+      const hint = document.createElement('div');
+      hint.className = 'reward-button-hint';
+      hint.textContent = hintMap[type] || '';
+      btn.appendChild(hint);
+      const keyEl = document.createElement('div');
+      keyEl.className = 'reward-button-key';
+      keyEl.textContent = '[' + (idx+1) + ']';
+      btn.appendChild(keyEl);
+      // Hover state via CSS, but track for keyboard selection highlight
+      btn.addEventListener('mouseenter', () => { rewardMenuHover = type; });
+      btn.addEventListener('mouseleave', () => { if (rewardMenuHover===type) rewardMenuHover = null; });
+      btn.addEventListener('click', () => { claimReward(type); });
+      btnContainer.appendChild(btn);
+    });
+    // Reroll button state
+    if (rerollBtn) {
+      rerollBtn.disabled = !!rewardRerolled;
+      rerollBtn.classList.toggle('disabled', !!rewardRerolled);
+      rerollBtn.textContent = rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
+      rerollBtn.onclick = () => { if (!rewardRerolled) rerollReward(); };
+    }
+  } else {
+    overlay.classList.add('hidden');
+    if (btnContainer) btnContainer.innerHTML = '';
+  }
+  // Hotbar stays visible during reward per spec; sync already handles
+}
+
 
 // 11-banners API
 function isHoleBannerVisible() { return holeBannerVisible; }
@@ -1695,11 +1866,11 @@ function claimReward(type) {
     addToSupply('freeShot', 3);
     rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
   } else if (type === 'areaUp' || normalized === 'fieldExtender' || type === 'fieldExtender') {
-    addFieldExtender(1); // Field Extender +10% (was Area +20%)
+    addFieldExtender(1); // Field Extender +15% (was +10% / +20%)
     rewardChosenCounts.fieldExtender = Math.max(0, (rewardChosenCounts.fieldExtender || 0) + 1);
     rewardChosenCounts.areaUp = Math.max(0, (rewardChosenCounts.areaUp || 0) + 1);
   } else if (normalized === 'powerCell' || type === 'powerCell') {
-    addPowerCell(1); // Power Cell +10% strength
+    addPowerCell(1); // Power Cell +15% strength
     rewardChosenCounts.powerCell = Math.max(0, (rewardChosenCounts.powerCell || 0) + 1);
   } else {
     if (!(type in supply) && !(normalized in supply)) return false;
@@ -1715,6 +1886,7 @@ function claimReward(type) {
   rewardOffered = [];
   rewardPending = false;
   updateHotbarUI();
+  syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
   return true;
@@ -1800,6 +1972,7 @@ function loadLevel(index) {
     rewardRerolled = false;
     rewardMenuHover = null;
     rewardRerollHover = false;
+    syncRewardOverlay();
   }
   // REQ-015 collapsible: reset to expanded on new hole
   resetHotbarCollapsed();
@@ -1967,6 +2140,7 @@ function showGameOver() {
   rewardRerolled = false;
   rewardMenuHover = null;
   rewardRerollHover = false;
+  syncRewardOverlay();
   // 11-banners: hide banners on Game Over
   holeBannerVisible = false; holeBannerTimer = 0;
   attemptsBannerVisible = false; attemptsBannerTimer = 0;
@@ -2740,6 +2914,7 @@ function render() {
   if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !helpVisible && gameState === "FLYING") {
     try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch {};
   }
+  // HTML reward overlay (sync handled on state change, not per-frame to avoid thrashing)
   // 11-banners: hole/attempts/freeShot banners share reward backdrop/style, auto-hide 1s; hole banner transitions to reward
   if (holeBannerVisible) {
     try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch {};
@@ -2748,7 +2923,7 @@ function render() {
   } else if (freeShotBannerVisible) {
     try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, freeShotBannerText); } catch {};
   } else if (rewardMenuVisible) {
-    drawRewardMenu(ctx, LOGICAL_W, LOGICAL_H, rewardOffered, rewardMenuHover, rewardRerolled, rewardRerollHover);
+    // Reward is HTML overlay #reward-overlay; no canvas draw (icon background removed)
   }
   // REQ-028: pause menu is DOM-only (#pause-overlay) to avoid duplicate rendering; canvas pause draw disabled
   // Render wind overlay (Three.js shader lines + particles) on top of game canvas, transparent
@@ -3156,6 +3331,7 @@ function init() {
           // If reward was pending/visible before save, restore it
           if (data.rewardMenuVisible && rewardOffered.length === 3) {
             rewardMenuVisible = true;
+            try { syncRewardOverlay(); } catch {};
           } else if (rewardPending) {
             maybeShowRewardMenu();
           }
@@ -3880,7 +4056,7 @@ function getRewardMenuState() {
   return { visible: rewardMenuVisible, claimedFor: rewardClaimedFor, hover: rewardMenuHover, offered: [...rewardOffered] };
 }
 function setRewardClaimedFor(v) { rewardClaimedFor = v; }
-function setRewardMenuVisible(v) { rewardMenuVisible = v; }
+function setRewardMenuVisible(v) { rewardMenuVisible = !!v; try { syncRewardOverlay(); } catch {}; }
 function setRewardOffered(v) { if (Array.isArray(v)) rewardOffered = [...v]; }
 
 // Expose for manual/browser testing and for acceptance checks without import
@@ -3967,7 +4143,7 @@ if (typeof window !== 'undefined') {
   });
   Object.defineProperty(window, 'rewardMenuVisible', {
     get: () => rewardMenuVisible,
-    set: (v) => { rewardMenuVisible = v; }
+    set: (v) => { rewardMenuVisible = !!v; try { syncRewardOverlay(); } catch {}; }
   });
   Object.defineProperty(window, 'rewardClaimedFor', {
     get: () => rewardClaimedFor,

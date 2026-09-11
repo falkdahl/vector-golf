@@ -788,9 +788,9 @@ const REWARD_TYPE_DEFS = {
   flip: { icon: '⇄', label: 'Flip', color: '#9b59b6', border: 'rgba(155,89,182,0.9)', fill: 'rgba(155,89,182,0.28)', fillHover: 'rgba(155,89,182,0.38)', hint: '+1 to supply' },
   rotate: { icon: '↻', label: 'Rotate', color: '#e74c3c', border: 'rgba(231,76,60,0.9)', fill: 'rgba(231,76,60,0.28)', fillHover: 'rgba(231,76,60,0.38)', hint: '+1 to supply' },
   freeShot: { icon: '★', label: 'Free Shoot', color: '#f1c40f', border: 'rgba(241,196,15,0.9)', fill: 'rgba(241,196,15,0.28)', fillHover: 'rgba(241,196,15,0.38)', hint: 'Supply +3' },
-  areaUp: { icon: '◯', label: 'Field Extender', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+10% area' },
-  fieldExtender: { icon: '◯', label: 'Field Extender', color: '#f39c12', border: 'rgba(243,156,18,0.9)', fill: 'rgba(243,156,18,0.28)', fillHover: 'rgba(243,156,18,0.38)', hint: '+10% area' },
-  powerCell: { icon: '⚡', label: 'Power Cell', color: '#8e44ad', border: 'rgba(142,68,173,0.9)', fill: 'rgba(142,68,173,0.28)', fillHover: 'rgba(142,68,173,0.38)', hint: '+10% strength' }
+  areaUp: { icon: '◯', label: 'Field Extender', color: '#808080', border: 'rgba(128,128,128,0.9)', fill: 'rgba(128,128,128,0.28)', fillHover: 'rgba(128,128,128,0.38)', hint: '+15% area' },
+  fieldExtender: { icon: '◯', label: 'Field Extender', color: '#808080', border: 'rgba(128,128,128,0.9)', fill: 'rgba(128,128,128,0.28)', fillHover: 'rgba(128,128,128,0.38)', hint: '+15% area' },
+  powerCell: { icon: '⚡', label: 'Power Cell', color: '#808080', border: 'rgba(128,128,128,0.9)', fill: 'rgba(128,128,128,0.28)', fillHover: 'rgba(128,128,128,0.38)', hint: '+15% strength' }
 };
 
 export function getRewardButtonsLayout(width, height, offered = null) {
@@ -919,75 +919,14 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
       const size = 88;
       const ix = btn.x + btn.w / 2 - size / 2;
       const iy = btn.y + 18;
-      // Blueish gray gradient background behind icon
-      const bgSize = size + 18;
-      const bgX = btn.x + btn.w / 2 - bgSize / 2;
-      const bgY = iy - 9;
-      const grad = ctx.createLinearGradient(bgX, bgY, bgX + bgSize, bgY + bgSize);
-      grad.addColorStop(0, '#6b7c99');
-      grad.addColorStop(0.5, '#8a9ab5');
-      grad.addColorStop(1, '#b8c4d6');
-      ctx.save();
-      ctx.fillStyle = grad;
-      ctx.shadowColor = "rgba(0,0,0,0.25)";
-      ctx.shadowBlur = 6;
-      const r = 12;
-      ctx.beginPath();
-      ctx.moveTo(bgX + r, bgY);
-      ctx.lineTo(bgX + bgSize - r, bgY);
-      ctx.quadraticCurveTo(bgX + bgSize, bgY, bgX + bgSize, bgY + r);
-      ctx.lineTo(bgX + bgSize, bgY + bgSize - r);
-      ctx.quadraticCurveTo(bgX + bgSize, bgY + bgSize, bgX + bgSize - r, bgY + bgSize);
-      ctx.lineTo(bgX + r, bgY + bgSize);
-      ctx.quadraticCurveTo(bgX, bgY + bgSize, bgX, bgY + bgSize - r);
-      ctx.lineTo(bgX, bgY + r);
-      ctx.quadraticCurveTo(bgX, bgY, bgX + r, bgY);
-      ctx.closePath();
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = "rgba(255,255,255,0.22)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.restore();
+      // Icon directly without background per new spec (removed gradient)
       ctx.shadowColor = "rgba(0,0,0,0.35)";
       ctx.shadowBlur = 4;
       ctx.drawImage(iconImg, ix, iy, size, size);
       ctx.shadowBlur = 0;
       ctx.shadowColor = "transparent";
     } else {
-      // Blueish gray gradient background for fallback icon as well (even bigger)
-      const fbSize = 88;
-      const fbBgSize = fbSize + 18;
-      const fbIx = btn.x + btn.w / 2 - fbSize / 2;
-      const fbIy = btn.y + 20;
-      const fbBgX = btn.x + btn.w / 2 - fbBgSize / 2;
-      const fbBgY = fbIy - 9;
-      const fbGrad = ctx.createLinearGradient(fbBgX, fbBgY, fbBgX + fbBgSize, fbBgY + fbBgSize);
-      fbGrad.addColorStop(0, '#6b7c99');
-      fbGrad.addColorStop(0.5, '#8a9ab5');
-      fbGrad.addColorStop(1, '#b8c4d6');
-      ctx.save();
-      ctx.fillStyle = fbGrad;
-      ctx.shadowColor = "rgba(0,0,0,0.25)";
-      ctx.shadowBlur = 6;
-      const fbR = 12;
-      ctx.beginPath();
-      ctx.moveTo(fbBgX + fbR, fbBgY);
-      ctx.lineTo(fbBgX + fbBgSize - fbR, fbBgY);
-      ctx.quadraticCurveTo(fbBgX + fbBgSize, fbBgY, fbBgX + fbBgSize, fbBgY + fbR);
-      ctx.lineTo(fbBgX + fbBgSize, fbBgY + fbBgSize - fbR);
-      ctx.quadraticCurveTo(fbBgX + fbBgSize, fbBgY + fbBgSize, fbBgX + fbBgSize - fbR, fbBgY + fbBgSize);
-      ctx.lineTo(fbBgX + fbR, fbBgY + fbBgSize);
-      ctx.quadraticCurveTo(fbBgX, fbBgY + fbBgSize, fbBgX, fbBgY + fbBgSize - fbR);
-      ctx.lineTo(fbBgX, fbBgY + fbR);
-      ctx.quadraticCurveTo(fbBgX, fbBgY, fbBgX + fbR, fbBgY);
-      ctx.closePath();
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = "rgba(255,255,255,0.22)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.restore();
+      // No background for fallback icon per new spec
       ctx.font = "700 36px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";

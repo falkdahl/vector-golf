@@ -23,6 +23,7 @@ Allowed DOM:
     <canvas id="game" width="1280" height="720"></canvas>       <!-- z-index:2 transparent, handles input -->
     <canvas id="wind-canvas"></canvas>                          <!-- z-index:3 Three.js, alpha:true, pointer-events:none -->
     <div id="hotbar">...</div>
+    <div id="reward-overlay" class="hidden">...</div>            <!-- z-index:10 HTML reward, dim -->
     <div id="win-overlay" class="hidden">...</div>
     <div id="main-menu-overlay" class="hidden">...</div>
     <div id="toast" class="hidden">copied to clipboard</div>
@@ -33,7 +34,7 @@ Allowed DOM:
 
 - Outside `#game-container` only `#loading-screen` may exist. **No `<h1>`** (`document.querySelector('h1')===null`), **no `#instructions`** (`getElementById('instructions')===null`), no other body children. Tests shall verify `document.body.children` contains only `#game-container` + optional `#loading-screen` and no horizontal scroll.
 - Inside `#game-container` stacking via CSS `canvas,#wind-canvas { position:absolute; inset:0; width:100%; height:100% }` with `#bg-canvas{z-index:1}` `#game{z-index:2}` `#wind-canvas{z-index:3; pointer-events:none; background:transparent}` and `pointer-events:none` on `bg`+`wind`; `game` is the only input target.
-- Overlays (`#hotbar`,`#win-overlay`,`#main-menu-overlay`,`#help-overlay`,`#toast`) are `position:absolute; inset:0` or anchored to container edges, `z-index:5-12`, bounded to container (`getBoundingClientRect()` inside container). Scrollable children use `overflow-y:auto; overscroll-behavior:contain`.
+- Overlays (`#hotbar`,`#reward-overlay`,`#win-overlay`,`#main-menu-overlay`,`#help-overlay`,`#toast`) are `position:absolute; inset:0` or anchored to container edges, `z-index:5-12`, bounded to container (`getBoundingClientRect()` inside container). Scrollable children use `overflow-y:auto; overscroll-behavior:contain`.
 
 ## 3. Centering & Maximization (16:9)
 
