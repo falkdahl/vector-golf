@@ -967,10 +967,12 @@ function showCoinSummary(holes, coins) {
   coinSummaryCoins = Math.max(0, Math.floor(coins||0));
   coinSummaryVisible = true;
   syncCoinSummaryOverlay();
+  syncProgressionDisplay();
 }
 function hideCoinSummary() {
   coinSummaryVisible=false;
   syncCoinSummaryOverlay();
+  syncProgressionDisplay();
 }
 function finalizeRunCoinsAndShowSummary() {
   const holes = runHolesCleared;
