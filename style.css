@@ -1478,7 +1478,7 @@ body {
   border-radius: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   align-items: center;
   width: 100%;
   max-width: 100%;
@@ -1496,6 +1496,20 @@ body {
   color: white;
   -webkit-text-stroke: 4px rgba(0,0,0,0.7);
   paint-order: stroke fill;
+  flex: 0 0 auto;
+}
+.loadout-gap {
+  flex: 1 1 0;
+  min-height: 12px;
+  max-height: 64px;
+  width: 100%;
+  pointer-events: none;
+}
+.loadout-gap--title-loadout {
+  max-height: 48px;
+}
+.loadout-gap--loadout-shop {
+  max-height: 48px;
 }
 .loadout-subtitle {
   margin: -6px 0 0;
@@ -1505,11 +1519,12 @@ body {
 .loadout-layout {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   width: 100%;
-  flex: 1;
+  flex: 1 1 auto;
   overflow: hidden;
   min-height: 0;
+  align-items: center;
 }
 .loadout-left {
   display: flex;
@@ -1517,18 +1532,20 @@ body {
   gap: 12px;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   flex: 0 0 auto;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
 }
 .loadout-right {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  flex: 1;
-  width: 100%;
+  overflow: visible;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
 }
 .loadout-section {
   background: transparent;
@@ -1568,10 +1585,12 @@ body {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-  overflow: hidden;
-  flex: 1;
-  width: 100%;
+  overflow: visible;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
   box-sizing: border-box;
+  align-items: center;
 }
 .loadout-section h3, .loadout-shop-section h3, .loadout-storage-section h3 {
   margin: 0;
@@ -1697,36 +1716,50 @@ body {
 .personal-item .pi-name { font: 600 9px system-ui, sans-serif; color: white; -webkit-text-stroke: 2px rgba(0,0,0,0.5); paint-order: stroke fill; }
 .personal-item .pi-owned { font: 600 8px system-ui, sans-serif; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.35); padding:1px 4px; border-radius: 6px; }
 .loadout-shop {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, 88px);
   gap: 8px;
-  overflow-y: auto;
-  flex: 1;
+  overflow: visible;
+  flex: 0 0 auto;
   align-content: start;
+  justify-content: center;
 }
 .shop-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   gap: 4px;
   padding: 8px 6px;
   border-radius: 8px;
   border: 2px solid rgba(255,255,255,0.18);
   background: rgba(255,255,255,0.06);
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  min-height: 88px;
+  height: auto;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  overflow: visible;
 }
-.shop-item img { width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
-.shop-item .si-name { font: 600 10px system-ui, sans-serif; color: white; }
-.shop-item .si-price { font: 600 11px system-ui, sans-serif; color: #FFD700; }
+.shop-item img { width: 32px; height: 32px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35)); flex: 0 0 auto; }
+.shop-item .si-name { font: 600 9px system-ui, sans-serif; color: white; line-height: 1.1; text-align: center; white-space: nowrap; }
+.shop-item .si-price { font: 600 10px system-ui, sans-serif; color: #FFD700; line-height: 1; }
 .shop-item button {
-  margin-top: 2px;
+  margin-top: 4px;
   padding: 4px 10px;
-  font: 700 10px system-ui, sans-serif;
+  font: 700 9px system-ui, sans-serif;
   color: white;
   background: #27ae60;
   border: 1px solid #1e8449;
   border-radius: 6px;
   cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 .shop-item button:disabled { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.45); cursor: not-allowed; }
 .shop-item button:hover:not(:disabled) { background: #1e8449; }
@@ -1740,6 +1773,7 @@ body {
   gap: 12px;
   justify-content: center;
   width: 100%;
+  flex: 0 0 auto;
 }
 #loadout-start-button {
   flex: 1;
