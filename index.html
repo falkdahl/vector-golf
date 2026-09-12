@@ -151,6 +151,53 @@
         <button id="pause-end-run-button" class="main-menu-button">End Run</button>
       </div>
     </div>
+    <div id="loadout-overlay" class="hidden">
+      <div class="loadout-card">
+        <h2 class="loadout-title">Choose Your Loadout</h2>
+        <div class="loadout-layout">
+          <div class="loadout-left">
+            <div class="loadout-section">
+              <div id="loadout-slots" class="loadout-slots"></div>
+            </div>
+          </div>
+          <div class="loadout-right">
+            <div class="loadout-shop-section">
+              <div class="shop-header" style="display:flex; align-items:center; gap:8px; justify-content:center;">
+                <h3>Shop</h3>
+                <span id="loadout-coins">💰 0</span>
+              </div>
+              <div id="shop-grid" class="loadout-shop"></div>
+            </div>
+          </div>
+        </div>
+        <div class="loadout-actions">
+          <button id="loadout-start-button">Start Course</button>
+          <button id="loadout-cancel-button">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="loadout-item-picker-overlay" class="hidden">
+      <div class="loadout-picker-card">
+        <h3>Your Items</h3>
+        <p class="loadout-picker-subtitle">Select an item for this slot — your items never deplete</p>
+        <div id="loadout-picker-grid" class="loadout-picker-grid"></div>
+      </div>
+    </div>
+    <div id="coin-summary-overlay" class="hidden">
+      <div class="coin-summary-card">
+        <h3>Run Complete</h3>
+        <div class="coin-summary-big">
+          <span id="coin-summary-amount">+0</span>
+          <span class="coin-big-icon">💰</span>
+        </div>
+        <div id="coin-summary-details" class="coin-details-rows"></div>
+        <div id="coin-summary-unlock" class="coin-unlock-info">Loadout slot unlocked</div>
+        <p id="coin-summary-text" class="hidden">You earned 0 coins: 0 holes × 10 coins per hole</p>
+        <p id="coin-summary-breakdown" class="coin-breakdown hidden"></p>
+        <button id="coin-summary-ok">Continue</button>
+      </div>
+    </div>
+    <div id="progression-coins-display" class="hidden">Coins: 0</div>
     <div id="help-overlay" class="hidden">
       <div class="help-card">
         <h3>How to Play</h3>
