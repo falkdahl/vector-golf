@@ -7,7 +7,7 @@
 
 ## 1. Currency & Persistent Storage
 
-### 1.1 Storage Key
+### 1.1 Storage Keys
 
 - **Key:** `PROGRESSION_KEY = "golfVectorField.progression.v1"`
 - JSON `version:1` payload:
@@ -23,7 +23,18 @@
 }
 ```
 Legacy `personalSupply` keys `amplify/nullify/flip/rotate/areaUp` map to new names (magnifier/liquifier/deflector/rotator/fieldExtender).
-Wrap in try/catch; corrupt/missing/version!==1 defaults to `coins:0, personalSupply: {magnifier:0, liquifier:1, deflector:0, rotator:0, fieldExtender:0, powerCell:0, freeShot:0}` (see §1.2). No other keys.
+Wrap in try/catch; corrupt/missing/version!==1 defaults to `coins:0, personalSupply: {magnifier:0, liquifier:1, deflector:0, rotator:0, fieldExtender:0, powerCell:0, freeShot:0}` (see §1.2). No other keys in this payload.
+
+- **Loadout Key:** `LOADOUT_KEY = "golfVectorField.loadout.v1"`
+- JSON `version:1` payload:
+```js
+{
+  version:1,
+  slots: Array<type|null> // length 4, each null or one of 7 types
+  savedAt:number
+}
+```
+`slots` is the last loadout confirmed via `Start Course` (`loadoutSlots` length 4, locked slots always `null`). `type` ∈ `['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot']` (legacy `amplify/nullify/flip/rotate/areaUp` normalized). Corrupt/missing/version!==1 or `slots` not length 4 → treat as no saved loadout (`getLastLoadout()===null`, `hasLastLoadout()===false`). Persisted via `setLastLoadout(slots)` / `getLastLoadout()` / `clearLastLoadout()` in `src/progression.js`; survives `clearProgress()` and campaign regeneration (loadout is personal, not per-campaign). Exposed as `window.__LOADOUT_KEY`, `window.__getLastLoadout`, `window.__setLastLoadout` for tests.
 
 ### 1.2 Starting Values
 
@@ -132,6 +143,15 @@ Wrap in try/catch; corrupt/missing/version!==1 defaults to `coins:0, personalSup
 - `personalSupply` and `coins` survive `clearProgress()` (run clear only removes `STORAGE_KEY`, not `PROGRESSION_KEY`). Campaign regeneration (`regenerateCampaign`/`applyManualSeed`) does NOT reset `coins`/`personalSupply` (keep across campaigns) unless explicitly cleared via new `clearProgression()` debug helper (not exposed).
 - Shop prices are fixed; no discount.
 
+### 2.5 Loadout Persistence — Last Loadout Pre-loaded, Random Fallback
+
+- **Saved in persistent storage:** Every successful `Start Course` (`startCourseWithLoadout`) shall persist the confirmed `loadoutSlots` (length 4, copy `[...loadoutSlots]`) via `setLastLoadout(slots)` to `LOADOUT_KEY`. This is the **last loadout** and survives `clearProgress()`, `endRun`, `Game Over`, and campaign regeneration (loadout is personal, like `personalSupply`). `clearLastLoadout()` debug helper may clear it.
+- **Pre-loaded on Loadout screen:** When the player opens the Loadout screen (clicking any unlocked course play button → `showLoadout(courseId)` / `handleCoursePlay(courseId)`), before rendering slots:
+  1. If `hasLastLoadout()===true` (`getLastLoadout()!==null`): validate the saved `slots`: for each index `i` `0..3` if `i >= getUnlockedLoadoutSlots()` → force `null` (locked), else check `type` is in `VALID_LOADOUT_TYPES` and `personalSupply[type] > usedCount` (respect owned count, duplicates limited by owned), otherwise `null`. Used count tracks duplicates so `magnifier:1` cannot fill two slots. Validated array becomes `loadoutSlots` (even if all `null` — empty saved is respected, not re-randomized).
+  2. Else (`hasLastLoadout()===false` / no saved loadout in storage): **pick a random item from the player's storage for each unlocked loadout slot**: for `i=0..unlocked-1` build `candidates = VALID_TYPES.filter(t => (personalSupply[t]??0) - used[t] > 0)` (owned>0 respecting remaining). If `candidates` empty → `null`, else pick `candidates[Math.floor(Math.random()*candidates.length)]` uniformly, decrement `available`. Locked slots remain `null`. This ensures fresh install with only `liquifier:1` gets `liquifier` in slot 0, and richer inventories get fully random distribution without exceeding owned.
+- Random uses `Math.random()` (loadout is UX, not deterministic campaign seed). Validation ensures saved loadout never exceeds owned or unlocked; excess duplicates are dropped to `null` and not re-randomized (player can re-fill via picker).
+- `showLoadout` is the single entry for course play; `handleCoursePlay` shall delegate to `showLoadout` so persistence logic is not bypassed.
+
 ## 3. Run Supply Derivation
 
 - **Run `supply` is ephemeral** (`src/main.js:supply`) derived only at loadout confirm. It is persisted in `STORAGE_KEY` per existing save, but `personalSupply` is separate persistent key.
@@ -188,11 +208,12 @@ Wrap in try/catch; corrupt/missing/version!==1 defaults to `coins:0, personalSup
 - [ ] Clicking unlocked course shows loadout with **only Loadout and Shop panels**; clicking an **unlocked slot** opens picker overlay; selecting a picker item with owned>0 sets that slot to the type (respecting `countInLoadout<owned`), closes picker, updates loadout; `Clear` removes. Start Course derives `supply` from slots: e.g. slots `[liquifier, magnifier, fieldExtender, freeShot]` → `supply.liquifier=1, magnifier=1, fieldExtenderCount=1, freeShot=1`. Sections have **visually distinct backgrounds** Loadout vs Shop (different `backgroundColor` tints using course palette — verify two sections have different `getComputedStyle(backgroundColor)`).
 - [ ] Coin earning: `COINS_PER_HOLE=10` + `COURSE_COMPLETE_BONUS=50` on full course clear. Clearing 2 holes → `runCoinsEarned 20` (no course bonus, only one row `2 hole clears × 10💰`); completing 3-hole course → `80` (`3×10+50`) and summary appears over main menu **as full screen transparent `rgba(0,0,0,0.55)` backdrop with black card `rgba(0,0,0,0.75)` slightly transparent around info** (`getComputedStyle(.coin-summary-card).backgroundColor` `rgba(0,0,0,0.75)` not opaque, `0.70-0.85`) with title `Run Complete`, **big `+80💰` with number before icon and plus** (`#coin-summary-amount` text `+80` before `.coin-big-icon` `💰` in `.coin-summary-big`, `font-size 44px` smaller), **first row `3 hole clears × 10💰`** (`#coin-summary-details .coin-detail-row:first-child` contains `hole clears`, `×`, `10💰`) and **when course cleared second row `Course cleared, 50💰`** (`#coin-summary-details .coin-detail-row:nth-child(2)` contains `Course cleared`, `50`, `💰`, number before 💰, e.g. `Course cleared, 50💰` — only when `isCourseComplete`/bonus awarded, otherwise only one row) **and conditionally bigger unlock `Loadout slot unlocked`** (`#coin-summary-unlock` text exactly `Loadout slot unlocked`, `font:700 15px`, **only visible when a new loadout slot was actually unlocked in that run** `getUnlockedLoadoutSlots() > loadoutUnlockedAtRunStart` — e.g. after first 3-hole clear shows, after End Run with 0 holes or replay without new unlock hidden `display:none`), **do not show** `You earned 30 coins: 3 holes × 10 coins per hole` nor `3 holes cleared — 10 per hole` (`#coin-summary-text`/`#coin-summary-breakdown` hidden `display:none`). `runCoinsEarned` resets. End Run 0 holes shows `+0💰` with `0 hole clears × 10💰` and **no** unlock, **no** course row.
 - [ ] Loadout Cancel (`Cancel`/`Escape`/backdrop) hides overlay without starting course, `mainMenuVisible` remains true, no `STORAGE_KEY` created.
+- [ ] **Loadout persistence — last loadout pre-loaded, random fallback:** After `Start Course` with `slots=[magnifier,liquifier,null,null]` (or any), `localStorage.getItem('golfVectorField.loadout.v1')` contains `slots` JSON and `getLastLoadout()` returns that array. On next `handleCoursePlay` / `showLoadout` (no ongoing save), the loadout screen is **pre-loaded** with that saved array validated (same `slots` visible, same order; locked slots forced `null`). If `localStorage.getItem('golfVectorField.loadout.v1')===null` (no saved loadout, fresh install cleared), opening Loadout shows **random item from player's storage for each unlocked slot**: for `unlocked=1` with only `liquifier:1`, slot 0 is `liquifier`; for richer `personalSupply`, each unlocked slot is a random owned type with uniform `Math.random` among `candidates = types.filter(t=>owned-remaining>0)`, without exceeding owned count, without filling locked slots. `hasLastLoadout()` distinguishes no-key vs saved.
 
 ## File Paths
 
-- `src/progression.js:1` (PROGRESSION_KEY, load/save, coins, personalSupply, purchase, costFor)
-- `src/main.js:1` (loadoutVisible, loadoutSlots, showLoadout/hideLoadout, startCourseWithLoadout, runHolesCleared/runCoinsEarned, syncLoadoutOverlay, coin summary)
+- `src/progression.js:1` (PROGRESSION_KEY, LOADOUT_KEY, load/save, coins, personalSupply, purchase, costFor, getLastLoadout/setLastLoadout/hasLastLoadout)
+- `src/main.js:1` (loadoutVisible, loadoutSlots, showLoadout/hideLoadout, startCourseWithLoadout, runHolesCleared/runCoinsEarned, syncLoadoutOverlay, coin summary, loadout persistence + random fallback)
 - `index.html:1` (`#loadout-overlay`, `#coin-summary-overlay`, `#progression-coins-display`)
 - `style.css:1` (loadout/shop/coin-summary styles, overlay bounds)
 - `docs/requirements/10-progression.md:1` (this file)

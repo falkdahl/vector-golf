@@ -43,7 +43,7 @@ import {
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed } from "./courses.js";
-import { PROGRESSION_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression } from "./progression.js";
+import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -780,12 +780,63 @@ function removeFromLoadout(idx) {
   while (loadoutSlots.length<4) loadoutSlots.push(null);
   syncLoadoutOverlay();
 }
+const VALID_LOADOUT_TYPES = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
 function showLoadout(courseId) {
   if (hasRestorableSave()) return false;
   const course = findCourseById(courseId);
   if (!course) return false;
   loadoutCourseId = courseId;
-  loadoutSlots = [null,null,null,null];
+  // Try to pre-load last saved loadout; if none, pick random owned items for each unlocked slot
+  let preloaded = null;
+  let hasSaved = false;
+  try {
+    const saved = getLastLoadout();
+    if (Array.isArray(saved) && saved.length === 4) {
+      hasSaved = true;
+      const unlocked = getUnlockedLoadoutSlots();
+      const personal = getPersonalSupply();
+      const used = {};
+      const validated = [null,null,null,null];
+      for (let i=0;i<4;i++) {
+        if (i >= unlocked) { validated[i]=null; continue; }
+        const t = saved[i];
+        if (!t) { validated[i]=null; continue; }
+        const norm = normalizeSupplyType(t);
+        // check valid type and owned availability
+        const owned = personal[norm] ?? 0;
+        const cnt = used[norm] ?? 0;
+        if (!VALID_LOADOUT_TYPES.includes(norm)) { validated[i]=null; continue; }
+        if (owned <=0 || cnt >= owned) { validated[i]=null; continue; }
+        validated[i]=norm;
+        used[norm]=(cnt+1);
+      }
+      preloaded = validated;
+    }
+  } catch {}
+  if (hasSaved && preloaded) {
+    loadoutSlots = preloaded;
+  } else if (!hasSaved) {
+    // No saved loadout — pick random item from player's storage for each unlocked slot
+    try {
+      const unlocked = getUnlockedLoadoutSlots();
+      const personal = getPersonalSupply();
+      const available = { ...personal };
+      const rnd = [null,null,null,null];
+      const types = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
+      for (let i=0;i<unlocked;i++) {
+        const candidates = types.filter(tp => (available[tp] ?? 0) > 0);
+        if (!candidates.length) { rnd[i]=null; continue; }
+        const idx = Math.floor(Math.random() * candidates.length);
+        const chosen = candidates[idx];
+        rnd[i]=chosen;
+        available[chosen]--;
+      }
+      // locked slots remain null
+      loadoutSlots = rnd;
+    } catch {
+      loadoutSlots = [null,null,null,null];
+    }
+  }
   loadoutVisible = true;
   hideLoadoutPicker();
   syncLoadoutOverlay();
@@ -802,6 +853,22 @@ function hideLoadout() {
 function startCourseWithLoadout(courseId, slots) {
   const course = findCourseById(courseId || loadoutCourseId);
   if (!course) return false;
+  // Persist last loadout before deriving supply — slots param or current loadoutSlots (full 4)
+  try {
+    const toSave = Array.isArray(slots) ? (() => {
+      if (slots.length===4 && slots.every(v=>v===null || typeof v==='string')) return slots.slice(0,4);
+      const padded = [null,null,null,null];
+      const unlocked = getUnlockedLoadoutSlots();
+      let idx=0;
+      for (let i=0;i<4;i++) {
+        if (i>=unlocked) { padded[i]=null; continue; }
+        if (idx < slots.length) padded[i]=slots[idx++] || null;
+        else padded[i]=null;
+      }
+      return padded;
+    })() : loadoutSlots.slice(0,4);
+    if (Array.isArray(toSave)) setLastLoadout(toSave);
+  } catch {}
   const chosen = Array.isArray(slots) ? slots.filter(Boolean) : loadoutSlots.filter(Boolean);
   // Derive run supply from chosen slots
   const newSupply = { magnifier:0, liquifier:0, deflector:0, rotator:0, freeShot:0 };
@@ -1468,20 +1535,10 @@ function renderCourseList() {
 }
 
 function handleCoursePlay(courseId) {
-  // New flow: show loadout before first hole (10-progression.md §2)
-  if (hasRestorableSave()) {
-    // Should not happen via button when save exists, but guard
-    return;
-  }
-  const course = findCourseById(courseId);
-  if (!course) return;
-  // Ensure progression loaded
+  // New flow: show loadout before first hole (10-progression.md §2) — pre-load last saved or random
+  if (hasRestorableSave()) return;
   try { loadProgression(); } catch {}
-  loadoutCourseId = courseId;
-  loadoutSlots = [null,null,null,null];
-  loadoutVisible = true;
-  syncLoadoutOverlay();
-  syncMainMenu();
+  showLoadout(courseId);
   syncProgressionDisplay();
 }
 

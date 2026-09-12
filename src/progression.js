@@ -1,4 +1,5 @@
 export const PROGRESSION_KEY = "golfVectorField.progression.v1";
+export const LOADOUT_KEY = "golfVectorField.loadout.v1";
 export const COINS_PER_HOLE = 10;
 export const COURSE_COMPLETE_BONUS = 50;
 export const SHOP_PRICE_SPATIAL = 50;
@@ -150,6 +151,59 @@ export function clearProgression() {
 
 export function resetProgressionToDefault() { clearProgression(); saveProgression(); }
 
+// --- Last Loadout Persistence (10-progression.md §2.5) ---
+// Persisted as separate key LOADOUT_KEY so it survives clearProgress and does not pollute PROGRESSION_KEY.
+// If no loadout saved, caller shall pick random owned items for each unlocked slot.
+const VALID_LOADOUT_TYPES = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
+
+function normalizeLoadoutType(t) {
+  if (!t || typeof t !== 'string') return null;
+  const n = normalizeType(t);
+  if (n === 'areaUp' || n === 'areaUpgrade') return 'fieldExtender';
+  return VALID_LOADOUT_TYPES.includes(n) ? n : null;
+}
+
+export function getLastLoadout() {
+  try {
+    const raw = localStorage.getItem(LOADOUT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || d.version !== 1) return null;
+    const slots = d.slots;
+    if (!Array.isArray(slots) || slots.length !== 4) return null;
+    const cleaned = slots.map(v => {
+      if (v === null || v === undefined) return null;
+      return normalizeLoadoutType(String(v));
+    });
+    // Return even if all-null — caller can distinguish no-key (null) vs saved-empty (all-null)
+    return cleaned;
+  } catch { return null; }
+}
+
+export function setLastLoadout(slots) {
+  try {
+    if (!Array.isArray(slots) || slots.length !== 4) return false;
+    const cleaned = slots.map(v => {
+      if (v === null || v === undefined) return null;
+      return normalizeLoadoutType(String(v));
+    });
+    const payload = { version: 1, slots: cleaned, savedAt: Date.now() };
+    localStorage.setItem(LOADOUT_KEY, JSON.stringify(payload));
+    return true;
+  } catch { return false; }
+}
+
+export function clearLastLoadout() {
+  try { localStorage.removeItem(LOADOUT_KEY); } catch {}
+}
+
+export function hasLastLoadout() {
+  try { return localStorage.getItem(LOADOUT_KEY) !== null; } catch { return false; }
+}
+
 if (typeof window !== 'undefined') {
   window.__PROGRESSION_KEY = PROGRESSION_KEY;
+  window.__LOADOUT_KEY = LOADOUT_KEY;
+  window.__getLastLoadout = getLastLoadout;
+  window.__setLastLoadout = setLastLoadout;
 }
