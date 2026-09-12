@@ -169,13 +169,11 @@ function handleParallaxMouseMove(e) {
   if (!container) return;
   const rect = container.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  // Normalize to [-1, 1] (subtle: limit to [-1,1] with clamp)
+  // Normalize X only to [-1, 1] (subtle: limit to [-1,1] with clamp) — Y disabled per requirement (x-plane only)
   const nx = Math.max(-1, Math.min(1, (e.clientX - cx) / (rect.width / 2)));
-  const ny = Math.max(-1, Math.min(1, (e.clientY - cy) / (rect.height / 2)));
   // Small dampening: keep target in subtle range (-1 to 1 will be scaled by depth)
   parallaxTargetX = nx;
-  parallaxTargetY = ny;
+  parallaxTargetY = 0;
 }
 
 function handleParallaxMouseLeave() {
@@ -185,20 +183,20 @@ function handleParallaxMouseLeave() {
 
 function applyParallaxTransforms() {
   if (!parallaxLayers.length) return;
-  // Lerp current toward target for smooth subtle motion
+  // Lerp current toward target for smooth subtle motion — X only (Y locked to 0)
   const lerp = 0.08;
   parallaxCurrentX += (parallaxTargetX - parallaxCurrentX) * lerp;
-  parallaxCurrentY += (parallaxTargetY - parallaxCurrentY) * lerp;
+  parallaxCurrentY = 0;
+  parallaxTargetY = 0;
   // Clamp very small values to zero to avoid jitter
   if (Math.abs(parallaxCurrentX) < 0.001) parallaxCurrentX = 0;
-  if (Math.abs(parallaxCurrentY) < 0.001) parallaxCurrentY = 0;
   for (const layer of parallaxLayers) {
     const depth = layer.dataset.depth;
     const d = PARALLAX_DEPTHS[depth] ?? 10;
-    // Parallax: closer layers move more, in direction of mouse (subtle, not inverted)
-    // Use translate3d for GPU compositing
+    // Parallax: x-plane only — closer layers move more horizontally, no vertical motion
+    // Use translate3d for GPU compositing (y locked to 0)
     const x = parallaxCurrentX * d;
-    const y = parallaxCurrentY * d * 0.55; // vertical a bit less pronounced for subtlety
+    const y = 0;
     layer.style.transform = `translate3d(${x}px, ${y}px, 0)`;
   }
 }
