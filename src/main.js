@@ -926,11 +926,11 @@ function syncCoinSummaryOverlay() {
       details.innerHTML = '';
       const row = document.createElement('div');
       row.className = 'coin-detail-row';
-      // number before moneybag, e.g. "3 hole clears × 10💰"
+      // New format: "Hole cleared - 10💰 (x3)" per updated requirement — not "0 hole clears × 10💰"
       if (coinSummaryHoles > 0) {
-        row.textContent = `${coinSummaryHoles} hole clears × ${COINS_PER_HOLE}💰`;
+        row.textContent = `Hole cleared - ${COINS_PER_HOLE}💰 (x${coinSummaryHoles})`;
       } else {
-        row.textContent = `0 hole clears × ${COINS_PER_HOLE}💰`;
+        row.textContent = `Hole cleared - ${COINS_PER_HOLE}💰 (x0)`;
       }
       details.appendChild(row);
       // Second row when course was cleared (bonus awarded) — "Course cleared, 50💰"
@@ -965,6 +965,13 @@ function syncCoinSummaryOverlay() {
 function showCoinSummary(holes, coins) {
   coinSummaryHoles = Math.max(0, Math.floor(holes||0));
   coinSummaryCoins = Math.max(0, Math.floor(coins||0));
+  // Do not show overlay if no money was gained
+  if (coinSummaryCoins <= 0) {
+    coinSummaryVisible = false;
+    syncCoinSummaryOverlay();
+    syncProgressionDisplay();
+    return;
+  }
   coinSummaryVisible = true;
   syncCoinSummaryOverlay();
   syncProgressionDisplay();
@@ -993,11 +1000,16 @@ function finalizeRunCoinsAndShowSummary() {
   if (isCourseComplete) coins += COURSE_COMPLETE_BONUS;
   runCoinsEarned = coins;
   if (coins>0) addCoins(coins);
-  else { // still ensure progression saved even if 0? no need
+  else { // still ensure progression saved even if 0
     try{ saveProgression(); }catch{}
   }
-  // Persist and show summary if any holes or even 0? Show if at least run was started (holes>=0). Spec says when run ends show overlay showing how much earned and why. Show always (even 0) but tests may expect visible when holes>0.
-  showCoinSummary(holes, coins);
+  // Do not show "Run Completed" overlay if no money was gained (coins==0)
+  if (coins > 0) {
+    showCoinSummary(holes, coins);
+  } else {
+    coinSummaryVisible = false;
+    syncCoinSummaryOverlay();
+  }
   runHolesCleared=0; runCoinsEarned=0;
   syncProgressionDisplay();
 }
