@@ -3,8 +3,17 @@ export const LOADOUT_KEY = "golfVectorField.loadout.v1";
 export const COINS_PER_HOLE = 10;
 export const COURSE_COMPLETE_BONUS = 50;
 export const SHOP_PRICE_SPATIAL = 50;
-export const SHOP_PRICE_PASSIVE = 100;
+export const SHOP_PRICE_PASSIVE = 150;
 export const MAX_LOADOUT_SLOTS = 4;
+export const SHOP_INITIAL_STOCK = {
+  magnifier: 4,
+  liquifier: 4,
+  deflector: 4,
+  rotator: 4,
+  fieldExtender: 2,
+  powerCell: 2,
+  freeShot: 2
+};
 
 const DEFAULT_PERSONAL_SUPPLY = {
   magnifier: 0,
@@ -37,6 +46,7 @@ let progression = {
   version: 1,
   coins: 0,
   personalSupply: { ...DEFAULT_PERSONAL_SUPPLY },
+  shopStock: { ...SHOP_INITIAL_STOCK },
   savedAt: Date.now()
 };
 
@@ -45,6 +55,7 @@ export function getProgression() {
     version: progression.version,
     coins: progression.coins,
     personalSupply: { ...progression.personalSupply },
+    shopStock: { ...progression.shopStock },
     savedAt: progression.savedAt
   };
 }
@@ -54,6 +65,11 @@ export function getPersonalSupply() { return { ...progression.personalSupply }; 
 export function getPersonalSupplyCount(type) {
   const t = normalizeType(type);
   return progression.personalSupply[t] ?? 0;
+}
+export function getShopStock() { return { ...progression.shopStock }; }
+export function getShopStockCount(type) {
+  const t = normalizeType(type);
+  return progression.shopStock[t] ?? 0;
 }
 
 export function setCoins(v) {
@@ -77,8 +93,10 @@ export function purchase(type) {
   if (!(t in progression.personalSupply)) return false;
   if (progression.coins < cost) return false;
   if ((progression.personalSupply[t] ?? 0) >= MAX_LOADOUT_SLOTS) return false; // cannot buy more than max slots
+  if ((progression.shopStock[t] ?? 0) <= 0) return false; // out of stock
   progression.coins -= cost;
   progression.personalSupply[t] = Math.max(0, (progression.personalSupply[t] ?? 0) + 1);
+  progression.shopStock[t] = Math.max(0, (progression.shopStock[t] ?? 0) - 1);
   saveProgression();
   return true;
 }
@@ -100,6 +118,8 @@ export function setPersonalSupply(obj) {
 export function saveProgression() {
   try {
     progression.savedAt = Date.now();
+    // Ensure shopStock exists
+    if (!progression.shopStock) progression.shopStock = { ...SHOP_INITIAL_STOCK };
     localStorage.setItem(PROGRESSION_KEY, JSON.stringify(progression));
   } catch {}
 }
@@ -125,6 +145,21 @@ export function loadProgression() {
     if (Object.values(progression.personalSupply).every(v=>v===0)) {
       progression.personalSupply = { ...DEFAULT_PERSONAL_SUPPLY };
     }
+    // Load shop stock — if missing (legacy), reset to initial stock
+    const ss = d.shopStock || null;
+    if (ss && typeof ss === 'object') {
+      progression.shopStock = {
+        magnifier: Math.max(0, Math.floor(ss.magnifier ?? SHOP_INITIAL_STOCK.magnifier)),
+        liquifier: Math.max(0, Math.floor(ss.liquifier ?? SHOP_INITIAL_STOCK.liquifier)),
+        deflector: Math.max(0, Math.floor(ss.deflector ?? SHOP_INITIAL_STOCK.deflector)),
+        rotator: Math.max(0, Math.floor(ss.rotator ?? SHOP_INITIAL_STOCK.rotator)),
+        fieldExtender: Math.max(0, Math.floor(ss.fieldExtender ?? SHOP_INITIAL_STOCK.fieldExtender)),
+        powerCell: Math.max(0, Math.floor(ss.powerCell ?? SHOP_INITIAL_STOCK.powerCell)),
+        freeShot: Math.max(0, Math.floor(ss.freeShot ?? SHOP_INITIAL_STOCK.freeShot)),
+      };
+    } else {
+      progression.shopStock = { ...SHOP_INITIAL_STOCK };
+    }
     progression.savedAt = d.savedAt || Date.now();
     return getProgression();
   } catch {
@@ -132,6 +167,7 @@ export function loadProgression() {
       version: 1,
       coins: 0,
       personalSupply: { ...DEFAULT_PERSONAL_SUPPLY },
+      shopStock: { ...SHOP_INITIAL_STOCK },
       savedAt: Date.now()
     };
     try { saveProgression(); } catch {}
@@ -145,6 +181,7 @@ export function clearProgression() {
     version: 1,
     coins: 0,
     personalSupply: { ...DEFAULT_PERSONAL_SUPPLY },
+    shopStock: { ...SHOP_INITIAL_STOCK },
     savedAt: Date.now()
   };
 }
@@ -206,4 +243,8 @@ if (typeof window !== 'undefined') {
   window.__LOADOUT_KEY = LOADOUT_KEY;
   window.__getLastLoadout = getLastLoadout;
   window.__setLastLoadout = setLastLoadout;
+  window.__SHOP_INITIAL_STOCK = SHOP_INITIAL_STOCK;
+  window.__getShopStock = getShopStock;
+  window.__getShopStockCount = getShopStockCount;
+  window.__costFor = costFor;
 }

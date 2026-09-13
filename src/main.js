@@ -43,7 +43,7 @@ import {
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
-import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
+import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -711,7 +711,7 @@ function syncLoadoutOverlay() {
         slotsEl.appendChild(div);
       }
     }
-    // Shop grid — only name and cost with moneybag, max 4 per item (removed when maxed)
+    // Shop grid — limited stock, price 50 spatial / 150 passive, stock indicated, auto-add to loadout
     const shop = document.getElementById('shop-grid');
     if (shop) {
       shop.innerHTML='';
@@ -719,8 +719,12 @@ function syncLoadoutOverlay() {
       const types = ['liquifier','deflector','rotator','magnifier','fieldExtender','powerCell','freeShot'];
       const names3 = {liquifier:'Liquifier',deflector:'Deflector',rotator:'Rotator',magnifier:'Magnifier',fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shot'};
       const icons3 = {liquifier:'./img/liquifier-icon.png',deflector:'./img/deflector-icon.png',rotator:'./img/rotator-icon.png',magnifier:'./img/magnifier-icon.png',fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
+      let shopStock = {};
+      try { shopStock = getShopStock(); } catch { shopStock = {}; }
       for (const t of types) {
         const owned = personal[t] ?? 0;
+        const remaining = shopStock[t] ?? 0;
+        if (remaining <= 0) continue;
         if (owned >= MAX_SLOTS) continue;
         const price = costFor(t);
         const can = coins >= price;
@@ -731,7 +735,26 @@ function syncLoadoutOverlay() {
         else { const fb=document.createElement('div'); fb.textContent='★'; fb.style.font='700 22px system-ui'; fb.style.color='#FFD700'; div.appendChild(fb); }
         const nm=document.createElement('div'); nm.className='si-name'; nm.textContent=names3[t]||t; div.appendChild(nm);
         const pr=document.createElement('div'); pr.className='si-price'; pr.textContent='💰' + price; div.appendChild(pr);
-        const btn=document.createElement('button'); btn.textContent='Buy'; btn.disabled=!can; btn.addEventListener('click', () => { if (progressionPurchase(t)) { syncLoadoutOverlay(); syncLoadoutPickerOverlay(); syncProgressionDisplay(); } else { try{showToast('Not enough coins');}catch{}}});
+        const stock=document.createElement('div'); stock.className='si-stock'; stock.textContent='Stock: ' + remaining; div.appendChild(stock);
+        const btn=document.createElement('button'); btn.textContent='Buy'; btn.disabled=!can; btn.addEventListener('click', () => {
+          if (progressionPurchase(t)) {
+            // Auto-add to empty loadout slot if available
+            try {
+              const unlocked = getUnlockedLoadoutSlots();
+              let emptyIdx = -1;
+              for (let i=0;i<unlocked;i++) if (loadoutSlots[i]==null) { emptyIdx=i; break; }
+              if (emptyIdx !== -1) {
+                const personalAfter = getPersonalSupply();
+                const ownedAfter = personalAfter[t] ?? 0;
+                let countInLoadout = loadoutSlots.filter(v=>v===t).length;
+                if (countInLoadout < ownedAfter) {
+                  loadoutSlots[emptyIdx]=t;
+                }
+              }
+            } catch {}
+            syncLoadoutOverlay(); syncLoadoutPickerOverlay(); syncProgressionDisplay();
+          } else { try{showToast('Not enough coins');}catch{}}
+        });
         div.appendChild(btn);
         shop.appendChild(div);
       }
