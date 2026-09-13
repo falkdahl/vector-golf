@@ -149,11 +149,21 @@
       </div>
     </div>
     <div id="pause-overlay" class="hidden">
-      <button id="pause-help-button" class="help-corner-button" title="Help">?</button>
       <div class="pause-content">
         <button id="resume-button" class="main-menu-button">Continue</button>
         <button id="pause-reset-attempt-button" class="main-menu-button">Next Attempt</button>
+        <button id="pause-help-button" class="main-menu-button">Help</button>
         <button id="pause-end-run-button" class="main-menu-button">End Run</button>
+      </div>
+    </div>
+    <div id="end-run-confirm-overlay" class="hidden">
+      <div class="end-run-confirm-card">
+        <h3>End Run?</h3>
+        <p class="end-run-confirm-text">Are you sure you want to end the run? Your progress will be lost.</p>
+        <div class="end-run-confirm-actions">
+          <button id="end-run-confirm-ok">Confirm</button>
+          <button id="end-run-confirm-cancel">Cancel</button>
+        </div>
       </div>
     </div>
     <div id="loadout-overlay" class="hidden">

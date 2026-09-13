@@ -453,6 +453,9 @@ export function saveCourses(courses, campaignSeedOverride) {
 }
 
 export function regenerateCampaign(newSeed) {
+  // Requirement: Generating a new seed shall remove all state from local storage (including progression, loadout, high score, progress, courses)
+  try { localStorage.clear(); } catch {}
+  try { _coursesCache = null; _coursesCacheRaw = null; } catch {}
   const cs = String(newSeed !== undefined && newSeed !== null && String(newSeed).trim() !== '' ? String(newSeed).trim() : generateCampaignSeed());
   campaignSeed = cs;
   const coursesNew = [generateCampaignCourse(3, cs, { difficulty: 'easy' })];

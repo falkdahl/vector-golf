@@ -307,10 +307,10 @@ function _generateLevelsInternal(seed = 42, count = 18, options = {}) {
     const holeX = Math.floor(rand() * 100) + (LOGICAL_W - 140);
     const holeY = Math.floor(rand() * (LOGICAL_H - 160)) + 80;
     const hole = { x: Math.max(LOGICAL_W - 180, Math.min(LOGICAL_W - 40, holeX)), y: holeY, radius: 14 };
-    // Easy angle limit: |atan2(dY,dX)| <=20° (0° = same y) to prevent overly long tilted easy holes
+    // Easy angle limit: |atan2(dY,dX)| <=10° (0° = same y) to prevent overly long tilted easy holes
     if (tier === 'easy') {
       const dX = hole.x - tee.x;
-      const maxDeltaY = dX * Math.tan(20 * Math.PI / 180); // ~0.364 * dX
+      const maxDeltaY = dX * Math.tan(10 * Math.PI / 180); // ~0.176 * dX
       const dY = hole.y - tee.y;
       if (Math.abs(dY) > maxDeltaY) {
         const clampedY = tee.y + Math.sign(dY) * maxDeltaY;

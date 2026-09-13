@@ -42,7 +42,7 @@ import {
   updateFreeShotGlow,
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
-import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed } from "./courses.js";
+import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
 
 const LOGICAL_W = 1280;
@@ -1222,10 +1222,39 @@ function loadProgress() {
 function clearProgress() {
   try { localStorage.removeItem(STORAGE_KEY); } catch {};
 }
+function clearAllStorageForSeedGeneration() {
+  // Requirement: Generating a new seed shall remove all state from local storage
+  try { localStorage.clear(); } catch {}
+  try { clearProgression(); } catch {}
+  try { clearLastLoadout(); } catch {}
+  try { clearHighScore(); } catch {}
+  try { clearProgress(); } catch {}
+  // Also invalidate in-memory course cache
+  try { invalidateCoursesCache(); } catch {}
+  // Reset run-specific progress variables
+  try { runHolesCleared = 0; runCoinsEarned = 0; } catch {}
+  try { coinSummaryVisible = false; syncCoinSummaryOverlay(); } catch {}
+}
 
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
 let pauseMenuVisible = false;
 let pauseMenuHover = null;
+let endRunConfirmVisible = false;
+function isEndRunConfirmVisible() { return endRunConfirmVisible; }
+function showEndRunConfirm() {
+  endRunConfirmVisible = true;
+  syncEndRunConfirmOverlay();
+}
+function hideEndRunConfirm() {
+  endRunConfirmVisible = false;
+  syncEndRunConfirmOverlay();
+}
+function syncEndRunConfirmOverlay() {
+  const el = document.getElementById('end-run-confirm-overlay');
+  if (!el) return;
+  if (endRunConfirmVisible) el.classList.remove('hidden');
+  else el.classList.add('hidden');
+}
 let rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
 function getRewardChosenCounts() { return { ...rewardChosenCounts }; }
 function getRewardChosenCount(type) { return Math.max(0, Math.floor(rewardChosenCounts[type] || 0)); }
@@ -1792,31 +1821,31 @@ function executePendingCampaignAction() {
   const act = pendingCampaignAction;
   if (!act) return;
   if (act.type === 'refresh') {
-    // use native confirm as fallback for programmatic tests, but primary is custom overlay
-    // native confirm check kept for backward compat if overlay bypassed
     try {
+      clearAllStorageForSeedGeneration();
       const res = regenerateCampaign();
       try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
-      clearProgress();
       rewardSeedCounter = 0;
       rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
       _lastCourseListSig = null;
       try { renderCourseList(); } catch {};
       syncCampaignSeedDisplay();
+      syncProgressionDisplay();
       hideCampaignEditOverlay();
       updateHotbarUI();
     } catch (e) { console.warn('campaign regenerate failed', e); }
   } else if (act.type === 'apply') {
     const val = String(act.seed || '').trim();
     try {
+      clearAllStorageForSeedGeneration();
       const res = applyManualSeed(val);
       try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
-      clearProgress();
       rewardSeedCounter = 0;
       rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
       _lastCourseListSig = null;
       try { renderCourseList(); } catch {};
       syncCampaignSeedDisplay();
+      syncProgressionDisplay();
       hideCampaignEditOverlay();
       updateHotbarUI();
     } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {}; }
@@ -1854,14 +1883,15 @@ function handleCampaignRefreshViaConfirm() {
     if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
   } catch {};
   try {
+    clearAllStorageForSeedGeneration();
     const res = regenerateCampaign();
     try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
-    clearProgress();
     rewardSeedCounter = 0;
     rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
     _lastCourseListSig = null;
     try { renderCourseList(); } catch {};
     syncCampaignSeedDisplay();
+    syncProgressionDisplay();
     hideCampaignEditOverlay();
     updateHotbarUI();
   } catch (e) { console.warn('campaign regenerate failed', e); }
@@ -1905,14 +1935,15 @@ function handleManualSeedApplyLegacy() {
     if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
   } catch {};
   try {
+    clearAllStorageForSeedGeneration();
     const res = applyManualSeed(val);
     try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
-    clearProgress();
     rewardSeedCounter = 0;
     rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
     _lastCourseListSig = null;
     try { renderCourseList(); } catch {};
     syncCampaignSeedDisplay();
+    syncProgressionDisplay();
     hideCampaignEditOverlay();
     updateHotbarUI();
   } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {}; }
@@ -4346,8 +4377,17 @@ function init() {
   // Use single reference for event listeners
   const pauseNextAttemptBtnDomFinal = pauseNextBtn;
   if (resumeBtnDom) resumeBtnDom.addEventListener("click", () => resumeGame());
-  if (mainEndRunBtnDom) mainEndRunBtnDom.addEventListener("click", () => endRun());
-  if (pauseEndRunBtnDom) pauseEndRunBtnDom.addEventListener("click", () => endRun());
+  if (mainEndRunBtnDom) mainEndRunBtnDom.addEventListener("click", () => showEndRunConfirm());
+  if (pauseEndRunBtnDom) pauseEndRunBtnDom.addEventListener("click", () => showEndRunConfirm());
+  // End Run confirmation overlay wiring
+  const endRunConfirmOk = document.getElementById('end-run-confirm-ok');
+  const endRunConfirmCancel = document.getElementById('end-run-confirm-cancel');
+  const endRunConfirmOverlay = document.getElementById('end-run-confirm-overlay');
+  if (endRunConfirmOk) endRunConfirmOk.addEventListener('click', () => { hideEndRunConfirm(); endRun(); });
+  if (endRunConfirmCancel) endRunConfirmCancel.addEventListener('click', () => hideEndRunConfirm());
+  if (endRunConfirmOverlay) endRunConfirmOverlay.addEventListener('click', (e) => {
+    if (e.target === endRunConfirmOverlay) hideEndRunConfirm();
+  });
   // Next Attempt in pause (renamed from Next Attempt) — same effect as hitting R hotkey, placed between Continue and End Run
   function handlePauseResetAttempt() {
     // Replicate R hotkey logic (see initInput onReset) but allowed while pause is open:
@@ -4457,6 +4497,16 @@ function init() {
       if (isInput) {
         // allow typing, Enter, Backspace, etc. in input
         if (e.code === "Enter" || e.key.length === 1 || e.code === "Backspace" || e.code === "Delete" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "Home" || e.code === "End" || (e.ctrlKey || e.metaKey)) return;
+      }
+      e.preventDefault();
+      return;
+    }
+    // End Run confirm has priority when visible
+    if (endRunConfirmVisible) {
+      if (e.code === "Escape") {
+        hideEndRunConfirm();
+        e.preventDefault();
+        return;
       }
       e.preventDefault();
       return;
