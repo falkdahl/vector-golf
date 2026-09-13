@@ -924,22 +924,31 @@ function syncCoinSummaryOverlay() {
     if (br) { br.textContent = coinSummaryHoles>0 ? `${coinSummaryHoles} hole${coinSummaryHoles===1?'':'s'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
     if (details) {
       details.innerHTML = '';
-      const row = document.createElement('div');
-      row.className = 'coin-detail-row';
-      // New format: "Hole cleared - 10💰 (x3)" per updated requirement — not "0 hole clears × 10💰"
+      const makeRow = (amount, label) => {
+        const r = document.createElement('div');
+        r.className = 'coin-detail-row';
+        const a = document.createElement('span');
+        a.className = 'coin-amount';
+        a.textContent = String(amount);
+        const ic = document.createElement('span');
+        ic.className = 'coin-icon';
+        ic.textContent = '💰';
+        const lb = document.createElement('span');
+        lb.className = 'coin-label';
+        lb.textContent = ` - ${label}`;
+        r.append(a, ic, lb);
+        return r;
+      };
+      // "10💰 - Hole Completed (x3)" split into [10][💰][ - Hole Completed (x3)] so 💰 vertically aligns for 10 vs 1000
       if (coinSummaryHoles > 0) {
-        row.textContent = `Hole cleared - ${COINS_PER_HOLE}💰 (x${coinSummaryHoles})`;
+        details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
       } else {
-        row.textContent = `Hole cleared - ${COINS_PER_HOLE}💰 (x0)`;
+        details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
       }
-      details.appendChild(row);
-      // Second row when course was cleared (bonus awarded) — "Course cleared, 50💰"
+      // Second row when course was cleared (bonus awarded) — "50💰 - Course Completed"
       const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
       if (isCourseBonus) {
-        const row2 = document.createElement('div');
-        row2.className = 'coin-detail-row';
-        row2.textContent = `Course cleared, ${COURSE_COMPLETE_BONUS}💰`;
-        details.appendChild(row2);
+        details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
     }
     if (unlockEl) {
@@ -970,16 +979,19 @@ function showCoinSummary(holes, coins) {
     coinSummaryVisible = false;
     syncCoinSummaryOverlay();
     syncProgressionDisplay();
+    try { syncMainMenu(); } catch {}
     return;
   }
   coinSummaryVisible = true;
   syncCoinSummaryOverlay();
   syncProgressionDisplay();
+  try { syncMainMenu(); } catch {}
 }
 function hideCoinSummary() {
   coinSummaryVisible=false;
   syncCoinSummaryOverlay();
   syncProgressionDisplay();
+  try { syncMainMenu(); } catch {}
 }
 function finalizeRunCoinsAndShowSummary() {
   const holes = runHolesCleared;
@@ -1624,8 +1636,8 @@ function syncMainMenu() {
       const helpBtn = document.getElementById('help-button');
       const seedWrapper = document.getElementById('campaign-seed-wrapper');
       const menuTitle = document.getElementById('menu-title');
-      // When loadout is visible, hide main menu buttons but keep splash background
-      if (loadoutVisible) {
+      // When loadout or coin summary is visible, hide main menu buttons but keep splash background (black transparent backdrop like loadout)
+      if (loadoutVisible || coinSummaryVisible) {
         if (mmc) mmc.classList.add('hidden');
         if (root) root.classList.add('hidden');
         if (cm) cm.classList.add('hidden');
@@ -1657,8 +1669,8 @@ function syncMainMenu() {
         if (helpBtn) helpBtn.classList.remove('hidden');
         if (menuTitle) menuTitle.classList.remove('hidden');
       }
-      // Always hide chrome when loadout is active — keep only splash image
-      if (loadoutVisible) {
+      // Always hide chrome when loadout or coin summary is active — keep only splash image
+      if (loadoutVisible || coinSummaryVisible) {
         if (helpBtn) helpBtn.classList.add('hidden');
         if (seedWrapper) seedWrapper.classList.add('hidden');
         if (menuTitle) menuTitle.classList.add('hidden');
@@ -1821,7 +1833,7 @@ function syncCampaignSeedDisplay() {
   try {
     const cs = (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null) || '';
     el.textContent = 'Seed: ' + String(cs);
-    const show = !!mainMenuVisible && !loadoutVisible;
+    const show = !!mainMenuVisible && !loadoutVisible && !coinSummaryVisible;
     if (wrapper) wrapper.classList.toggle('hidden', !show);
     else el.classList.toggle('hidden', !show);
     // also update popup current seed if visible
