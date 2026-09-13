@@ -602,7 +602,8 @@ export function drawAim(ctx, ball, aimAngle, charge, gameState) {
 }
 
 export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, totalAttempts, maxAttempts = 10, freeShotSupply = 0) {
-  // Top bar inside canvas per REQ-012/014/05 — Hole left, Attempts Left (+freeShot) center, Total right
+  // Deprecated: HUD is now HTML #hud on top of canvas (see 03-rendering.md §4). Kept for backward compat, not called from render().
+  // Top bar inside canvas per legacy REQ-012/014/05 — Hole left, Attempts Left (+freeShot) center, Total right
   ctx.save();
   // semi-transparent strip
   ctx.fillStyle = "rgba(0,0,0,0.25)";

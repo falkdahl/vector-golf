@@ -104,6 +104,32 @@ body {
   pointer-events: auto;
 }
 
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: rgba(0,0,0,0.25);
+  color: white;
+  font: 14px system-ui, sans-serif;
+  -webkit-text-stroke: 3px rgba(0,0,0,0.7);
+  paint-order: stroke fill;
+  line-height: 28px;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: 8px 8px 0 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+#hud.hidden { display: none !important; }
+#hud-hole { text-align: left; flex: 1; }
+#hud-attempts { text-align: center; flex: 1; }
+#hud-total { text-align: right; flex: 1; }
+
 #loading-screen {
   position: fixed;
   inset: 0;

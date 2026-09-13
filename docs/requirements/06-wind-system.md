@@ -170,5 +170,5 @@ Visualization on `game` canvas: `magnifier` orange `rgba(230,126,34,0.25)` `»` 
 - `src/windThree.js:1` (`initWindOverlay`, `updateWind`, `renderWind`, `setWindVisible`, gold glow)
 - `src/main.js:1` (`supply`, `modifiers`, `selectedModifier`, `canPlace`, `placeModifier`, `handleLaunch` free-shot, `getEffectiveModifierRadius`, hotbar toggle)
 - `src/input.js:1` (keys `1`/`2`/`3`/`4` spatial)
-- `src/render.js:1` (`drawModifiers`, `drawModifierPreview`, `drawHUD`)
+- `src/render.js:1` (`drawModifiers`, `drawModifierPreview` — `drawHUD` deprecated, HUD now HTML `#hud`)
 - `index.html:8` (import map, `#wind-canvas`, `#hotbar`), `style.css:1`

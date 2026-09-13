@@ -13,7 +13,11 @@
   No dimming rect here; backdrop dimming is done by `#main-menu-overlay.with-backdrop` per `09-persistence-and-campaign.md`.
 
 - **Middle `fgCtx` (`#game`, `z-index:2`, transparent, `clearRect` each frame)** — every `render()`:
-  1. Trees / circular obstacles, 2. Hole + flag, 3. **Treasure** (`level.treasure` gold chest/star `r 10-14`, see §5, hidden after `isCollected`), 4. Ball (with shadow, `z` lift), 5. Aim orbit+line+indicator (when `AIMING`/`CHARGING`), 6. Modifier circles + preview, 7. Force bar under ball (when `CHARGING`), 8. HUD `Hole/Attempts Left/Total` (canvas), 9. **Softlock banner** (`Stuck? Press R…` middle of screen, a bit higher than center, when `softlockBannerVisible`, see `05-input-and-states.md` §7), 10. Pause/Game Over dim (if canvas mode, else DOM) — **reward menu is NOT on canvas, it is HTML overlay `#reward-overlay` layered above canvas (see §4 and `08-rewards-and-progression.md` §5)**
+  1. Trees / circular obstacles, 2. Hole + flag, 3. **Treasure** (`level.treasure` gold chest/star `r 10-14`, see §5, hidden after `isCollected`), 4. Ball (with shadow, `z` lift), 5. Aim orbit+line+indicator (when `AIMING`/`CHARGING`), 6. Modifier circles + preview, 7. Force bar under ball (when `CHARGING`), 8. **Softlock banner** (`Stuck? Press R…` middle of screen, a bit higher than center, when `softlockBannerVisible`, see `05-input-and-states.md` §7), 9. Pause/Game Over dim (if canvas mode, else DOM) — **reward menu is NOT on canvas, it is HTML overlay `#reward-overlay` layered above canvas (see §4 and `08-rewards-and-progression.md` §5)**
+
+  - **Top HTML HUD (`#hud`, `z-index:4`, `pointer-events:none`)** — regular HTML header on top of canvases (not canvas-drawn): `#hud-hole` left `Hole: N/M`, `#hud-attempts` center `Attempts Left: X (+Y)` (`(+Y)` only when `Y>0`), `#hud-total` right `Total: Y`. See §4.
+
+  Note: HUD was previously canvas-drawn `drawHUD` on `fgCtx`; it is now HTML. `drawHUD` is deprecated and shall not be called from `render()`.
 
 - **Top `windRenderer` (`#wind-canvas`, `z-index:3`, transparent, `pointer-events:none`)** — Three.js ghost trails + particles + **Free Shot golden glow** over ball (see `06-wind-system.md` §2 & §7.2), `renderer.setClearColor(0x000000,0)` and own per-frame clear, above game but below HTML overlays (`#hotbar` z5, `#reward-overlay` z10, other overlays z10-12).
 
@@ -45,7 +49,16 @@ Rendering order on `bgCtx` is `OB → Rough → Fairway → Green → Water`. Zo
 
 This section defines **rendering** only; state is canonical in `05-input-and-states.md` and `06-wind-system.md`. Do not re-define counters here.
 
-- **HUD** `drawHUD(ctx, currentHoleIndex, totalHoles, holeAttempts, totalAttempts, maxAttempts, freeShotSupply)` every `render()`: renders `Hole: N/M` left `(12,22)`, `Attempts Left: X (+Y)` centered (`(+Y)` only when `Y>0`, see `05-input-and-states.md` §4 for `X`/`Y` derivation), `Total: Y` right `(W-12,22)`, `14px system-ui` white `stroke rgba(0,0,0,0.7) 3px`, strip `rgba(0,0,0,0.25) 28px` behind. Visible in `AIMING`/`CHARGING`/`FLYING`, dimmed behind `WIN`/`GAME_OVER`.
+- **HUD — HTML header on top of canvas** (`#hud`):
+  ```html
+  <div id="hud">
+    <span id="hud-hole">Hole: 1/3</span>
+    <span id="hud-attempts">Attempts Left: 10</span>
+    <span id="hud-total">Total: 0</span>
+  </div>
+  ```
+  CSS ` #hud { position:absolute; top:0; left:0; right:0; height:28px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:rgba(0,0,0,0.25); color:white; font:14px system-ui, sans-serif; -webkit-text-stroke:3px rgba(0,0,0,0.7); paint-order:stroke fill; line-height:28px; z-index:4; pointer-events:none; }` with `#hud-hole{ text-align:left; flex:1 }` `#hud-attempts{ text-align:center; flex:1 }` `#hud-total{ text-align:right; flex:1 }`. Text `Hole: N/M` left, `Attempts Left: X (+Y)` centered (`(+Y)` only when `Y>0`, see `05-input-and-states.md` §4 for `X`/`Y` derivation), `Total: Y` right, same colors/stroke/strip as before but now HTML. Visible in `AIMING`/`CHARGING`/`FLYING` (flex), dimmed/`opacity:0.55` or hidden behind `WIN`/`GAME_OVER`/`mainMenuVisible` (`.hidden` when not in gameplay). No `drawHUD` canvas call.
+  - Legacy `drawHUD(ctx, ...)` is deprecated and shall not be called; keep for backward compat as no-op if needed.
 - **Victory overlay** (DOM, `gameState==='WIN'` final hole only): dim `rgba(0,0,0,0.55)`, `★★★` `72px #FFD700`, title `Course Completed!` `700 22px` white `stroke 5px`, text `Total: Y`, green `Continue` `#continue-button-win` `#145a32` with `Press R to continue` → `clearProgress()` → entry menu (see `05-input-and-states.md` §5 and `08-rewards-and-progression.md` §1).
 - **Game Over overlay** (DOM, `gameState==='GAME_OVER'`): same dim as Victory, title `Game Over` `700 22px` white `stroke 5px` over green `Continue` `#gameover-return-button` `#145a32` with `Press R to continue` → `clearProgress()` (see `05-input-and-states.md` §5).
 - **Force bar** `drawForceBar(ctx, ball, charge)` only when `CHARGING` (Space held): centered at `ball.pos+(0,28)`, `60×8`, border `1px #222`, bg `rgba(0,0,0,0.35)`, fill `charge*100%` lerp green→yellow→red, label `78%` white with shadow.
@@ -57,21 +70,21 @@ This section defines **rendering** only; state is canonical in `05-input-and-sta
 - **Softlock Banner** (`src/render.js:drawSoftlockBanner`, see `05-input-and-states.md` §7): non-blocking small banner in middle of screen, a bit higher than center (`y~height/2-60,h~28` `rgba(0,0,0,0.65)`) with `700 13px` white `stroke 4px` text:
   - Normal: `Stuck? Press R to reset — or use Next Attempt in pause menu` (must contain `Press R` and `pause`+`Next Attempt`)
   - Last attempt (`getAttemptsLeft()===1 && freeShot===0`): exactly `Stuck on last attempt? End Run in pause menu (Escape)` (must equal that string, contains `last attempt`, `End Run`, `pause menu`, `Escape`, no `Press R`),
-  rendered on `fgCtx` after `drawHUD` when `softlockBannerVisible===true`; does NOT dim full canvas, allows ball to keep moving; hidden during `WIN`/`GAME_OVER`/reward/pause/main-menu and removed on hole completed. On last attempt `Next Attempt` is hidden so banner just informs with last-attempt text. Attempts now decrement on reset, so `Free Shot!`/`Last Attempt` banners appear after reset when `left===1`.
-- **No DOM HUD** (`#hole-counter`/`#force-bar-container` removed); no `<h1>`/`#instructions`; overlays bounded to container.
+  rendered on `fgCtx` after `drawForceBar` when `softlockBannerVisible===true`; does NOT dim full canvas, allows ball to keep moving; hidden during `WIN`/`GAME_OVER`/reward/pause/main-menu and removed on hole completed. On last attempt `Next Attempt` is hidden so banner just informs with last-attempt text. Attempts now decrement on reset, so `Free Shot!`/`Last Attempt` banners appear after reset when `left===1`.
+- **HTML HUD** `#hud` with `#hud-hole`/`#hud-attempts`/`#hud-total` on top of canvas (`z-index:4`), `pointer-events:none`, `28px` strip `rgba(0,0,0,0.25)`, `14px` white stroke `3px`; no `<h1>`/`#instructions`; overlays bounded to container.
 
 ## Acceptance Criteria
 
 - [ ] Bottom canvas zones use palette within ±8 per channel; order `OB→Rough→Fairway→Green→Water`; trees on top canvas; hole black circle.
 - [ ] Level mode draws zoned terrain; main-menu mode shows splash aspect-covered and per `08-rewards-and-progression.md` backdrop rules.
-- [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→HUD→softlock) → wind (particles/trails) → HTML overlays` (`#reward-overlay` dim `rgba(0,0,0,0.55)` with HTML buttons above canvas, treasure above trees, below ball, softlock in middle, a bit higher than center). Reward menu is **HTML** `#reward-overlay` layered above canvas, not canvas `drawRewardMenu`; no icon gradient background behind reward icons.
-- [ ] HUD and force bar are inside canvas, visible without scroll, with correct stroke/shadow.
+- [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→softlock) → wind (particles/trails) → HTML HUD (`#hud` 28px strip) → HTML overlays` (`#reward-overlay` dim `rgba(0,0,0,0.55)` with HTML buttons above canvas, `#hud` `Hole:/Attempts Left:/Total` as HTML, treasure above trees, below ball, softlock in middle, a bit higher than center). Reward menu is **HTML** `#reward-overlay` layered above canvas, not canvas `drawRewardMenu`; no icon gradient background behind reward icons.
+- [ ] HUD is **HTML** `#hud` with `#hud-hole`/`#hud-attempts`/`#hud-total` on top of canvas (not canvas `drawHUD`), `28px` `rgba(0,0,0,0.25)` strip, `14px` white stroke `3px`, visible without scroll, `Attempts Left: X` vs `Attempts Left: X (+Y)` correct; force bar remains canvas under ball when `CHARGING`.
 - [ ] Treasure: one per hole near a tree (`level.treasure`, radius `12±2`, gold `#D4AF37`/`#FFD700`), visible on `fgCtx` when `!isCollected`, hidden after hit, never at `0,0` or overlapping tree, on `fairway`/`rough`, and `drawTreasure` called each frame.
 - [ ] Softlock banner: when confined `<75px` over `6s` after `8s` flight, shows `Stuck? Press R…pause menu` non-blocking in middle of screen, a bit higher than center, keeps shot moving, removed on hole completed or reset; on last attempt shows exactly `Stuck on last attempt? End Run in pause menu (Escape)` variant (contains `last attempt`, `End Run`, `Escape`, no `Press R`), pause `Next Attempt` hidden.
 
 ## File Paths
 
-- `src/render.js:1` (`drawBackground`, `drawDynamic`, `drawHUD`, `drawForceBar`, `drawObstacles`, `drawHole`, `drawTreasure`, `drawSoftlockBanner` — reward menu now HTML, not canvas)
-- `src/main.js:1` (`#reward-overlay` HTML overlay creation and sync)
+- `src/render.js:1` (`drawBackground`, `drawDynamic`, `drawForceBar`, `drawObstacles`, `drawHole`, `drawTreasure`, `drawSoftlockBanner` — HUD now HTML `drawHUD` deprecated, reward menu HTML)
+- `src/main.js:1` (`#hud` HTML header update via `updateAttemptsUI`/`syncHUD`, `#reward-overlay` HTML overlay creation and sync)
 - `src/terrain.js:1` (exports `terrainZoneAt` used by `drawBackground` zone fill)
-- `index.html:30` (no extra DOM for HUD), `style.css:1` (container/overlay bounds)
+- `index.html:1` (`#hud` with `#hud-hole`/`#hud-attempts`/`#hud-total`), `style.css:1` (container/overlay bounds, `#hud` 28px strip)

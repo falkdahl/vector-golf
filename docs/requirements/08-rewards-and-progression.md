@@ -68,6 +68,6 @@
 ## File Paths
 
 - `src/main.js:1` (`POOL` 6 with `freeShot`, `reward*` state, `maybeShowRewardMenu`, `claimReward`, `rerollReward`, `handleLaunch` branching, `#reward-overlay` HTML)
-- `src/render.js:1` (`drawTreasure`, `drawHUD` — reward menu now HTML, not canvas)
+- `src/render.js:1` (`drawTreasure` — reward menu now HTML, not canvas; `drawHUD` deprecated)
 - `src/windThree.js:1` (golden glow for `isFreeShotActive`)
 - `src/levels.js:1` (`treasure` generation), `src/terrain.js:1` (helpers)

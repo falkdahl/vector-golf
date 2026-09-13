@@ -1703,6 +1703,7 @@ function syncMainMenu() {
   // Actually wind should be visible on level and also while paused (dimmed), hidden only on main menu entry
   try { const showWind2 = !mainMenuVisible; setWindVisible(showWind2 || pauseMenuVisible); } catch {};
   updateHotbarUI();
+  try { updateAttemptsUI(); } catch {}
 }
 
 let campaignEditVisible = false;
@@ -2637,6 +2638,10 @@ let gameoverHoleTotal;
 let gameoverTotalValue;
 let gameoverTitle;
 let gameoverReturnButton;
+let hudEl;
+let hudHoleEl;
+let hudAttemptsEl;
+let hudTotalEl;
 
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -2781,6 +2786,22 @@ function updateAttemptsUI() {
       continueButton.classList.add("hidden");
     }
   }
+  // HTML HUD on top of canvas (replaces canvas drawHUD)
+  try {
+    if (hudHoleEl) hudHoleEl.textContent = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
+    if (hudAttemptsEl) {
+      const attemptsLeft = Math.max(0, maxAttempts - holeAttempts);
+      const freeShot = Math.max(0, Math.floor(supply.freeShot ?? 0));
+      hudAttemptsEl.textContent = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft}`;
+    }
+    if (hudTotalEl) hudTotalEl.textContent = `Total: ${totalAttempts}`;
+    if (hudEl) {
+      const shouldHide = !!mainMenuVisible;
+      hudEl.classList.toggle("hidden", shouldHide);
+      if (gameState === "WIN" || gameState === "GAME_OVER") hudEl.style.opacity = "0.55";
+      else hudEl.style.opacity = "";
+    }
+  } catch {}
 }
 
 function updateHotbarUI() {
@@ -3645,8 +3666,7 @@ function render() {
     // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true);
   }
-  // HUD inside canvas on top per REQ-012/014/05 — Attempts Left (+freeShot)
-  drawHUD(ctx, LOGICAL_W, currentHoleIndex, LEVELS.length, holeAttempts, totalAttempts, maxAttempts, supply.freeShot);
+  // HUD is now HTML #hud on top of canvas (see 03-rendering.md §4) — no canvas drawHUD
   // Power bar under ball when charging per REQ-007
   if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
     drawForceBar(ctx, ball, charge);
@@ -3728,6 +3748,10 @@ function init() {
   golfbagContainerEl = document.getElementById("golfbag-container");
   golfbagIconEl = document.getElementById("golfbag-icon");
   bottomBarEl = document.getElementById("bottom-bar");
+  hudEl = document.getElementById("hud");
+  hudHoleEl = document.getElementById("hud-hole");
+  hudAttemptsEl = document.getElementById("hud-attempts");
+  hudTotalEl = document.getElementById("hud-total");
   syncHotbarCollapsedUI();
   if (golfbagContainerEl) {
     const handleGolfbagToggle = (e) => {
