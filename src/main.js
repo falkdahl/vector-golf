@@ -2449,8 +2449,15 @@ const freeShotBannerDuration = 1000;
 let lastFreeShotBannerValue = null;
 
 function getRewardRerolled() { return rewardRerolled; }
+function isRerollDisabled() {
+  if (rewardRerolled) return true;
+  // Disabled on last attempt to prevent suicide — you cannot kill yourself with a re-roll
+  if (getAttemptsLeft() <= 1) return true;
+  return false;
+}
 function rerollReward() {
   if (!rewardMenuVisible || rewardRerolled) return false;
+  if (getAttemptsLeft() <= 1) return false;
   // Cost is always 1 attempt, never free shot, never secret counter per REQ-025
   holeAttempts += 1;
   totalAttempts += 1;
@@ -2458,6 +2465,7 @@ function rerollReward() {
   updateAttemptsUI();
   saveProgress();
   // If this reroll exhausted attempts, Game Over immediately — do not show new reward
+  // Note: disabled on last attempt above prevents this suicide path, but keep as fallback
   if (getAttemptsLeft() <= 0) {
     showGameOver();
     return true;
@@ -2526,11 +2534,13 @@ function syncRewardOverlay() {
   if (shouldBeVisible && isVisible && currentTypes === desiredTypes) {
     // Just update reroll state, no rebuild
     if (rerollBtn) {
-      const shouldDisable = !!rewardRerolled;
+      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1;
       if (rerollBtn.disabled !== shouldDisable) {
         rerollBtn.disabled = shouldDisable;
         rerollBtn.classList.toggle('disabled', shouldDisable);
-        rerollBtn.textContent = shouldDisable ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
+        rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
+      } else if (shouldDisable) {
+        rerollBtn.textContent = rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
       }
     }
     return;
@@ -2630,12 +2640,13 @@ function syncRewardOverlay() {
       btn.addEventListener('click', () => { claimReward(type); });
       btnContainer.appendChild(btn);
     });
-    // Reroll button state
+    // Reroll button state — disabled on last attempt to prevent suicide
     if (rerollBtn) {
-      rerollBtn.disabled = !!rewardRerolled;
-      rerollBtn.classList.toggle('disabled', !!rewardRerolled);
-      rerollBtn.textContent = rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
-      rerollBtn.onclick = () => { if (!rewardRerolled) rerollReward(); };
+      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1;
+      rerollBtn.disabled = shouldDisable;
+      rerollBtn.classList.toggle('disabled', shouldDisable);
+      rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
+      rerollBtn.onclick = () => { if (!rewardRerolled && getAttemptsLeft() > 1) rerollReward(); };
     }
   } else {
     overlay.classList.add('hidden');
@@ -4864,10 +4875,11 @@ function init() {
       } else if (e.code === "Digit3" && rewardOffered[2]) {
         claimReward(rewardOffered[2]);
         e.preventDefault();
-      } else if (e.code === "KeyR" && !rewardRerolled) {
+      } else if (e.code === "KeyR" && !rewardRerolled && getAttemptsLeft() > 1) {
         rerollReward();
         e.preventDefault();
-      } else if (e.code === "KeyR" && rewardRerolled) {
+      } else if (e.code === "KeyR" && (rewardRerolled || getAttemptsLeft() <= 1)) {
+        // Disabled on last attempt — cannot kill yourself with reroll
         e.preventDefault();
       } else if (e.code === "Digit0" || e.code === "Numpad0") {
         // Digit0 no longer rerolls; blocked
@@ -5054,7 +5066,7 @@ function init() {
       try {
         const rerollRect = getRewardRerollButtonLayout(LOGICAL_W, LOGICAL_H);
         const isRerollHover = pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h;
-        rewardRerollHover = isRerollHover && !rewardRerolled;
+        rewardRerollHover = isRerollHover && !rewardRerolled && getAttemptsLeft() > 1;
       } catch { rewardRerollHover = false; }
       if (hovered) canvas.style.cursor = "pointer";
       else if (rewardRerollHover) canvas.style.cursor = "pointer";
@@ -5143,8 +5155,12 @@ function init() {
       // Check re-roll button first (REQ-025)
       try {
         const rerollRect = getRewardRerollButtonLayout(LOGICAL_W, LOGICAL_H);
-        if (!rewardRerolled && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
+        if (!rewardRerolled && getAttemptsLeft() > 1 && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
           rerollReward();
+          e.preventDefault();
+          return;
+        } else if (getAttemptsLeft() <= 1 && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
+          // Disabled on last attempt — block click, no reroll
           e.preventDefault();
           return;
         }
