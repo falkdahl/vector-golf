@@ -3107,11 +3107,26 @@ function updateHotbarUI() {
     if (type === 'fieldExtender' || type === 'areaUp' || type === 'powerCell') {
       const isField = type === 'fieldExtender' || type === 'areaUp';
       const count = isField ? fieldExtenderCount : powerCellCount;
+      const isEmpty = count === 0;
       const countEl = slot.querySelector(".hotbar-count");
-      if (countEl) countEl.textContent = `x${count}`;
+      if (countEl) {
+        countEl.textContent = `x${count}`;
+        countEl.style.display = isEmpty ? "none" : "";
+      }
+      const iconEl = slot.querySelector(".hotbar-icon-img");
+      if (iconEl) iconEl.style.display = isEmpty ? "none" : "";
+      // empty gray handling
+      slot.classList.toggle("empty", isEmpty);
       slot.classList.remove("selected", "disabled", "active");
       slot.classList.add("passive");
       slot.style.cursor = "default";
+      if (isEmpty) {
+        slot.style.background = "rgba(128,128,128,0.28)";
+        slot.style.borderColor = "rgba(128,128,128,0.82)";
+      } else {
+        slot.style.background = "";
+        slot.style.borderColor = "";
+      }
       // hide hotkey badge if present (passive have no hotkey)
       const hotkeyEl = slot.querySelector(".hotbar-hotkey");
       if (hotkeyEl) hotkeyEl.style.display = "none";
@@ -3123,19 +3138,32 @@ function updateHotbarUI() {
     // Active spatial slots
     const activeCount = modifiers.filter(m => m.type === type).length;
     const supplyCount = supply[type] ?? 0;
+    const isEmptyActive = supplyCount === 0;
     const canPlaceThis = (supplyCount ?? 0) > 0;
-    slot.classList.toggle("selected", slot.dataset.type === selectedModifier);
+    slot.classList.toggle("selected", slot.dataset.type === selectedModifier && !isEmptyActive);
     slot.classList.remove("active");
-    slot.classList.toggle("disabled", !canPlaceThis);
+    slot.classList.toggle("disabled", !canPlaceThis && !isEmptyActive);
+    slot.classList.toggle("empty", isEmptyActive);
     slot.classList.remove("passive");
-    slot.style.cursor = "";
+    if (isEmptyActive) {
+      slot.style.cursor = "default";
+      slot.style.background = "rgba(128,128,128,0.28)";
+      slot.style.borderColor = "#7a7a7a";
+    } else {
+      slot.style.cursor = "";
+      slot.style.background = "";
+      slot.style.borderColor = "";
+    }
     const hotkeyEl2 = slot.querySelector(".hotbar-hotkey");
-    if (hotkeyEl2) hotkeyEl2.style.display = "";
-    // Update count badge — lower-right xN per new spec (e.g. x2)
+    if (hotkeyEl2) hotkeyEl2.style.display = isEmptyActive ? "none" : "";
+    // Update count badge — lower-right xN per new spec (e.g. x2) — hidden when empty
     const countEl = slot.querySelector(".hotbar-count");
     if (countEl) {
       countEl.textContent = `x${supplyCount}`;
+      countEl.style.display = isEmptyActive ? "none" : "";
     }
+    const iconEl2 = slot.querySelector(".hotbar-icon-img");
+    if (iconEl2) iconEl2.style.display = isEmptyActive ? "none" : "";
     slot.removeAttribute('title');
     // For testing: expose supply via dataset
     slot.dataset.supply = String(supplyCount);

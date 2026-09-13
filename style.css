@@ -1055,6 +1055,27 @@ body {
   transform: none;
   box-shadow: none;
 }
+.hotbar-slot.empty {
+  background: rgba(128,128,128,0.28) !important;
+  border-color: #7a7a7a !important;
+  cursor: default !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+.hotbar-slot.empty .hotbar-icon-img {
+  display: none !important;
+}
+.hotbar-slot.empty .hotbar-count {
+  display: none !important;
+}
+.hotbar-slot.empty .hotbar-hotkey {
+  display: none !important;
+}
+.hotbar-slot.empty:hover {
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
 .hotbar-icon {
   font-size: 17px;
   line-height: 1;
