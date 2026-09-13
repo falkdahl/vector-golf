@@ -2065,7 +2065,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  align-items: center;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
 }
 .coin-detail-row {
   font: 500 12px system-ui, sans-serif;
@@ -2077,9 +2080,14 @@ body {
   gap: 2px 4px;
   align-items: center;
   justify-items: start;
-  justify-content: center;
-  width: fit-content;
-  margin: 0 auto;
+  width: 100%;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(4px);
+  animation: coinRowIn 0.28s ease forwards;
+}
+@keyframes coinRowIn {
+  to { opacity: 1; transform: translateY(0); }
 }
 .coin-amount {
   text-align: right;

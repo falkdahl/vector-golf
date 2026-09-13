@@ -409,6 +409,9 @@ let runCoinsEarned = 0;
 let coinSummaryVisible = false;
 let coinSummaryHoles = 0;
 let coinSummaryCoins = 0;
+let coinSummaryAnimDone = false;
+let coinSummaryAnimTimers = [];
+let coinSummaryPendingUnlock = false;
 let loadoutUnlockedAtRunStart = 1;
 function normalizeSupplyType(type) {
   if (type === 'amplify') return 'magnifier';
@@ -931,6 +934,88 @@ function startCourseWithLoadout(courseId, slots) {
   saveProgress();
   return true;
 }
+function clearCoinSummaryAnimTimers() {
+  for (const id of coinSummaryAnimTimers) try { clearTimeout(id); } catch {}
+  coinSummaryAnimTimers = [];
+}
+function isCoinSummaryAnimating() {
+  return coinSummaryVisible && !coinSummaryAnimDone;
+}
+function fastForwardCoinSummary() {
+  if (!coinSummaryVisible) return false;
+  clearCoinSummaryAnimTimers();
+  const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+  // Show final state instantly
+  const el = document.getElementById('coin-summary-overlay');
+  if (el) el.classList.remove('hidden');
+  const amt = document.getElementById('coin-summary-amount');
+  if (amt) amt.textContent = `+${coinSummaryCoins}`;
+  const details = document.getElementById('coin-summary-details');
+  if (details) {
+    details.innerHTML = '';
+    const makeRow = (amount, label) => {
+      const r = document.createElement('div');
+      r.className = 'coin-detail-row';
+      r.style.animation = 'none';
+      r.style.opacity = '1';
+      r.style.transform = 'none';
+      const a = document.createElement('span');
+      a.className = 'coin-amount';
+      a.textContent = String(amount);
+      const ic = document.createElement('span');
+      ic.className = 'coin-icon';
+      ic.textContent = '💰';
+      const lb = document.createElement('span');
+      lb.className = 'coin-label';
+      lb.textContent = ` - ${label}`;
+      r.append(a, ic, lb);
+      return r;
+    };
+    if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+    else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
+    if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
+  }
+  const unlockEl = document.getElementById('coin-summary-unlock');
+  if (unlockEl) {
+    try {
+      const currentUnlocked = getUnlockedLoadoutSlots();
+      const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
+      if (currentUnlocked > startUnlocked) {
+        unlockEl.textContent = `Loadout slot unlocked`;
+        unlockEl.style.display = 'block';
+        unlockEl.style.opacity = '1';
+        unlockEl.classList.remove('hidden');
+      } else {
+        unlockEl.textContent = `Loadout slot unlocked`;
+        unlockEl.style.display = 'none';
+      }
+    } catch { try { unlockEl.style.display = 'none'; } catch {} }
+  }
+  coinSummaryAnimDone = true;
+  syncProgressionDisplay();
+  try { syncMainMenu(); } catch {}
+  return true;
+}
+function animateCoinSummaryAmount(from, to, duration = 320) {
+  const amt = document.getElementById('coin-summary-amount');
+  if (!amt) return;
+  if (from === to) { amt.textContent = `+${to}`; return; }
+  const start = performance.now();
+  const step = (now) => {
+    const elapsed = now - start;
+    const p = Math.min(1, elapsed / duration);
+    // easeOut
+    const eased = 1 - Math.pow(1 - p, 3);
+    const cur = Math.round(from + (to - from) * eased);
+    amt.textContent = `+${cur}`;
+    if (p < 1 && isCoinSummaryAnimating() && coinSummaryVisible) {
+      requestAnimationFrame(step);
+    } else {
+      amt.textContent = `+${to}`;
+    }
+  };
+  requestAnimationFrame(step);
+}
 function syncCoinSummaryOverlay() {
   const el = document.getElementById('coin-summary-overlay');
   if (!el) return;
@@ -941,56 +1026,89 @@ function syncCoinSummaryOverlay() {
     const amt = document.getElementById('coin-summary-amount');
     const details = document.getElementById('coin-summary-details');
     const unlockEl = document.getElementById('coin-summary-unlock');
-    if (amt) amt.textContent = `+${coinSummaryCoins}`;
     // Keep legacy elements hidden — do not show You earned / cleared texts per new spec
     if (txt) { txt.textContent = `You earned ${coinSummaryCoins} coins: ${coinSummaryHoles} holes × ${COINS_PER_HOLE} coins per hole`; txt.classList.add('hidden'); }
     if (br) { br.textContent = coinSummaryHoles>0 ? `${coinSummaryHoles} hole${coinSummaryHoles===1?'':'s'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
-    if (details) {
-      details.innerHTML = '';
-      const makeRow = (amount, label) => {
-        const r = document.createElement('div');
-        r.className = 'coin-detail-row';
-        const a = document.createElement('span');
-        a.className = 'coin-amount';
-        a.textContent = String(amount);
-        const ic = document.createElement('span');
-        ic.className = 'coin-icon';
-        ic.textContent = '💰';
-        const lb = document.createElement('span');
-        lb.className = 'coin-label';
-        lb.textContent = ` - ${label}`;
-        r.append(a, ic, lb);
-        return r;
-      };
-      // "10💰 - Hole Completed (x3)" split into [10][💰][ - Hole Completed (x3)] so 💰 vertically aligns for 10 vs 1000
-      if (coinSummaryHoles > 0) {
-        details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
-      } else {
-        details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
+    // If animated, details/amount are managed by showCoinSummary animation; but if animDone or no animation, render final instantly
+    if (coinSummaryAnimDone) {
+      if (amt) amt.textContent = `+${coinSummaryCoins}`;
+      if (details) {
+        details.innerHTML = '';
+        const makeRow = (amount, label) => {
+          const r = document.createElement('div');
+          r.className = 'coin-detail-row';
+          const a = document.createElement('span');
+          a.className = 'coin-amount';
+          a.textContent = String(amount);
+          const ic = document.createElement('span');
+          ic.className = 'coin-icon';
+          ic.textContent = '💰';
+          const lb = document.createElement('span');
+          lb.className = 'coin-label';
+          lb.textContent = ` - ${label}`;
+          r.append(a, ic, lb);
+          return r;
+        };
+        if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+        else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
+        const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+        if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
-      // Second row when course was cleared (bonus awarded) — "50💰 - Course Completed"
-      const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
-      if (isCourseBonus) {
-        details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
+      if (unlockEl) {
+        try {
+          const currentUnlocked = getUnlockedLoadoutSlots();
+          const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
+          if (currentUnlocked > startUnlocked) {
+            unlockEl.textContent = `Loadout slot unlocked`;
+            unlockEl.style.display = 'block';
+            unlockEl.classList.remove('hidden');
+          } else {
+            unlockEl.textContent = `Loadout slot unlocked`;
+            unlockEl.style.display = 'none';
+          }
+        } catch { try { unlockEl.style.display = 'none'; } catch {} }
       }
-    }
-    if (unlockEl) {
-      try {
-        const currentUnlocked = getUnlockedLoadoutSlots();
-        const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
-        if (currentUnlocked > startUnlocked) {
-          unlockEl.textContent = `Loadout slot unlocked`;
-          unlockEl.style.display = 'block';
-          unlockEl.classList.remove('hidden');
-        } else {
-          // No new slot was unlocked this run — hide the message to avoid false positive
-          unlockEl.textContent = `Loadout slot unlocked`;
-          unlockEl.style.display = 'none';
-          // Keep hidden for tests that check visibility when not unlocked
-        }
-      } catch {
-        try { unlockEl.style.display = 'none'; } catch {}
+    } else if (!isCoinSummaryAnimating()) {
+      // Initial render before animation starts: show final instantly if not animating path
+      // This fallback keeps old behaviour for non-animated calls
+      if (amt) amt.textContent = `+${coinSummaryCoins}`;
+      if (details) {
+        details.innerHTML = '';
+        const makeRow = (amount, label) => {
+          const r = document.createElement('div');
+          r.className = 'coin-detail-row';
+          const a = document.createElement('span');
+          a.className = 'coin-amount';
+          a.textContent = String(amount);
+          const ic = document.createElement('span');
+          ic.className = 'coin-icon';
+          ic.textContent = '💰';
+          const lb = document.createElement('span');
+          lb.className = 'coin-label';
+          lb.textContent = ` - ${label}`;
+          r.append(a, ic, lb);
+          return r;
+        };
+        if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+        else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
+        const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+        if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
+      if (unlockEl) {
+        try {
+          const currentUnlocked = getUnlockedLoadoutSlots();
+          const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
+          if (currentUnlocked > startUnlocked) {
+            unlockEl.textContent = `Loadout slot unlocked`;
+            unlockEl.style.display = 'block';
+            unlockEl.classList.remove('hidden');
+          } else {
+            unlockEl.textContent = `Loadout slot unlocked`;
+            unlockEl.style.display = 'none';
+          }
+        } catch { try { unlockEl.style.display = 'none'; } catch {} }
+      }
+      coinSummaryAnimDone = true;
     }
   } else el.classList.add('hidden');
 }
@@ -1000,17 +1118,108 @@ function showCoinSummary(holes, coins) {
   // Do not show overlay if no money was gained
   if (coinSummaryCoins <= 0) {
     coinSummaryVisible = false;
+    coinSummaryAnimDone = false;
+    clearCoinSummaryAnimTimers();
     syncCoinSummaryOverlay();
     syncProgressionDisplay();
     try { syncMainMenu(); } catch {}
     return;
   }
   coinSummaryVisible = true;
-  syncCoinSummaryOverlay();
+  coinSummaryAnimDone = false;
+  clearCoinSummaryAnimTimers();
+  const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+  const holeCoins = coinSummaryHoles * COINS_PER_HOLE;
+  // Prepare overlay in initial animated state
+  const el = document.getElementById('coin-summary-overlay');
+  if (el) el.classList.remove('hidden');
+  const txt = document.getElementById('coin-summary-text');
+  const br = document.getElementById('coin-summary-breakdown');
+  if (txt) { txt.textContent = `You earned ${coinSummaryCoins} coins: ${coinSummaryHoles} holes × ${COINS_PER_HOLE} coins per hole`; txt.classList.add('hidden'); }
+  if (br) { br.textContent = coinSummaryHoles>0 ? `${coinSummaryHoles} hole${coinSummaryHoles===1?'':'s'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
+  const amt = document.getElementById('coin-summary-amount');
+  const details = document.getElementById('coin-summary-details');
+  const unlockEl = document.getElementById('coin-summary-unlock');
+  if (amt) amt.textContent = `+0`;
+  if (details) details.innerHTML = '';
+  if (unlockEl) { unlockEl.textContent = `Loadout slot unlocked`; unlockEl.style.display = 'none'; unlockEl.style.opacity = '0'; }
   syncProgressionDisplay();
   try { syncMainMenu(); } catch {}
+
+  // Schedule animated steps: hole row -> course row -> unlock
+  const makeRow = (amount, label) => {
+    const r = document.createElement('div');
+    r.className = 'coin-detail-row';
+    const a = document.createElement('span');
+    a.className = 'coin-amount';
+    a.textContent = String(amount);
+    const ic = document.createElement('span');
+    ic.className = 'coin-icon';
+    ic.textContent = '💰';
+    const lb = document.createElement('span');
+    lb.className = 'coin-label';
+    lb.textContent = ` - ${label}`;
+    r.append(a, ic, lb);
+    return r;
+  };
+  // Step 1: hole completed row + amount to holeCoins
+  const t1 = setTimeout(() => {
+    if (!coinSummaryVisible || coinSummaryAnimDone) return;
+    if (details) {
+      if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+      else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
+    }
+    animateCoinSummaryAmount(0, holeCoins, 380);
+  }, 420);
+  coinSummaryAnimTimers.push(t1);
+  if (isCourseBonus) {
+    const t2 = setTimeout(() => {
+      if (!coinSummaryVisible || coinSummaryAnimDone) return;
+      if (details) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
+      animateCoinSummaryAmount(holeCoins, coinSummaryCoins, 380);
+    }, 920);
+    coinSummaryAnimTimers.push(t2);
+    const t3 = setTimeout(() => {
+      if (!coinSummaryVisible || coinSummaryAnimDone) return;
+      try {
+        const currentUnlocked = getUnlockedLoadoutSlots();
+        const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
+        if (currentUnlocked > startUnlocked && unlockEl) {
+          unlockEl.textContent = `Loadout slot unlocked`;
+          unlockEl.style.display = 'block';
+          unlockEl.style.opacity = '0';
+          unlockEl.classList.remove('hidden');
+          // fade in
+          unlockEl.style.transition = 'opacity 0.24s ease';
+          requestAnimationFrame(() => { unlockEl.style.opacity = '1'; });
+        }
+      } catch {}
+      coinSummaryAnimDone = true;
+    }, 1320);
+    coinSummaryAnimTimers.push(t3);
+  } else {
+    const t2b = setTimeout(() => {
+      if (!coinSummaryVisible || coinSummaryAnimDone) return;
+      try {
+        const currentUnlocked = getUnlockedLoadoutSlots();
+        const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
+        if (currentUnlocked > startUnlocked && unlockEl) {
+          unlockEl.textContent = `Loadout slot unlocked`;
+          unlockEl.style.display = 'block';
+          unlockEl.style.opacity = '0';
+          unlockEl.classList.remove('hidden');
+          unlockEl.style.transition = 'opacity 0.24s ease';
+          requestAnimationFrame(() => { unlockEl.style.opacity = '1'; });
+        }
+      } catch {}
+      coinSummaryAnimDone = true;
+    }, 780);
+    coinSummaryAnimTimers.push(t2b);
+  }
 }
 function hideCoinSummary() {
+  clearCoinSummaryAnimTimers();
+  coinSummaryAnimDone = false;
   coinSummaryVisible=false;
   syncCoinSummaryOverlay();
   syncProgressionDisplay();
@@ -4120,11 +4329,17 @@ function init() {
   if (pickerClose) pickerClose.addEventListener('click', () => hideLoadoutPicker());
   if (pickerOverlay) pickerOverlay.addEventListener('click', (e) => { if (e.target === pickerOverlay) hideLoadoutPicker(); });
   if (coinSummaryOk) {
-    coinSummaryOk.addEventListener('click', () => hideCoinSummary());
+    coinSummaryOk.addEventListener('click', () => {
+      if (isCoinSummaryAnimating()) fastForwardCoinSummary();
+      else hideCoinSummary();
+    });
   }
   if (coinSummaryOverlay) {
     coinSummaryOverlay.addEventListener('click', (e) => {
-      if (e.target === coinSummaryOverlay) hideCoinSummary();
+      if (e.target === coinSummaryOverlay) {
+        if (isCoinSummaryAnimating()) fastForwardCoinSummary();
+        else hideCoinSummary();
+      }
     });
   }
 
@@ -4463,10 +4678,15 @@ function init() {
   syncPauseOverlay();
   syncMainMenu();
   window.addEventListener("keydown", (e) => {
-    // Coin summary has top priority (above game over)
+    // Coin summary has top priority (above game over) — animated End Run overlay
     if (coinSummaryVisible) {
-      if (e.code === "Escape" || e.code === "Enter" || e.code === "Space") {
-        hideCoinSummary();
+      const isDismissKey = e.code === "Escape" || e.code === "Enter" || e.code === "Space" || e.code === "KeyR" || e.key === "r" || e.key === "R";
+      if (isDismissKey) {
+        if (isCoinSummaryAnimating()) {
+          fastForwardCoinSummary();
+        } else {
+          hideCoinSummary();
+        }
         e.preventDefault();
       }
       return;
@@ -5328,6 +5548,8 @@ if (typeof window !== 'undefined') {
   window.__getRunCoinsEarned = getRunCoinsEarned;
   window.__getRunHolesCleared = getRunHolesCleared;
   window.__isCoinSummaryVisible = isCoinSummaryVisible;
+  window.__isCoinSummaryAnimating = isCoinSummaryAnimating;
+  window.__fastForwardCoinSummary = fastForwardCoinSummary;
   window.__showCoinSummary = showCoinSummary;
   window.__hideCoinSummary = hideCoinSummary;
   window.__finalizeRunCoinsAndShowSummary = finalizeRunCoinsAndShowSummary;
