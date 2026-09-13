@@ -226,6 +226,58 @@
           <li>R — Reset ball</li>
           <li>Escape — Pause</li>
         </ul>
+        <h4>Items</h4>
+        <div id="help-items" class="help-items">
+          <div class="help-item" data-type="liquifier">
+            <img class="help-item-icon" src="./img/liquifier-icon.png" alt="Liquifier">
+            <div class="help-item-info">
+              <span class="help-item-name">Liquifier</span>
+              <span class="help-item-desc">Nullifies wind to 0 inside the bubble and preserves your entry velocity. Dominates other modifiers; not affected by Power Cell.</span>
+            </div>
+          </div>
+          <div class="help-item" data-type="deflector">
+            <img class="help-item-icon" src="./img/deflector-icon.png" alt="Deflector">
+            <div class="help-item-info">
+              <span class="help-item-name">Deflector</span>
+              <span class="help-item-desc">Reverses wind direction 180° and magnifies wind 5× inside the bubble. Deduped with Rotator to one 5×, further amplified by Magnifier and Power Cell.</span>
+            </div>
+          </div>
+          <div class="help-item" data-type="rotator">
+            <img class="help-item-icon" src="./img/rotator-icon.png" alt="Rotator">
+            <div class="help-item-info">
+              <span class="help-item-name">Rotator</span>
+              <span class="help-item-desc">Rotates wind 90° CCW and magnifies wind 5× inside the bubble. Deduped with Deflector to one 5×.</span>
+            </div>
+          </div>
+          <div class="help-item" data-type="magnifier">
+            <img class="help-item-icon" src="./img/magnifier-icon.png" alt="Magnifier">
+            <div class="help-item-info">
+              <span class="help-item-name">Magnifier</span>
+              <span class="help-item-desc">Magnifies wind strength 5× inside the bubble. Stacks to 25×, scaled by Power Cell.</span>
+            </div>
+          </div>
+          <div class="help-item" data-type="fieldExtender">
+            <img class="help-item-icon" src="./img/field-extender-icon.png" alt="Field Extender">
+            <div class="help-item-info">
+              <span class="help-item-name">Field Extender</span>
+              <span class="help-item-desc">Passive: +15% radius for all spatial modifiers, retroactively grows existing bubbles (area).</span>
+            </div>
+          </div>
+          <div class="help-item" data-type="powerCell">
+            <img class="help-item-icon" src="./img/power-cell-icon.png" alt="Power Cell">
+            <div class="help-item-info">
+              <span class="help-item-name">Power Cell</span>
+              <span class="help-item-desc">Passive: +15% strength for Magnifier, Deflector and Rotator (base 5 → 5.75), retroactive power boost.</span>
+            </div>
+          </div>
+          <div class="help-item" data-type="freeShot">
+            <div class="help-item-icon help-item-icon--freeShot" aria-hidden="true">★</div>
+            <div class="help-item-info">
+              <span class="help-item-name">Free Shot</span>
+              <span class="help-item-desc">Passive: grants a free attempt not counted, shown as Attempts Left: X (+Y), auto-armed on last attempt with golden glow, no placement.</span>
+            </div>
+          </div>
+        </div>
         <button id="help-back-button">Back</button>
       </div>
     </div>
