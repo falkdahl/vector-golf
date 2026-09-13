@@ -1618,29 +1618,50 @@ function syncMainMenu() {
       // Main menu is always transparent over splash, never with backdrop (pause has its own overlay)
       el.classList.remove("with-backdrop");
       el.dataset.mode = "entry";
-      // Sync sub-views — help is now global, not inside main-menu-overlay, so handle separately
       const mmc = el.querySelector('.main-menu-content');
       const root = document.getElementById('main-menu-root');
       const cm = document.getElementById('course-menu');
-      // Help is global, handled in syncHelpOverlay
-      if (courseMenuVisible) {
+      const helpBtn = document.getElementById('help-button');
+      const seedWrapper = document.getElementById('campaign-seed-wrapper');
+      const menuTitle = document.getElementById('menu-title');
+      // When loadout is visible, hide main menu buttons but keep splash background
+      if (loadoutVisible) {
+        if (mmc) mmc.classList.add('hidden');
         if (root) root.classList.add('hidden');
-        if (cm) cm.classList.remove('hidden');
-        const ncc2 = document.getElementById('new-course-choices');
-        const nccDiff2 = document.getElementById('new-course-choices-difficulty');
-        const ia2 = document.getElementById('import-area');
-        const cmf2 = document.getElementById('course-menu-footer');
-        if (ncc2) ncc2.classList.add('hidden');
-        if (nccDiff2) nccDiff2.classList.add('hidden');
-        if (ia2) ia2.classList.add('hidden');
-        if (cmf2) cmf2.classList.remove('hidden');
-        try { renderCourseList(); } catch {};
-        if (mmc) mmc.classList.remove('hidden');
-      } else {
-        if (root) root.classList.remove('hidden');
         if (cm) cm.classList.add('hidden');
-        if (mmc) mmc.classList.remove('hidden');
-        renderMainMenuRootVisibility();
+        // hide chrome but keep overlay itself visible for splash backdrop
+        // parallax sync will keep splash visible
+      } else {
+        // Sync sub-views — help is now global, not inside main-menu-overlay, so handle separately
+        // Help is global, handled in syncHelpOverlay
+        if (courseMenuVisible) {
+          if (root) root.classList.add('hidden');
+          if (cm) cm.classList.remove('hidden');
+          const ncc2 = document.getElementById('new-course-choices');
+          const nccDiff2 = document.getElementById('new-course-choices-difficulty');
+          const ia2 = document.getElementById('import-area');
+          const cmf2 = document.getElementById('course-menu-footer');
+          if (ncc2) ncc2.classList.add('hidden');
+          if (nccDiff2) nccDiff2.classList.add('hidden');
+          if (ia2) ia2.classList.add('hidden');
+          if (cmf2) cmf2.classList.remove('hidden');
+          try { renderCourseList(); } catch {};
+          if (mmc) mmc.classList.remove('hidden');
+        } else {
+          if (root) root.classList.remove('hidden');
+          if (cm) cm.classList.add('hidden');
+          if (mmc) mmc.classList.remove('hidden');
+          renderMainMenuRootVisibility();
+        }
+        // restore chrome visibility when not in loadout
+        if (helpBtn) helpBtn.classList.remove('hidden');
+        if (menuTitle) menuTitle.classList.remove('hidden');
+      }
+      // Always hide chrome when loadout is active — keep only splash image
+      if (loadoutVisible) {
+        if (helpBtn) helpBtn.classList.add('hidden');
+        if (seedWrapper) seedWrapper.classList.add('hidden');
+        if (menuTitle) menuTitle.classList.add('hidden');
       }
     } else {
       el.classList.add("hidden");
@@ -1799,7 +1820,7 @@ function syncCampaignSeedDisplay() {
   try {
     const cs = (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null) || '';
     el.textContent = 'Seed: ' + String(cs);
-    const show = !!mainMenuVisible;
+    const show = !!mainMenuVisible && !loadoutVisible;
     if (wrapper) wrapper.classList.toggle('hidden', !show);
     else el.classList.toggle('hidden', !show);
     // also update popup current seed if visible
