@@ -6,7 +6,7 @@
     "src": "img/cutscenes/bg-club-house.png",
     "color": "#1a1a1a"
   },
-  "duration": 47000,
+  "duration": 60000,
   "camera": {
     "keyframes": [
       {
@@ -38,42 +38,28 @@
         "easing": "linear"
       },
       {
-        "t": 13000,
+        "t": 35000,
         "x": 800,
         "y": 310,
         "zoom": 2,
         "easing": "easeOut"
       },
       {
-        "t": 16000,
+        "t": 37000,
         "x": 200,
         "y": 230,
         "zoom": 1.5,
         "easing": "linear"
       },
       {
-        "t": 26500,
-        "x": 200,
-        "y": 230,
-        "zoom": 1.5,
-        "easing": "linear"
-      },
-      {
-        "t": 33000,
+        "t": 49000,
         "x": 30,
         "y": 500,
         "zoom": 2,
         "easing": "linear"
       },
       {
-        "t": 36900,
-        "x": 30,
-        "y": 500,
-        "zoom": 2,
-        "easing": "linear"
-      },
-      {
-        "t": 40000,
+        "t": 52000,
         "x": 200,
         "y": 230,
         "zoom": 1.5,
@@ -115,7 +101,23 @@
           "sprite": "cortex-left"
         },
         {
-          "t": 41500,
+          "t": 17700,
+          "x": 754,
+          "y": 340,
+          "scale": 0.6,
+          "easing": "linear",
+          "sprite": "cortex-front"
+        },
+        {
+          "t": 35100,
+          "x": 754,
+          "y": 340,
+          "scale": 0.6,
+          "easing": "linear",
+          "sprite": "cortex-left"
+        },
+        {
+          "t": 51500,
           "x": 754,
           "y": 340,
           "scale": 0.6,
@@ -218,22 +220,16 @@
           "x": -101,
           "y": 449,
           "scale": 0.4,
-          "easing": "linear"
+          "easing": "linear",
+          "sprite": "slicer-right"
         },
         {
-          "t": 9200,
-          "x": 291,
-          "y": 383,
-          "scale": 0.4,
-          "easing": "linear"
-        },
-        {
-          "t": 26500,
+          "t": 9000,
           "x": 291,
           "y": 383,
           "scale": 0.4,
           "easing": "linear",
-          "sprite": "slicer-front"
+          "sprite": "slicer-right"
         },
         {
           "t": 36500,
@@ -242,6 +238,14 @@
           "scale": 0.4,
           "easing": "linear",
           "sprite": "slicer-right"
+        },
+        {
+          "t": 37300,
+          "x": 291,
+          "y": 383,
+          "scale": 0.4,
+          "easing": "linear",
+          "sprite": "slicer-front"
         }
       ]
     }
@@ -268,23 +272,23 @@
       "duration": 1000
     },
     {
-      "t": 27000,
+      "t": 37500,
       "speaker": "Slicer",
       "text": "And let it be known... ",
       "cps": 20,
       "portrait": "img/cutscenes/portrait-slicer.png",
       "portraitSide": "left",
-      "duration": 500,
       "texts": [
         "And let it be known... ",
         "those who try to cheat the wind...",
         "...or mock our traditions, will face the wrath of the Slicer.",
         "And my swing leaves no divots—only scars."
       ],
-      "name": "slicer"
+      "name": "slicer",
+      "duration": 1500
     },
     {
-      "t": 40000,
+      "t": 52000,
       "speaker": "Grandmaster Cortex",
       "text": "Let the trials begin.",
       "cps": 20,
