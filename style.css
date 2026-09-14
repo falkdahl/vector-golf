@@ -2229,3 +2229,87 @@ body {
   pointer-events: none;
 }
 #progression-coins-display.hidden { display: none !important; }
+
+/* 11-cutscenes — JRPG dialog overlay */
+#cutscene-dialog {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px 14px;
+  z-index: 12;
+  pointer-events: none;
+  border-radius: 8px;
+}
+#cutscene-dialog.hidden { display: none !important; }
+#cutscene-dialog:not(.hidden) { pointer-events: auto; }
+.cutscene-dialog-box {
+  width: min(92%, 720px);
+  min-height: 110px;
+  max-height: 38%;
+  background: #1a3a8a;
+  border: 3px solid #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 0 0 2px rgba(255,255,255,0.15);
+  padding: 12px 16px;
+  color: #fff;
+  font-family: "Press Start 2P", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  text-align: left;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  image-rendering: pixelated;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.cutscene-dialog-box.portrait-left { flex-direction: row; }
+.cutscene-dialog-box.portrait-right { flex-direction: row-reverse; }
+.cutscene-dialog-box.no-portrait { flex-direction: column; }
+.cutscene-portrait {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  min-height: 72px;
+  object-fit: cover;
+  image-rendering: pixelated;
+  border: 2px solid #fff;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.25);
+  flex-shrink: 0;
+}
+.cutscene-portrait.hidden { display: none !important; }
+.cutscene-dialog-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cutscene-speaker {
+  font: 700 11px "Press Start 2P", monospace;
+  color: #FFD700;
+  margin-bottom: 6px;
+  letter-spacing: 0.06em;
+  -webkit-text-stroke: 1.5px rgba(0,0,0,0.6);
+  paint-order: stroke fill;
+}
+.cutscene-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Press Start 2P", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.cutscene-hint {
+  margin-top: 8px;
+  font: 600 9px system-ui, sans-serif;
+  color: rgba(255,255,255,0.65);
+  text-align: right;
+  letter-spacing: 0.04em;
+}

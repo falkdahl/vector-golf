@@ -44,6 +44,7 @@ import {
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
+import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -223,7 +224,8 @@ function startParallaxLoop() {
 function syncParallaxVisibility() {
   if (!parallaxSceneEl) parallaxSceneEl = document.getElementById('parallax-scene');
   if (!parallaxSceneEl) return;
-  const shouldShow = !!(mainMenuVisible && !isInLevelPause);
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+  const shouldShow = !!(mainMenuVisible && !isInLevelPause && !isCut);
   parallaxSceneEl.classList.toggle('hidden', !shouldShow);
   parallaxSceneEl.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
   if (shouldShow) {
@@ -263,6 +265,12 @@ function redrawBottom() {
     // Use logical W/H with DPR transform already set in setupCanvases
     bgCtx.save();
     bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let isCut2 = false; try { isCut2 = cutsceneIsActive(); } catch {}
+    // During cutscene, do not draw splash/parallax — cutsceneRender handles bgCanvas
+    if (isCut2) {
+      bgCtx.restore();
+      return;
+    }
     if (mainMenuVisible && !isInLevelPause) {
       // layered parallax scene handles splash visuals; bgCanvas is hidden via CSS when parallax visible
       const parallaxOk = isParallaxReady();
@@ -1823,6 +1831,67 @@ function handleCoursePlay(courseId) {
   // New flow: show loadout before first hole (10-progression.md §2) — pre-load last saved or random
   if (hasRestorableSave()) return;
   try { loadProgression(); } catch {}
+  // 11-cutscenes §11: first time player clicks 3-hole course, show prologue.json before next state (loadout)
+  try {
+    const course = findCourseById(courseId);
+    const isThreeHole = !!(course && course.holeCount === 3);
+    const notSeen = !cutsceneHasSeen('prologue');
+    const canPlayPrologue = isThreeHole && notSeen && !cutsceneIsActive();
+    if (canPlayPrologue) {
+      // Immediately hide main menu/splash so cutscene bg is visible on first frame (avoid flash of menu over cutscene)
+      try {
+        const el = document.getElementById('main-menu-overlay');
+        if (el) { el.classList.add('hidden'); el.classList.remove('with-backdrop'); }
+        const parallaxEl = document.getElementById('parallax-scene');
+        if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden','true'); }
+        const hud = document.getElementById('hud');
+        if (hud) hud.classList.add('hidden');
+      } catch {}
+      try { syncMainMenu(); } catch {}
+      try { redrawBottom(); } catch {}
+      try { syncParallaxVisibility(); } catch {}
+      // Load prologue cutscene then play it; onComplete marks seen and proceeds to loadout
+      // Use cutsceneLoad to handle async correctly (cutscenePlay with string id returns false on async load and retries, which would cause fallback race)
+      cutsceneLoad('prologue').then((data) => {
+        if (!data) {
+          // Failed to load prologue.json — fallback to loadout so player isn't blocked
+          console.warn('[prologue] failed to load prologue.json, skipping to loadout');
+          showLoadout(courseId);
+          syncProgressionDisplay();
+          return;
+        }
+        // Use wrapped version so main menu/splash are hidden immediately and cutscene bg is visible
+        const ok = playCutsceneWrapped(data, {
+          onComplete: (completed) => {
+            try { cutsceneMarkSeen('prologue'); } catch {}
+            // Ensure seen is persisted even if onComplete called via skip
+            showLoadout(courseId);
+            syncProgressionDisplay();
+          }
+        });
+        if (!ok) {
+          // Play failed (invalid data) — fallback to loadout and still mark seen to avoid loop?
+          console.warn('[prologue] playCutscene failed, skipping to loadout');
+          try { cutsceneMarkSeen('prologue'); } catch {}
+          showLoadout(courseId);
+          syncProgressionDisplay();
+        } else {
+          // Ensure main menu is hidden immediately (playCutsceneWrapped already does, but force again for race where syncMainMenu hasn't run yet)
+          try { syncMainMenu(); } catch {}
+          try { redrawBottom(); } catch {}
+          try { syncParallaxVisibility(); } catch {}
+        }
+      }).catch((e) => {
+        console.warn('[prologue] load error', e);
+        showLoadout(courseId);
+        syncProgressionDisplay();
+      });
+      return; // Wait for cutscene onComplete to show loadout
+    }
+  } catch (e) {
+    console.warn('[prologue] check failed', e);
+    // Fall through to normal loadout
+  }
   showLoadout(courseId);
   syncProgressionDisplay();
 }
@@ -1884,9 +1953,19 @@ function createNewCourseWithHoles(holeCount, difficulty) {
 }
 
 function syncMainMenu() {
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+  // During cutscene, hide main menu and splash so cutscene background is visible
+  if (isCut) {
+    const cutEl = document.getElementById("main-menu-overlay");
+    if (cutEl) {
+      cutEl.classList.add("hidden");
+      cutEl.classList.remove("with-backdrop");
+    }
+    try { if (parallaxSceneEl) { parallaxSceneEl.classList.add("hidden"); parallaxSceneEl.setAttribute('aria-hidden','true'); } } catch {}
+  }
   const el = document.getElementById("main-menu-overlay");
   if (el) {
-    if (mainMenuVisible) {
+    if (mainMenuVisible && !isCut) {
       el.classList.remove("hidden");
       // Main menu is always transparent over splash, never with backdrop (pause has its own overlay)
       el.classList.remove("with-backdrop");
@@ -1971,10 +2050,11 @@ function syncMainMenu() {
   try { syncParallaxVisibility(); } catch {}
   // Ensure bottom background reflects mode (splash vs terrain)
   redrawBottom();
-  // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop)
-  try { const showWind = !mainMenuVisible && !pauseMenuVisible; setWindVisible(!showWind ? false : true); } catch {};
+  // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop) — hidden during cutscene
+  let isCutW=false; try{ isCutW=cutsceneIsActive(); }catch{}
+  try { const showWind = !mainMenuVisible && !pauseMenuVisible && !isCutW; setWindVisible(!showWind ? false : true); } catch {};
   // Actually wind should be visible on level and also while paused (dimmed), hidden only on main menu entry
-  try { const showWind2 = !mainMenuVisible; setWindVisible(showWind2 || pauseMenuVisible); } catch {};
+  try { const showWind2 = !mainMenuVisible && !isCutW; setWindVisible(showWind2 || pauseMenuVisible); } catch {};
   updateHotbarUI();
   try { updateAttemptsUI(); } catch {}
 }
@@ -3082,7 +3162,8 @@ function updateAttemptsUI() {
     }
     if (hudTotalEl) hudTotalEl.textContent = `Total: ${totalAttempts}`;
     if (hudEl) {
-      const shouldHide = !!mainMenuVisible;
+      let isCut2=false; try{ isCut2=cutsceneIsActive(); }catch{}
+      const shouldHide = !!mainMenuVisible || isCut2;
       hudEl.classList.toggle("hidden", shouldHide);
       if (gameState === "WIN" || gameState === "GAME_OVER") hudEl.style.opacity = "0.55";
       else hudEl.style.opacity = "";
@@ -3095,7 +3176,8 @@ function updateHotbarUI() {
   // Bag+hotbar are always visible during gameplay including FLYING and reward (per updated spec)
   // Only hide during overlays/menus/banners/WIN/GAME_OVER; collapsed is handled via CSS class
   // Bottom-bar wrapper is the centered bottom element (gap 12px to bottom)
-  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER";
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut;
   const hideHotbar = isOverlayHidden;
   const hideBag = isOverlayHidden;
   if (bottomBarEl) bottomBarEl.classList.toggle("hidden", isOverlayHidden);
@@ -3743,6 +3825,8 @@ function handleNextHole() {
 }
 
 function update(dt) {
+  // 11-cutscenes: when active, freeze game physics but advance cutscene & wind
+  try { if (cutsceneIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; cutsceneUpdate(dt); return; } } catch {}
   // REQ-004: wind shader + particles advance even when menu is blocking ball physics
   const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {}; try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
   // REQ-021: when reward menu visible, block aiming/charging but still animate wind
@@ -3945,6 +4029,8 @@ function updateForceBar() {
 }
 
 function render() {
+  // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
+  try { if (cutsceneIsActive()) { try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch {} return; } } catch {}
   // Top canvas is transparent; clear every frame with DPR transform
   const dpr = window.devicePixelRatio || 1;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -4717,6 +4803,8 @@ function init() {
   syncPauseOverlay();
   syncMainMenu();
   window.addEventListener("keydown", (e) => {
+    // 11-cutscenes has top priority — Space/R fast-forward and advance dialog, Escape skip
+    try { if (cutsceneIsActive()) { if (cutsceneHandleInput(e)) { return; } const ae0=document.activeElement; const isIn0=ae0 && (ae0.tagName==='INPUT'||ae0.tagName==='TEXTAREA'||ae0.isContentEditable); if(!isIn0) e.preventDefault(); return; } } catch {}
     // Coin summary has top priority (above game over) — animated End Run overlay
     if (coinSummaryVisible) {
       const isDismissKey = e.code === "Escape" || e.code === "Enter" || e.code === "Space" || e.code === "KeyR" || e.key === "r" || e.key === "R";
@@ -5144,6 +5232,8 @@ function init() {
     }
   });
   canvas.addEventListener("click", (e) => {
+    // 11-cutscenes: Space/R/Click fast-forward while active
+    try { if (cutsceneIsActive()) { cutsceneHandleInput(e); e.preventDefault(); return; } } catch {}
     // REQ-029/030: main menu is HTML overlay bounded to canvas — canvas clicks while menu visible are ignored (HTML button handles New Game)
     if (mainMenuVisible) {
       e.preventDefault();
@@ -5623,6 +5713,51 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'campaignSeed', { get: () => (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null), set: (v) => { if (typeof setCampaignSeed === 'function') setCampaignSeed(v); syncCampaignSeedDisplay(); } });
   Object.defineProperty(window, 'rewardSeedCounter', { get: () => rewardSeedCounter, set: (v) => { rewardSeedCounter = Math.max(0, Math.floor(v||0)); } });
 }
+
+// 11-cutscenes helpers
+function playCutsceneWrapped(idOrData, opts) {
+  // hide wind, hud etc will be synced via isCut check; also pause any banners
+  const ok = cutscenePlay(idOrData, {
+    onComplete: (completed) => {
+      try { updateHotbarUI(); } catch {}
+      try { updateAttemptsUI(); } catch {}
+      try { syncMainMenu(); } catch {}
+      try { redrawBottom(); } catch {}
+      try { syncParallaxVisibility(); } catch {}
+      if (opts && opts.onComplete) try { opts.onComplete(completed); } catch {}
+    }
+  });
+  if (ok) {
+    try { updateHotbarUI(); updateAttemptsUI(); } catch {}
+    try { syncMainMenu(); } catch {}
+    try { redrawBottom(); } catch {}
+    try { syncParallaxVisibility(); } catch {}
+    // Force hide main menu overlay and parallax immediately so cutscene bg is visible (mainMenuVisible stays true until loadout)
+    try {
+      const el = document.getElementById('main-menu-overlay');
+      if (el) { el.classList.add('hidden'); el.classList.remove('with-backdrop'); }
+      const parallaxEl = document.getElementById('parallax-scene');
+      if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden','true'); }
+      const hud = document.getElementById('hud');
+      if (hud) hud.classList.add('hidden');
+    } catch {}
+    // bind dialog click to advance
+    try {
+      const dlg = document.getElementById('cutscene-dialog');
+      const box = dlg && dlg.querySelector('.cutscene-dialog-box');
+      if (box && !box._cutBound) {
+        box._cutBound = true;
+        box.addEventListener('click', (e)=>{ try{ cutsceneHandleInput({type:'click', preventDefault:()=>{}}); }catch{} e.stopPropagation(); });
+      }
+      if (dlg && !dlg._cutBound) {
+        dlg._cutBound = true;
+        dlg.addEventListener('click', (e)=>{ if(e.target===dlg) try{ cutsceneHandleInput({type:'click', preventDefault:()=>{}});}catch{} });
+      }
+    } catch {}
+  }
+  return ok;
+}
+try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId; window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
 

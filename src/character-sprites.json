@@ -1,0 +1,283 @@
+{
+  "version": 2,
+  "sprites": {
+    "may-front": {
+      "src": "./img/cutscenes/chars-front.png",
+      "frame": {
+        "x": 194,
+        "y": 51,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "may-right": {
+      "src": "./img/cutscenes/chars-right.png",
+      "frame": {
+        "x": 206,
+        "y": 48,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "may-back": {
+      "src": "./img/cutscenes/chars-back.png",
+      "frame": {
+        "x": 205,
+        "y": 55,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "cortex-front": {
+      "src": "./img/cutscenes/chars-front.png",
+      "frame": {
+        "x": 552,
+        "y": 42,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "cortex-back": {
+      "src": "./img/cutscenes/chars-back.png",
+      "frame": {
+        "x": 546,
+        "y": 42,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "cortex-right": {
+      "src": "./img/cutscenes/chars-right.png",
+      "frame": {
+        "x": 540,
+        "y": 50,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "caddy-front": {
+      "src": "./img/cutscenes/chars-front.png",
+      "frame": {
+        "x": 897,
+        "y": 42,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "caddy-back": {
+      "src": "./img/cutscenes/chars-back.png",
+      "frame": {
+        "x": 885,
+        "y": 31,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "caddy-right": {
+      "src": "./img/cutscenes/chars-right.png",
+      "frame": {
+        "x": 890,
+        "y": 48,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "rat-front": {
+      "src": "./img/cutscenes/chars-front.png",
+      "frame": {
+        "x": 537,
+        "y": 381,
+        "w": 300,
+        "h": 288
+      }
+    },
+    "rat-back": {
+      "src": "./img/cutscenes/chars-back.png",
+      "frame": {
+        "x": 535,
+        "y": 363,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "rat-right": {
+      "src": "./img/cutscenes/chars-right.png",
+      "frame": {
+        "x": 538,
+        "y": 367,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "rat-right-left": {
+      "src": "./img/cutscenes/chars-left.png",
+      "frame": {
+        "x": 564,
+        "y": 367,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "may-left": {
+      "src": "./img/cutscenes/chars-left.png",
+      "frame": {
+        "x": 872,
+        "y": 50,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "cortex-left": {
+      "src": "./img/cutscenes/chars-left.png",
+      "frame": {
+        "x": 553,
+        "y": 48,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "caddy-left": {
+      "src": "./img/cutscenes/chars-left.png",
+      "frame": {
+        "x": 201,
+        "y": 44,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "acolyte-back": {
+      "src": "./img/cutscenes/chars-back.png",
+      "frame": {
+        "x": 865,
+        "y": 414,
+        "w": 300,
+        "h": 256
+      }
+    },
+    "acolyte-front": {
+      "src": "./img/cutscenes/chars-front.png",
+      "frame": {
+        "x": 884,
+        "y": 378,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "acolyte-left": {
+      "src": "./img/cutscenes/chars-left.png",
+      "frame": {
+        "x": 199,
+        "y": 380,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "acolyte-right": {
+      "src": "./img/cutscenes/chars-right.png",
+      "frame": {
+        "x": 875,
+        "y": 380,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "slicer-front": {
+      "src": "./img/cutscenes/chars-slicer.png",
+      "frame": {
+        "x": 539,
+        "y": 544,
+        "w": 400,
+        "h": 400
+      }
+    },
+    "slicer-right": {
+      "src": "./img/cutscenes/chars-slicer.png",
+      "frame": {
+        "x": 558,
+        "y": 58,
+        "w": 400,
+        "h": 400
+      }
+    },
+    "slicer-back": {
+      "src": "./img/cutscenes/chars-slicer.png",
+      "frame": {
+        "x": 71,
+        "y": 60,
+        "w": 400,
+        "h": 400
+      }
+    },
+    "slicer-left": {
+      "src": "./img/cutscenes/chars-slicer.png",
+      "frame": {
+        "x": 84,
+        "y": 549,
+        "w": 400,
+        "h": 400
+      }
+    }
+  },
+  "characters": {
+    "may": {
+      "name": "May",
+      "sprites": [
+        "may-front",
+        "may-right",
+        "may-back",
+        "may-left"
+      ],
+      "defaultSprite": "may-front"
+    },
+    "cortex": {
+      "name": "Cortex",
+      "sprites": [
+        "cortex-front",
+        "cortex-right",
+        "cortex-back",
+        "cortex-left"
+      ],
+      "defaultSprite": "cortex-front"
+    },
+    "caddy": {
+      "name": "Caddy",
+      "sprites": [
+        "caddy-front",
+        "caddy-right",
+        "caddy-back",
+        "caddy-left"
+      ],
+      "defaultSprite": "caddy-front"
+    },
+    "rat": {
+      "name": "Rat",
+      "sprites": [
+        "rat-front",
+        "rat-right",
+        "rat-right-left",
+        "rat-back"
+      ],
+      "defaultSprite": "rat-front"
+    },
+    "acolyte": {
+      "name": "Acolyte",
+      "sprites": [
+        "acolyte-front",
+        "acolyte-right",
+        "acolyte-back",
+        "acolyte-left"
+      ],
+      "defaultSprite": "acolyte-front"
+    },
+    "slicer": {
+      "name": "slicer",
+      "sprites": [
+        "slicer-back",
+        "slicer-front",
+        "slicer-right",
+        "slicer-left"
+      ],
+      "defaultSprite": "slicer-front"
+    }
+  }
+}

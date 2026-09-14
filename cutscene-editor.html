@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cutscene Editor — Gale Force Golf (hidden)</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,sans-serif;background:#0b0b0b;color:#eee;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{padding:10px 14px;background:#111;border-bottom:1px solid #222;display:flex;align-items:center;gap:12px}
+  header h1{margin:0;font:700 14px system-ui}
+  header span{font:500 11px system-ui;color:#aaa}
+  #main{display:flex;flex:1;min-height:0;overflow:hidden}
+  #left{width:420px;min-width:360px;max-width:520px;overflow-y:auto;padding:12px;background:#0f0f0f;border-right:1px solid #222;display:flex;flex-direction:column;gap:14px}
+  #center{flex:1.4;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#000;padding:12px;gap:10px;overflow:hidden;min-width:0}
+  #right{width:360px;min-width:300px;overflow-y:auto;padding:12px;background:#0f0f0f;border-left:1px solid #222;display:flex;flex-direction:column;gap:14px}
+  .panel{background:#181818;border:1px solid #2a2a2a;border-radius:8px;padding:10px}
+  .panel h3{margin:0 0 8px;font:700 12px system-ui;color:#FFD700}
+  label{font:600 11px system-ui;color:#bbb;display:block;margin:4px 0 2px}
+  input,select,textarea{width:100%;padding:6px 8px;font:500 12px system-ui;background:#222;color:#eee;border:1px solid #333;border-radius:6px}
+  textarea{resize:vertical;min-height:56px}
+  button{padding:6px 10px;font:700 11px system-ui;background:#27ae60;color:#fff;border:1px solid #1e8449;border-radius:6px;cursor:pointer}
+  button:hover{background:#1e8449}
+  button.secondary{background:#222;border-color:#444;color:#ccc}
+  button.secondary:hover{background:#333}
+  button.danger{background:#c0392b;border-color:#8e2418}
+  .row{display:flex;gap:6px}
+  .row > *{flex:1}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .item{background:#222;border:1px solid #333;border-radius:6px;padding:8px}
+  .item h4{margin:0;font:700 11px system-ui;flex:1}
+  .item-header{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;padding:2px 0}
+  .collapse-toggle{font:700 14px system-ui;color:#FFD700;width:18px;text-align:center;transition:transform 0.15s;line-height:1}
+  .item.collapsed .collapse-toggle{transform:rotate(-90deg)}
+  .item-body{margin-top:6px}
+  .item.collapsed .item-body{display:none}
+  .item-actions{display:flex;gap:6px;margin-top:6px}
+  #preview-wrap{position:relative;width:100%;max-width:960px;aspect-ratio:16/9;background:#1a1a1a;border:2px solid #333;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  #preview-canvas{width:100%;height:100%;display:block;background:#1a1a1a;image-rendering:pixelated}
+  #preview-dialog{position:absolute;left:12px;right:12px;bottom:12px;background:#1a3a8a;border:3px solid #fff;border-radius:8px;padding:8px 10px;min-height:58px;display:flex;gap:10px;align-items:flex-start}
+  #preview-dialog.hidden{display:none}
+  #preview-dialog.portrait-left{flex-direction:row}
+  #preview-dialog.portrait-right{flex-direction:row-reverse}
+  #preview-dialog.no-portrait{flex-direction:column}
+  #preview-portrait{width:56px;height:56px;min-width:56px;min-height:56px;object-fit:cover;border:2px solid #fff;border-radius:6px;background:rgba(0,0,0,0.25);flex-shrink:0}
+  #preview-portrait.hidden{display:none}
+  #preview-content{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+  #preview-speaker{font:700 10px "Courier New",monospace;color:#FFD700}
+  #preview-text{font:500 11px "Courier New",monospace;color:#fff;white-space:pre-wrap;line-height:1.4}
+  #timeline{width:100%;display:flex;align-items:center;gap:8px}
+  #timeline input[type=range]{flex:1}
+  #json-preview{font:500 11px monospace;white-space:pre;min-height:160px;max-height:240px;overflow:auto}
+  .hint{font:500 10px system-ui;color:#888}
+  .small{font:500 10px system-ui;color:#aaa}
+  #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:8px 14px;border-radius:6px;font:600 12px system-ui;z-index:50}
+  .hidden{display:none !important}
+  .kf-row{display:flex;gap:4px;align-items:center;margin:4px 0}
+  .kf-row input{padding:4px 6px;font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cutscene Editor</h1>
+  <span>hidden endpoint — not linked from game</span>
+  <span style="margin-left:auto" class="hint">place, scale, keyframe movement & pan/zoom, write dialog</span>
+</header>
+<div id="main">
+  <div id="left">
+    <div class="panel">
+      <h3>Scene</h3>
+      <label>ID (unique) <span class="small">^[a-z0-9][a-z0-9-_]{2,40}$</span></label>
+      <input id="scene-id" placeholder="intro-mt-aeolus" maxlength="40">
+      <label>Title</label>
+      <input id="scene-title" placeholder="The Windy Peak">
+      <label>Duration (ms)</label>
+      <input id="scene-duration" type="number" min="1000" max="120000" step="500" value="15000">
+      <label>Background</label>
+      <select id="bg-type"><option value="image">image</option><option value="color">color</option></select>
+      <label>Background src (./img/...)</label>
+      <select id="bg-src">
+        <option value="./img/splash/background-gfg-splash.png">background-gfg-splash.png</option>
+        <option value="./img/splash/middleground-gfg-splash.png">middleground-gfg-splash.png</option>
+        <option value="./img/splash/foreground-gfg-splash.png">foreground-gfg-splash.png</option>
+        <option value="./img/splash/may-gfg-splash.png">may-gfg-splash.png</option>
+        <option value="./img/gfg-splash.png">gfg-splash.png</option>
+        <option value="./img/logo.png">logo.png</option>
+        <option value="./img/golfbag.png">golfbag.png</option>
+        <option value="./img/magnifier-icon.png">magnifier-icon.png</option>
+        <option value="./img/liquifier-icon.png">liquifier-icon.png</option>
+        <option value="./img/deflector-icon.png">deflector-icon.png</option>
+        <option value="./img/rotator-icon.png">rotator-icon.png</option>
+      </select>
+      <input id="bg-src-custom" placeholder="or custom ./img/... path" style="margin-top:6px">
+      <label>Background color fallback</label>
+      <input id="bg-color" type="color" value="#1a1a1a">
+      <div class="hint">Click preview canvas to place character. Drag to move.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Characters</h3>
+      <div id="char-list" class="list"></div>
+      <div class="row"><button id="add-char">+ Add character</button></div>
+      <div class="hint">anchor: center (default) or bottom (feet at y)</div>
+    </div>
+
+    <div class="panel">
+      <h3>Camera — pan & zoom (sync across canvases)</h3>
+      <div id="camera-kfs" class="list"></div>
+      <button id="add-camera-kf">+ Add camera keyframe at scrub time</button>
+      <div class="hint">camera translates/zooms both bg and characters together</div>
+    </div>
+  </div>
+
+  <div id="center">
+    <div id="preview-wrap">
+      <canvas id="preview-canvas" width="960" height="540"></canvas>
+      <div id="preview-dialog" class="hidden no-portrait"><img id="preview-portrait" class="hidden" alt=""><div id="preview-content"><div id="preview-speaker"></div><div id="preview-text"></div></div></div>
+    </div>
+    <div id="timeline"><span class="small">Time</span><input id="scrub" type="range" min="0" max="15000" value="0" step="100"><span id="scrub-label" class="small">0 ms</span><button id="play-btn" class="secondary">▶︎ Play</button></div>
+    <div class="hint">click canvas to place selected character • Shift+click adds movement keyframe • scrub to preview interpolation</div>
+  </div>
+
+  <div id="right">
+    <div class="panel">
+      <h3>Load Existing Cutscene</h3>
+      <label>Available from repo (src/cutscenes.json)</label>
+      <select id="load-cutscene-select"><option value="">(loading...)</option></select>
+      <div class="row" style="margin-top:6px"><button id="load-cutscene-btn" class="secondary">Load Selected</button><button id="refresh-cutscene-list" class="secondary">Refresh List</button></div>
+      <label style="margin-top:8px">Or load by ID (./src/cutscenes/&lt;id&gt;.json)</label>
+      <div class="row"><input id="load-cutscene-id" placeholder="e.g. intro-mt-aeolus"><button id="load-cutscene-id-btn" class="secondary">Load</button></div>
+      <div class="hint">loads saved file from repo to preview — then edit and export again</div>
+    </div>
+    <div class="panel">
+      <h3>Dialogs — timed JRPG boxes</h3>
+      <div id="dialog-list" class="list"></div>
+      <button id="add-dialog">+ Add dialog at scrub time</button>
+      <div class="hint">typewriter cps 30 default; Space/R/Click fast-forward while revealing</div>
+    </div>
+
+    <div class="panel">
+      <h3>JSON <span class="small">live preview</span></h3>
+      <textarea id="json-preview" readonly></textarea>
+      <div class="row"><button id="cutscene-export-button">Export — Copy JSON</button><button id="import-btn" class="secondary">Load pasted JSON</button></div>
+      <textarea id="import-area" placeholder="paste exported JSON here to load" style="min-height:70px"></textarea>
+      <div class="hint">export copies whole scene as JSON (JSON.stringify null 2) to clipboard for manual save to src/cutscenes/&lt;id&gt;.json</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden">copied to clipboard</div>
+<script type="module" src="./src/cutscene-editor.js"></script>
+</body>
+</html>
