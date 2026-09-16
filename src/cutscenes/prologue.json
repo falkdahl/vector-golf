@@ -1,12 +1,12 @@
 {
   "id": "prologue",
-  "title": "prologue",
+  "title": "Order of Golfing Purists - Club House",
   "background": {
     "type": "image",
     "src": "img/cutscenes/bg-club-house.png",
     "color": "#1a1a1a"
   },
-  "duration": 60000,
+  "duration": 68000,
   "camera": {
     "keyframes": [
       {
@@ -52,14 +52,21 @@
         "easing": "linear"
       },
       {
-        "t": 49000,
+        "t": 50000,
         "x": 30,
         "y": 500,
         "zoom": 2,
         "easing": "linear"
       },
       {
-        "t": 52000,
+        "t": 56400,
+        "x": 30,
+        "y": 500,
+        "zoom": 2,
+        "easing": "linear"
+      },
+      {
+        "t": 62000,
         "x": 200,
         "y": 230,
         "zoom": 1.5,
@@ -93,7 +100,7 @@
           "easing": "linear"
         },
         {
-          "t": 11500,
+          "t": 8200,
           "x": 754,
           "y": 340,
           "scale": 0.6,
@@ -101,7 +108,7 @@
           "sprite": "cortex-left"
         },
         {
-          "t": 17700,
+          "t": 12200,
           "x": 754,
           "y": 340,
           "scale": 0.6,
@@ -209,16 +216,16 @@
         "w": 400,
         "h": 400
       },
-      "x": 291,
-      "y": 383,
+      "x": -293,
+      "y": 400,
       "scale": 0.4,
       "anchor": "center",
       "zIndex": 5,
       "keyframes": [
         {
           "t": 0,
-          "x": -101,
-          "y": 449,
+          "x": -293,
+          "y": 400,
           "scale": 0.4,
           "easing": "linear",
           "sprite": "slicer-right"
@@ -232,15 +239,7 @@
           "sprite": "slicer-right"
         },
         {
-          "t": 36500,
-          "x": 291,
-          "y": 383,
-          "scale": 0.4,
-          "easing": "linear",
-          "sprite": "slicer-right"
-        },
-        {
-          "t": 37300,
+          "t": 41900,
           "x": 291,
           "y": 383,
           "scale": 0.4,
@@ -264,15 +263,28 @@
         "They say golf is a game of calm greens and gentle breezes.",
         "Fools!",
         "Only in the fury of the gale does true skill reveal itself!",
-        "The wind is our judge. The wind is our jury. It sweeps away the weak, leaving only the pure!",
+        "The wind is our judge!",
+        "The wind is our jury!",
+        "It sweeps away the weak, leaving only the pure!",
         "Ten strokes per hole, or your ball is cast into the void forever.",
         "And remember the ancient edict: he who conquers all 18 holes of Mt. Aeolus shall be crowned Grandmaster in my stead!"
       ],
       "name": "grand master initial",
-      "duration": 1000
+      "duration": 2000,
+      "gaps": [
+        1000,
+        1000,
+        1000,
+        1000,
+        1000,
+        2000,
+        2000,
+        2000,
+        1000
+      ]
     },
     {
-      "t": 37500,
+      "t": 42000,
       "speaker": "Slicer",
       "text": "And let it be known... ",
       "cps": 20,
@@ -281,14 +293,23 @@
       "texts": [
         "And let it be known... ",
         "those who try to cheat the wind...",
-        "...or mock our traditions, will face the wrath of the Slicer.",
-        "And my swing leaves no divots—only scars."
+        "...or mock our traditions",
+        "will face the wrath of the Slicer.",
+        "And my swing leaves no divots",
+        "only scars"
       ],
       "name": "slicer",
-      "duration": 1500
+      "duration": 1500,
+      "gaps": [
+        1000,
+        1500,
+        1500,
+        1500,
+        1500
+      ]
     },
     {
-      "t": 52000,
+      "t": 59000,
       "speaker": "Grandmaster Cortex",
       "text": "Let the trials begin.",
       "cps": 20,
@@ -297,14 +318,24 @@
       "name": "master final",
       "texts": [
         "Let the trials begin.",
-        "Find me a challenger worthy of my throne...",
+        "Find me a challenger worthy of my throne",
         "if they dare."
       ],
       "gaps": [
         1000,
         1000
       ],
-      "duration": 1000
+      "duration": 2000
     }
-  ]
+  ],
+  "intro": {
+    "blackMs": 500,
+    "titleFadeMs": 500,
+    "holdMs": 1000,
+    "fadeInMs": 600,
+    "enabled": true
+  },
+  "outro": {
+    "fadeOutMs": 1000
+  }
 }

@@ -411,6 +411,8 @@ let supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0
 let loadoutVisible = false;
 let loadoutCourseId = null;
 let loadoutSlots = [null, null, null, null]; // 4 slots, each null or type string
+// Flag to hide shop when loadout follows intro-3-hole chain (tutorial) — 10-progression §2.3 & 11b
+let loadoutHideShopDueToIntro = false;
 // Run coin tracking: 10 per hole cleared (COINS_PER_HOLE)
 let runHolesCleared = 0;
 let runCoinsEarned = 0;
@@ -584,9 +586,14 @@ function syncLoadoutPickerOverlay() {
     const names = {liquifier:'Liquifier',deflector:'Deflector',rotator:'Rotator',magnifier:'Magnifier',fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shot'};
     const icons = {liquifier:'./img/liquifier-icon.png',deflector:'./img/deflector-icon.png',rotator:'./img/rotator-icon.png',magnifier:'./img/magnifier-icon.png',fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
     let visibleCount = 0;
+    // compute total count per type in loadout for remaining calculation
+    const totalCountByType = {};
+    for (const v of loadoutSlots) if (v) totalCountByType[v] = (totalCountByType[v]||0)+1;
     for (const t of types) {
       const owned = personal[t] ?? 0;
-      if (owned <=0) continue;
+      const placed = totalCountByType[t] || 0;
+      const remaining = owned - placed;
+      if (remaining <=0) continue;
       visibleCount++;
       const div = document.createElement('div');
       div.className = 'picker-item';
@@ -602,7 +609,7 @@ function syncLoadoutPickerOverlay() {
         div.appendChild(fb);
       }
       const nm = document.createElement('div'); nm.className='pi-name'; nm.textContent = names[t] || t; div.appendChild(nm);
-      const ow = document.createElement('div'); ow.className='pi-owned'; ow.textContent = 'Owned: ' + owned; div.appendChild(ow);
+      const ow = document.createElement('div'); ow.className='pi-owned'; ow.textContent = 'x' + remaining; div.appendChild(ow);
       // highlight if already in that slot
       if (loadoutSlots[loadoutPickerSlotIndex]===t) div.style.outline='2px solid rgba(255,255,255,0.9)';
       div.addEventListener('click', () => {
@@ -675,6 +682,37 @@ function syncLoadoutOverlay() {
     const personal = getPersonalSupply();
     const coins = getCoins();
     const unlocked = getUnlockedLoadoutSlots();
+    // Title: ensure "Choose your starting items" (10-progression §2.2)
+    try {
+      const titleEl = overlay.querySelector('.loadout-title') || document.querySelector('#loadout-overlay .loadout-title');
+      if (titleEl && titleEl.textContent.trim() !== 'Choose your starting items') titleEl.textContent = 'Choose your starting items';
+    } catch {}
+    // Shop visibility: hide shop when intro-3-hole chain just played for 3-hole course
+    const shouldHideShop = !!(loadoutHideShopDueToIntro && loadoutCourseId && (()=>{ try{ const c=findCourseById(loadoutCourseId); return c && c.holeCount===3; }catch{return false;}})());
+    try {
+      const shopSection = overlay.querySelector('.loadout-shop-section') || document.querySelector('#loadout-overlay .loadout-shop-section') || document.getElementById('shop-grid')?.parentElement;
+      const shopGrid = document.getElementById('shop-grid');
+      const gapShop = overlay.querySelector('.loadout-gap--loadout-shop');
+      const gapTitle = overlay.querySelector('.loadout-gap--title-loadout');
+      if (shopSection) {
+        shopSection.classList.toggle('hidden', shouldHideShop);
+        shopSection.style.display = shouldHideShop ? 'none' : '';
+        // also ensure visibility for tests checking computed style
+        if (shouldHideShop) shopSection.setAttribute('aria-hidden','true');
+        else shopSection.removeAttribute('aria-hidden');
+      }
+      if (shopGrid) {
+        shopGrid.classList.toggle('hidden', shouldHideShop);
+        shopGrid.style.display = shouldHideShop ? 'none' : '';
+      }
+      if (gapShop) {
+        gapShop.classList.toggle('hidden', shouldHideShop);
+        gapShop.style.display = shouldHideShop ? 'none' : '';
+      }
+      // when shop hidden, also ensure loadout-layout doesn't reserve huge gap
+      if (shouldHideShop && gapTitle) gapTitle.style.display = 'none';
+      else if (gapTitle) gapTitle.style.display = '';
+    } catch {}
     // Coins display with moneybag
     const coinsEl = document.getElementById('loadout-coins');
     if (coinsEl) coinsEl.textContent = '💰 ' + coins;
@@ -813,11 +851,17 @@ function removeFromLoadout(idx) {
   syncLoadoutOverlay();
 }
 const VALID_LOADOUT_TYPES = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
-function showLoadout(courseId) {
+function showLoadout(courseId, opts) {
   if (hasRestorableSave()) return false;
   const course = findCourseById(courseId);
   if (!course) return false;
   loadoutCourseId = courseId;
+  // opts.hideShop used for intro-3-hole chain (shop hidden on tutorial 3-hole loadout)
+  if (opts && typeof opts.hideShop === 'boolean') {
+    loadoutHideShopDueToIntro = !!opts.hideShop;
+  } else {
+    loadoutHideShopDueToIntro = false;
+  }
   // Try to pre-load last saved loadout; if none, pick random owned items for each unlocked slot
   let preloaded = null;
   let hasSaved = false;
@@ -878,6 +922,7 @@ function showLoadout(courseId) {
 function hideLoadout() {
   loadoutVisible=false;
   loadoutCourseId=null;
+  loadoutHideShopDueToIntro = false;
   hideLoadoutPicker();
   syncLoadoutOverlay();
   syncMainMenu();
@@ -934,6 +979,7 @@ function startCourseWithLoadout(courseId, slots) {
   runHolesCleared=0; runCoinsEarned=0;
   try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 1; }
   loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
+  loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
   loadLevel(0); gameState='AIMING';
   if (winOverlay) winOverlay.classList.add('hidden'); if (gameoverOverlay) gameoverOverlay.classList.add('hidden');
@@ -1864,16 +1910,52 @@ function handleCoursePlay(courseId) {
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
             try { cutsceneMarkSeen('prologue'); } catch {}
-            // Ensure seen is persisted even if onComplete called via skip
-            showLoadout(courseId);
-            syncProgressionDisplay();
+            // Chain intro-3-hole directly after prologue before loadout (11b)
+            const introNotSeen = (()=>{ try{ return !cutsceneHasSeen('intro-3-hole'); }catch{ return true; }})();
+            if (introNotSeen && isThreeHole && !cutsceneIsActive()) {
+              cutsceneLoad('intro-3-hole').then((data2) => {
+                if (!data2) {
+                  console.warn('[intro-3-hole] failed to load, skipping to loadout');
+                  try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+                  showLoadout(courseId, {hideShop:true});
+                  syncProgressionDisplay();
+                  return;
+                }
+                const ok2 = playCutsceneWrapped(data2, {
+                  onComplete: (completed2) => {
+                    try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+                    showLoadout(courseId, {hideShop:true});
+                    syncProgressionDisplay();
+                  }
+                });
+                if (!ok2) {
+                  console.warn('[intro-3-hole] play failed, skipping to loadout');
+                  try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+                  showLoadout(courseId, {hideShop:true});
+                  syncProgressionDisplay();
+                }
+              }).catch((e)=>{
+                console.warn('[intro-3-hole] load error', e);
+                showLoadout(courseId, {hideShop:true});
+                syncProgressionDisplay();
+              });
+            } else {
+              // intro already seen or not applicable
+              showLoadout(courseId);
+              syncProgressionDisplay();
+            }
           }
         });
         if (!ok) {
           // Play failed (invalid data) — fallback to loadout and still mark seen to avoid loop?
           console.warn('[prologue] playCutscene failed, skipping to loadout');
           try { cutsceneMarkSeen('prologue'); } catch {}
-          showLoadout(courseId);
+          // still attempt intro chain before loadout?
+          const introNotSeen2 = (()=>{ try{ return !cutsceneHasSeen('intro-3-hole'); }catch{ return true; }})();
+          if (introNotSeen2 && isThreeHole) {
+            try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+          }
+          showLoadout(courseId, {hideShop: introNotSeen2 && isThreeHole});
           syncProgressionDisplay();
         } else {
           // Ensure main menu is hidden immediately (playCutsceneWrapped already does, but force again for race where syncMainMenu hasn't run yet)

@@ -14,7 +14,7 @@ let scene = {
   duration: 15000,
   camera: { keyframes: [{ t:0, x:0, y:0, zoom:1, easing:"easeInOut" },{ t:8000, x:120, y:40, zoom:1.4, easing:"easeInOut" }] },
   characters: [
-    { id:"may", src:"./img/splash/may-gfg-splash.png", x:320, y:520, scale:0.65, anchor:"bottom", zIndex:0, keyframes:[{t:0,x:320,y:520,scale:0.65,easing:"easeOut"},{t:4000,x:640,y:520,scale:0.65,easing:"linear"}] }
+    { id:"may", character:"may", x:320, y:520, scale:0.65, anchor:"bottom", zIndex:0, keyframes:[{t:0,x:320,y:520,scale:0.65,easing:"easeOut"},{t:4000,x:640,y:520,scale:0.65,easing:"linear"}] }
   ],
   dialogs: [
     { t:500, speaker:"May", text:"Welcome to Mt. Aeolus...", cps:32, portrait:"./img/splash/may-gfg-splash.png", portraitSide:"left" },
@@ -31,6 +31,136 @@ let dragCharId = null;
 let isDragging = false;
 let collapsedChars = new Set();
 let collapsedDialogs = new Set();
+
+// New Scene blank template
+function createBlankScene(){
+  return {
+    id: "new-scene",
+    title: "",
+    background: { type: "image", src: "./img/splash/background-gfg-splash.png", color: "#1a1a1a" },
+    duration: 15000,
+    camera: { keyframes: [] },
+    characters: [],
+    dialogs: []
+  };
+}
+function handleNewScene(){
+  scene = createBlankScene();
+  selectedCharId = "";
+  scrubTime = 0;
+  collapsedChars = new Set();
+  collapsedDialogs = new Set();
+  try{ localStorage.removeItem('cutsceneEditorDraft.v1'); }catch{}
+  try{ localStorage.setItem('cutsceneEditorDraft.v1', JSON.stringify(scene)); }catch{}
+  syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); syncJson(); renderPreview();
+  showToast('new scene — blank template');
+}
+
+// Image discovery including subfolders (for dropdowns)
+let availableImages = [
+  "./img/splash/background-gfg-splash.png",
+  "./img/splash/middleground-gfg-splash.png",
+  "./img/splash/foreground-gfg-splash.png",
+  "./img/splash/may-gfg-splash.png",
+  "./img/cutscenes/bg-club-house.png",
+  "./img/cutscenes/bg-green.png",
+  "./img/cutscenes/bg-mountains.png",
+  "./img/cutscenes/chars-back.png",
+  "./img/cutscenes/chars-front.png",
+  "./img/cutscenes/chars-left.png",
+  "./img/cutscenes/chars-right.png",
+  "./img/cutscenes/chars-slicer.png",
+  "./img/cutscenes/dialog-caddy.png",
+  "./img/cutscenes/dialog-cortex.png",
+  "./img/cutscenes/dialog-may.png",
+  "./img/cutscenes/dialog-rat.png",
+  "./img/cutscenes/dialog-slicer.png",
+  "./img/cutscenes/portrait-acolyte.png",
+  "./img/cutscenes/portrait-caddy.png",
+  "./img/cutscenes/portrait-cortex.png",
+  "./img/cutscenes/portrait-may.png",
+  "./img/cutscenes/portrait-rat.png",
+  "./img/cutscenes/portrait-slicer.png",
+  "./img/gfg-splash.png",
+  "./img/logo.png",
+  "./img/golfbag.png",
+  "./img/magnifier-icon.png",
+  "./img/liquifier-icon.png",
+  "./img/deflector-icon.png",
+  "./img/rotator-icon.png",
+  "./img/field-extender-icon.png",
+  "./img/power-cell-icon.png",
+  "./img/amplify-icon.png",
+  "./img/nullify-icon.png",
+  "./img/flip-icon.png",
+  "./img/rotate-icon.png"
+];
+async function fetchFolderImages(folder){
+  try{
+    const res = await fetch(folder, {cache:'no-store'});
+    if(!res.ok) return [];
+    const text = await res.text();
+    const re = /href="([^"]+\.(png|jpg|jpeg|webp|gif))"/gi;
+    const out=[];
+    let m;
+    while((m=re.exec(text))){
+      const href=m[1];
+      if(href.startsWith('http') || href.startsWith('/')) continue;
+      if(href.includes('..')) continue;
+      // href may be "bg-club-house.png" when folder is ./img/cutscenes/
+      // or "cutscenes/bg..." when folder is ./img/
+      let full = href;
+      if(!href.includes('/')){
+        const folderNorm = folder.replace(/\/$/,'');
+        full = folderNorm + '/' + href;
+      } else if(href.startsWith('./')) {
+        full = href;
+      } else if(!href.startsWith('./img')){
+        // relative from folder
+        const folderNorm = folder.replace(/\/$/,'');
+        full = folderNorm + '/' + href.split('/').pop();
+      }
+      // normalize to ./img/... form
+      if(full.startsWith('img/')) full='./'+full;
+      if(!full.startsWith('./img/')) full='./img/'+full.split('/').pop();
+      out.push(full);
+    }
+    return out;
+  }catch{ return []; }
+}
+async function refreshAvailableImages(){
+  try{
+    const lists = await Promise.all([
+      fetchFolderImages('./img/'),
+      fetchFolderImages('./img/cutscenes/'),
+      fetchFolderImages('./img/splash/'),
+      fetchFolderImages('./img/characters/'),
+    ]);
+    const flat = lists.flat().filter(Boolean);
+    const merged = [...new Set([...availableImages, ...flat])].sort();
+    // only keep that look like ./img/...
+    availableImages = merged.filter(p=>p.startsWith('./img/'));
+    // update bg src dropdown if present
+    if(els.bgSrc){
+      const cur = els.bgSrc.value || scene.background?.src || "";
+      els.bgSrc.innerHTML='';
+      for(const p of availableImages){
+        const opt=document.createElement('option');
+        opt.value=p;
+        // show short name with folder
+        opt.textContent=p.replace('./img/','');
+        if(p===cur) opt.selected=true;
+        els.bgSrc.appendChild(opt);
+      }
+      // ensure current custom still visible? keep fallback
+      if(cur && !availableImages.includes(cur)){
+        const opt=document.createElement('option');
+        opt.value=cur; opt.textContent=cur.replace('./img/',''); opt.selected=true;
+        els.bgSrc.appendChild(opt);
+      }
+    }
+  }catch{}
+}
 
 const els = {};
 function q(id){ return document.getElementById(id); }
@@ -69,6 +199,17 @@ function initEls(){
   els.refreshBtn = q('refresh-cutscene-list');
   els.loadIdInput = q('load-cutscene-id');
   els.loadIdBtn = q('load-cutscene-id-btn');
+  els.newSceneBtn = q('new-scene-button');
+  // 12 — intro/outro
+  els.introEnabled = q('intro-enabled');
+  els.introBlackMs = q('intro-black-ms');
+  els.introTitleFadeMs = q('intro-title-fade-ms');
+  els.introHoldMs = q('intro-hold-ms');
+  els.introFadeInMs = q('intro-fadein-ms');
+  els.introTitle = q('intro-title');
+  els.outroFadeOutMs = q('outro-fadeout-ms');
+  els.previewIntroBtn = q('preview-intro-btn');
+  els.clearIntroBtn = q('clear-intro-btn');
 }
 
 const easingFn = {
@@ -103,12 +244,25 @@ function interpolate(kfs, t, defaults){
 }
 
 function getCameraAt(t){
-  return interpolate(scene.camera?.keyframes||[], t, {x:0,y:0,zoom:1});
+  const introCfgEC = getIntroForEditor();
+  const introBeforeFadeEC = introCfgEC.introBeforeFade ?? (introCfgEC.total - (introCfgEC.fadeInMs||0));
+  const eff = introBeforeFadeEC ? Math.max(0, t - introBeforeFadeEC) : t;
+  // during fade-out, freeze at last
+  const outro = getOutroForEditor();
+  const contentDuration = scene.duration || 15000;
+  const clamped = outro.fadeOutMs>0 ? Math.min(eff, contentDuration) : eff;
+  return interpolate(scene.camera?.keyframes||[], clamped, {x:0,y:0,zoom:1});
 }
 function getCharAt(char, t){
+  const introCfgGC = getIntroForEditor();
+  const introBeforeFadeGC = introCfgGC.introBeforeFade ?? (introCfgGC.total - (introCfgGC.fadeInMs||0));
+  const eff = introBeforeFadeGC ? Math.max(0, t - introBeforeFadeGC) : t;
+  const outro = getOutroForEditor();
+  const contentDuration = scene.duration || 15000;
+  const clamped = outro.fadeOutMs>0 ? Math.min(eff, contentDuration) : eff;
   const base={x:char.x??640,y:char.y??360,scale:char.scale??1};
   if(!char.keyframes||!char.keyframes.length) return base;
-  return interpolate(char.keyframes, t, base);
+  return interpolate(char.keyframes, clamped, base);
 }
 function getEffectiveSpriteId(ch, t){
   let baseId = ch.sprite || null;
@@ -117,15 +271,79 @@ function getEffectiveSpriteId(ch, t){
     baseId = ch.sprite || grp.defaultSprite || (grp.sprites&&grp.sprites[0]) || null;
   }
   if(!ch.keyframes || !ch.keyframes.length) return baseId;
+  const introCfg = getIntroForEditor();
+  const introBeforeFade = introCfg.introBeforeFade ?? (introCfg.total - (introCfg.fadeInMs||0));
+  const effT = introBeforeFade ? Math.max(0, t - introBeforeFade) : t;
+  const outro = getOutroForEditor();
+  const contentDuration = scene.duration || 15000;
+  const clamped = outro.fadeOutMs>0 ? Math.min(effT, contentDuration) : effT;
   const sorted = [...ch.keyframes].sort((a,b)=>a.t-b.t);
   let eff = baseId;
   for(const kf of sorted){
-    if(kf.t <= t && kf.sprite) eff = kf.sprite;
-    else if(kf.t > t) break;
+    if(kf.t <= clamped && kf.sprite) eff = kf.sprite;
+    else if(kf.t > clamped) break;
   }
   return eff;
 }
 function isAutoDialog(d){ return d.t == null || d.auto === true; }
+// 12 — intro/outro helpers for editor
+function getIntroForEditor(){
+  const intro = scene.intro && typeof scene.intro==='object' ? scene.intro : null;
+  if(!intro) return { blackMs:0, titleFadeMs:0, holdMs:0, fadeInMs:0, title:'', enabled:false, total:0, introBeforeFade:0 };
+  const blackMs = Math.max(0, Math.min(10000, parseInt(intro.blackMs ?? intro.blackDuration ?? 0)||0));
+  const titleFadeMs = Math.max(0, Math.min(5000, parseInt(intro.titleFadeMs ?? intro.textFadeMs ?? 0)||0));
+  const holdMs = Math.max(0, Math.min(10000, parseInt(intro.holdMs ?? intro.pauseMs ?? 0)||0));
+  const fadeInMs = Math.max(0, Math.min(10000, parseInt(intro.fadeInMs ?? intro.cutsceneFadeInMs ?? intro.sceneFadeMs ?? 0)||0));
+  const title = typeof intro.title==='string' ? intro.title : '';
+  const enabled = intro.enabled !== false && (intro.enabled===true || blackMs>0 || titleFadeMs>0 || holdMs>0 || fadeInMs>0 || !!title);
+  const total = (enabled ? blackMs+titleFadeMs+holdMs+fadeInMs : 0);
+  const introBeforeFade = blackMs+titleFadeMs+holdMs;
+  return { blackMs, titleFadeMs, holdMs, fadeInMs, title, enabled, total, introBeforeFade };
+}
+function getOutroForEditor(){
+  const outro = scene.outro && typeof scene.outro==='object' ? scene.outro : null;
+  const flat = (!outro && (scene.fadeOutMs!==undefined || scene.fadeOutDuration!==undefined)) ? scene : null;
+  const v = outro ? (outro.fadeOutMs ?? outro.fadeOutDuration) : (flat ? (flat.fadeOutMs ?? flat.fadeOutDuration) : 0);
+  const fadeOutMs = Math.max(0, Math.min(10000, parseInt(v)||0));
+  return { fadeOutMs, enabled: fadeOutMs>0 };
+}
+function getIntroTotalForEditor(){ return getIntroForEditor().total; }
+function getIntroBeforeFadeForEditor(){ const c=getIntroForEditor(); return c.introBeforeFade ?? (c.total - (c.fadeInMs||0)); }
+function getContentScrubTime(){ const c=getIntroForEditor(); const ibf=c.introBeforeFade ?? (c.total - (c.fadeInMs||0)); return scrubTime - ibf; }
+function updateScrubLabel(){
+  if(els.scrubLabel) els.scrubLabel.textContent = Math.round(getContentScrubTime()) + ' ms';
+}
+function syncIntroToSceneFromUI(){
+  const enabled = els.introEnabled ? els.introEnabled.checked : false;
+  const blackMs = Math.max(0, Math.min(10000, parseInt(els.introBlackMs?.value)||0));
+  const titleFadeMs = Math.max(0, Math.min(5000, parseInt(els.introTitleFadeMs?.value)||0));
+  const holdMs = Math.max(0, Math.min(10000, parseInt(els.introHoldMs?.value)||0));
+  const fadeInMs = Math.max(0, Math.min(10000, parseInt(els.introFadeInMs?.value)||0));
+  const title = (els.introTitle?.value||'').trim();
+  const fadeOutMs = Math.max(0, Math.min(10000, parseInt(els.outroFadeOutMs?.value)||0));
+  if(enabled || blackMs||titleFadeMs||holdMs||fadeInMs||title){
+    if(!scene.intro || typeof scene.intro!=='object') scene.intro={};
+    scene.intro.blackMs=blackMs;
+    scene.intro.titleFadeMs=titleFadeMs;
+    scene.intro.holdMs=holdMs;
+    scene.intro.fadeInMs=fadeInMs;
+    if(title) scene.intro.title=title; else delete scene.intro.title;
+    scene.intro.enabled=enabled;
+    // clean empty if all zero and disabled
+    if(!enabled && blackMs===0 && titleFadeMs===0 && holdMs===0 && fadeInMs===0 && !title){
+      delete scene.intro;
+    }
+  } else {
+    delete scene.intro;
+  }
+  if(fadeOutMs>0){
+    if(!scene.outro || typeof scene.outro!=='object') scene.outro={};
+    scene.outro.fadeOutMs=fadeOutMs;
+  } else {
+    delete scene.outro;
+    delete scene.fadeOutMs; delete scene.fadeOutDuration;
+  }
+}
 const BOX_GAP_DEFAULT = 1000;
 const BOX_GAP = BOX_GAP_DEFAULT; // legacy alias
 function getBoxGapForEditor(dialog, boxIndex){
@@ -149,7 +367,7 @@ function getDialogTextsForEditor(d){
 }
 function getDialogTotalRevealForEditor(d){
   const texts = getDialogTextsForEditor(d);
-  const cps = d.cps ?? 30;
+  const cps = d.cps ?? 20;
   let total = 0;
   for(let i=0;i<texts.length;i++){
     total += (texts[i].length / cps) * 1000;
@@ -182,6 +400,11 @@ function getEffectiveDialogsForEditor(dialogs){
   return res;
 }
 function getEffectiveCharForPreview(ch, t){
+  // during intro, clamp to 0
+  const introCfgE = getIntroForEditor();
+  const introBeforeFadeE = introCfgE.introBeforeFade ?? (introCfgE.total - (introCfgE.fadeInMs||0));
+  const effT = introBeforeFadeE ? Math.max(0, t - introBeforeFadeE) : t;
+  const clampedT = effT;
   // Resolve src/frame including per-keyframe sprite override and character group
   let baseSrc = ch.src;
   let baseFrame = ch.frame || null;
@@ -204,7 +427,7 @@ function getEffectiveCharForPreview(ch, t){
   let effSrc = baseSrc;
   let effFrame = baseFrame;
   for(const kf of sorted){
-    if(kf.t <= t){
+    if(kf.t <= clampedT){
       if(kf.sprite && spriteLibrary[kf.sprite]){
         const s = spriteLibrary[kf.sprite];
         effSrc = s.src;
@@ -338,35 +561,109 @@ function renderPreview(){
   ctx.restore();
   ctx.restore();
 
-  // dialog preview with portrait left/right, duration and auto (after previous)
-  const effDialogs = getEffectiveDialogsForEditor(scene.dialogs);
+  // 12 — intro / outro overlay preview on canvas (black + title)
+  try{
+    const introP = getIntroForEditor();
+    const outroP = getOutroForEditor();
+    const introTotal = introP.total;
+    const contentDuration = scene.duration || 15000;
+    const introBeforeFadePrev = introP.introBeforeFade ?? (introP.total - (introP.fadeInMs||0));
+    const totalActive = introBeforeFadePrev + contentDuration + outroP.fadeOutMs;
+    let overlayAlpha = 0;
+    let titleAlpha = 0;
+    let titleToShow = introP.title || scene.title || scene.id || '';
+    if(introP.enabled && scrubTime < introTotal){
+      if(scrubTime < introP.blackMs){
+        overlayAlpha = 1;
+        titleAlpha = 0;
+      } else if(scrubTime < introP.blackMs + introP.titleFadeMs){
+        const p = introP.titleFadeMs>0 ? (scrubTime - introP.blackMs)/introP.titleFadeMs : 1;
+        overlayAlpha = 1;
+        titleAlpha = Math.max(0,Math.min(1,p));
+      } else if(scrubTime < introP.blackMs + introP.titleFadeMs + introP.holdMs){
+        overlayAlpha = 1;
+        titleAlpha = 1;
+      } else {
+        const t0 = introP.blackMs + introP.titleFadeMs + introP.holdMs;
+        const p = introP.fadeInMs>0 ? (scrubTime - t0)/introP.fadeInMs : 1;
+        overlayAlpha = 1 - Math.max(0,Math.min(1,p));
+        titleAlpha = 1 - Math.max(0,Math.min(1,p));
+      }
+    } else if(outroP.enabled && scrubTime >= totalActive - outroP.fadeOutMs){
+      const p = outroP.fadeOutMs>0 ? (scrubTime - (totalActive - outroP.fadeOutMs))/outroP.fadeOutMs : 1;
+      overlayAlpha = Math.max(0,Math.min(1,p));
+      titleAlpha = 0;
+    }
+    if(overlayAlpha>0.001){
+      ctx.save();
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.globalAlpha = overlayAlpha;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0,0,PREVIEW_W,PREVIEW_H);
+      ctx.restore();
+      if(titleToShow && titleAlpha>0.001){
+        ctx.save();
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.globalAlpha = titleAlpha;
+        ctx.fillStyle = '#fff';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.font='700 24px system-ui, sans-serif';
+        // stroke for readability
+        ctx.strokeStyle='rgba(0,0,0,0.75)';
+        ctx.lineWidth=6;
+        const cx = PREVIEW_W/2, cy = PREVIEW_H/2;
+        try{ ctx.strokeText(titleToShow, cx, cy); }catch{}
+        ctx.fillText(titleToShow, cx, cy);
+        ctx.restore();
+      }
+    } else if(introP.enabled && scrubTime < introTotal && titleAlpha>0.001){
+      // title without full overlay? already handled
+    }
+  }catch{}
+
+  // dialog preview with portrait left/right, duration and auto (after previous) — offset by intro
+  const introForDialog = getIntroForEditor();
+  const introBeforeFadeDlg = introForDialog.introBeforeFade ?? (introForDialog.total - (introForDialog.fadeInMs||0));
+  const outroForDialog = getOutroForEditor();
+  const introBeforeFadeDlg2 = introForDialog.introBeforeFade ?? (introForDialog.total - (introForDialog.fadeInMs||0));
+  const contentScrub = introBeforeFadeDlg2 ? scrubTime - introBeforeFadeDlg2 : scrubTime;
+  const isInIntroDlg = introForDialog.enabled && scrubTime < (introForDialog.introBeforeFade ?? (introForDialog.total - (introForDialog.fadeInMs||0)));
+  const isInOutroDlg = outroForDialog.enabled && scrubTime >= (introBeforeFadeDlg + (scene.duration||15000) + outroForDialog.fadeOutMs - outroForDialog.fadeOutMs);
   let cur=null;
   let curEff = null;
+  if(!isInIntroDlg && !isInOutroDlg){
+  const effDialogs = getEffectiveDialogsForEditor(scene.dialogs);
   for(let i=0;i<effDialogs.length;i++){
     const d = effDialogs[i];
-    if(d.effectiveT <= scrubTime) { cur = d; curEff = d; }
+    if(d.effectiveT <= contentScrub) { cur = d; curEff = d; }
     else break;
   }
   // use effective for next check — totalReveal includes boxes+gaps
   if(cur && curEff){
     const idxEff = effDialogs.indexOf(curEff);
-    const nextEff = effDialogs[idxEff+1];
-    if(nextEff && scrubTime>=nextEff.effectiveT) cur=null;
+    const effDialogs2 = effDialogs;
+    const nextEff = effDialogs2[idxEff+1];
+    if(nextEff && contentScrub>=nextEff.effectiveT) cur=null;
     else if(cur.duration != null && Number.isFinite(cur.duration)){
       const totalRevealTmp = getDialogTotalRevealForEditor(cur);
       const effT = curEff.effectiveT;
-      if(scrubTime >= effT + totalRevealTmp + cur.duration) cur=null;
+      if(contentScrub >= effT + totalRevealTmp + cur.duration) cur=null;
     }
   } else if(cur){
-    const idx=effDialogs.indexOf(curEff);
-    const next=effDialogs[idx+1];
-    if(next && scrubTime>=next.effectiveT) cur=null;
+    const effDialogs3 = getEffectiveDialogsForEditor(scene.dialogs);
+    const idx=effDialogs3.indexOf(curEff);
+    const next=effDialogs3[idx+1];
+    if(next && contentScrub>=next.effectiveT) cur=null;
   }
+  }
+  // expose effDialogs for later use in this scope? need to define for outer
+  const _effDialogsForLater = getEffectiveDialogsForEditor(scene.dialogs);
   if(cur){
-    const cps=cur.cps??30;
+    const cps=cur.cps??20;
     const curTexts = getDialogTextsForEditor(cur);
     const effT2 = curEff?.effectiveT ?? cur.effectiveT ?? cur.t ?? 0;
-    const elapsedInDlg = scrubTime - effT2;
+    const elapsedInDlg = contentScrub - effT2;
     // find which text box is active (including gaps, default 1000ms, adjustable per box)
     let boxIdx = 0;
     let boxOffset = 0;
@@ -462,11 +759,15 @@ function syncFromUI(){
   scene.id=(els.sceneId.value.trim()||'intro-mt-aeolus');
   scene.title=els.sceneTitle.value.trim();
   scene.duration=Math.max(1000, Math.min(120000, parseInt(els.sceneDuration.value)||15000));
-  els.scrub.max=String(scene.duration);
+  const outro = getOutroForEditor();
+  // scrub covers introBeforeFade + content + outro fade (so intro scrub-able) — time 0 at fade start per 11-cutscenes.md §12
+  const _ibfSC = getIntroForEditor().introBeforeFade ?? (getIntroForEditor().total - (getIntroForEditor().fadeInMs||0));
+  els.scrub.max=String(scene.duration + _ibfSC + outro.fadeOutMs);
   const bgType=els.bgType.value;
   const custom=els.bgSrcCustom.value.trim();
   const sel=els.bgSrc.value;
   scene.background={ type:bgType, src: custom || sel, color: els.bgColor.value };
+  // intro/outro are synced via syncIntroToSceneFromUI (called from input handlers)
   // characters and camera/dialogs are synced via individual handlers that mutate scene directly
 }
 
@@ -474,7 +775,10 @@ function syncToUI(){
   els.sceneId.value=scene.id||'';
   els.sceneTitle.value=scene.title||'';
   els.sceneDuration.value=String(scene.duration||15000);
-  els.scrub.max=String(scene.duration||15000);
+  const intro = getIntroForEditor();
+  const outro = getOutroForEditor();
+  const _ibfST = intro.introBeforeFade ?? (intro.total - (intro.fadeInMs||0));
+  els.scrub.max=String((scene.duration||15000) + _ibfST + outro.fadeOutMs);
   els.bgType.value=scene.background?.type||'image';
   // try to match bgSrc
   const src=scene.background?.src||'';
@@ -484,125 +788,164 @@ function syncToUI(){
   else if(matched) els.bgSrcCustom.value='';
   els.bgColor.value=scene.background?.color||'#1a1a1a';
   els.scrub.value=String(scrubTime);
-  els.scrubLabel.textContent=Math.round(scrubTime)+' ms';
+  updateScrubLabel();
+  // intro/outro UI
+  if(els.introEnabled) els.introEnabled.checked = !!intro.enabled;
+  if(els.introBlackMs) els.introBlackMs.value = String(intro.blackMs||0);
+  if(els.introTitleFadeMs) els.introTitleFadeMs.value = String(intro.titleFadeMs||0);
+  if(els.introHoldMs) els.introHoldMs.value = String(intro.holdMs||0);
+  if(els.introFadeInMs) els.introFadeInMs.value = String(intro.fadeInMs||0);
+  if(els.introTitle) els.introTitle.value = intro.title || '';
+  if(els.outroFadeOutMs) els.outroFadeOutMs.value = String(outro.fadeOutMs||0);
+  // disable inputs when not enabled? keep editable but visually indicate
+  const en = !!intro.enabled;
+  if(els.introBlackMs) els.introBlackMs.disabled = !en && false; // keep enabled for direct editing, but checkbox controls inclusion
 }
 
 function renderCharList(){
+  // migrate legacy characters (src/frame/id) to character-based model if needed
+  (scene.characters||[]).forEach(ch=>{
+    if(!ch.character){
+      // try to infer character from id/sprite
+      if(ch.id && characterGroups[ch.id]){
+        ch.character = ch.id;
+      } else if(ch.sprite && typeof ch.sprite==='string'){
+        for(const [cid,cg] of Object.entries(characterGroups)){
+          if(cg.sprites && cg.sprites.includes(ch.sprite)){ ch.character = cid; break; }
+        }
+      }
+      if(!ch.character){
+        // try src/frame match by looking up sprite with same src
+        const probeSrc = ch.src || '';
+        if(probeSrc){
+          for(const [sid, s] of Object.entries(spriteLibrary)){
+            if(s.src===probeSrc){
+              // find owner
+              for(const [cid,cg] of Object.entries(characterGroups)){
+                if(cg.sprites && cg.sprites.includes(sid)){ ch.character = cid; ch.sprite=sid; break; }
+              }
+              if(ch.character) break;
+            }
+          }
+        }
+      }
+      if(!ch.character){
+        const first = Object.keys(characterGroups)[0];
+        if(first) ch.character = first;
+      }
+    }
+    // id is derived from character name if needed
+    if(!ch.id || ch.id!==ch.character) {
+      // keep existing id if it equals character for uniqueness check, otherwise sync
+      // if duplicate ids exist, dedupe
+      const base = ch.character || 'char';
+      if(!ch.id || !/^[a-z0-9][a-z0-9-_]{1,40}$/.test(ch.id) || !characterGroups[ch.id]){
+        ch.id = base;
+      }
+      // ensure uniqueness later; for now keep
+    }
+    // remove legacy image/frame fields - source of truth is character-sprites.json
+    if(ch.src) delete ch.src;
+    if(ch.frame) delete ch.frame;
+    // keep ch.sprite only if it belongs to the character's set, otherwise reset to default
+    const grp = characterGroups[ch.character];
+    if(grp){
+      if(ch.sprite && !grp.sprites.includes(ch.sprite)){
+        delete ch.sprite;
+      }
+      if(!ch.sprite && grp.defaultSprite) ch.sprite = grp.defaultSprite;
+      // ensure id matches character for non-duplicate case
+      if(scene.characters.filter(c=>c.character===ch.character).length===1){
+        ch.id = ch.character;
+      }
+    }
+  });
+  // deduplicate ids that now collide (multiple same character) -> suffix
+  const seenCharIds = new Map();
+  (scene.characters||[]).forEach(ch=>{
+    const base = ch.character || ch.id;
+    let cand = base;
+    let n=1;
+    // count previous occurrence of same base
+    const count = seenCharIds.get(base) || 0;
+    if(count>0){
+      cand = base + '-' + (count+1);
+      // ensure not already taken
+      let t=cand, m=1;
+      while((scene.characters||[]).some(o=>o!==ch && o.id===t)){ t=cand+'-'+m; m++; }
+      cand=t;
+      ch.id=cand;
+    }
+    seenCharIds.set(base, (seenCharIds.get(base)||0)+1);
+    ch.id=cand;
+  });
   els.charList.innerHTML='';
+  if(!Object.keys(characterGroups).length){
+    const hint=document.createElement('div');
+    hint.className='hint';
+    hint.textContent='Loading characters from ./src/character-sprites.json...';
+    els.charList.appendChild(hint);
+    return;
+  }
   (scene.characters||[]).forEach((ch, idx)=>{
+    const grp = characterGroups[ch.character] || {name: ch.character, sprites: []};
+    const displayName = grp.name || ch.character || ch.id;
     const isCollapsed = collapsedChars.has(ch.id);
     const div=document.createElement('div');
     div.className='item' + (isCollapsed ? ' collapsed' : '');
     if(ch.id===selectedCharId) { div.classList.add('selected'); div.style.borderColor='#FFD700'; }
-    // sprite library options — filtered by character group if set
-    const allSpriteIds = Object.keys(spriteLibrary);
     const charGroups = Object.keys(characterGroups);
-    const curCharacter = ch.character || '';
-    let charOpts = `<option value="">(none) custom</option>`;
+    let charOpts = '';
     for (const cid of charGroups){
       const cg = characterGroups[cid];
-      charOpts += `<option value="${cid}" ${curCharacter===cid?'selected':''}>${cid} — ${cg.name||cid} (${(cg.sprites||[]).length} sprites)</option>`;
+      charOpts += `<option value="${cid}" ${ch.character===cid?'selected':''}>${cg.name||cid}</option>`;
     }
-    const curSprite = ch.sprite || '';
-    // if character group selected, filter sprites to that group's list
-    let spriteIds = allSpriteIds;
-    if (curCharacter && characterGroups[curCharacter] && characterGroups[curCharacter].sprites){
-      spriteIds = characterGroups[curCharacter].sprites.filter(id=> spriteLibrary[id]);
-      // if current sprite not in group but still valid, keep it in list
-      if (curSprite && !spriteIds.includes(curSprite) && spriteLibrary[curSprite]) spriteIds = [...spriteIds, curSprite];
-    }
-    let spriteOpts = `<option value="">(none) — use src/frame below</option>`;
-    for (const sid of spriteIds){
-      const s = spriteLibrary[sid];
-      if(!s) continue;
-      spriteOpts += `<option value="${sid}" ${curSprite===sid?'selected':''}>${sid} — ${s.src.replace('./img/','')} ${s.frame ? s.frame.w+'×'+s.frame.h : 'full'}</option>`;
-    }
-    // frame display
-    const hasFrame = !!(ch.frame && typeof ch.frame.w === 'number');
-    const frameX = hasFrame ? ch.frame.x : 0;
-    const frameY = hasFrame ? ch.frame.y : 0;
-    const frameW = hasFrame ? ch.frame.w : 64;
-    const frameH = hasFrame ? ch.frame.h : 64;
     div.innerHTML=`
-      <div class="item-header"><span class="collapse-toggle">▼</span><h4>${ch.id||'(no id)'} ${ch.id===selectedCharId? '★':''}</h4></div>
+      <div class="item-header"><span class="collapse-toggle">▼</span><h4>${displayName} ${ch.id===selectedCharId? '★':''}</h4><span class="small" style="margin-left:auto; color:#888;">${ch.character}</span></div>
       <div class="item-body">
-      <label>ID</label><input data-k="id" value="${ch.id||''}" placeholder="may">
-      <label>Character (group from sprite library)</label><select data-k="character">${charOpts}</select>
-      <div class="hint">group sprites into a character (e.g. may = may-front + may-right ...) — selects which sprites are available per keyframe</div>
-      <label>Sprite (variant for this character)</label><select data-k="sprite">${spriteOpts}</select>
-      <div class="hint">pick a saved sprite (may-right etc.) to auto-fill src + frame; per-keyframe sprite can be changed below</div>
-      <label>src</label><select data-k="src">
-        <option value="./img/splash/may-gfg-splash.png" ${ch.src==="./img/splash/may-gfg-splash.png"?'selected':''}>may-gfg-splash.png</option>
-        <option value="./img/splash/background-gfg-splash.png" ${ch.src==="./img/splash/background-gfg-splash.png"?'selected':''}>background-gfg-splash.png</option>
-        <option value="./img/logo.png" ${ch.src==="./img/logo.png"?'selected':''}>logo.png</option>
-        <option value="./img/golfbag.png" ${ch.src==="./img/golfbag.png"?'selected':''}>golfbag.png</option>
-        <option value="./img/magnifier-icon.png" ${ch.src==="./img/magnifier-icon.png"?'selected':''}>magnifier-icon.png</option>
-        <option value="./img/liquifier-icon.png" ${ch.src==="./img/liquifier-icon.png"?'selected':''}>liquifier-icon.png</option>
-        <option value="./img/deflector-icon.png" ${ch.src==="./img/deflector-icon.png"?'selected':''}>deflector-icon.png</option>
-        <option value="./img/rotator-icon.png" ${ch.src==="./img/rotator-icon.png"?'selected':''}>rotator-icon.png</option>
-      </select>
-      <input data-k="src-custom" placeholder="or custom ./img/..." value="${(['./img/splash/may-gfg-splash.png','./img/logo.png','./img/golfbag.png','./img/magnifier-icon.png','./img/liquifier-icon.png','./img/deflector-icon.png','./img/rotator-icon.png','./img/splash/background-gfg-splash.png'].includes(ch.src)?'':ch.src)}" style="margin-top:4px">
-      <div class="row"><div><label>frame x</label><input data-k="frame-x" type="number" min="0" value="${frameX}"></div><div><label>y</label><input data-k="frame-y" type="number" min="0" value="${frameY}"></div></div>
-      <div class="row"><div><label>w</label><input data-k="frame-w" type="number" min="1" value="${frameW}"></div><div><label>h</label><input data-k="frame-h" type="number" min="1" value="${frameH}"></div><div style="display:flex;align-items:flex-end"><button data-act="clear-frame" class="secondary" style="width:100%">Clear frame (full image)</button></div></div>
-      <div class="hint">frame crops part of PNG (transparent sheet with multiple characters) — not expensive, same 1 blit</div>
-      <div class="row"><div><label>x</label><input data-k="x" type="number" min="0" max="1280" value="${ch.x??640}"></div><div><label>y</label><input data-k="y" type="number" min="0" max="720" value="${ch.y??360}"></div></div>
+      <label>Character</label><select data-k="character">${charOpts}</select>
+      <div class="hint">Select from ./src/character-sprites.json — image/frame come from the sprite sheet</div>
+      <div class="row"><div><label>x</label><input data-k="x" type="number" min="-1000" max="2280" value="${ch.x??640}"></div><div><label>y</label><input data-k="y" type="number" min="-1000" max="1720" value="${ch.y??360}"></div></div>
       <label>scale <span class="small">${(ch.scale??1).toFixed(2)}</span></label><input data-k="scale" type="range" min="0.2" max="3" step="0.05" value="${ch.scale??1}">
       <div class="row"><div><label>anchor</label><select data-k="anchor"><option value="center" ${ch.anchor==='center'?'selected':''}>center</option><option value="bottom" ${ch.anchor==='bottom'?'selected':''}>bottom</option></select></div><div><label>zIndex</label><input data-k="zIndex" type="number" value="${ch.zIndex??0}"></div></div>
       <div class="row" style="margin-top:6px"><button data-act="select" class="secondary">Select</button><button data-act="duplicate" class="secondary">Duplicate</button><button data-act="remove" class="danger">Remove</button></div>
       <div style="margin-top:8px"><strong class="small">Keyframes (movement & scale) — click canvas Shift adds</strong></div>
       <div data-k="kfs"></div>
-      <button data-act="add-kf" class="secondary" style="margin-top:6px">+ Add keyframe at ${scrubTime} ms</button>
+      <button data-act="add-kf" class="secondary" style="margin-top:6px">+ Add keyframe at ${Math.round(getContentScrubTime())} ms</button>
       </div>
     `;
     // bind
     div.querySelectorAll('input,select').forEach(el=>{
-      const handler = (e)=>{
+      const handler = ()=>{
         const k=el.dataset.k;
-        if(k==='id') ch.id=el.value.trim()||ch.id;
-        else if(k==='character'){
+        if(k==='character'){
           const v=el.value;
-          if(!v){ delete ch.character; }
-          else {
+          if(v && characterGroups[v]){
+            // ensure not creating duplicate character id if already exists elsewhere
+            const existing = scene.characters.find((c,i)=>i!==idx && c.character===v && c.id===v);
+            // allow duplicate but will suffix on next render
             ch.character = v;
-            const grp = characterGroups[v];
-            const def = grp && (grp.defaultSprite || (grp.sprites&&grp.sprites[0]));
-            if(def && spriteLibrary[def]){
-              ch.sprite = def;
-              const s = spriteLibrary[def];
-              ch.src = s.src;
-              ch.frame = s.frame ? {...s.frame} : undefined;
-            }
+            // reset to default sprite for new character (base)
+            delete ch.sprite;
+            // dedupe id
+            ch.id = v;
+            let nid=v, n=1;
+            while(scene.characters.find((c,i)=>i!==idx && c.id===nid)){ nid = v + '-' + (n+1); n++; }
+            ch.id=nid;
+            selectedCharId=ch.id;
             renderCharList();
           }
         }
-        else if(k==='sprite'){
-          const v=el.value;
-          if(!v){ delete ch.sprite; }
-          else {
-            ch.sprite = v;
-            const s = spriteLibrary[v];
-            if(s){ ch.src = s.src; ch.frame = s.frame ? {...s.frame} : undefined; renderCharList(); }
-          }
-        }
-        else if(k==='src'){ ch.src=el.value; const cust=div.querySelector('[data-k="src-custom"]'); if(cust) cust.value=''; delete ch.sprite; if(ch.character) delete ch.character; }
-        else if(k==='src-custom'){ const v=el.value.trim(); if(v){ ch.src=v; delete ch.sprite; if(ch.character) delete ch.character; } }
-        else if(k==='frame-x'){ if(!ch.frame) ch.frame={x:0,y:0,w:64,h:64}; ch.frame.x=parseInt(el.value)||0; delete ch.sprite; }
-        else if(k==='frame-y'){ if(!ch.frame) ch.frame={x:0,y:0,w:64,h:64}; ch.frame.y=parseInt(el.value)||0; delete ch.sprite; }
-        else if(k==='frame-w'){ if(!ch.frame) ch.frame={x:0,y:0,w:64,h:64}; ch.frame.w=parseInt(el.value)||1; delete ch.sprite; }
-        else if(k==='frame-h'){ if(!ch.frame) ch.frame={x:0,y:0,w:64,h:64}; ch.frame.h=parseInt(el.value)||1; delete ch.sprite; }
         else if(k==='x') ch.x=parseInt(el.value)||0;
         else if(k==='y') ch.y=parseInt(el.value)||0;
         else if(k==='scale') { ch.scale=parseFloat(el.value)||1; const span=div.querySelector('span'); if(span) span.textContent=ch.scale.toFixed(2); }
         else if(k==='anchor') ch.anchor=el.value;
         else if(k==='zIndex') ch.zIndex=parseInt(el.value)||0;
-        if(k==='id' && ch.id) selectedCharId=ch.id;
         syncJson(); renderPreview();
       };
       el.addEventListener('input', handler);
       el.addEventListener('change', handler);
     });
-    const clearBtn = div.querySelector('[data-act="clear-frame"]');
-    if(clearBtn) clearBtn.addEventListener('click', ()=>{ delete ch.frame; delete ch.sprite; renderCharList(); syncJson(); renderPreview(); });
     const header = div.querySelector('.item-header');
     if(header) header.addEventListener('click', (e)=>{
       if(e.target.closest('button')) return;
@@ -612,16 +955,21 @@ function renderCharList(){
     });
     const dupBtn = div.querySelector('[data-act="duplicate"]');
     if(dupBtn) dupBtn.addEventListener('click', ()=>{
-      const newId = ch.id + '-copy';
-      let nid = newId, n=1;
-      while(scene.characters.find(c=>c.id===nid)) { nid = newId + n; n++; }
+      // duplicate same character type
+      const baseChar = ch.character;
+      let nid = baseChar, n=1;
+      // find next free suffix
+      const taken = new Set(scene.characters.map(c=>c.id));
+      while(taken.has(nid)){ n++; nid = baseChar + '-' + n; }
       const copy = JSON.parse(JSON.stringify(ch));
+      copy.character = baseChar;
       copy.id = nid;
+      delete copy.src; delete copy.frame;
+      // keep base sprite inherit (default) — don't copy per-char sprite override unless valid
       copy.x = (copy.x||640) + 20;
       copy.y = (copy.y||360) + 20;
       scene.characters.push(copy);
       selectedCharId = nid;
-      // copy collapsed state? not needed
       renderCharList(); syncJson(); renderPreview();
     });
     div.querySelector('[data-act="select"]').addEventListener('click', ()=>{ selectedCharId=ch.id; renderCharList(); renderPreview(); });
@@ -632,21 +980,32 @@ function renderCharList(){
     });
     div.querySelector('[data-act="add-kf"]').addEventListener('click', ()=>{
       if(!ch.keyframes) ch.keyframes=[];
+      const introBeforeFadeAddKf = getIntroForEditor().introBeforeFade ?? (getIntroForEditor().total - (getIntroForEditor().fadeInMs||0));
+      const effAddKf = Math.max(0, scrubTime - introBeforeFadeAddKf);
       const st=getCharAt(ch, scrubTime);
       const curSprite = getEffectiveSpriteId(ch, scrubTime);
-      const kf = {t:scrubTime, x:Math.round(st.x), y:Math.round(st.y), scale:Number(st.scale.toFixed(2)), easing:'linear'};
-      if(curSprite && curSprite !== ch.sprite) kf.sprite = curSprite;
+      const kf = {t:effAddKf, x:Math.round(st.x), y:Math.round(st.y), scale:Number(st.scale.toFixed(2)), easing:'linear'};
+      if(curSprite && curSprite !== (characterGroups[ch.character]?.defaultSprite || '')) {
+        // only store if differs from default to keep JSON minimal; but allow explicit
+        const def = characterGroups[ch.character]?.defaultSprite;
+        if(curSprite !== def) kf.sprite = curSprite;
+        else {
+          // if default, still allow but we can omit; keep if user explicitly wants
+        }
+      } else if(curSprite) {
+        // if base has no explicit sprite, store curSprite if not default
+        const def = characterGroups[ch.character]?.defaultSprite;
+        if(curSprite !== def) kf.sprite = curSprite;
+      }
       ch.keyframes.push(kf);
       ch.keyframes.sort((a,b)=>a.t-b.t);
       renderCharList(); syncJson(); renderPreview();
     });
-    // keyframe rows — now with sprite selector and click-to-jump
+    // keyframe rows — with sprite selector filtered to this character
     const kfWrap=div.querySelector('[data-k="kfs"]');
-    // determine available sprites for this character's group
-    let kfSpriteOptions = Object.keys(spriteLibrary);
+    let kfSpriteOptions = [];
     if(ch.character && characterGroups[ch.character] && characterGroups[ch.character].sprites){
       kfSpriteOptions = characterGroups[ch.character].sprites.filter(id=> spriteLibrary[id]);
-      // keep current kf sprite even if not in group
     }
     (ch.keyframes||[]).forEach((kf, kfi)=>{
       const row=document.createElement('div');
@@ -654,15 +1013,15 @@ function renderCharList(){
       row.style.cursor='pointer';
       row.title='Click to jump to this keyframe time';
       const curKfSprite = kf.sprite || '';
-      let kfSpriteOpts = `<option value="">(inherit base: ${ch.sprite||'none'})</option>`;
+      const defSprite = characterGroups[ch.character]?.defaultSprite || '';
+      let kfSpriteOpts = `<option value="">(default: ${defSprite||'none'})</option>`;
       for(const sid of kfSpriteOptions){
         kfSpriteOpts += `<option value="${sid}" ${curKfSprite===sid?'selected':''}>${sid}</option>`;
       }
-      // if current sprite not in filtered list but exists, add it
       if(curKfSprite && !kfSpriteOptions.includes(curKfSprite) && spriteLibrary[curKfSprite]){
         kfSpriteOpts += `<option value="${curKfSprite}" selected>${curKfSprite}</option>`;
       }
-      row.innerHTML=`<input type="number" value="${kf.t}" style="width:60px" title="t ms"><input type="number" value="${kf.x}" style="width:56px" title="x"><input type="number" value="${kf.y}" style="width:56px" title="y"><input type="number" value="${kf.scale}" step="0.05" style="width:48px" title="scale"><select data-k="kf-sprite" style="min-width:90px">${kfSpriteOpts}</select><select style="min-width:70px"><option value="linear" ${kf.easing==='linear'?'selected':''}>linear</option><option value="easeIn" ${kf.easing==='easeIn'?'selected':''}>easeIn</option><option value="easeOut" ${kf.easing==='easeOut'?'selected':''}>easeOut</option><option value="easeInOut" ${kf.easing==='easeInOut'?'selected':''}>easeInOut</option></select><button class="danger" style="padding:4px 6px">✕</button>`;
+      row.innerHTML=`<input type="number" value="${kf.t}" style="width:60px" title="t ms"><input type="number" value="${kf.x}" style="width:56px" title="x"><input type="number" value="${kf.y}" style="width:56px" title="y"><input type="number" value="${kf.scale}" step="0.05" style="width:48px" title="scale"><select data-k="kf-sprite" style="min-width:90px">${kfSpriteOpts}</select><select style="min-width:70px"><option value="linear" ${kf.easing==='linear'?'selected':''}>linear</option><option value="easeIn" ${kf.easing==='easeIn'?'selected':''}>easeIn</option><option value="easeOut" ${kf.easing==='easeOut'?'selected':''}>easeOut</option><option value="easeInOut" ${kf.easing==='easeInOut'?'selected':''}>easeInOut</option></select><button data-act="jump" title="Jump to this time" style="padding:4px 6px;background:#1a3a8a;border-color:#2a4a9a">⏱</button><button class="danger" style="padding:4px 6px">✕</button>`;
       const inputs=row.querySelectorAll('input'); const sels=row.querySelectorAll('select');
       const spriteSel = sels[0]; const easingSel = sels[1];
       inputs[0].addEventListener('input',()=>{ kf.t=parseInt(inputs[0].value)||0; ch.keyframes.sort((a,b)=>a.t-b.t); syncJson(); renderPreview(); });
@@ -676,12 +1035,15 @@ function renderCharList(){
         syncJson(); renderPreview();
       });
       easingSel.addEventListener('change',()=>{ kf.easing=easingSel.value; syncJson(); renderPreview(); });
-      row.querySelector('button').addEventListener('click',(e)=>{ e.stopPropagation(); ch.keyframes.splice(kfi,1); renderCharList(); syncJson(); renderPreview(); });
+      const jumpBtnC = row.querySelector('[data-act="jump"]');
+      if(jumpBtnC) jumpBtnC.addEventListener('click',(e)=>{ e.stopPropagation(); const introBeforeFadeJumpC = getIntroBeforeFadeForEditor(); scrubTime = introBeforeFadeJumpC + kf.t; els.scrub.value = String(scrubTime); updateScrubLabel(); renderPreview(); });
+      row.querySelector('button.danger').addEventListener('click',(e)=>{ e.stopPropagation(); ch.keyframes.splice(kfi,1); renderCharList(); syncJson(); renderPreview(); });
       row.addEventListener('click', (e)=>{
         if(e.target.tagName==='INPUT' || e.target.tagName==='SELECT' || e.target.tagName==='BUTTON') return;
-        scrubTime = kf.t;
+        const introBeforeFadeRow = getIntroBeforeFadeForEditor();
+        scrubTime = introBeforeFadeRow + kf.t;
         els.scrub.value = String(scrubTime);
-        els.scrubLabel.textContent = Math.round(scrubTime)+' ms';
+        updateScrubLabel();
         renderPreview();
       });
       kfWrap.appendChild(row);
@@ -697,25 +1059,41 @@ function renderCameraKfs(){
   kfs.forEach((kf, idx)=>{
     const div=document.createElement('div');
     div.className='kf-row';
-    div.innerHTML=`<span class="small" style="min-width:28px">${idx}.</span><input type="number" value="${kf.t}" style="width:72px" title="t"><input type="number" value="${kf.x}" style="width:64px"><input type="number" value="${kf.y}" style="width:64px"><input type="number" value="${kf.zoom}" step="0.05" style="width:56px"><select><option value="linear" ${kf.easing==='linear'?'selected':''}>linear</option><option value="easeIn" ${kf.easing==='easeIn'?'selected':''}>easeIn</option><option value="easeOut" ${kf.easing==='easeOut'?'selected':''}>easeOut</option><option value="easeInOut" ${kf.easing==='easeInOut'?'selected':''}>easeInOut</option></select><button class="danger" style="padding:4px 6px">✕</button>`;
+    div.style.cursor='pointer';
+    div.title='Click to jump to this keyframe time';
+    div.innerHTML=`<span class="small" style="min-width:28px">${idx}.</span><input type="number" value="${kf.t}" style="width:72px" title="t"><input type="number" value="${kf.x}" style="width:64px"><input type="number" value="${kf.y}" style="width:64px"><input type="number" value="${kf.zoom}" step="0.05" style="width:56px"><select><option value="linear" ${kf.easing==='linear'?'selected':''}>linear</option><option value="easeIn" ${kf.easing==='easeIn'?'selected':''}>easeIn</option><option value="easeOut" ${kf.easing==='easeOut'?'selected':''}>easeOut</option><option value="easeInOut" ${kf.easing==='easeInOut'?'selected':''}>easeInOut</option></select><button data-act="jump" title="Jump to this time" style="padding:4px 6px;background:#1a3a8a;border-color:#2a4a9a">⏱</button><button class="danger" style="padding:4px 6px">✕</button>`;
     const inputs=div.querySelectorAll('input'); const sel=div.querySelector('select');
     inputs[0].addEventListener('input',()=>{ kf.t=parseInt(inputs[0].value)||0; kfs.sort((a,b)=>a.t-b.t); syncJson(); renderPreview(); });
     inputs[1].addEventListener('input',()=>{ kf.x=parseInt(inputs[1].value)||0; syncJson(); renderPreview(); });
     inputs[2].addEventListener('input',()=>{ kf.y=parseInt(inputs[2].value)||0; syncJson(); renderPreview(); });
     inputs[3].addEventListener('input',()=>{ kf.zoom=parseFloat(inputs[3].value)||1; syncJson(); renderPreview(); });
     sel.addEventListener('change',()=>{ kf.easing=sel.value; syncJson(); renderPreview(); });
-    div.querySelector('button').addEventListener('click',()=>{ kfs.splice(idx,1); renderCameraKfs(); syncJson(); renderPreview(); });
+    const jumpBtn = div.querySelector('[data-act="jump"]');
+    if(jumpBtn) jumpBtn.addEventListener('click',(e)=>{ e.stopPropagation(); const introBeforeFadeJump = getIntroBeforeFadeForEditor(); scrubTime = introBeforeFadeJump + kf.t; els.scrub.value = String(scrubTime); updateScrubLabel(); renderPreview(); });
+    div.querySelector('button.danger').addEventListener('click',(e)=>{ e.stopPropagation(); kfs.splice(idx,1); renderCameraKfs(); syncJson(); renderPreview(); });
+    div.addEventListener('click', (e)=>{
+      if(e.target.tagName==='INPUT' || e.target.tagName==='SELECT' || e.target.tagName==='BUTTON') return;
+      const introBeforeFadeRow = getIntroBeforeFadeForEditor();
+      scrubTime = introBeforeFadeRow + kf.t;
+      els.scrub.value = String(scrubTime);
+      updateScrubLabel();
+      renderPreview();
+    });
     els.cameraKfs.appendChild(div);
   });
 }
 
 function renderDialogList(){
+  // include all discovered images including subfolders (./img/cutscenes/... etc) plus sprite ids
   const basePortraitOptions = [
-    '', './img/splash/may-gfg-splash.png','./img/splash/background-gfg-splash.png','./img/splash/middleground-gfg-splash.png','./img/splash/foreground-gfg-splash.png','./img/gfg-splash.png','./img/logo.png','./img/golfbag.png','./img/magnifier-icon.png','./img/liquifier-icon.png','./img/deflector-icon.png','./img/rotator-icon.png','./img/field-extender-icon.png','./img/power-cell-icon.png'
+    '', ...availableImages,
+    './img/splash/may-gfg-splash.png','./img/splash/background-gfg-splash.png','./img/splash/middleground-gfg-splash.png','./img/splash/foreground-gfg-splash.png','./img/gfg-splash.png','./img/logo.png','./img/golfbag.png','./img/magnifier-icon.png','./img/liquifier-icon.png','./img/deflector-icon.png','./img/rotator-icon.png','./img/field-extender-icon.png','./img/power-cell-icon.png'
   ];
+  // dedupe and keep order: availableImages first (includes subfolders correctly)
+  const uniqBase = [...new Set(basePortraitOptions)];
   // include sprite ids from library (e.g. may-right)
   const spriteIds = Object.keys(spriteLibrary);
-  const portraitOptions = [...basePortraitOptions, ...spriteIds];
+  const portraitOptions = [...uniqBase, ...spriteIds];
   els.dialogList.innerHTML='';
   (scene.dialogs||[]).forEach((d, idx)=>{
     const isCollapsed = collapsedDialogs.has(String(idx));
@@ -745,7 +1123,7 @@ function renderDialogList(){
       <label>speaker</label><input data-k="speaker" value="${d.speaker||''}" placeholder="May">
       <label>portrait (who is talking)</label><select data-k="portrait">${optsHtml}</select>
       <input data-k="portrait-custom" placeholder="or custom ./img/... path (overrides select if filled)" value="${!portraitOptions.includes(selPortrait) && selPortrait ? selPortrait : ''}" style="margin-top:4px">
-      <div class="row"><div><label>side</label><select data-k="portraitSide"><option value="left" ${side==='left'?'selected':''}>left</option><option value="right" ${side==='right'?'selected':''}>right</option></select></div><div><label>cps</label><input data-k="cps" type="number" min="10" max="80" value="${d.cps??30}"></div></div>
+      <div class="row"><div><label>side</label><select data-k="portraitSide"><option value="left" ${side==='left'?'selected':''}>left</option><option value="right" ${side==='right'?'selected':''}>right</option></select></div><div><label>cps</label><input data-k="cps" type="number" min="10" max="80" value="${d.cps??20}"></div></div>
       <label>duration (ms, auto-hide) <span class="small">empty = stay until next dialog / manual</span></label><input data-k="duration" type="number" min="0" step="100" placeholder="e.g. 2500" value="${durVal}">
       <label>Text boxes <span class="small">same window, 1000ms linger between (adjustable per box)</span></label>
       <div class="boxes-list" style="display:flex; flex-direction:column; gap:8px;"></div>
@@ -894,7 +1272,7 @@ function renderDialogList(){
         else if(k==='t') { const v=el.value.trim(); if(v===''){ d.t=null; d.auto=true; } else { d.t=parseInt(v)||0; delete d.auto; } }
         else if(k==='speaker') d.speaker=el.value.trim();
         else if(k==='text') d.text=el.value;
-        else if(k==='cps') d.cps=parseInt(el.value)||30;
+        else if(k==='cps') d.cps=parseInt(el.value)||20;
         else if(k==='duration'){
           const v=el.value.trim();
           if(v===''){ delete d.duration; }
@@ -1006,7 +1384,7 @@ function renderDialogList(){
       renderDialogList(); syncJson(); renderPreview(); });
     div.querySelector('[data-act="preview"]').addEventListener('click',()=>{
       const eff = getEffectiveDialogsForEditor(scene.dialogs).find(e=> e.index===idx)?.effectiveT ?? d.t ?? 0;
-      scrubTime = eff; els.scrub.value=String(scrubTime); els.scrubLabel.textContent=Math.round(scrubTime)+' ms'; renderPreview();
+      scrubTime = (getIntroForEditor().introBeforeFade ?? (getIntroForEditor().total - (getIntroForEditor().fadeInMs||0))) + eff; els.scrub.value=String(scrubTime); updateScrubLabel(); renderPreview();
     });
     els.dialogList.appendChild(div);
   });
@@ -1080,31 +1458,72 @@ function applyLoadedScene(data){
   return true;
 }
 
+async function discoverCutsceneIdsFromFolder(){
+  // Try to list folder ./src/cutscenes/ via directory listing (python -m http.server) and parse *.json
+  const ids=new Set();
+  try{
+    const res=await fetch('./src/cutscenes/', {cache:'no-store'});
+    if(res.ok){
+      const ct=(res.headers.get('content-type')||'').toLowerCase();
+      const text=await res.text();
+      if(ct.includes('application/json')){
+        try{
+          const j=JSON.parse(text);
+          if(Array.isArray(j)){
+            for(const e of j){ if(e && typeof e==='object' && e.id) ids.add(String(e.id)); else if(typeof e==='string') ids.add(e.replace(/\.json$/,'')); }
+          } else if(j && typeof j==='object' && Array.isArray(j.files)){
+            for(const f of j.files) ids.add(String(f).replace(/\.json$/,''));
+          } else if(j && j.id) ids.add(String(j.id));
+        }catch{}
+      } else {
+        // HTML directory listing: href="*.json"
+        const re=/href="([^"]*\.json)"/gi;
+        let m;
+        while((m=re.exec(text))){
+          const href=m[1];
+          if(href.includes('/')) {
+            // href may be like "prologue.json" or "./prologue.json" or full path
+            const file=href.split('/').pop();
+            if(!file) continue;
+            const id=file.replace(/\.json$/,'');
+            if(/^[a-z0-9][a-z0-9-_]{2,40}$/.test(id)) ids.add(id);
+          } else {
+            const id=href.replace(/\.json$/,'').replace(/^\.\//,'');
+            if(/^[a-z0-9][a-z0-9-_]{2,40}$/.test(id)) ids.add(id);
+          }
+        }
+      }
+    }
+  }catch{}
+  return [...ids];
+}
 async function refreshCutsceneList(){
   if(!els.loadSelect) return;
   els.loadSelect.innerHTML = '<option value="">(loading...)</option>';
   let ids = [];
-  try{
-    const res = await fetch('./src/cutscenes.json', {cache:'no-store'});
-    if(res.ok){
-      const data = await res.json();
-      if(Array.isArray(data)){
-        ids = data.map(s=>s.id).filter(Boolean);
-      } else if(data && data.id){
-        ids = [data.id];
-      }
-    }
-  }catch{}
-  // also try to discover via known repo files: we have at least intro-mt-aeolus
+  // Primary: folder listing (separate files, NOT src/cutscenes.json)
+  ids = await discoverCutsceneIdsFromFolder();
+  // Fallback: probe known id 'prologue' if listing empty or blocked (e.g. GitHub Pages without directory index)
   if(!ids.length){
-    ids = ['intro-mt-aeolus'];
+    try{
+      const r=await fetch('./src/cutscenes/prologue.json', {cache:'no-store'});
+      if(r.ok){
+        try{ const j=await r.clone().json(); if(j && j.id && /^[a-z0-9][a-z0-9-_]{2,40}$/.test(j.id)) ids.push(j.id); else ids.push('prologue'); }catch{ ids.push('prologue'); }
+      }
+    }catch{}
   }
-  // deduplicate and sort
-  ids = [...new Set(ids)].sort();
+  // Also include any ids already cached in localStorage draft? keep at least current scene id if valid and file exists?
+  if(!ids.length && scene && scene.id && /^[a-z0-9][a-z0-9-_]{2,40}$/.test(scene.id)){
+    // try to see if file for current scene exists? keep it as option
+    ids.push(scene.id);
+  }
+  // deduplicate and sort, filter valid
+  ids = [...new Set(ids)].filter(id=>/^[a-z0-9][a-z0-9-_]{2,40}$/.test(id)).sort();
+  // Do NOT fetch src/cutscenes.json (deprecated)
   els.loadSelect.innerHTML = '';
   if(!ids.length){
     const opt=document.createElement('option');
-    opt.value=''; opt.textContent='(no cutscenes found)';
+    opt.value=''; opt.textContent='(no cutscenes found — create with New Scene)';
     els.loadSelect.appendChild(opt);
   } else {
     for(const id of ids){
@@ -1119,8 +1538,8 @@ async function refreshCutsceneList(){
 
 async function loadCutsceneById(id){
   if(!id) { alert('Enter a cutscene id'); return; }
-  // try src/cutscenes/<id>.json first, then src/cutscenes.json, then inline cache
-  const urls = [`./src/cutscenes/${id}.json`, './src/cutscenes.json'];
+  // Only per-file storage: ./src/cutscenes/<id>.json (src/cutscenes.json is NOT used)
+  const urls = [`./src/cutscenes/${id}.json`];
   for(const url of urls){
     try{
       const res = await fetch(url, {cache:'no-store'});
@@ -1144,7 +1563,7 @@ async function loadCutsceneById(id){
       }
     }catch{}
   }
-  alert('Cutscene not found: '+id+' (tried ./src/cutscenes/'+id+'.json and ./src/cutscenes.json)');
+  alert('Cutscene not found: '+id+' (tried ./src/cutscenes/'+id+'.json — separate files in ./src/cutscenes/; src/cutscenes.json is not used)');
   return false;
 }
 
@@ -1162,7 +1581,9 @@ function handleCanvasClick(e){
     // add keyframe — include current sprite variant for per-keyframe sprite control
     if(!sel.keyframes) sel.keyframes=[];
     const curSprite = getEffectiveSpriteId(sel, scrubTime);
-    const kf = {t:scrubTime, x:Math.round(worldX), y:Math.round(worldY), scale: sel.scale||1, easing:'linear'};
+    const introBeforeFadeClk = getIntroBeforeFadeForEditor();
+    const effClk = Math.max(0, scrubTime - introBeforeFadeClk);
+    const kf = {t:effClk, x:Math.round(worldX), y:Math.round(worldY), scale: sel.scale||1, easing:'linear'};
     if(curSprite) kf.sprite = curSprite;
     sel.keyframes.push(kf);
     sel.keyframes.sort((a,b)=>a.t-b.t);
@@ -1207,9 +1628,11 @@ function handleMouseMove(e){
   const ch=scene.characters.find(c=>c.id===dragCharId);
   if(!ch) return;
   ch.x=Math.round(worldX); ch.y=Math.round(worldY);
-  // also update keyframe at scrubTime if exists
+  // also update keyframe at scrubTime if exists — use content time when intro present
   if(ch.keyframes){
-    const kf=ch.keyframes.find(k=>k.t===scrubTime);
+    const introBeforeFadeMM = getIntroBeforeFadeForEditor();
+    const effMM = Math.max(0, scrubTime - introBeforeFadeMM);
+    const kf=ch.keyframes.find(k=>k.t===effMM) || ch.keyframes.find(k=>k.t===scrubTime);
     if(kf){ kf.x=ch.x; kf.y=ch.y; }
   }
   renderPreview(); syncJson();
@@ -1219,11 +1642,13 @@ function handleMouseUp(){ if(isDragging){ isDragging=false; dragCharId=null; ren
 function tickPlay(now){
   if(!playing) return;
   const elapsed=now-playStart;
-  scrubTime=Math.round(Math.min(scene.duration, elapsed));
+  const ibfTick = getIntroForEditor().introBeforeFade ?? (getIntroForEditor().total - (getIntroForEditor().fadeInMs||0));
+  const total = (scene.duration||15000) + ibfTick + getOutroForEditor().fadeOutMs;
+  scrubTime=Math.round(Math.min(total, elapsed));
   els.scrub.value=String(scrubTime);
-  els.scrubLabel.textContent=Math.round(scrubTime)+' ms';
+  updateScrubLabel();
   renderPreview();
-  if(scrubTime>=scene.duration){ playing=false; els.playBtn.textContent='▶︎ Play'; return; }
+  if(scrubTime>=total){ playing=false; els.playBtn.textContent='▶︎ Play'; return; }
   playRaf=requestAnimationFrame(tickPlay);
 }
 
@@ -1236,6 +1661,9 @@ async function init(){
   }catch{}
   try{ await loadSpriteLibraryEditor(); }catch{}
   try{ await refreshCutsceneList(); }catch{}
+  try{ await refreshAvailableImages(); }catch{}
+  // ensure bg dropdown reflects discovered subfolder images
+  try{ if(els.bgSrc) { /* already populated by refreshAvailableImages */ } }catch{}
   syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); syncJson(); renderPreview();
 
   // events
@@ -1246,23 +1674,59 @@ async function init(){
   els.bgSrc.addEventListener('change', ()=>{ els.bgSrcCustom.value=''; syncJson(); renderPreview(); });
   els.bgSrcCustom.addEventListener('input', ()=>{ syncJson(); renderPreview(); });
   els.bgColor.addEventListener('input', ()=>{ syncJson(); renderPreview(); });
+  // 12 — intro/outro controls
+  function bindIntro(){
+    if(els.introEnabled) els.introEnabled.addEventListener('change', ()=>{ syncIntroToSceneFromUI(); syncJson(); syncToUI(); renderPreview(); });
+    if(els.introBlackMs) els.introBlackMs.addEventListener('input', ()=>{ syncIntroToSceneFromUI(); syncJson(); syncToUI(); renderPreview(); });
+    if(els.introTitleFadeMs) els.introTitleFadeMs.addEventListener('input', ()=>{ syncIntroToSceneFromUI(); syncJson(); syncToUI(); renderPreview(); });
+    if(els.introHoldMs) els.introHoldMs.addEventListener('input', ()=>{ syncIntroToSceneFromUI(); syncJson(); syncToUI(); renderPreview(); });
+    if(els.introFadeInMs) els.introFadeInMs.addEventListener('input', ()=>{ syncIntroToSceneFromUI(); syncJson(); syncToUI(); renderPreview(); });
+    if(els.introTitle) els.introTitle.addEventListener('input', ()=>{ syncIntroToSceneFromUI(); syncJson(); renderPreview(); });
+    if(els.outroFadeOutMs) els.outroFadeOutMs.addEventListener('input', ()=>{ syncIntroToSceneFromUI(); syncJson(); syncToUI(); renderPreview(); });
+    if(els.previewIntroBtn) els.previewIntroBtn.addEventListener('click', ()=>{
+      scrubTime = 0;
+      if(els.scrub) els.scrub.value='0';
+      updateScrubLabel();
+      renderPreview();
+      // optional auto-play intro segment
+      if(playing){ /* restart */ playing=false; cancelAnimationFrame(playRaf); }
+      playing=true; playStart=performance.now(); els.playBtn.textContent='⏸︎ Pause';
+      playRaf=requestAnimationFrame(tickPlay);
+    });
+    if(els.clearIntroBtn) els.clearIntroBtn.addEventListener('click', ()=>{
+      delete scene.intro; delete scene.outro; delete scene.fadeOutMs; delete scene.fadeOutDuration;
+      syncToUI(); syncJson(); renderPreview();
+    });
+  }
+  bindIntro();
   els.addChar.addEventListener('click', ()=>{
-    const nid='char'+(scene.characters.length+1);
-    const firstCharGroup = Object.keys(characterGroups)[0];
-    if(firstCharGroup){
-      const grp = characterGroups[firstCharGroup];
-      const defSprite = grp.defaultSprite || (grp.sprites && grp.sprites[0]);
-      const s = defSprite ? spriteLibrary[defSprite] : null;
-      scene.characters.push({id:nid, character:firstCharGroup, sprite:defSprite || undefined, src: s ? s.src : './img/magnifier-icon.png', frame: s && s.frame ? {...s.frame} : undefined, x:640, y:360, scale:1, anchor:'center', zIndex:scene.characters.length, keyframes:[]});
-    } else {
-      scene.characters.push({id:nid, src:'./img/magnifier-icon.png', x:640, y:360, scale:1, anchor:'center', zIndex:scene.characters.length, keyframes:[]});
+    const groups = Object.keys(characterGroups);
+    if(!groups.length){
+      showToast('No characters in character-sprites.json');
+      return;
     }
+    // pick first unused character, otherwise first group
+    const used = new Set((scene.characters||[]).map(c=>c.character));
+    let pick = groups.find(g=>!used.has(g)) || groups[0];
+    // generate unique id from character name
+    let nid = pick;
+    let n=1;
+    const taken = new Set((scene.characters||[]).map(c=>c.id));
+    while(taken.has(nid)){ n++; nid = pick + '-' + n; }
+    const grp = characterGroups[pick];
+    const defSprite = grp.defaultSprite || (grp.sprites && grp.sprites[0]);
+    // store minimal: id = character name, character = group, optional sprite = default for validation
+    const entry = {id:nid, character:pick, x:640, y:360, scale:1, anchor:'center', zIndex:scene.characters.length, keyframes:[]};
+    if(defSprite) entry.sprite = defSprite;
+    scene.characters.push(entry);
     selectedCharId=nid;
     renderCharList(); syncJson(); renderPreview();
   });
   els.addCameraKf.addEventListener('click', ()=>{
     if(!scene.camera) scene.camera={keyframes:[]};
-    scene.camera.keyframes.push({t:scrubTime, x:0, y:0, zoom:1, easing:'linear'});
+    const introBeforeFade = getIntroBeforeFadeForEditor();
+    const eff = Math.round(scrubTime - introBeforeFade);
+    scene.camera.keyframes.push({t:eff, x:0, y:0, zoom:1, easing:'linear'});
     scene.camera.keyframes.sort((a,b)=>a.t-b.t);
     renderCameraKfs(); syncJson(); renderPreview();
   });
@@ -1270,13 +1734,15 @@ async function init(){
     if(!scene.dialogs) scene.dialogs=[];
     // default portrait is first character's src or may
     const defPortrait = scene.characters?.[0]?.src || './img/splash/may-gfg-splash.png';
-    scene.dialogs.push({t:scrubTime, speaker:'May', text:'New dialog...', cps:30, portrait:defPortrait, portraitSide:'left'});
+    const introBeforeFade = getIntroBeforeFadeForEditor();
+    const eff = Math.round(scrubTime - introBeforeFade);
+    scene.dialogs.push({t:eff, speaker:'May', text:'New dialog...', cps:20, portrait:defPortrait, portraitSide:'left'});
     // keep insertion order — do not sort, effective order handles playback
     renderDialogList(); syncJson(); renderPreview();
   });
   els.scrub.addEventListener('input', ()=>{
     scrubTime=parseInt(els.scrub.value)||0;
-    els.scrubLabel.textContent=Math.round(scrubTime)+' ms';
+    updateScrubLabel();
     renderPreview();
   });
   els.playBtn.addEventListener('click', ()=>{
@@ -1301,6 +1767,9 @@ async function init(){
   });
   if(els.loadIdInput) els.loadIdInput.addEventListener('keydown', (e)=>{
     if(e.key==='Enter'){ e.preventDefault(); const id=(els.loadIdInput.value||'').trim(); loadCutsceneById(id); }
+  });
+  if(els.newSceneBtn) els.newSceneBtn.addEventListener('click', ()=>{
+    handleNewScene();
   });
 
   // canvas

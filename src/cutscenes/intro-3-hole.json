@@ -1,0 +1,561 @@
+{
+    "id": "intro-3-hole",
+    "title": "On the Way up Mt. Aeolus",
+    "background": {
+        "type": "image",
+        "src": "./img/cutscenes/bg-mountains.png",
+        "color": "#1a1a1a"
+    },
+    "duration": 118400,
+    "camera": {
+        "keyframes": []
+    },
+    "characters": [
+        {
+            "id": "may",
+            "character": "may",
+            "sprite": "may-front",
+            "x": 992,
+            "y": 477,
+            "scale": 0.4,
+            "anchor": "center",
+            "zIndex": 0,
+            "keyframes": [
+                {
+                    "t": 300,
+                    "x": 68,
+                    "y": 598,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-right"
+                },
+                {
+                    "t": 4600,
+                    "x": 311,
+                    "y": 528,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-right"
+                },
+                {
+                    "t": 4600,
+                    "x": 311,
+                    "y": 528,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-back"
+                },
+                {
+                    "t": 7700,
+                    "x": 435,
+                    "y": 411,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-back"
+                },
+                {
+                    "t": 7800,
+                    "x": 442,
+                    "y": 411,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-right"
+                },
+                {
+                    "t": 9700,
+                    "x": 570,
+                    "y": 383,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-right"
+                },
+                {
+                    "t": 12000,
+                    "x": 728,
+                    "y": 408,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-right"
+                },
+                {
+                    "t": 41900,
+                    "x": 728,
+                    "y": 408,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-right"
+                },
+                {
+                    "t": 46600,
+                    "x": 992,
+                    "y": 477,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-right"
+                },
+                {
+                    "t": 48100,
+                    "x": 992,
+                    "y": 477,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-front"
+                },
+                {
+                    "t": 48300,
+                    "x": 992,
+                    "y": 477,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "may-left"
+                }
+            ]
+        },
+        {
+            "id": "caddy",
+            "character": "caddy",
+            "x": 1060,
+            "y": 500,
+            "scale": 0.4,
+            "anchor": "center",
+            "zIndex": 1,
+            "keyframes": [
+                {
+                    "t": 300,
+                    "x": 142,
+                    "y": 574,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                },
+                {
+                    "t": 3100,
+                    "x": 301,
+                    "y": 516,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                },
+                {
+                    "t": 3200,
+                    "x": 307,
+                    "y": 515,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-back"
+                },
+                {
+                    "t": 6700,
+                    "x": 443,
+                    "y": 395,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-back"
+                },
+                {
+                    "t": 6800,
+                    "x": 450,
+                    "y": 396,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                },
+                {
+                    "t": 8600,
+                    "x": 582,
+                    "y": 379,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                },
+                {
+                    "t": 11800,
+                    "x": 801,
+                    "y": 422,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                },
+                {
+                    "t": 12200,
+                    "x": 801,
+                    "y": 422,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-front"
+                },
+                {
+                    "t": 12300,
+                    "x": 801,
+                    "y": 422,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-left"
+                },
+                {
+                    "t": 41700,
+                    "x": 801,
+                    "y": 422,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-front"
+                },
+                {
+                    "t": 41900,
+                    "x": 801,
+                    "y": 422,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                },
+                {
+                    "t": 46600,
+                    "x": 1060,
+                    "y": 500,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                },
+                {
+                    "t": 48100,
+                    "x": 1060,
+                    "y": 500,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-front"
+                },
+                {
+                    "t": 48300,
+                    "x": 1060,
+                    "y": 500,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "caddy-left"
+                }
+            ],
+            "sprite": "caddy-front"
+        },
+        {
+            "id": "rat",
+            "character": "rat",
+            "x": 50,
+            "y": 177,
+            "scale": 0.4,
+            "anchor": "center",
+            "zIndex": 2,
+            "keyframes": [
+                {
+                    "t": 300,
+                    "x": -70,
+                    "y": 201,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 49900,
+                    "x": -47,
+                    "y": 220,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 51100,
+                    "x": 50,
+                    "y": 177,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 52900,
+                    "x": 206,
+                    "y": 161,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 53000,
+                    "x": 206,
+                    "y": 161,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-front"
+                },
+                {
+                    "t": 56400,
+                    "x": 454,
+                    "y": 387,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 59200,
+                    "x": 643,
+                    "y": 390,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 63000,
+                    "x": 912,
+                    "y": 459,
+                    "scale": 0.4,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                }
+            ],
+            "sprite": "rat-front"
+        },
+        {
+            "id": "liquifier",
+            "character": "liquifier",
+            "x": -104,
+            "y": 437,
+            "scale": 0.2,
+            "anchor": "center",
+            "zIndex": 3,
+            "keyframes": [
+                {
+                    "t": 300,
+                    "x": -59,
+                    "y": 424,
+                    "scale": 0.2,
+                    "easing": "linear"
+                },
+                {
+                    "t": 74400,
+                    "x": -74,
+                    "y": 494,
+                    "scale": 0.2,
+                    "easing": "linear"
+                },
+                {
+                    "t": 74401,
+                    "x": 959,
+                    "y": 470,
+                    "scale": 0.2,
+                    "easing": "linear"
+                },
+                {
+                    "t": 106400,
+                    "x": 959,
+                    "y": 470,
+                    "scale": 0.2,
+                    "easing": "linear"
+                },
+                {
+                    "t": 106401,
+                    "x": -104,
+                    "y": 437,
+                    "scale": 0.2,
+                    "easing": "linear"
+                }
+            ],
+            "sprite": "liquifier-front"
+        }
+    ],
+    "dialogs": [
+        {
+            "t": 1600,
+            "speaker": "May",
+            "text": "Thanks for helping with this Caddy.",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-may.png",
+            "portraitSide": "left",
+            "name": "may 1",
+            "duration": 2000,
+            "texts": [
+                "Thanks for helping with this Caddy.",
+                "It would be impossible to beat the legendary courses of Mt. Aeolus without you."
+            ],
+            "gaps": [
+                1500
+            ]
+        },
+        {
+            "t": 12500,
+            "speaker": "Caddy",
+            "text": "Save your breath, kid.",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portraitSide": "left",
+            "texts": [
+                "Save your breath, kid.",
+                "I’ve been lugging bags up these rocks for forty years. Nobody clears this course.",
+                "The Grandmaster claims he did a 9-hole run once, but it's a rigged game. He cheated, I tell you!",
+                "It's physically impossible!"
+            ],
+            "gaps": [
+                1500,
+                1500,
+                500
+            ],
+            "duration": 1500
+        },
+        {
+            "t": null,
+            "speaker": "May",
+            "text": " I don't care how hard it is. I'm May. ",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-may.png",
+            "portraitSide": "left",
+            "auto": true,
+            "texts": [
+                " I don't care how hard it is. I'm May. ",
+                "I want to see how good I really am, and I'm going to the top."
+            ],
+            "gaps": [
+                1000
+            ],
+            "duration": 1500
+        },
+        {
+            "t": 36200,
+            "speaker": "Caddy",
+            "text": "Dream all you want kid.",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portraitSide": "left",
+            "duration": 1000,
+            "texts": [
+                "Dream all you want kid.",
+                "I'm in as long as the pay checks keep coming."
+            ],
+            "gaps": [
+                1000
+            ]
+        },
+        {
+            "t": 45000,
+            "speaker": "???",
+            "text": "You seek to conquer Mt. Aeolus, young one?",
+            "cps": 20,
+            "duration": 1000
+        },
+        {
+            "t": 48500,
+            "speaker": "May",
+            "text": "Who's there?!",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-may.png",
+            "portraitSide": "left",
+            "duration": 1000
+        },
+        {
+            "t": 53100,
+            "speaker": "???",
+            "text": "The wind up here does not just blow.\n",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portraitSide": "left",
+            "texts": [
+                "The wind up here does not just blow.\n",
+                "It murders dreams.",
+                "Old Caddy speaks wise words, though his bitterness clouds his vision.",
+                "The Grandmaster is a fraud. And I have proof. ",
+                "I am a member of the inner order who seeks to bring him down from the inside."
+            ],
+            "gaps": [
+                1000,
+                2000,
+                1000,
+                1000
+            ],
+            "duration": 1000
+        },
+        {
+            "t": 75000,
+            "speaker": "???",
+            "text": "Take this.",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portraitSide": "left",
+            "duration": 1000,
+            "texts": [
+                "Take this.",
+                "It is an item I call \"the Liquifier\".",
+                "Once activated it will completely nullify the wind inside a localized bubble, giving you a fighting chance on your first three holes.",
+                "I give it to you freely."
+            ],
+            "gaps": [
+                1000,
+                1000,
+                1000
+            ]
+        },
+        {
+            "t": 89900,
+            "speaker": "May",
+            "text": "Freely?",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-may.png",
+            "portraitSide": "left",
+            "texts": [
+                "Freely?",
+                "What's the catch?"
+            ],
+            "gaps": [
+                1000
+            ],
+            "duration": 1000
+        },
+        {
+            "t": 94785,
+            "speaker": "???",
+            "text": "There is no catch.",
+            "cps": 20,
+            "duration": 1000,
+            "texts": [
+                "There is no catch.",
+                "I've seen far too many young talents break on this mountain.",
+                "And it's about time someone exposes the grandmaster as the fraud he is."
+            ],
+            "gaps": [
+                2000,
+                1000
+            ],
+            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portraitSide": "left"
+        },
+        {
+            "t": 106500,
+            "speaker": "May",
+            "text": "Uhmm... thanks, I guess",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-may.png",
+            "portraitSide": "left",
+            "duration": 1000
+        },
+        {
+            "t": 109000,
+            "speaker": "???",
+            "text": "Note that there are many other strange items on this mountain. Try to use them to your advantage.",
+            "cps": 20,
+            "duration": 1000,
+            "texts": [
+                "Note that there are many other strange items on this mountain. Try to use them to your advantage.",
+                "Now, on your way to the 3-hole trial!"
+            ],
+            "gaps": [
+                1500
+            ],
+            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portraitSide": "left"
+        }
+    ],
+    "intro": {
+        "blackMs": 500,
+        "titleFadeMs": 500,
+        "holdMs": 1000,
+        "fadeInMs": 1000,
+        "enabled": true
+    },
+    "outro": {
+        "fadeOutMs": 1000
+    }
+}

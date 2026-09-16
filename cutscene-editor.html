@@ -11,7 +11,11 @@
   header h1{margin:0;font:700 14px system-ui}
   header span{font:500 11px system-ui;color:#aaa}
   #main{display:flex;flex:1;min-height:0;overflow:hidden}
-  #left{width:420px;min-width:360px;max-width:520px;overflow-y:auto;padding:12px;background:#0f0f0f;border-right:1px solid #222;display:flex;flex-direction:column;gap:14px}
+  #left{width:560px;min-width:480px;max-width:640px;overflow-y:auto;padding:12px;background:#0f0f0f;border-right:1px solid #222;display:flex;flex-direction:column;gap:14px}
+  #left .panel{overflow:visible}
+  #left .kf-row{flex-wrap:nowrap;overflow:visible}
+  #left .kf-row input{flex:1 1 auto;min-width:48px}
+  #left .kf-row select{flex:1 1 auto;min-width:70px}
   #center{flex:1.4;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#000;padding:12px;gap:10px;overflow:hidden;min-width:0}
   #right{width:360px;min-width:300px;overflow-y:auto;padding:12px;background:#0f0f0f;border-left:1px solid #222;display:flex;flex-direction:column;gap:14px}
   .panel{background:#181818;border:1px solid #2a2a2a;border-radius:8px;padding:10px}
@@ -76,12 +80,15 @@
       <input id="scene-duration" type="number" min="1000" max="120000" step="500" value="15000">
       <label>Background</label>
       <select id="bg-type"><option value="image">image</option><option value="color">color</option></select>
-      <label>Background src (./img/...)</label>
+      <label>Background src (./img/... includes subfolders)</label>
       <select id="bg-src">
-        <option value="./img/splash/background-gfg-splash.png">background-gfg-splash.png</option>
-        <option value="./img/splash/middleground-gfg-splash.png">middleground-gfg-splash.png</option>
-        <option value="./img/splash/foreground-gfg-splash.png">foreground-gfg-splash.png</option>
-        <option value="./img/splash/may-gfg-splash.png">may-gfg-splash.png</option>
+        <option value="./img/splash/background-gfg-splash.png">splash/background-gfg-splash.png</option>
+        <option value="./img/splash/middleground-gfg-splash.png">splash/middleground-gfg-splash.png</option>
+        <option value="./img/splash/foreground-gfg-splash.png">splash/foreground-gfg-splash.png</option>
+        <option value="./img/splash/may-gfg-splash.png">splash/may-gfg-splash.png</option>
+        <option value="./img/cutscenes/bg-club-house.png">cutscenes/bg-club-house.png</option>
+        <option value="./img/cutscenes/bg-green.png">cutscenes/bg-green.png</option>
+        <option value="./img/cutscenes/bg-mountains.png">cutscenes/bg-mountains.png</option>
         <option value="./img/gfg-splash.png">gfg-splash.png</option>
         <option value="./img/logo.png">logo.png</option>
         <option value="./img/golfbag.png">golfbag.png</option>
@@ -90,10 +97,29 @@
         <option value="./img/deflector-icon.png">deflector-icon.png</option>
         <option value="./img/rotator-icon.png">rotator-icon.png</option>
       </select>
-      <input id="bg-src-custom" placeholder="or custom ./img/... path" style="margin-top:6px">
+      <input id="bg-src-custom" placeholder="or custom ./img/... path (subfolders like ./img/cutscenes/... supported)" style="margin-top:6px">
       <label>Background color fallback</label>
       <input id="bg-color" type="color" value="#1a1a1a">
       <div class="hint">Click preview canvas to place character. Drag to move.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Title Intro &amp; Fades <span class="small">black → title → fade</span></h3>
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="intro-enabled" style="width:auto"> Enable intro title on black screen</label>
+      <label>Black screen (X ms) — blackMs</label>
+      <input id="intro-black-ms" type="number" min="0" max="10000" step="100" value="0" placeholder="e.g. 800">
+      <label>Title animate in (ms) — titleFadeMs</label>
+      <input id="intro-title-fade-ms" type="number" min="0" max="5000" step="100" value="0" placeholder="e.g. 600">
+      <label>Pause / hold (Y ms) — holdMs</label>
+      <input id="intro-hold-ms" type="number" min="0" max="10000" step="100" value="0" placeholder="e.g. 900">
+      <label>Cutscene fade-in (Z ms) — fadeInMs</label>
+      <input id="intro-fadein-ms" type="number" min="0" max="10000" step="100" value="0" placeholder="e.g. 800">
+      <label>Title override (optional, defaults to scene title)</label>
+      <input id="intro-title" placeholder="The Windy Peak" maxlength="80">
+      <label>Fade-out to black (X2 ms) — fadeOutMs</label>
+      <input id="outro-fadeout-ms" type="number" min="0" max="10000" step="100" value="0" placeholder="e.g. 700">
+      <div class="hint">X black → text fade → Y hold → Z fade into scene; X2 fades to black at end. All configurable.</div>
+      <div class="row" style="margin-top:6px"><button id="preview-intro-btn" class="secondary">Preview Intro</button><button id="clear-intro-btn" class="secondary">Clear Intro</button></div>
     </div>
 
     <div class="panel">
@@ -123,12 +149,13 @@
   <div id="right">
     <div class="panel">
       <h3>Load Existing Cutscene</h3>
-      <label>Available from repo (src/cutscenes.json)</label>
+      <label>Available from folder ./src/cutscenes/ (separate files)</label>
       <select id="load-cutscene-select"><option value="">(loading...)</option></select>
       <div class="row" style="margin-top:6px"><button id="load-cutscene-btn" class="secondary">Load Selected</button><button id="refresh-cutscene-list" class="secondary">Refresh List</button></div>
+      <div class="row" style="margin-top:6px"><button id="new-scene-button" class="secondary" style="background:#1a3a8a;border-color:#2a4a9a;color:#fff">+ New Scene</button></div>
       <label style="margin-top:8px">Or load by ID (./src/cutscenes/&lt;id&gt;.json)</label>
       <div class="row"><input id="load-cutscene-id" placeholder="e.g. intro-mt-aeolus"><button id="load-cutscene-id-btn" class="secondary">Load</button></div>
-      <div class="hint">loads saved file from repo to preview — then edit and export again</div>
+      <div class="hint">loads saved file from repo to preview — then edit and export again. Each cutscene is a separate file in ./src/cutscenes/.</div>
     </div>
     <div class="panel">
       <h3>Dialogs — timed JRPG boxes</h3>

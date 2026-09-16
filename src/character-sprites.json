@@ -216,6 +216,15 @@
         "w": 400,
         "h": 400
       }
+    },
+    "liquifier-front": {
+      "src": "./img/liquifier-icon.png",
+      "frame": {
+        "x": 51,
+        "y": 22,
+        "w": 335,
+        "h": 356
+      }
     }
   },
   "characters": {
@@ -278,6 +287,13 @@
         "slicer-left"
       ],
       "defaultSprite": "slicer-front"
+    },
+    "liquifier": {
+      "name": "liquifier",
+      "sprites": [
+        "liquifier-front"
+      ],
+      "defaultSprite": "liquifier-front"
     }
   }
 }
