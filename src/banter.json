@@ -52,6 +52,35 @@
       ]
     },
     {
+      "id": "stacking-third",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "The wind is straight against me here. One gadget will not turn it enough."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Then stack them. You can put field modifiers right on top of each other, and their winds combine."
+        },
+        {
+          "speaker": "may",
+          "text": "Deflecting and rotating at once? That could send the gale anywhere."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Exactly. Deflecting and rotating turn the wind in unexpected directions. And magnifying a Rotator or a Deflector multiplies the whole trick."
+        },
+        {
+          "speaker": "may",
+          "text": "So I layer them until the wind draws the exact trajectory I need."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Now you are thinking like a weather criminal. Stack them high, aim true."
+        }
+      ]
+    },
+    {
       "id": "run-start-1",
       "lines": [
         {
