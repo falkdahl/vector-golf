@@ -43,7 +43,7 @@ import {
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
-import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
+import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 
 const LOGICAL_W = 1280;
@@ -411,8 +411,27 @@ let supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0
 let loadoutVisible = false;
 let loadoutCourseId = null;
 let loadoutSlots = [null, null, null, null]; // 4 slots, each null or type string
+// Timestamp (ms) when the loadout overlay last finished opening (stamped at the END
+// of showLoadout, when the overlay is actually interactive). Backdrop/Escape dismissal
+// ignores input within LOADOUT_OPEN_GRACE_MS so click/key overshoot from
+// fast-forwarding the cutscene chain (dialog clicks land on the overlay backdrop
+// once the chain ends, including clicks queued while terrain gen blocks the thread)
+// cannot instantly dismiss the just-opened loadout.
+let loadoutOpenedAt = 0;
+const LOADOUT_OPEN_GRACE_MS = 500;
+function isLoadoutDismissGraceActive() {
+  try {
+    if (!loadoutVisible) return false;
+    return (Date.now() - loadoutOpenedAt) < LOADOUT_OPEN_GRACE_MS;
+  } catch { return false; }
+}
 // Flag to hide shop when loadout follows intro-3-hole chain (tutorial) — 10-progression §2.3 & 11b
 let loadoutHideShopDueToIntro = false;
+// Tutorial run: the run started from the loadout shown directly after the intro-3-hole
+// chain for the 3-hole course. Whole run gets liquifier-only single-card rewards, no re-roll
+// (see 08-rewards-and-progression.md §5b). Persisted in STORAGE_KEY, cleared on run end.
+let isTutorialRun = false;
+function isTutorialRunActive() { return !!isTutorialRun; }
 // Run coin tracking: 10 per hole cleared (COINS_PER_HOLE)
 let runHolesCleared = 0;
 let runCoinsEarned = 0;
@@ -536,9 +555,10 @@ function syncProgressionDisplay() {
     const el = document.getElementById('progression-coins-display');
     const inline = document.getElementById('loadout-coins');
     const coins = getCoins();
+    let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
     if (el) {
       el.textContent = '💰 ' + coins;
-      const show = !!mainMenuVisible && !loadoutVisible && !coinSummaryVisible;
+      const show = !!mainMenuVisible && !loadoutVisible && !coinSummaryVisible && !isCut;
       el.classList.toggle('hidden', !show);
     }
     if (inline) inline.textContent = '💰 ' + getCoins();
@@ -812,7 +832,15 @@ function syncLoadoutOverlay() {
         empty.style.gridColumn='1 / -1';
         empty.style.font='500 11px system-ui';
         empty.style.color='rgba(255,255,255,0.6)';
-        empty.textContent='All items maxed (4)';
+        empty.style.alignSelf='center';
+        // Distinguish an empty shop (unlock stock via course clears) from
+        // maxed-out ownership (10-progression.md §1.5/§1.6).
+        let anyStock = false;
+        try {
+          const ss = getShopStock();
+          for (const t of types) { if ((ss[t] ?? 0) > 0) { anyStock = true; break; } }
+        } catch {}
+        empty.textContent = anyStock ? 'All items maxed (4)' : 'Shop is empty — clear courses to unlock stock';
         shop.appendChild(empty);
       }
     }
@@ -915,8 +943,33 @@ function showLoadout(courseId, opts) {
   }
   loadoutVisible = true;
   hideLoadoutPicker();
+  // Loadout is shown over the pre-loaded hole 1, not over the main menu
+  // (10-progression.md §2.1): hole loads in behind the overlay; Hole 1 banner
+  // is suppressed until Start Course closes the overlay.
+  try {
+    setActiveCourse(course);
+    currentHoleIndex = 0;
+    mainMenuVisible = false;
+    mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+    pauseMenuVisible = false; pauseMenuHover = null;
+    gameState = 'AIMING';
+    loadLevel(0);
+    // Suppress the Hole 1 banner during preview — it shows after Start Course.
+    holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
+    attemptsBannerVisible = false; attemptsBannerTimer = 0;
+    freeShotBannerVisible = false; freeShotBannerTimer = 0;
+    rewardPending = false; rewardMenuVisible = false; rewardOffered = [];
+    rewardRerolled = false; rewardMenuHover = null; rewardRerollHover = false;
+    try { syncRewardOverlay(); } catch {}
+    try { redrawBottom(); } catch {}
+  } catch (e) { console.warn('showLoadout preview load failed', e); }
   syncLoadoutOverlay();
   syncMainMenu();
+  try { syncProgressionDisplay(); } catch {}
+  // Stamp AFTER the synchronous open work (terrain gen can block ~1s): the grace
+  // window must start when the overlay actually becomes interactive, otherwise
+  // clicks queued during the freeze dispatch after the grace already expired.
+  try { loadoutOpenedAt = Date.now(); } catch {}
   return true;
 }
 function hideLoadout() {
@@ -925,7 +978,21 @@ function hideLoadout() {
   loadoutHideShopDueToIntro = false;
   hideLoadoutPicker();
   syncLoadoutOverlay();
+  // Preview hole was loaded behind the loadout with mainMenuVisible=false;
+  // Cancel returns to the main menu without starting a run (no STORAGE_KEY).
+  try {
+    mainMenuVisible = true;
+    courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+    pauseMenuVisible = false; pauseMenuHover = null;
+    gameState = 'AIMING';
+    holeBannerVisible = false; holeBannerTimer = 0;
+    attemptsBannerVisible = false; attemptsBannerTimer = 0;
+    freeShotBannerVisible = false; freeShotBannerTimer = 0;
+    rewardPending = false; rewardMenuVisible = false; rewardOffered = [];
+    try { syncRewardOverlay(); } catch {}
+  } catch {}
   syncMainMenu();
+  try { redrawBottom(); } catch {}
 }
 function startCourseWithLoadout(courseId, slots) {
   const course = findCourseById(courseId || loadoutCourseId);
@@ -962,6 +1029,11 @@ function startCourseWithLoadout(courseId, slots) {
   }
   setActiveCourse(course);
   clearProgress();
+  // Tutorial run = loadout shown directly after the intro-3-hole chain for the 3-hole
+  // course (shop hidden). Whole run gets liquifier-only single-card rewards, no re-roll.
+  try {
+    isTutorialRun = !!(loadoutHideShopDueToIntro && course && course.holeCount === 3);
+  } catch { isTutorialRun = !!loadoutHideShopDueToIntro; }
   currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
   supply = newSupply;
   clearFreeShotGlow();
@@ -1361,6 +1433,7 @@ function getSavePayload() {
     maxAttempts,
     supply: { ...supply },
     isFreeShotActive,
+    isTutorialRun,
     treasure: level && level.treasure ? { x: level.treasure.x, y: level.treasure.y, radius: level.treasure.radius, isCollected: !!level.treasure.isCollected } : null,
     areaUpgradeCount: fieldExtenderCount,
     fieldExtenderCount,
@@ -1422,6 +1495,7 @@ function loadProgress() {
     if (d.supply && d.supply.freeShot === undefined) supply.freeShot = 0;
     if (d.supply && d.supply.rotator === undefined) supply.rotator = 1;
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
+    isTutorialRun = !!d.isTutorialRun;
     try { setWindFreeShotActive(isFreeShotActive); } catch {};
     // Field Extender: support both legacy areaUpgradeCount and new fieldExtenderCount
     if (d.fieldExtenderCount !== undefined) fieldExtenderCount = Math.max(0, Math.floor(d.fieldExtenderCount));
@@ -1431,11 +1505,11 @@ function loadProgress() {
     powerCellCount = Math.max(0, Math.floor(d.powerCellCount ?? 0));
     try { setFieldPowerCellCount(powerCellCount); } catch {};
     rewardPending = !!d.rewardPending;
-    rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length === 3 ? [...d.rewardOffered] : [];
+    rewardOffered = Array.isArray(d.rewardOffered) && (d.rewardOffered.length === 3 || d.rewardOffered.length === 1) ? [...d.rewardOffered] : [];
     // migrate legacy /maxAttempts offers to freeShot and legacy modifier names to new names
     rewardOffered = rewardOffered.map(t => t === '' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t === 'amplify' ? 'magnifier' : t === 'nullify' ? 'liquifier' : t === 'flip' ? 'deflector' : t === 'rotate' ? 'rotator' : t);
     rewardRerolled = !!d.rewardRerolled;
-    rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length === 3;
+    rewardMenuVisible = !!d.rewardMenuVisible && (rewardOffered.length === 3 || (rewardOffered.length === 1 && !!d.isTutorialRun));
     rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
     if (d.campaignSeed && typeof setCampaignSeed === 'function') {
       try { setCampaignSeed(String(d.campaignSeed)); } catch {};
@@ -1560,6 +1634,7 @@ function resumeGame() {
 }
 function startNewGame() {
   clearProgress();
+  isTutorialRun = false;
   // Generate fresh 18 levels with increasing difficulty per REQ-010
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
@@ -1779,12 +1854,19 @@ function maybeUpdateHighScore() {
   if (prev == null || totalAttempts < prev) setHighScore(totalAttempts);
   // Per-course bestTotal per REQ-031 + staged unlocking 3→6→9→18
   let updated = false;
+  let firstClear = false;
   if (activeCourse.bestTotal == null || totalAttempts < activeCourse.bestTotal) {
+    firstClear = (activeCourse.bestTotal == null);
     activeCourse.bestTotal = totalAttempts;
     updated = true;
     try { saveCourses(); } catch {};
     // Re-render course list to show new record
     try { renderCourseList(); } catch {};
+  }
+  // Shop stock milestones (10-progression.md §1.6): first clear of a course
+  // unlocks stock. Replays never re-grant.
+  if (firstClear) {
+    try { grantShopMilestoneStock(activeCourse.holeCount); } catch {}
   }
   // Auto-generate next stage if this stage was just cleared (or already cleared)
   if (activeCourse.bestTotal !== null) {
@@ -1798,6 +1880,30 @@ function maybeUpdateHighScore() {
   }
 }
 function maybeUpdateCourseRecord() { return maybeUpdateHighScore(); }
+// Shop stock milestones (10-progression.md §1.6). Called only on the FIRST clear
+// of a course (bestTotal null → set); replays must not call this.
+function grantShopMilestoneStock(holeCount) {
+  const n = Math.floor(Number(holeCount));
+  if (n === 3) {
+    // First tutorial run: a deflector, a rotator and a magnifier come into stock.
+    addShopStock('deflector', 1);
+    addShopStock('rotator', 1);
+    addShopStock('magnifier', 1);
+  } else if (n === 6 || n === 9) {
+    // First 6-hole / 9-hole clear: one more of each placeable field modifier
+    // plus one field extender, one power cell and one free shot.
+    addShopStock('magnifier', 1);
+    addShopStock('liquifier', 1);
+    addShopStock('deflector', 1);
+    addShopStock('rotator', 1);
+    addShopStock('fieldExtender', 1);
+    addShopStock('powerCell', 1);
+    addShopStock('freeShot', 1);
+  }
+  // 18-hole clears grant no additional stock.
+  try { syncLoadoutOverlay(); } catch {}
+  try { syncProgressionDisplay(); } catch {}
+}
 function getCourseRecord(courseId) {
   const c = findCourseById(courseId);
   return c ? c.bestTotal : null;
@@ -1896,9 +2002,12 @@ function handleCoursePlay(courseId) {
       try { syncMainMenu(); } catch {}
       try { redrawBottom(); } catch {}
       try { syncParallaxVisibility(); } catch {}
-      // Load prologue cutscene then play it; onComplete marks seen and proceeds to loadout
+      // Preload both cutscenes up-front so prologue → intro-3-hole chain plays
+      // back-to-back with no intermediate screen (11-cutscenes §11b): the second
+      // starts synchronously inside the first's onComplete (same call stack as
+      // endCutscene), so there is no async fetch gap where menus/splash could flash.
       // Use cutsceneLoad to handle async correctly (cutscenePlay with string id returns false on async load and retries, which would cause fallback race)
-      cutsceneLoad('prologue').then((data) => {
+      Promise.all([cutsceneLoad('prologue'), cutsceneLoad('intro-3-hole')]).then(([data, preloadedIntro]) => {
         if (!data) {
           // Failed to load prologue.json — fallback to loadout so player isn't blocked
           console.warn('[prologue] failed to load prologue.json, skipping to loadout');
@@ -1906,43 +2015,50 @@ function handleCoursePlay(courseId) {
           syncProgressionDisplay();
           return;
         }
+        // Helper to start intro-3-hole synchronously (already preloaded) or fall back.
+        const playIntroSync = () => {
+          const introNotSeen = (()=>{ try{ return !cutsceneHasSeen('intro-3-hole'); }catch{ return true; }})();
+          if (!(introNotSeen && isThreeHole)) {
+            showLoadout(courseId);
+            syncProgressionDisplay();
+            return;
+          }
+          const data2 = preloadedIntro || null;
+          if (!data2) {
+            console.warn('[intro-3-hole] failed to load, skipping to loadout');
+            try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+            showLoadout(courseId, {hideShop:true});
+            syncProgressionDisplay();
+            return;
+          }
+          const ok2 = playCutsceneWrapped(data2, {
+            onComplete: (completed2) => {
+              try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+              showLoadout(courseId, {hideShop:true});
+              syncProgressionDisplay();
+            }
+          });
+          if (!ok2) {
+            console.warn('[intro-3-hole] play failed, skipping to loadout');
+            try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+            showLoadout(courseId, {hideShop:true});
+            syncProgressionDisplay();
+          } else {
+            try { syncMainMenu(); } catch {}
+            try { redrawBottom(); } catch {}
+            try { syncParallaxVisibility(); } catch {}
+          }
+        };
         // Use wrapped version so main menu/splash are hidden immediately and cutscene bg is visible
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
             try { cutsceneMarkSeen('prologue'); } catch {}
-            // Chain intro-3-hole directly after prologue before loadout (11b)
-            const introNotSeen = (()=>{ try{ return !cutsceneHasSeen('intro-3-hole'); }catch{ return true; }})();
-            if (introNotSeen && isThreeHole && !cutsceneIsActive()) {
-              cutsceneLoad('intro-3-hole').then((data2) => {
-                if (!data2) {
-                  console.warn('[intro-3-hole] failed to load, skipping to loadout');
-                  try { cutsceneMarkSeen('intro-3-hole'); } catch {}
-                  showLoadout(courseId, {hideShop:true});
-                  syncProgressionDisplay();
-                  return;
-                }
-                const ok2 = playCutsceneWrapped(data2, {
-                  onComplete: (completed2) => {
-                    try { cutsceneMarkSeen('intro-3-hole'); } catch {}
-                    showLoadout(courseId, {hideShop:true});
-                    syncProgressionDisplay();
-                  }
-                });
-                if (!ok2) {
-                  console.warn('[intro-3-hole] play failed, skipping to loadout');
-                  try { cutsceneMarkSeen('intro-3-hole'); } catch {}
-                  showLoadout(courseId, {hideShop:true});
-                  syncProgressionDisplay();
-                }
-              }).catch((e)=>{
-                console.warn('[intro-3-hole] load error', e);
-                showLoadout(courseId, {hideShop:true});
-                syncProgressionDisplay();
-              });
-            } else {
-              // intro already seen or not applicable
-              showLoadout(courseId);
-              syncProgressionDisplay();
+            // Chain intro-3-hole directly after prologue before loadout (11b),
+            // synchronously — no other screen between.
+            if (!cutsceneIsActive()) playIntroSync();
+            else {
+              // Should not happen (previous cutscene just ended), but guard.
+              playIntroSync();
             }
           }
         });
@@ -2256,7 +2372,8 @@ function syncCampaignSeedDisplay() {
   try {
     const cs = (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null) || '';
     el.textContent = 'Seed: ' + String(cs);
-    const show = !!mainMenuVisible && !loadoutVisible && !coinSummaryVisible;
+    let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+    const show = !!mainMenuVisible && !loadoutVisible && !coinSummaryVisible && !isCut;
     if (wrapper) wrapper.classList.toggle('hidden', !show);
     else el.classList.toggle('hidden', !show);
     // also update popup current seed if visible
@@ -2364,6 +2481,7 @@ function syncHelpOverlay() {
 function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {
   clearProgress();
+  isTutorialRun = false;
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
@@ -2385,6 +2503,7 @@ function endRun() {
   // Coin economy: finalize coins before clearing run
   try { finalizeRunCoinsAndShowSummary(); } catch {}
   clearProgress();
+  isTutorialRun = false;
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
@@ -2519,9 +2638,24 @@ function seededShuffle(a, seedStr) {
   return a;
 }
 function getSeededRewardOffer() {
+  // Tutorial run (after intro-3-hole chain): only liquifiers, single card (08 §5b).
+  if (isTutorialRun) {
+    rewardSeedCounter++;
+    return ['liquifier'];
+  }
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':' + rewardSeedCounter;
   rewardSeedCounter++;
+  // 3-hole and 6-hole courses: rewards only consist of the four placeable
+  // field modifiers (08 §5). 9/18-hole courses use the full pool below.
+  try {
+    const hc = activeCourse ? activeCourse.holeCount : null;
+    if (hc === 3 || hc === 6) {
+      const spatial = ['magnifier','liquifier','deflector','rotator'];
+      seededShuffle(spatial, seedStr);
+      return spatial.slice(0, 3);
+    }
+  } catch {}
   // Field Extender and Power Cell share one slot (combined) with same probability as other items, never together
   const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
   const effectivePool = [...basePool, 'COMBINED'];
@@ -2549,9 +2683,24 @@ function getSeededRewardOffer() {
   return offer;
 }
 function getSeededRerollOffer() {
+  // Tutorial run never rerolls (disabled), but keep single-liquifier shape for safety.
+  if (isTutorialRun) {
+    rewardSeedCounter++;
+    return ['liquifier'];
+  }
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':reroll:' + rewardSeedCounter;
   rewardSeedCounter++;
+  // 3-hole and 6-hole courses: rerolls draw from the four placeable field
+  // modifiers only (08 §5).
+  try {
+    const hc = activeCourse ? activeCourse.holeCount : null;
+    if (hc === 3 || hc === 6) {
+      const spatial = ['magnifier','liquifier','deflector','rotator'];
+      seededShuffle(spatial, seedStr);
+      return spatial.slice(0, 3);
+    }
+  } catch {}
   const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
   const effectivePool = [...basePool, 'COMBINED'];
   seededShuffle(effectivePool, seedStr);
@@ -2612,12 +2761,14 @@ let lastFreeShotBannerValue = null;
 
 function getRewardRerolled() { return rewardRerolled; }
 function isRerollDisabled() {
+  if (isTutorialRun) return true;
   if (rewardRerolled) return true;
   // Disabled on last attempt to prevent suicide — you cannot kill yourself with a re-roll
   if (getAttemptsLeft() <= 1) return true;
   return false;
 }
 function rerollReward() {
+  if (isTutorialRun) return false;
   if (!rewardMenuVisible || rewardRerolled) return false;
   if (getAttemptsLeft() <= 1) return false;
   // Cost is always 1 attempt, never free shot, never secret counter per REQ-025
@@ -2692,11 +2843,13 @@ function syncRewardOverlay() {
   const currentTypes = Array.from(btnContainer.children).map(b => b.dataset.type).join(',');
   const desiredTypes = Array.isArray(rewardOffered) ? rewardOffered.join(',') : '';
   const isVisible = !overlay.classList.contains('hidden');
-  const shouldBeVisible = !!(rewardMenuVisible && Array.isArray(rewardOffered) && rewardOffered.length === 3);
+  // Tutorial run shows a single liquifier card; normal runs show 3 cards.
+  const wantLen = isTutorialRun ? 1 : 3;
+  const shouldBeVisible = !!(rewardMenuVisible && Array.isArray(rewardOffered) && rewardOffered.length === wantLen);
   if (shouldBeVisible && isVisible && currentTypes === desiredTypes) {
     // Just update reroll state, no rebuild
     if (rerollBtn) {
-      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1;
+      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1 || isTutorialRun;
       if (rerollBtn.disabled !== shouldDisable) {
         rerollBtn.disabled = shouldDisable;
         rerollBtn.classList.toggle('disabled', shouldDisable);
@@ -2802,13 +2955,13 @@ function syncRewardOverlay() {
       btn.addEventListener('click', () => { claimReward(type); });
       btnContainer.appendChild(btn);
     });
-    // Reroll button state — disabled on last attempt to prevent suicide
+    // Reroll button state — disabled on last attempt to prevent suicide; always disabled in tutorial
     if (rerollBtn) {
-      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1;
+      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1 || isTutorialRun;
       rerollBtn.disabled = shouldDisable;
       rerollBtn.classList.toggle('disabled', shouldDisable);
-      rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
-      rerollBtn.onclick = () => { if (!rewardRerolled && getAttemptsLeft() > 1) rerollReward(); };
+      rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
+      rerollBtn.onclick = () => { if (!rewardRerolled && getAttemptsLeft() > 1 && !isTutorialRun) rerollReward(); };
     }
   } else {
     overlay.classList.add('hidden');
@@ -3391,6 +3544,7 @@ function handleGameOverReturn() {
   hideGameOver();
   try { finalizeRunCoinsAndShowSummary(); } catch {}
   clearProgress();
+  isTutorialRun = false;
   gameState = "AIMING";
   currentHoleIndex = 0;
   holeAttempts = 0;
@@ -3653,6 +3807,7 @@ function returnToMainMenu() {
   // Coin economy: add coins for holes cleared this run and show summary
   try { finalizeRunCoinsAndShowSummary(); } catch {}
   clearProgress();
+  isTutorialRun = false;
   currentHoleIndex = 0;
   holeAttempts = 0;
   totalAttempts = 0;
@@ -3718,6 +3873,7 @@ function resetGameAfterWin() {
     return returnToMainMenu();
   }
   clearProgress();
+  isTutorialRun = false;
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0;
   holeAttempts = 0;
@@ -3908,7 +4064,7 @@ function handleNextHole() {
 
 function update(dt) {
   // 11-cutscenes: when active, freeze game physics but advance cutscene & wind
-  try { if (cutsceneIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; cutsceneUpdate(dt); return; } } catch {}
+  try { if (cutsceneIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch {} return; } } catch {}
   // REQ-004: wind shader + particles advance even when menu is blocking ball physics
   const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {}; try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
   // REQ-021: when reward menu visible, block aiming/charging but still animate wind
@@ -4527,6 +4683,7 @@ function init() {
     loadoutOverlay.addEventListener('click', (e) => {
       if (e.target === loadoutOverlay) {
         if (loadoutPickerVisible) hideLoadoutPicker();
+        else if (isLoadoutDismissGraceActive()) { e.preventDefault(); }
         else hideLoadout();
       }
     });
@@ -4549,6 +4706,17 @@ function init() {
       }
     });
   }
+  // 11-cutscenes §10b: Skip button top-right — ends the active cutscene at once.
+  const cutsceneSkipBtn = document.getElementById('cutscene-skip-button');
+  if (cutsceneSkipBtn && !cutsceneSkipBtn._cutBound) {
+    cutsceneSkipBtn._cutBound = true;
+    cutsceneSkipBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch {}
+      try { if (cutsceneIsActive()) cutsceneSkip(); } catch {}
+    });
+  }
 
   // Parallax layered menu background - subtle mouse parallax with 4 splash layers
   try { initParallax(); } catch (e) { console.warn('parallax init failed', e); }
@@ -4556,7 +4724,28 @@ function init() {
   setupCanvas();
   // REQ-031: load courses collection before progress (so courseId can be resolved)
   try { loadCourses(); } catch (e) { console.warn('loadCourses failed', e); }
+  // Legacy migration (10-progression.md §1.6): detect saves persisted before
+  // shopStock existed BEFORE loadProgression normalizes them.
+  let legacyMissingShopStock = false;
+  try {
+    const raw0 = localStorage.getItem(PROGRESSION_KEY);
+    if (raw0) {
+      try {
+        const d0 = JSON.parse(raw0);
+        legacyMissingShopStock = !d0 || d0.version !== 1 || !d0.shopStock || typeof d0.shopStock !== 'object';
+      } catch { legacyMissingShopStock = true; }
+    }
+  } catch {}
   try { loadProgression(); } catch (e) { console.warn('loadProgression failed', e); }
+  if (legacyMissingShopStock) {
+    // Baseline is the milestone-derived stock for already-cleared courses.
+    for (const hc of [3, 6, 9]) {
+      try {
+        const cc = courses.find(x => x.holeCount === hc);
+        if (cc && cc.bestTotal !== null && cc.bestTotal !== undefined) grantShopMilestoneStock(hc);
+      } catch {}
+    }
+  }
   try { syncCampaignSeedDisplay(); } catch {};
   try { syncProgressionDisplay(); } catch {};
   try { syncLoadoutOverlay(); } catch {};
@@ -4626,7 +4815,7 @@ function init() {
           }
           if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
           // If reward was pending/visible before save, restore it
-          if (data.rewardMenuVisible && rewardOffered.length === 3) {
+          if (data.rewardMenuVisible && (rewardOffered.length === 3 || rewardOffered.length === 1)) {
             rewardMenuVisible = true;
             try { syncRewardOverlay(); } catch {};
           } else if (rewardPending) {
@@ -4912,7 +5101,8 @@ function init() {
         return;
       }
       if (e.code === "Escape") {
-        hideLoadout();
+        // Ignore Escape overshoot right after the overlay opened (e.g. fast-forwarding cutscene dialogs).
+        if (!isLoadoutDismissGraceActive()) hideLoadout();
         e.preventDefault();
       } else {
         // Block all other keys while loadout open except Escape/Enter which may start? Enter handled via button
@@ -5045,10 +5235,10 @@ function init() {
       } else if (e.code === "Digit3" && rewardOffered[2]) {
         claimReward(rewardOffered[2]);
         e.preventDefault();
-      } else if (e.code === "KeyR" && !rewardRerolled && getAttemptsLeft() > 1) {
+      } else if (e.code === "KeyR" && !rewardRerolled && getAttemptsLeft() > 1 && !isTutorialRun) {
         rerollReward();
         e.preventDefault();
-      } else if (e.code === "KeyR" && (rewardRerolled || getAttemptsLeft() <= 1)) {
+      } else if (e.code === "KeyR" && (rewardRerolled || getAttemptsLeft() <= 1 || isTutorialRun)) {
         // Disabled on last attempt — cannot kill yourself with reroll
         e.preventDefault();
       } else if (e.code === "Digit0" || e.code === "Numpad0") {
@@ -5619,6 +5809,7 @@ if (typeof window !== 'undefined') {
   window.__setHighScore = setHighScore;
   window.__clearHighScore = clearHighScore;
   window.__maybeUpdateHighScore = maybeUpdateHighScore;
+  window.__grantShopMilestoneStock = grantShopMilestoneStock;
   window.__isMainMenuVisible = isMainMenuVisible;
   window.__syncMainMenu = syncMainMenu;
   window.__startNewGameFromMain = startNewGameFromMain;
@@ -5745,6 +5936,8 @@ if (typeof window !== 'undefined') {
   window.applyManualSeed = applyManualSeed;
   // 10-progression (persistent loadout + coins)
   window.__isLoadoutVisible = isLoadoutVisible;
+  window.__isLoadoutDismissGraceActive = isLoadoutDismissGraceActive;
+  window.__getLoadoutOpenedAt = () => { try { return loadoutOpenedAt; } catch { return 0; } };
   window.__showLoadout = showLoadout;
   window.__hideLoadout = hideLoadout;
   window.__getLoadoutSlots = getLoadoutSlots;
@@ -5781,6 +5974,9 @@ if (typeof window !== 'undefined') {
   window.__saveProgression = saveProgression;
   window.__clearProgression = clearProgression;
   window.__progressionPurchase = progressionPurchase;
+  window.__isTutorialRun = isTutorialRunActive;
+  window.isTutorialRun = isTutorialRunActive;
+  window.__isRerollDisabled = isRerollDisabled;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) loadoutSlots=[...v].slice(0,4); syncLoadoutOverlay();} });
@@ -5797,6 +5993,16 @@ if (typeof window !== 'undefined') {
 }
 
 // 11-cutscenes helpers
+// Skip button (10b): visible in the top-right corner only while a cutscene is active.
+function syncCutsceneSkipButton() {
+  try {
+    const btn = document.getElementById('cutscene-skip-button');
+    if (!btn) return;
+    let active = false;
+    try { active = cutsceneIsActive(); } catch {}
+    btn.classList.toggle('hidden', !active);
+  } catch {}
+}
 function playCutsceneWrapped(idOrData, opts) {
   // hide wind, hud etc will be synced via isCut check; also pause any banners
   const ok = cutscenePlay(idOrData, {
@@ -5806,6 +6012,7 @@ function playCutsceneWrapped(idOrData, opts) {
       try { syncMainMenu(); } catch {}
       try { redrawBottom(); } catch {}
       try { syncParallaxVisibility(); } catch {}
+      try { syncCutsceneSkipButton(); } catch {}
       if (opts && opts.onComplete) try { opts.onComplete(completed); } catch {}
     }
   });
@@ -5814,6 +6021,7 @@ function playCutsceneWrapped(idOrData, opts) {
     try { syncMainMenu(); } catch {}
     try { redrawBottom(); } catch {}
     try { syncParallaxVisibility(); } catch {}
+    try { syncCutsceneSkipButton(); } catch {}
     // Force hide main menu overlay and parallax immediately so cutscene bg is visible (mainMenuVisible stays true until loadout)
     try {
       const el = document.getElementById('main-menu-overlay');
@@ -5839,7 +6047,7 @@ function playCutsceneWrapped(idOrData, opts) {
   }
   return ok;
 }
-try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId; window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
+try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
 

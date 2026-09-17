@@ -1677,7 +1677,7 @@ body {
   background: rgba(0,0,0,0.55);
   border-radius: 8px;
   z-index: 13;
-  padding: 16px;
+  padding: 10px;
   box-sizing: border-box;
 }
 #loadout-overlay.hidden { display: none !important; }
@@ -1692,7 +1692,7 @@ body {
   align-items: center;
   width: min(560px, 92%);
   max-width: 92%;
-  max-height: 92%;
+  max-height: 96%;
   height: auto;
   overflow: hidden;
   overscroll-behavior: contain;
@@ -1909,7 +1909,7 @@ body {
   overflow-x: hidden;
   flex: 1 1 auto;
   min-height: 0;
-  max-height: min(32vh, 260px);
+  max-height: min(42vh, 330px);
   align-content: start;
   justify-content: center;
   padding-right: 4px;
@@ -1967,7 +1967,7 @@ body {
   .loadout-slot { width: 72px; height: 96px; }
 }
 @media (max-height: 580px), (max-width: 520px) {
-  .loadout-shop { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-height: min(28vh, 210px); }
+  .loadout-shop { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-height: min(36vh, 270px); }
   .shop-item { min-height: 100px; padding: 6px 4px 5px; max-width: none; }
   .shop-item img { width: 28px; height: 28px; }
   .shop-item .si-name { font-size: 8px; min-height: 16px; }
@@ -2352,3 +2352,20 @@ body {
   .cutscene-title-text,
   #cutscene-title-text { font-size: 22px; -webkit-text-stroke: 3px rgba(0,0,0,0.75); }
 }
+/* 10b — Skip button, top-right corner, visible only while a cutscene is active */
+#cutscene-skip-button {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 14;
+  font: 700 11px system-ui, sans-serif;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+#cutscene-skip-button.hidden { display: none !important; }
+#cutscene-skip-button:hover { background: rgba(0,0,0,0.75); }

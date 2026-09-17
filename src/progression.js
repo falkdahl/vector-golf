@@ -6,13 +6,13 @@ export const SHOP_PRICE_SPATIAL = 50;
 export const SHOP_PRICE_PASSIVE = 150;
 export const MAX_LOADOUT_SLOTS = 4;
 export const SHOP_INITIAL_STOCK = {
-  magnifier: 4,
-  liquifier: 4,
-  deflector: 4,
-  rotator: 4,
-  fieldExtender: 2,
-  powerCell: 2,
-  freeShot: 2
+  magnifier: 0,
+  liquifier: 0,
+  deflector: 0,
+  rotator: 0,
+  fieldExtender: 0,
+  powerCell: 0,
+  freeShot: 0
 };
 
 const DEFAULT_PERSONAL_SUPPLY = {
@@ -113,6 +113,18 @@ export function setPersonalSupply(obj) {
   if ('rotate' in obj && !('rotator' in obj)) progression.personalSupply.rotator = Math.max(0, Math.floor(obj.rotate||0));
   if ('areaUp' in obj && !('fieldExtender' in obj)) progression.personalSupply.fieldExtender = Math.max(0, Math.floor(obj.areaUp||0));
   saveProgression();
+}
+
+// Course-clear milestones (10-progression.md §1.6): add stock to the shop.
+// Never called on replays — callers only invoke on first clear.
+export function addShopStock(type, n = 1) {
+  const t = normalizeType(type);
+  if (!(t in progression.shopStock)) return false;
+  const add = Math.max(0, Math.floor(n ?? 0));
+  if (add <= 0) return false;
+  progression.shopStock[t] = Math.max(0, (progression.shopStock[t] ?? 0) + add);
+  saveProgression();
+  return true;
 }
 
 export function saveProgression() {
@@ -246,5 +258,6 @@ if (typeof window !== 'undefined') {
   window.__SHOP_INITIAL_STOCK = SHOP_INITIAL_STOCK;
   window.__getShopStock = getShopStock;
   window.__getShopStockCount = getShopStockCount;
+  window.__addShopStock = addShopStock;
   window.__costFor = costFor;
 }
