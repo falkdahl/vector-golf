@@ -1,0 +1,312 @@
+{
+  "version": 1,
+  "banters": [
+    {
+      "id": "run-start-1",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Feel that? The old mountain is breathing again. Straight off the peak, as usual."
+        },
+        {
+          "speaker": "may",
+          "text": "Then we breathe with it. Aim small, swing smooth, and let the gale do the arguing."
+        },
+        {
+          "speaker": "caddy",
+          "text": "One ball, ten tries, no putting. The Purists are watching, so make it pretty."
+        }
+      ]
+    },
+    {
+      "id": "run-start-2",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "Same wind as yesterday, same impossible hole. I almost missed this."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Almost is for cowards, remember? The Marshal confiscates pants for almost."
+        },
+        {
+          "speaker": "may",
+          "text": "Then hold my tee and watch. This one goes straight in, gale or no gale."
+        },
+        {
+          "speaker": "caddy",
+          "text": "That is the spirit. Disguise the gadgets, praise the aerodynamics, ace the hole."
+        }
+      ]
+    },
+    {
+      "id": "run-start-3",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Wind is shifty on this one. It wants your ball in the grey, do not give it away."
+        },
+        {
+          "speaker": "may",
+          "text": "If it drifts, I drift with it. The hole is just a suggestion until the ball says otherwise."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Easy now. Breathe, aim, and send it."
+        }
+      ]
+    },
+    {
+      "id": "caddy-name",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "You never told me your name Caddy."
+        },
+        {
+          "speaker": "caddy",
+          "text": "It's Jones."
+        },
+        {
+          "speaker": "may",
+          "text": "Anything more than Jones?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "No, just Jones, Caddy Jones."
+        }
+      ]
+    },
+    {
+      "id": "run-start-4",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "You read this wind like a weather report, May. Ever think of doing it on camera?"
+        },
+        {
+          "speaker": "may",
+          "text": "I used to work for television, actually. Field reporting. Mostly standing in storms, yelling into a microphone."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Explains the hair. And the complete lack of fear."
+        },
+        {
+          "speaker": "may",
+          "text": "The station taught me one thing: if the gale can carry your voice, it can carry your ball."
+        }
+      ]
+    },
+    {
+      "id": "run-start-5",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "If we ace this course, dinner is on me. Plain cheese. No arguments."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Plain? Coward. I once watched a guy order marshmallow, tuna, and extra cheese. At midnight. Near a storm drain."
+        },
+        {
+          "speaker": "may",
+          "text": "That is the most disgusting sentence ever aimed at me, and I have met the Grand Marshal."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Fine. Plain cheese. Champions eat boring."
+        }
+      ]
+    },
+    {
+      "id": "run-start-6",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "This pocket gadget is acting up again. Which way do I even point it?"
+        },
+        {
+          "speaker": "may",
+          "text": "Try turning the device to channel 6. It likes that one. Trust me."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Channel 6? That is oddly specific."
+        },
+        {
+          "speaker": "may",
+          "text": "A very reliable source told me. Now hush and let me aim."
+        }
+      ]
+    },
+    {
+      "id": "run-start-7",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "Nice helmet. New?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Hockey helmet. Regular one, plain, no mask. I am not a goalie and I do not pretend to be one."
+        },
+        {
+          "speaker": "may",
+          "text": "Good. The last thing I need is my caddy hiding his face from a little wind."
+        },
+        {
+          "speaker": "caddy",
+          "text": "The wind can try. The helmet stays. The ball goes in."
+        }
+      ]
+    },
+    {
+      "id": "run-start-8",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "What do you listen to before a big shot? I need something fast."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Depends. Some days I want wild, off-beat jazz with drums going sideways. Other days I want a slow, steady island groove swaying under it."
+        },
+        {
+          "speaker": "may",
+          "text": "So, chaos first, sway second. Got it."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Exactly. Swing like the drums, land like the bassline."
+        }
+      ]
+    },
+    {
+      "id": "run-start-9",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "This green would make a fine chapel ceiling. Shame all I can paint is a slice."
+        },
+        {
+          "speaker": "may",
+          "text": "The old High Renaissance masters would weep. All that anatomy study, all that light, and we use it to chase a ball."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Four geniuses, one golden age, and not a single golf lesson among them."
+        },
+        {
+          "speaker": "may",
+          "text": "Then we will honor them the only way we can: with perfect form and zero mercy."
+        }
+      ]
+    },
+    {
+      "id": "run-start-10",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "Something moved down by the drainage grate. Tell me that was the wind."
+        },
+        {
+          "speaker": "caddy",
+          "text": "That was no wind. Big fella, whiskers, tail, total confidence. He looked at me like I owed him rent."
+        },
+        {
+          "speaker": "may",
+          "text": "The sewers under this mountain are practically a second clubhouse."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Aye. And down there, he is the Grand Marshal."
+        }
+      ]
+    },
+    {
+      "id": "run-start-11",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "New idea: I ride down the fairway on a skateboard carrying your bag. Faster rounds, bigger crowds."
+        },
+        {
+          "speaker": "may",
+          "text": "You would wipe out on the first warp in the turf and take my liquifiers with you."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Worth it. Four wheels, one plank, pure freedom. The Purists would faint."
+        },
+        {
+          "speaker": "may",
+          "text": "The answer is no. But if you land this caddy job well, I will let you push me to the next tee."
+        }
+      ]
+    },
+    {
+      "id": "run-start-12",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "There is green slime on my ball. Glowing, faintly warm, deeply suspicious slime."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Do not touch it. Last time I touched strange glowing goo, I grew three inches and an attitude."
+        },
+        {
+          "speaker": "may",
+          "text": "Wipe it on the rough and pretend it never happened. Some things are better left unmutated."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Agreed. If it starts talking, though, I am keeping it as a caddy."
+        }
+      ]
+    },
+    {
+      "id": "run-start-13",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Kids these days collect little plastic heroes, you know. Poseable. Kung-fu grip. Very serious business."
+        },
+        {
+          "speaker": "may",
+          "text": "And let me guess: you kept yours in mint condition, in the box, on a shelf?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Four of them. Never opened. Worth a fortune now, probably. Emotionally, I mean."
+        },
+        {
+          "speaker": "may",
+          "text": "When we win this course, I am buying you a fifth. That one you are allowed to take outside."
+        }
+      ]
+    },
+    {
+      "id": "run-start-14",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Question for the walk: ninjas. Favorite weapon. Go."
+        },
+        {
+          "speaker": "may",
+          "text": "Katana. Clean, honest, two-handed commitment. What about you?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Bo staff. Reach for days, and nobody accidentally loses a finger. Though I respect the twin sai crowd and the nunchuck daredevils."
+        },
+        {
+          "speaker": "may",
+          "text": "A full set of four, then. Pity they only make one golf club at a time."
+        }
+      ]
+    }
+  ]
+}

@@ -45,6 +45,7 @@ import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPosi
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
+import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload } from "./banter.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -958,6 +959,9 @@ function showLoadout(courseId, opts) {
   // window must start when the overlay actually becomes interactive, otherwise
   // clicks queued during the freeze dispatch after the grace already expired.
   try { loadoutOpenedAt = Date.now(); } catch {}
+  // 12-banter: preload the banter file while the player picks a loadout so the
+  // run-start dialog opens without a fetch gap when loadout closes.
+  try { banterPreload(); } catch {}
   return true;
 }
 function hideLoadout() {
@@ -1044,10 +1048,18 @@ function startCourseWithLoadout(courseId, slots) {
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
   loadLevel(0); gameState='AIMING';
+  // 12-banter: Hole 1 banner is deferred until the run-start banter has played.
+  holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
   if (winOverlay) winOverlay.classList.add('hidden'); if (gameoverOverlay) gameoverOverlay.classList.add('hidden');
   syncPauseOverlay(); syncMainMenu(); syncLoadoutOverlay();
   updateAttemptsUI(); updateHotbarUI(); syncProgressionDisplay();
   saveProgress();
+  // 12-banter: in-place May/Caddy dialog after loadout closes, before Hole 1 banner.
+  try {
+    banterPlayRunStart({ onComplete: () => { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} } }).then((ok) => {
+      if (!ok) { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} }
+    }).catch(() => { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} });
+  } catch { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} }
   return true;
 }
 function clearCoinSummaryAnimTimers() {
@@ -3720,6 +3732,7 @@ function getCanvasMousePos(e) {
 
 function placeModifier(x, y) {
   if (loadoutVisible || coinSummaryVisible) return;
+  if (banterIsActive()) return;
   if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (!selectedModifier) return;
@@ -3949,6 +3962,7 @@ function resetGameAfterWin() {
 function handleLaunch(angle, power) {
   // REQ-021: block launch while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners block
   if (loadoutVisible || coinSummaryVisible) return;
+  if (banterIsActive()) return;
   if (rewardMenuVisible) return;
   if (holeBannerVisible) return;
   if (attemptsBannerVisible) return;
@@ -4095,6 +4109,8 @@ function handleNextHole() {
 function update(dt) {
   // 11-cutscenes: when active, freeze game physics but advance cutscene & wind
   try { if (cutsceneIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch {} return; } } catch {}
+  // 12-banter: in-place dialog freezes physics/input like the Hole 1 banner but keeps terrain+wind visible
+  try { if (banterIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; banterUpdate(dt); try { updateHotbarUI(); } catch {} if (charging) { resetCharge(); gameState = "AIMING"; } return; } } catch {}
   // REQ-004: wind shader + particles advance even when menu is blocking ball physics
   const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {}; try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
   // REQ-021: when reward menu visible, block aiming/charging but still animate wind
@@ -4932,12 +4948,13 @@ function init() {
   });
 
   initInput(
-    () => rewardMenuVisible ? "REWARD" : gameState,
+    () => rewardMenuVisible ? "REWARD" : banterIsActive() ? "BANTER" : gameState,
     {
       onLaunch: handleLaunch,
       onReset: () => {
         // REQ-021: block R while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners: block on last attempt
         if (rewardMenuVisible) return;
+        if (banterIsActive()) return;
         if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
@@ -4961,6 +4978,7 @@ function init() {
       },
       onToggleWind: () => {
         if (rewardMenuVisible) return;
+        if (banterIsActive()) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
         toggleWindThree();
@@ -4974,6 +4992,7 @@ function init() {
       slot.addEventListener("click", () => {
         // REQ-021: block hotbar selection while reward menu visible; REQ-028: block while pause; REQ-029: block while main menu; 11-banners block
         if (rewardMenuVisible) return;
+        if (banterIsActive()) return;
         if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
         if (pauseMenuVisible) return;
         if (mainMenuVisible) return;
@@ -5107,6 +5126,8 @@ function init() {
   window.addEventListener("keydown", (e) => {
     // 11-cutscenes has top priority — Space/R fast-forward and advance dialog, Escape skip
     try { if (cutsceneIsActive()) { if (cutsceneHandleInput(e)) { return; } const ae0=document.activeElement; const isIn0=ae0 && (ae0.tagName==='INPUT'||ae0.tagName==='TEXTAREA'||ae0.isContentEditable); if(!isIn0) e.preventDefault(); return; } } catch {}
+    // 12-banter: in-place dialog — Space/R/Click fast-forward then advance, Escape advances (pause stays blocked)
+    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch {}
     // Coin summary has top priority (above game over) — animated End Run overlay
     if (coinSummaryVisible) {
       const isDismissKey = e.code === "Escape" || e.code === "Enter" || e.code === "Space" || e.code === "KeyR" || e.key === "r" || e.key === "R";
@@ -5498,6 +5519,8 @@ function init() {
       e.preventDefault();
       return;
     }
+    // 12-banter: block drag-start while the in-place dialog is up
+    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch {}
     if (pauseMenuVisible) {
       e.preventDefault();
       return;
@@ -5537,6 +5560,8 @@ function init() {
   canvas.addEventListener("click", (e) => {
     // 11-cutscenes: Space/R/Click fast-forward while active
     try { if (cutsceneIsActive()) { cutsceneHandleInput(e); e.preventDefault(); return; } } catch {}
+    // 12-banter: clicks advance the in-place dialog, never place modifiers
+    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch {}
     // REQ-029/030: main menu is HTML overlay bounded to canvas — canvas clicks while menu visible are ignored (HTML button handles New Game)
     if (mainMenuVisible) {
       e.preventDefault();
@@ -5979,6 +6004,9 @@ if (typeof window !== 'undefined') {
   window.__addToLoadout = addToLoadout;
   window.__removeFromLoadout = removeFromLoadout;
   window.__startCourseWithLoadout = startCourseWithLoadout;
+  // 12-banter: in-place May/Caddy dialog between loadout close and Hole 1 banner
+  window.__isBanterActive = banterIsActive;
+  window.isBanterActive = banterIsActive;
   window.__syncLoadoutOverlay = syncLoadoutOverlay;
   window.__showLoadoutPicker = showLoadoutPicker;
   window.__hideLoadoutPicker = hideLoadoutPicker;
