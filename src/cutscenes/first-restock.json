@@ -1,0 +1,332 @@
+{
+    "id": "first-restock",
+    "title": "Old Man's Cabin",
+    "background": {
+        "type": "image",
+        "src": "./img/cutscenes/bg-cottage.png",
+        "color": "#1a1a1a"
+    },
+    "duration": 65000,
+    "camera": {
+        "keyframes": []
+    },
+    "characters": [
+        {
+            "id": "may",
+            "character": "may",
+            "x": 645,
+            "y": 296,
+            "scale": 1.2,
+            "anchor": "center",
+            "zIndex": 3,
+            "keyframes": [
+                {
+                    "t": 500,
+                    "x": 793,
+                    "y": 401,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "may-left"
+                }
+            ],
+            "sprite": "may-front"
+        },
+        {
+            "id": "caddy",
+            "character": "caddy",
+            "x": 522,
+            "y": 357,
+            "scale": 1.2,
+            "anchor": "center",
+            "zIndex": 2,
+            "keyframes": [
+                {
+                    "t": 500,
+                    "x": 353,
+                    "y": 461,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "caddy-right"
+                }
+            ],
+            "sprite": "caddy-front"
+        },
+        {
+            "id": "rat",
+            "character": "rat",
+            "x": 702,
+            "y": 218,
+            "scale": 1.2,
+            "anchor": "center",
+            "zIndex": 1,
+            "keyframes": [
+                {
+                    "t": 1,
+                    "x": 684,
+                    "y": 285,
+                    "scale": 1.2,
+                    "easing": "linear"
+                },
+                {
+                    "t": 28000,
+                    "x": 684,
+                    "y": 285,
+                    "scale": 1.2,
+                    "easing": "linear"
+                },
+                {
+                    "t": 28100,
+                    "x": 684,
+                    "y": 285,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "rat-right-left"
+                },
+                {
+                    "t": 28700,
+                    "x": 533,
+                    "y": 300,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "rat-right-left"
+                },
+                {
+                    "t": 28800,
+                    "x": 493,
+                    "y": 302,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "rat-back"
+                },
+                {
+                    "t": 31000,
+                    "x": 493,
+                    "y": 302,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "rat-back"
+                },
+                {
+                    "t": 31100,
+                    "x": 493,
+                    "y": 302,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 32200,
+                    "x": 702,
+                    "y": 218,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "rat-right"
+                },
+                {
+                    "t": 32300,
+                    "x": 702,
+                    "y": 218,
+                    "scale": 1.2,
+                    "easing": "linear",
+                    "sprite": "rat-front"
+                }
+            ],
+            "sprite": "rat-front"
+        },
+        {
+            "id": "modifiers",
+            "character": "modifiers",
+            "x": -106,
+            "y": 232,
+            "scale": 1,
+            "anchor": "center",
+            "zIndex": 0,
+            "keyframes": [
+                {
+                    "t": 100,
+                    "x": -106,
+                    "y": 232,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-amp"
+                },
+                {
+                    "t": 29099,
+                    "x": -106,
+                    "y": 232,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-amp"
+                },
+                {
+                    "t": 29100,
+                    "x": 434,
+                    "y": 194,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-amp"
+                }
+            ],
+            "sprite": "mod-liquifier"
+        },
+        {
+            "id": "modifiers-2",
+            "character": "modifiers",
+            "x": -106,
+            "y": 228,
+            "scale": 1,
+            "anchor": "center",
+            "zIndex": 0,
+            "keyframes": [
+                {
+                    "t": 100,
+                    "x": -106,
+                    "y": 228,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-deflector"
+                },
+                {
+                    "t": 29499,
+                    "x": -106,
+                    "y": 228,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-deflector"
+                },
+                {
+                    "t": 29500,
+                    "x": 522,
+                    "y": 236,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-deflector"
+                }
+            ],
+            "sprite": "mod-liquifier"
+        },
+        {
+            "id": "modifiers-3",
+            "character": "modifiers",
+            "x": -80,
+            "y": 349,
+            "scale": 1,
+            "anchor": "center",
+            "zIndex": 0,
+            "keyframes": [
+                {
+                    "t": 29999,
+                    "x": -80,
+                    "y": 349,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-rotator"
+                },
+                {
+                    "t": 30000,
+                    "x": 412,
+                    "y": 264,
+                    "scale": 1,
+                    "easing": "linear",
+                    "sprite": "mod-rotator"
+                }
+            ],
+            "sprite": "mod-liquifier"
+        }
+    ],
+    "dialogs": [
+        {
+            "t": 1500,
+            "speaker": "Caddy",
+            "text": "That Liquifier you gave us came in really clutch out there old man.",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portraitSide": "left",
+            "texts": [
+                "That Liquifier you gave us came in really clutch out there old man.",
+                "What kind of devils magic is this?"
+            ],
+            "gaps": [
+                1000
+            ],
+            "duration": 2000
+        },
+        {
+            "t": null,
+            "speaker": "???",
+            "text": "It's not magic...",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portraitSide": "left",
+            "duration": 2000,
+            "texts": [
+                "It's not magic...",
+                "It is strange technology developed by the most inner circle of the grandmaster.",
+                "He runs a secret lab deep underground,",
+                "led by a most annoying man called Dexter Brothman. ",
+                "I have managed to get my hands of few more of their strange devices."
+            ],
+            "gaps": [
+                1000,
+                2000,
+                1000,
+                1000
+            ],
+            "auto": true
+        },
+        {
+            "t": null,
+            "speaker": "???",
+            "text": "I call these the \"Deflector\", the \"Rotator\" and the \"Magnifier\".",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portraitSide": "left",
+            "duration": 1000,
+            "texts": [
+                "I call these the \"Deflector\", the \"Rotator\" and the \"Magnifier\".",
+                "They will all manipulate the gale in different ways, use them wisely.",
+                "the \"Deflector\" violently flips the wind in the opposite direction,",
+                "the \"Rotator\" will twists it 90 degrees,",
+                "and the \"Magnifier\" amplifies the gale to destructive levels.",
+                "They were not easy for me to come by.",
+                "I am afraid I can not give them away for free this time."
+            ],
+            "gaps": [
+                1000,
+                1000,
+                1000,
+                1000,
+                1000,
+                1000
+            ],
+            "auto": true
+        },
+        {
+            "t": null,
+            "speaker": "Caddy",
+            "text": "Name your price, mystery man.",
+            "cps": 20,
+            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portraitSide": "left",
+            "duration": 1000,
+            "auto": true,
+            "texts": [
+                "Name your price, mystery man.",
+                "We're not turning back now. We smell blood, and the Grandmaster's throne is starting to wobble."
+            ],
+            "gaps": [
+                1000
+            ]
+        }
+    ],
+    "intro": {
+        "blackMs": 500,
+        "titleFadeMs": 500,
+        "holdMs": 1000,
+        "fadeInMs": 500,
+        "enabled": true
+    },
+    "outro": {
+        "fadeOutMs": 500
+    }
+}

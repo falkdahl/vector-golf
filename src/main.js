@@ -1874,6 +1874,25 @@ function grantShopMilestoneStock(holeCount, announce = true) {
   try { syncLoadoutOverlay(); } catch {}
   try { syncProgressionDisplay(); } catch {}
 }
+// 11-cutscenes §11c: shop counts as restocked for the first time when any shop
+// stock exists (first milestone granted) or — if already emptied by purchases —
+// when the 3-hole course has been cleared (which is what grants the first
+// restock: deflector + rotator + magnifier).
+function isShopRestockedFirstTime() {
+  try {
+    const ss = getShopStock();
+    if (ss && typeof ss === 'object') {
+      for (const k of Object.keys(ss)) {
+        if (Math.floor(Number(ss[k] ?? 0)) > 0) return true;
+      }
+    }
+  } catch {}
+  try {
+    const c3 = Array.isArray(courses) ? courses.find(x => x && x.holeCount === 3) : null;
+    if (c3 && c3.bestTotal !== null && c3.bestTotal !== undefined) return true;
+  } catch {}
+  return false;
+}
 function getCourseRecord(courseId) {
   const c = findCourseById(courseId);
   return c ? c.bestTotal : null;
@@ -2058,6 +2077,59 @@ function handleCoursePlay(courseId) {
     }
   } catch (e) {
     console.warn('[prologue] check failed', e);
+    // Fall through to normal loadout
+  }
+  // 11-cutscenes §11c: on the start of the run where the shop is restocked for
+  // the first time, play "first-restock" before the loadout overlay is shown.
+  try {
+    const restockNotSeen = !cutsceneHasSeen('first-restock');
+    const canPlayRestock = restockNotSeen && !cutsceneIsActive() && isShopRestockedFirstTime();
+    if (canPlayRestock) {
+      // Hide main menu/splash immediately so cutscene bg is visible on first frame.
+      try {
+        const el = document.getElementById('main-menu-overlay');
+        if (el) { el.classList.add('hidden'); el.classList.remove('with-backdrop'); }
+        const parallaxEl = document.getElementById('parallax-scene');
+        if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden','true'); }
+        const hud = document.getElementById('hud');
+        if (hud) hud.classList.add('hidden');
+      } catch {}
+      try { syncMainMenu(); } catch {}
+      try { redrawBottom(); } catch {}
+      try { syncParallaxVisibility(); } catch {}
+      cutsceneLoad('first-restock').then((data) => {
+        if (!data) {
+          console.warn('[first-restock] failed to load first-restock.json, skipping to loadout');
+          showLoadout(courseId);
+          syncProgressionDisplay();
+          return;
+        }
+        const ok = playCutsceneWrapped(data, {
+          onComplete: (completed) => {
+            try { cutsceneMarkSeen('first-restock'); } catch {}
+            showLoadout(courseId);
+            syncProgressionDisplay();
+          }
+        });
+        if (!ok) {
+          console.warn('[first-restock] playCutscene failed, skipping to loadout');
+          try { cutsceneMarkSeen('first-restock'); } catch {}
+          showLoadout(courseId);
+          syncProgressionDisplay();
+        } else {
+          try { syncMainMenu(); } catch {}
+          try { redrawBottom(); } catch {}
+          try { syncParallaxVisibility(); } catch {}
+        }
+      }).catch((e) => {
+        console.warn('[first-restock] load error', e);
+        showLoadout(courseId);
+        syncProgressionDisplay();
+      });
+      return; // Wait for cutscene onComplete to show loadout
+    }
+  } catch (e) {
+    console.warn('[first-restock] check failed', e);
     // Fall through to normal loadout
   }
   showLoadout(courseId);
@@ -5769,6 +5841,8 @@ if (typeof window !== 'undefined') {
   window.__clearHighScore = clearHighScore;
   window.__maybeUpdateHighScore = maybeUpdateHighScore;
   window.__grantShopMilestoneStock = grantShopMilestoneStock;
+  window.__isShopRestockedFirstTime = isShopRestockedFirstTime;
+  window.isShopRestockedFirstTime = isShopRestockedFirstTime;
   window.__isMainMenuVisible = isMainMenuVisible;
   window.__syncMainMenu = syncMainMenu;
   window.__startNewGameFromMain = startNewGameFromMain;
