@@ -185,7 +185,11 @@
         },
         {
           "speaker": "caddy",
-          "text": "No, just Jones, Caddy Jones."
+          "text": "No, just Jones..."
+        },
+        {
+          "speaker": "caddy",
+          "text": "...Caddy Jones."
         }
       ]
     },
