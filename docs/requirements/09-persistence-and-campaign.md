@@ -143,9 +143,9 @@ DOM `index.html` (two separate overlays inside `#game-container`):
 
 ## 7. End Run + Game Over
 
-- `function endRun(){ clearProgress(); currentHoleIndex=0; holeAttempts=0; totalAttempts=0; maxAttempts=10; supply={1,1,1,1,0}; isFreeShotActive=false; fieldExtenderCount=0; areaUpgradeCount=0; powerCellCount=0; modifiers=[]; syncModifiersToField(); clearFreeShotGlow(); mainMenuVisible=true; isInLevelPause=false; courseMenuVisible=false; helpVisible=false; }`
+- `function endRun(){ clearProgress(); currentHoleIndex=0; holeAttempts=0; totalAttempts=0; maxAttempts=10; supply={1,1,1,1,0}; isFreeShotActive=false; fieldExtenderCount=0; areaUpgradeCount=0; powerCellCount=0; modifiers=[]; syncModifiersToField(); clearFreeShotGlow(); mainMenuVisible=true; isInLevelPause=false; courseMenuVisible=false; helpVisible=false; }` — except the menu return is **deferred while the coin summary is shown** (see `10-progression.md` §4): when `coinSummaryVisible===true`, `deferredMenuReturn=true` and the level is kept behind the overlay; `hideCoinSummary()` then runs `finishReturnToMainMenu()` with the same reset.
 - Removes `STORAGE_KEY` only; preserves `COURSES_KEY`; `bestTotal` unchanged.
-- **Game Over** — canonical state machine in `05-input-and-states.md` §5. This file defines only persistence consequence: `GAME_OVER` does `clearProgress()` and returns to entry main menu (`mainMenuVisible=true`, `isInLevelPause=false`, `gameState='AIMING'` after clear). No other button; reload after `GAME_OVER` shows entry with no active game. Not saved as win — `bestTotal` unchanged. `R` on `Course Completed!` Victory or `Game Over` both clear progress and return to main menu.
+- **Game Over** — canonical state machine in `05-input-and-states.md` §5. This file defines only persistence consequence: `GAME_OVER` does `clearProgress()` and returns to entry main menu (`mainMenuVisible=true`, `isInLevelPause=false`, `gameState='AIMING'` after clear) — likewise deferred behind the coin summary overlay when one is shown. No other button; reload after `GAME_OVER` shows entry with no active game. Not saved as win — `bestTotal` unchanged. `R` on `Course Completed!` Victory or `Game Over` both clear progress and return to main menu (via the summary first when coins were earned).
 
 ## 8. Help Overlay
 

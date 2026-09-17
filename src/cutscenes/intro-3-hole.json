@@ -312,51 +312,58 @@
             "sprite": "rat-front"
         },
         {
-            "id": "liquifier",
-            "character": "liquifier",
-            "x": -104,
-            "y": 437,
-            "scale": 0.2,
+            "id": "modifiers",
+            "character": "modifiers",
+            "x": 1327,
+            "y": 480,
+            "scale": 0.6,
             "anchor": "center",
-            "zIndex": 3,
+            "zIndex": 4,
             "keyframes": [
                 {
-                    "t": 300,
-                    "x": -59,
-                    "y": 424,
-                    "scale": 0.2,
+                    "t": 200,
+                    "x": 1328,
+                    "y": 495,
+                    "scale": 0.6,
                     "easing": "linear"
                 },
                 {
-                    "t": 74400,
-                    "x": -74,
-                    "y": 494,
-                    "scale": 0.2,
+                    "t": 73799,
+                    "x": 1327,
+                    "y": 480,
+                    "scale": 0.6,
                     "easing": "linear"
                 },
                 {
-                    "t": 74401,
-                    "x": 959,
-                    "y": 470,
-                    "scale": 0.2,
+                    "t": 73800,
+                    "x": 963,
+                    "y": 476,
+                    "scale": 0.6,
                     "easing": "linear"
                 },
                 {
-                    "t": 106400,
-                    "x": 959,
-                    "y": 470,
-                    "scale": 0.2,
+                    "t": 106299,
+                    "x": 963,
+                    "y": 476,
+                    "scale": 0.6,
                     "easing": "linear"
                 },
                 {
-                    "t": 106401,
-                    "x": -104,
-                    "y": 437,
-                    "scale": 0.2,
+                    "t": 106300,
+                    "x": 963,
+                    "y": 475,
+                    "scale": 0.6,
+                    "easing": "linear"
+                },
+                {
+                    "t": 106301,
+                    "x": 1335,
+                    "y": 432,
+                    "scale": 0.6,
                     "easing": "linear"
                 }
             ],
-            "sprite": "liquifier-front"
+            "sprite": "mod-liquifier"
         }
     ],
     "dialogs": [

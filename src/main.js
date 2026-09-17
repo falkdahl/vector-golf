@@ -442,6 +442,13 @@ let coinSummaryAnimDone = false;
 let coinSummaryAnimTimers = [];
 let coinSummaryPendingUnlock = false;
 let loadoutUnlockedAtRunStart = 1;
+// End screen over the loaded level (10-progression.md §4): run-end paths keep
+// mainMenuVisible=false while the summary is visible and defer the menu return
+// until dismissal. runShopRestocked tracks whether this run restocked the shop.
+let deferredMenuReturn = false;
+let runShopRestocked = false;
+function isMenuReturnDeferred() { return !!deferredMenuReturn; }
+function isShopRestockedThisRun() { return !!runShopRestocked; }
 function normalizeSupplyType(type) {
   if (type === 'amplify') return 'magnifier';
   if (type === 'nullify') return 'liquifier';
@@ -605,7 +612,6 @@ function syncLoadoutPickerOverlay() {
     const types = ['liquifier','deflector','rotator','magnifier','fieldExtender','powerCell','freeShot'];
     const names = {liquifier:'Liquifier',deflector:'Deflector',rotator:'Rotator',magnifier:'Magnifier',fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shot'};
     const icons = {liquifier:'./img/liquifier-icon.png',deflector:'./img/deflector-icon.png',rotator:'./img/rotator-icon.png',magnifier:'./img/magnifier-icon.png',fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
-    let visibleCount = 0;
     // compute total count per type in loadout for remaining calculation
     const totalCountByType = {};
     for (const v of loadoutSlots) if (v) totalCountByType[v] = (totalCountByType[v]||0)+1;
@@ -614,7 +620,6 @@ function syncLoadoutPickerOverlay() {
       const placed = totalCountByType[t] || 0;
       const remaining = owned - placed;
       if (remaining <=0) continue;
-      visibleCount++;
       const div = document.createElement('div');
       div.className = 'picker-item';
       div.dataset.type = t;
@@ -645,14 +650,7 @@ function syncLoadoutPickerOverlay() {
       });
       grid.appendChild(div);
     }
-    if (visibleCount===0) {
-      const empty = document.createElement('div');
-      empty.style.font='500 11px system-ui';
-      empty.style.color='rgba(255,255,255,0.6)';
-      empty.textContent='No items yet — buy in Shop';
-      empty.style.alignSelf='center';
-      grid.appendChild(empty);
-    }
+    // No empty message: when nothing remains, only the Clear slot item shows.
     // Clear Slot button last in overlay
     {
       const div = document.createElement('div');
@@ -664,12 +662,8 @@ function syncLoadoutPickerOverlay() {
       const nm = document.createElement('div'); nm.className='pi-name'; nm.textContent='Clear slot'; div.appendChild(nm);
       const ow = document.createElement('div'); ow.className='pi-owned'; ow.textContent='Empty'; div.appendChild(ow);
       div.addEventListener('click', () => {
+        // Slots are positional and never reorder: clearing leaves null in place.
         loadoutSlots[loadoutPickerSlotIndex]=null;
-        const filled = loadoutSlots.slice(0, unlocked).filter(v=>v!==null);
-        const empty = Array(unlocked - filled.length).fill(null);
-        const lockedPart = loadoutSlots.slice(unlocked);
-        loadoutSlots = [...filled, ...empty, ...lockedPart].slice(0,4);
-        while(loadoutSlots.length<4) loadoutSlots.push(null);
         hideLoadoutPicker();
         syncLoadoutOverlay();
       });
@@ -868,14 +862,8 @@ function removeFromLoadout(idx) {
   const unlocked = getUnlockedLoadoutSlots();
   if (idx<0||idx>=4) return;
   if (idx >= unlocked) return;
+  // Slots are positional and never reorder: clearing leaves null in place.
   loadoutSlots[idx]=null;
-  const unlockedSlots = loadoutSlots.slice(0, unlocked);
-  const filled = unlockedSlots.filter(v=>v!==null);
-  const empty = Array(unlocked - filled.length).fill(null);
-  const lockedPart = loadoutSlots.slice(unlocked);
-  loadoutSlots = [...filled, ...empty, ...lockedPart];
-  loadoutSlots = loadoutSlots.slice(0,4);
-  while (loadoutSlots.length<4) loadoutSlots.push(null);
   syncLoadoutOverlay();
 }
 const VALID_LOADOUT_TYPES = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
@@ -1050,6 +1038,8 @@ function startCourseWithLoadout(courseId, slots) {
   modifiers=[]; syncModifiersToField(); selectedModifier=null;
   runHolesCleared=0; runCoinsEarned=0;
   try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 1; }
+  runShopRestocked = false;
+  deferredMenuReturn = false;
   loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
@@ -1102,21 +1092,8 @@ function fastForwardCoinSummary() {
     if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
   }
   const unlockEl = document.getElementById('coin-summary-unlock');
-  if (unlockEl) {
-    try {
-      const currentUnlocked = getUnlockedLoadoutSlots();
-      const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
-      if (currentUnlocked > startUnlocked) {
-        unlockEl.textContent = `Loadout slot unlocked`;
-        unlockEl.style.display = 'block';
-        unlockEl.style.opacity = '1';
-        unlockEl.classList.remove('hidden');
-      } else {
-        unlockEl.textContent = `Loadout slot unlocked`;
-        unlockEl.style.display = 'none';
-      }
-    } catch { try { unlockEl.style.display = 'none'; } catch {} }
-  }
+  const shopEl = document.getElementById('coin-summary-shop');
+  syncCoinSummaryNotices(unlockEl, shopEl, false);
   coinSummaryAnimDone = true;
   syncProgressionDisplay();
   try { syncMainMenu(); } catch {}
@@ -1142,6 +1119,36 @@ function animateCoinSummaryAmount(from, to, duration = 320) {
   };
   requestAnimationFrame(step);
 }
+// End-screen notice lines (10-progression.md §4): loadout-slot unlock and shop
+// restock. animate=true fades them in for the animated sequence; false shows final.
+function isLoadoutSlotUnlockedThisRun() {
+  try {
+    return getUnlockedLoadoutSlots() > (loadoutUnlockedAtRunStart ?? 1);
+  } catch { return false; }
+}
+function syncCoinSummaryNotices(unlockEl, shopEl, animate) {
+  const showUnlock = isLoadoutSlotUnlockedThisRun();
+  const showShop = isShopRestockedThisRun();
+  const showLine = (elm, text, show) => {
+    if (!elm) return;
+    elm.textContent = text;
+    if (show) {
+      elm.style.display = 'block';
+      elm.classList.remove('hidden');
+      if (animate) {
+        elm.style.opacity = '0';
+        elm.style.transition = 'opacity 0.24s ease';
+        requestAnimationFrame(() => { elm.style.opacity = '1'; });
+      } else {
+        elm.style.opacity = '1';
+      }
+    } else {
+      elm.style.display = 'none';
+    }
+  };
+  showLine(unlockEl, 'Loadout slot unlocked', showUnlock);
+  showLine(shopEl, 'New items in the shop', showShop);
+}
 function syncCoinSummaryOverlay() {
   const el = document.getElementById('coin-summary-overlay');
   if (!el) return;
@@ -1152,6 +1159,7 @@ function syncCoinSummaryOverlay() {
     const amt = document.getElementById('coin-summary-amount');
     const details = document.getElementById('coin-summary-details');
     const unlockEl = document.getElementById('coin-summary-unlock');
+    const shopEl = document.getElementById('coin-summary-shop');
     // Keep legacy elements hidden — do not show You earned / cleared texts per new spec
     if (txt) { txt.textContent = `You earned ${coinSummaryCoins} coins: ${coinSummaryHoles} holes × ${COINS_PER_HOLE} coins per hole`; txt.classList.add('hidden'); }
     if (br) { br.textContent = coinSummaryHoles>0 ? `${coinSummaryHoles} hole${coinSummaryHoles===1?'':'s'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
@@ -1180,20 +1188,7 @@ function syncCoinSummaryOverlay() {
         const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
         if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
-      if (unlockEl) {
-        try {
-          const currentUnlocked = getUnlockedLoadoutSlots();
-          const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
-          if (currentUnlocked > startUnlocked) {
-            unlockEl.textContent = `Loadout slot unlocked`;
-            unlockEl.style.display = 'block';
-            unlockEl.classList.remove('hidden');
-          } else {
-            unlockEl.textContent = `Loadout slot unlocked`;
-            unlockEl.style.display = 'none';
-          }
-        } catch { try { unlockEl.style.display = 'none'; } catch {} }
-      }
+      syncCoinSummaryNotices(unlockEl, shopEl, false);
     } else if (!isCoinSummaryAnimating()) {
       // Initial render before animation starts: show final instantly if not animating path
       // This fallback keeps old behaviour for non-animated calls
@@ -1220,20 +1215,7 @@ function syncCoinSummaryOverlay() {
         const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
         if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
-      if (unlockEl) {
-        try {
-          const currentUnlocked = getUnlockedLoadoutSlots();
-          const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
-          if (currentUnlocked > startUnlocked) {
-            unlockEl.textContent = `Loadout slot unlocked`;
-            unlockEl.style.display = 'block';
-            unlockEl.classList.remove('hidden');
-          } else {
-            unlockEl.textContent = `Loadout slot unlocked`;
-            unlockEl.style.display = 'none';
-          }
-        } catch { try { unlockEl.style.display = 'none'; } catch {} }
-      }
+      syncCoinSummaryNotices(unlockEl, shopEl, false);
       coinSummaryAnimDone = true;
     }
   } else el.classList.add('hidden');
@@ -1266,9 +1248,11 @@ function showCoinSummary(holes, coins) {
   const amt = document.getElementById('coin-summary-amount');
   const details = document.getElementById('coin-summary-details');
   const unlockEl = document.getElementById('coin-summary-unlock');
+  const shopEl = document.getElementById('coin-summary-shop');
   if (amt) amt.textContent = `+0`;
   if (details) details.innerHTML = '';
   if (unlockEl) { unlockEl.textContent = `Loadout slot unlocked`; unlockEl.style.display = 'none'; unlockEl.style.opacity = '0'; }
+  if (shopEl) { shopEl.textContent = `New items in the shop`; shopEl.style.display = 'none'; shopEl.style.opacity = '0'; }
   syncProgressionDisplay();
   try { syncMainMenu(); } catch {}
 
@@ -1307,37 +1291,14 @@ function showCoinSummary(holes, coins) {
     coinSummaryAnimTimers.push(t2);
     const t3 = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
-      try {
-        const currentUnlocked = getUnlockedLoadoutSlots();
-        const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
-        if (currentUnlocked > startUnlocked && unlockEl) {
-          unlockEl.textContent = `Loadout slot unlocked`;
-          unlockEl.style.display = 'block';
-          unlockEl.style.opacity = '0';
-          unlockEl.classList.remove('hidden');
-          // fade in
-          unlockEl.style.transition = 'opacity 0.24s ease';
-          requestAnimationFrame(() => { unlockEl.style.opacity = '1'; });
-        }
-      } catch {}
+      syncCoinSummaryNotices(unlockEl, shopEl, true);
       coinSummaryAnimDone = true;
     }, 1320);
     coinSummaryAnimTimers.push(t3);
   } else {
     const t2b = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
-      try {
-        const currentUnlocked = getUnlockedLoadoutSlots();
-        const startUnlocked = loadoutUnlockedAtRunStart ?? 1;
-        if (currentUnlocked > startUnlocked && unlockEl) {
-          unlockEl.textContent = `Loadout slot unlocked`;
-          unlockEl.style.display = 'block';
-          unlockEl.style.opacity = '0';
-          unlockEl.classList.remove('hidden');
-          unlockEl.style.transition = 'opacity 0.24s ease';
-          requestAnimationFrame(() => { unlockEl.style.opacity = '1'; });
-        }
-      } catch {}
+      syncCoinSummaryNotices(unlockEl, shopEl, true);
       coinSummaryAnimDone = true;
     }, 780);
     coinSummaryAnimTimers.push(t2b);
@@ -1349,7 +1310,12 @@ function hideCoinSummary() {
   coinSummaryVisible=false;
   syncCoinSummaryOverlay();
   syncProgressionDisplay();
-  try { syncMainMenu(); } catch {}
+  if (deferredMenuReturn) {
+    // End screen was over the level: now reset state and return to the menu.
+    finishReturnToMainMenu();
+  } else {
+    try { syncMainMenu(); } catch {}
+  }
 }
 function finalizeRunCoinsAndShowSummary() {
   const holes = runHolesCleared;
@@ -1505,11 +1471,11 @@ function loadProgress() {
     powerCellCount = Math.max(0, Math.floor(d.powerCellCount ?? 0));
     try { setFieldPowerCellCount(powerCellCount); } catch {};
     rewardPending = !!d.rewardPending;
-    rewardOffered = Array.isArray(d.rewardOffered) && (d.rewardOffered.length === 3 || d.rewardOffered.length === 1) ? [...d.rewardOffered] : [];
+    rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length >= 1 && d.rewardOffered.length <= 3 ? [...d.rewardOffered] : [];
     // migrate legacy /maxAttempts offers to freeShot and legacy modifier names to new names
     rewardOffered = rewardOffered.map(t => t === '' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t === 'amplify' ? 'magnifier' : t === 'nullify' ? 'liquifier' : t === 'flip' ? 'deflector' : t === 'rotate' ? 'rotator' : t);
     rewardRerolled = !!d.rewardRerolled;
-    rewardMenuVisible = !!d.rewardMenuVisible && (rewardOffered.length === 3 || (rewardOffered.length === 1 && !!d.isTutorialRun));
+    rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length >= 1 && rewardOffered.length <= 3;
     rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
     if (d.campaignSeed && typeof setCampaignSeed === 'function') {
       try { setCampaignSeed(String(d.campaignSeed)); } catch {};
@@ -1882,25 +1848,29 @@ function maybeUpdateHighScore() {
 function maybeUpdateCourseRecord() { return maybeUpdateHighScore(); }
 // Shop stock milestones (10-progression.md §1.6). Called only on the FIRST clear
 // of a course (bestTotal null → set); replays must not call this.
-function grantShopMilestoneStock(holeCount) {
+// announce=true (from a live run) flags the end screen's "New items in the shop"
+// notice; init reconciliation passes announce=false.
+function grantShopMilestoneStock(holeCount, announce = true) {
   const n = Math.floor(Number(holeCount));
+  let granted = false;
   if (n === 3) {
     // First tutorial run: a deflector, a rotator and a magnifier come into stock.
-    addShopStock('deflector', 1);
-    addShopStock('rotator', 1);
-    addShopStock('magnifier', 1);
+    granted = addShopStock('deflector', 1) || granted;
+    granted = addShopStock('rotator', 1) || granted;
+    granted = addShopStock('magnifier', 1) || granted;
   } else if (n === 6 || n === 9) {
     // First 6-hole / 9-hole clear: one more of each placeable field modifier
     // plus one field extender, one power cell and one free shot.
-    addShopStock('magnifier', 1);
-    addShopStock('liquifier', 1);
-    addShopStock('deflector', 1);
-    addShopStock('rotator', 1);
-    addShopStock('fieldExtender', 1);
-    addShopStock('powerCell', 1);
-    addShopStock('freeShot', 1);
+    granted = addShopStock('magnifier', 1) || granted;
+    granted = addShopStock('liquifier', 1) || granted;
+    granted = addShopStock('deflector', 1) || granted;
+    granted = addShopStock('rotator', 1) || granted;
+    granted = addShopStock('fieldExtender', 1) || granted;
+    granted = addShopStock('powerCell', 1) || granted;
+    granted = addShopStock('freeShot', 1) || granted;
   }
   // 18-hole clears grant no additional stock.
+  if (announce && granted) runShopRestocked = true;
   try { syncLoadoutOverlay(); } catch {}
   try { syncProgressionDisplay(); } catch {}
 }
@@ -2502,33 +2472,62 @@ function endRun() {
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   // Coin economy: finalize coins before clearing run
   try { finalizeRunCoinsAndShowSummary(); } catch {}
+  if (coinSummaryVisible) {
+    // End screen over the loaded level (10-progression.md §4): keep
+    // mainMenuVisible=false and the level; menu return deferred to dismissal.
+    deferredMenuReturn = true;
+    clearProgress();
+    pauseMenuVisible = false; pauseMenuHover = null;
+    if (winOverlay) winOverlay.classList.add("hidden");
+    if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
+    syncPauseOverlay(); syncMainMenu();
+    updateAttemptsUI(); updateHotbarUI();
+    return true;
+  }
+  finishReturnToMainMenu();
+  // Do NOT call maybeShowRewardMenu and do NOT update bestTotal — abandoned run shall not count toward record
+  return true;
+}
+
+// Shared run-state reset + return to the main menu entry. Runs immediately when
+// no coin summary is shown, otherwise deferred until hideCoinSummary().
+function finishReturnToMainMenu() {
   clearProgress();
   isTutorialRun = false;
+  deferredMenuReturn = false;
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
-  rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
+  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+  clearFreeShotGlow();
+  hideSoftlockBanner(); resetSoftlockDetection();
+  maxAttempts = 10;
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0;
+  try { setFieldPowerCellCount(0); } catch {};
+  rewardPending = false; rewardMenuVisible = false; rewardOffered = [];
+  rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
-  hideSoftlockBanner();
-  resetSoftlockDetection();
   rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   modifiers = []; syncModifiersToField(); selectedModifier = null;
-  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+  pauseMenuVisible = false; pauseMenuHover = null;
+  mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
   // Avoid heavy field generation when entering main menu (splash) — courses are cached in localStorage, field will be created on next course play
   // Keep level as dummy behind splash to avoid blocking UI; no createField here
   if (LEVELS.length) {
     level = LEVELS[0];
-  } else if (courses.length) {
+  } else if (courses.length && courses[0] && courses[0].holes && courses[0].holes.length) {
     level = courses[0].holes[0];
+  } else {
+    level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
   }
+  try { if (level && level.tee) createBall(level.tee); } catch {};
+  _lastCourseListSig = null;
+  resetHotbarCollapsed();
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   syncPauseOverlay(); syncMainMenu();
-  updateAttemptsUI(); updateHotbarUI();
-  // Do NOT call maybeShowRewardMenu and do NOT update bestTotal — abandoned run shall not count toward record
-  return true;
+  updateAttemptsUI(); updateHotbarUI(); updateForceBar();
 }
 
 function selectHole(n) {
@@ -2637,6 +2636,36 @@ function seededShuffle(a, seedStr) {
   }
   return a;
 }
+// Owned-only rewards (08 §5c): number of distinct kinds in personal storage.
+function countOwnedKinds() {
+  try {
+    const p = getPersonalSupply();
+    let n = 0;
+    for (const k of Object.keys(p)) if ((p[k] ?? 0) > 0) n++;
+    return n;
+  } catch { return 0; }
+}
+// Filter a seeded candidate order to owned kinds (preserving seeded order),
+// taking up to maxN distinct. Backfills from the full shuffled order, not just
+// the sliced head. Falls back to the unfiltered head when nothing is owned
+// (defensive; defaults guarantee liquifier:1 so this should not happen).
+function filterOfferToOwned(candidates, maxN) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  const n = Math.max(1, maxN || 3);
+  const head = list.slice(0, n);
+  try {
+    const p = getPersonalSupply();
+    const owned = new Set(Object.keys(p).filter(k => (p[k] ?? 0) > 0));
+    if (!owned.size) return head;
+    const kept = [];
+    for (const t of list) {
+      if (kept.length >= n) break;
+      if (owned.has(normalizeSupplyType(t)) && !kept.includes(t)) kept.push(t);
+    }
+    if (kept.length) return kept;
+  } catch {}
+  return head;
+}
 function getSeededRewardOffer() {
   // Tutorial run (after intro-3-hole chain): only liquifiers, single card (08 §5b).
   if (isTutorialRun) {
@@ -2648,39 +2677,39 @@ function getSeededRewardOffer() {
   rewardSeedCounter++;
   // 3-hole and 6-hole courses: rewards only consist of the four placeable
   // field modifiers (08 §5). 9/18-hole courses use the full pool below.
+  // Either way the offer is filtered to owned kinds (08 §5c).
   try {
     const hc = activeCourse ? activeCourse.holeCount : null;
     if (hc === 3 || hc === 6) {
       const spatial = ['magnifier','liquifier','deflector','rotator'];
       seededShuffle(spatial, seedStr);
-      return spatial.slice(0, 3);
+      return filterOfferToOwned(spatial, 3);
     }
   } catch {}
   // Field Extender and Power Cell share one slot (combined) with same probability as other items, never together
   const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
   const effectivePool = [...basePool, 'COMBINED'];
   seededShuffle(effectivePool, seedStr);
-  let offer = effectivePool.slice(0, 3);
-  if (offer.includes('COMBINED')) {
+  let ordered = effectivePool.map(t => {
+    if (t !== 'COMBINED') return t;
     const pickSeed = hashSeedString(seedStr + ':pick');
     const r = mulberry32Reward(pickSeed)();
-    const resolved = r < 0.5 ? 'fieldExtender' : 'powerCell';
-    offer = offer.map(t => t === 'COMBINED' ? resolved : t);
-  }
+    return r < 0.5 ? 'fieldExtender' : 'powerCell';
+  });
   // Ensure never both fieldExtender and powerCell together (legacy guard)
-  if (offer.includes('fieldExtender') && offer.includes('powerCell')) {
-    const dupIdx = offer.indexOf('powerCell');
-    const notInOffer = REWARD_POOL.filter(x => !offer.includes(x));
+  if (ordered.includes('fieldExtender') && ordered.includes('powerCell')) {
+    const dupIdx = ordered.indexOf('powerCell');
+    const notInOffer = REWARD_POOL.filter(x => !ordered.includes(x));
     if (notInOffer.length) {
       const pickSeed2 = hashSeedString(seedStr + ':dedup');
       const rr = mulberry32Reward(pickSeed2)();
       const pick = notInOffer[Math.floor(rr * notInOffer.length)];
-      offer[dupIdx] = pick;
+      ordered[dupIdx] = pick;
     } else {
-      offer[dupIdx] = 'magnifier';
+      ordered[dupIdx] = 'magnifier';
     }
   }
-  return offer;
+  return filterOfferToOwned(ordered, 3);
 }
 function getSeededRerollOffer() {
   // Tutorial run never rerolls (disabled), but keep single-liquifier shape for safety.
@@ -2692,38 +2721,37 @@ function getSeededRerollOffer() {
   const seedStr = cs + ':reroll:' + rewardSeedCounter;
   rewardSeedCounter++;
   // 3-hole and 6-hole courses: rerolls draw from the four placeable field
-  // modifiers only (08 §5).
+  // modifiers only (08 §5). Either way the offer is filtered to owned kinds (08 §5c).
   try {
     const hc = activeCourse ? activeCourse.holeCount : null;
     if (hc === 3 || hc === 6) {
       const spatial = ['magnifier','liquifier','deflector','rotator'];
       seededShuffle(spatial, seedStr);
-      return spatial.slice(0, 3);
+      return filterOfferToOwned(spatial, 3);
     }
   } catch {}
   const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
   const effectivePool = [...basePool, 'COMBINED'];
   seededShuffle(effectivePool, seedStr);
-  let offer = effectivePool.slice(0, 3);
-  if (offer.includes('COMBINED')) {
+  let ordered = effectivePool.map(t => {
+    if (t !== 'COMBINED') return t;
     const pickSeed = hashSeedString(seedStr + ':pick');
     const r = mulberry32Reward(pickSeed)();
-    const resolved = r < 0.5 ? 'fieldExtender' : 'powerCell';
-    offer = offer.map(t => t === 'COMBINED' ? resolved : t);
-  }
-  if (offer.includes('fieldExtender') && offer.includes('powerCell')) {
-    const dupIdx = offer.indexOf('powerCell');
-    const notInOffer = REWARD_POOL.filter(x => !offer.includes(x));
+    return r < 0.5 ? 'fieldExtender' : 'powerCell';
+  });
+  if (ordered.includes('fieldExtender') && ordered.includes('powerCell')) {
+    const dupIdx = ordered.indexOf('powerCell');
+    const notInOffer = REWARD_POOL.filter(x => !ordered.includes(x));
     if (notInOffer.length) {
       const pickSeed2 = hashSeedString(seedStr + ':dedup');
       const rr = mulberry32Reward(pickSeed2)();
       const pick = notInOffer[Math.floor(rr * notInOffer.length)];
-      offer[dupIdx] = pick;
+      ordered[dupIdx] = pick;
     } else {
-      offer[dupIdx] = 'magnifier';
+      ordered[dupIdx] = 'magnifier';
     }
   }
-  return offer;
+  return filterOfferToOwned(ordered, 3);
 }
 function maybeFilterAreaUp(offer, seedStr) {
   // Legacy: Field Extender + Power Cell now combined slot, never together. Keep guard for legacy saves.
@@ -2765,12 +2793,14 @@ function isRerollDisabled() {
   if (rewardRerolled) return true;
   // Disabled on last attempt to prevent suicide — you cannot kill yourself with a re-roll
   if (getAttemptsLeft() <= 1) return true;
+  // Disabled while owning fewer than four different kinds (08 §6): re-rolling a
+  // tiny owned pool would just offer the same items back.
+  if (countOwnedKinds() < 4) return true;
   return false;
 }
 function rerollReward() {
-  if (isTutorialRun) return false;
-  if (!rewardMenuVisible || rewardRerolled) return false;
-  if (getAttemptsLeft() <= 1) return false;
+  if (isRerollDisabled()) return false;
+  if (!rewardMenuVisible) return false;
   // Cost is always 1 attempt, never free shot, never secret counter per REQ-025
   holeAttempts += 1;
   totalAttempts += 1;
@@ -2843,13 +2873,12 @@ function syncRewardOverlay() {
   const currentTypes = Array.from(btnContainer.children).map(b => b.dataset.type).join(',');
   const desiredTypes = Array.isArray(rewardOffered) ? rewardOffered.join(',') : '';
   const isVisible = !overlay.classList.contains('hidden');
-  // Tutorial run shows a single liquifier card; normal runs show 3 cards.
-  const wantLen = isTutorialRun ? 1 : 3;
-  const shouldBeVisible = !!(rewardMenuVisible && Array.isArray(rewardOffered) && rewardOffered.length === wantLen);
+  // Offers hold 1–3 cards: single-card tutorial/owned-only offers up to full triples.
+  const shouldBeVisible = !!(rewardMenuVisible && Array.isArray(rewardOffered) && rewardOffered.length >= 1 && rewardOffered.length <= 3);
   if (shouldBeVisible && isVisible && currentTypes === desiredTypes) {
     // Just update reroll state, no rebuild
     if (rerollBtn) {
-      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1 || isTutorialRun;
+      const shouldDisable = isRerollDisabled();
       if (rerollBtn.disabled !== shouldDisable) {
         rerollBtn.disabled = shouldDisable;
         rerollBtn.classList.toggle('disabled', shouldDisable);
@@ -2956,12 +2985,13 @@ function syncRewardOverlay() {
       btnContainer.appendChild(btn);
     });
     // Reroll button state — disabled on last attempt to prevent suicide; always disabled in tutorial
+    // and while owning fewer than four kinds (08 §6).
     if (rerollBtn) {
-      const shouldDisable = !!rewardRerolled || getAttemptsLeft() <= 1 || isTutorialRun;
+      const shouldDisable = isRerollDisabled();
       rerollBtn.disabled = shouldDisable;
       rerollBtn.classList.toggle('disabled', shouldDisable);
       rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
-      rerollBtn.onclick = () => { if (!rewardRerolled && getAttemptsLeft() > 1 && !isTutorialRun) rerollReward(); };
+      rerollBtn.onclick = () => { if (!isRerollDisabled()) rerollReward(); };
     }
   } else {
     overlay.classList.add('hidden');
@@ -3398,7 +3428,7 @@ function updateAttemptsUI() {
     if (hudTotalEl) hudTotalEl.textContent = `Total: ${totalAttempts}`;
     if (hudEl) {
       let isCut2=false; try{ isCut2=cutsceneIsActive(); }catch{}
-      const shouldHide = !!mainMenuVisible || isCut2;
+      const shouldHide = !!mainMenuVisible || isCut2 || coinSummaryVisible;
       hudEl.classList.toggle("hidden", shouldHide);
       if (gameState === "WIN" || gameState === "GAME_OVER") hudEl.style.opacity = "0.55";
       else hudEl.style.opacity = "";
@@ -3412,7 +3442,7 @@ function updateHotbarUI() {
   // Only hide during overlays/menus/banners/WIN/GAME_OVER; collapsed is handled via CSS class
   // Bottom-bar wrapper is the centered bottom element (gap 12px to bottom)
   let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
-  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut;
+  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut;
   const hideHotbar = isOverlayHidden;
   const hideBag = isOverlayHidden;
   if (bottomBarEl) bottomBarEl.classList.toggle("hidden", isOverlayHidden);
@@ -3543,52 +3573,21 @@ function hideGameOver() {
 function handleGameOverReturn() {
   hideGameOver();
   try { finalizeRunCoinsAndShowSummary(); } catch {}
-  clearProgress();
-  isTutorialRun = false;
-  gameState = "AIMING";
-  currentHoleIndex = 0;
-  holeAttempts = 0;
-  totalAttempts = 0;
-  attempts = 0;
-  maxAttempts = 10;
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
-  clearFreeShotGlow();
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
-  rewardPending = false;
-  rewardOffered = [];
-  rewardMenuVisible = false;
-  rewardRerolled = false;
-  rewardMenuHover = null;
-  rewardRerollHover = false;
-  rewardSeedCounter = 0;
-  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
-  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
-  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
-  hideSoftlockBanner();
-  resetSoftlockDetection();
-  modifiers = [];
-  syncModifiersToField();
-  selectedModifier = null;
-  mainMenuVisible = true;
-  isInLevelPause = false;
-  courseMenuVisible = false;
-  helpVisible = false;
-  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
-  // Avoid heavy field generation when returning to main menu after Game Over — defer to next course play
-  _lastCourseListSig = null;
-  syncMainMenu();
-  syncPauseOverlay();
-  updateAttemptsUI();
-  updateHotbarUI();
-  if (LEVELS.length) {
-    level = LEVELS[0];
-    try { createBall(level.tee); } catch {};
-  } else if (courses.length) {
-    level = courses[0].holes[0];
-    try { createBall(level.tee); } catch {};
+  if (coinSummaryVisible) {
+    // End screen over the loaded level (10-progression.md §4); menu return deferred.
+    deferredMenuReturn = true;
+    clearProgress();
+    isTutorialRun = false;
+    pauseMenuVisible = false; pauseMenuHover = null;
+    if (winOverlay) winOverlay.classList.add("hidden");
+    if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
+    syncMainMenu();
+    syncPauseOverlay();
+    updateAttemptsUI();
+    updateHotbarUI();
+    return;
   }
-  // ensure win overlay hidden
-  if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
+  finishReturnToMainMenu();
 }
 
 function syncModifiersToField() {
@@ -3806,64 +3805,23 @@ function returnToMainMenu() {
   // Ensure per-course bestTotal already saved via maybeUpdateHighScore before calling
   // Coin economy: add coins for holes cleared this run and show summary
   try { finalizeRunCoinsAndShowSummary(); } catch {}
-  clearProgress();
-  isTutorialRun = false;
-  currentHoleIndex = 0;
-  holeAttempts = 0;
-  totalAttempts = 0;
-  attempts = 0;
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
-  clearFreeShotGlow();
-  maxAttempts = 10; 
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
-  rewardPending = false;
-  rewardMenuVisible = false;
-  rewardClaimedFor = null;
-  rewardMenuHover = null;
-  rewardOffered = [];
-  rewardRerolled = false;
-  rewardRerollHover = false;
-  rewardSeedCounter = 0;
-  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = "";
-  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
-  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
-  hideSoftlockBanner();
-  resetSoftlockDetection();
-  pauseMenuVisible = false;
-  pauseMenuHover = null;
-  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
-  modifiers = []; syncModifiersToField(); selectedModifier = null;
-  const pauseOverlay2 = document.getElementById("pause-overlay");
-  if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
-  mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-  gameState = "AIMING";
-  // Avoid heavy field generation when entering main menu (splash) — courses are cached in localStorage, field will be created on next course play via handleCoursePlay/loadLevel
-  // Keep level as first hole reference behind splash without creating field to avoid blocking UI
-  try {
-    if (LEVELS.length) {
-      level = LEVELS[0];
-    } else if (courses.length && courses[0].holes.length) {
-      level = courses[0].holes[0];
-    } else {
-      level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
-    }
-    // Defer ball/field creation — not needed while splash is visible; create minimal ball for HUD
-    try { createBall(level.tee); } catch {};
-    try {
-      const dx = level.hole.x - level.tee.x;
-      const dy = level.hole.y - level.tee.y;
-      setAimAngle(Math.atan2(dy, dx));
-    } catch {};
-    // Invalidate course list signature so next menu open re-renders with updated bestTotal/unlock (courses are read from cache)
-    _lastCourseListSig = null;
-  } catch {};
-  resetHotbarCollapsed();
-  if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
-  syncPauseOverlay();
-  syncMainMenu();
-  updateAttemptsUI();
-  updateHotbarUI();
-  updateForceBar();
+  if (coinSummaryVisible) {
+    // End screen over the loaded level (10-progression.md §4); menu return deferred.
+    deferredMenuReturn = true;
+    clearProgress();
+    isTutorialRun = false;
+    pauseMenuVisible = false;
+    pauseMenuHover = null;
+    const pauseOverlay2 = document.getElementById("pause-overlay");
+    if (pauseOverlay2) pauseOverlay2.classList.add("hidden");
+    if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
+    syncPauseOverlay();
+    syncMainMenu();
+    updateAttemptsUI();
+    updateHotbarUI();
+    return;
+  }
+  finishReturnToMainMenu();
 }
 
 function resetGameAfterWin() {
@@ -4293,24 +4251,25 @@ function render() {
     try { drawTreasure(ctx, level.treasure); } catch {};
   }
   drawBall(ctx, ball);
-  if (!rewardMenuVisible) {
+  // During the end screen (over the level) no aim/preview/force-bar/softlock chrome
+  if (!rewardMenuVisible && !coinSummaryVisible) {
     drawAim(ctx, ball, getAimAngle(), charge, gameState);
   }
   // Preview circle follows mouse when selecting modifier before shooting
   // REQ-020: only show preview if supply allows placement; REQ-021/023: not during reward menu
-  if (!rewardMenuVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
+  if (!rewardMenuVisible && !coinSummaryVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius());
-  } else if (!rewardMenuVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
+  } else if (!rewardMenuVisible && !coinSummaryVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
     // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true);
   }
   // HUD is now HTML #hud on top of canvas (see 03-rendering.md §4) — no canvas drawHUD
   // Power bar under ball when charging per REQ-007
-  if (gameState === "CHARGING" && charging && !rewardMenuVisible) {
+  if (gameState === "CHARGING" && charging && !rewardMenuVisible && !coinSummaryVisible) {
     drawForceBar(ctx, ball, charge);
   }
   // Softlock banner (non-blocking) below HUD — informs player they can reset via R or pause menu
-  if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !helpVisible && gameState === "FLYING") {
+  if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !coinSummaryVisible && !helpVisible && gameState === "FLYING") {
     try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch {};
   }
   // HTML reward overlay (sync handled on state change, not per-frame to avoid thrashing)
@@ -4742,7 +4701,7 @@ function init() {
     for (const hc of [3, 6, 9]) {
       try {
         const cc = courses.find(x => x.holeCount === hc);
-        if (cc && cc.bestTotal !== null && cc.bestTotal !== undefined) grantShopMilestoneStock(hc);
+        if (cc && cc.bestTotal !== null && cc.bestTotal !== undefined) grantShopMilestoneStock(hc, false);
       } catch {}
     }
   }
@@ -4815,7 +4774,7 @@ function init() {
           }
           if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
           // If reward was pending/visible before save, restore it
-          if (data.rewardMenuVisible && (rewardOffered.length === 3 || rewardOffered.length === 1)) {
+          if (data.rewardMenuVisible && (rewardOffered.length >= 1 && rewardOffered.length <= 3)) {
             rewardMenuVisible = true;
             try { syncRewardOverlay(); } catch {};
           } else if (rewardPending) {
@@ -5235,10 +5194,10 @@ function init() {
       } else if (e.code === "Digit3" && rewardOffered[2]) {
         claimReward(rewardOffered[2]);
         e.preventDefault();
-      } else if (e.code === "KeyR" && !rewardRerolled && getAttemptsLeft() > 1 && !isTutorialRun) {
+      } else if (e.code === "KeyR" && !isRerollDisabled()) {
         rerollReward();
         e.preventDefault();
-      } else if (e.code === "KeyR" && (rewardRerolled || getAttemptsLeft() <= 1 || isTutorialRun)) {
+      } else if (e.code === "KeyR" && isRerollDisabled()) {
         // Disabled on last attempt — cannot kill yourself with reroll
         e.preventDefault();
       } else if (e.code === "Digit0" || e.code === "Numpad0") {
@@ -5517,12 +5476,12 @@ function init() {
       // Check re-roll button first (REQ-025)
       try {
         const rerollRect = getRewardRerollButtonLayout(LOGICAL_W, LOGICAL_H);
-        if (!rewardRerolled && getAttemptsLeft() > 1 && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
+        if (!isRerollDisabled() && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
           rerollReward();
           e.preventDefault();
           return;
-        } else if (getAttemptsLeft() <= 1 && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
-          // Disabled on last attempt — block click, no reroll
+        } else if (isRerollDisabled() && pos.x >= rerollRect.x && pos.x <= rerollRect.x + rerollRect.w && pos.y >= rerollRect.y && pos.y <= rerollRect.y + rerollRect.h) {
+          // Disabled (last attempt / tutorial / <4 owned kinds) — block click, no reroll
           e.preventDefault();
           return;
         }
@@ -5958,6 +5917,9 @@ if (typeof window !== 'undefined') {
   window.__getRunHolesCleared = getRunHolesCleared;
   window.__isCoinSummaryVisible = isCoinSummaryVisible;
   window.__isCoinSummaryAnimating = isCoinSummaryAnimating;
+  window.__isMenuReturnDeferred = isMenuReturnDeferred;
+  window.__isShopRestockedThisRun = isShopRestockedThisRun;
+  window.__finishReturnToMainMenu = finishReturnToMainMenu;
   window.__fastForwardCoinSummary = fastForwardCoinSummary;
   window.__showCoinSummary = showCoinSummary;
   window.__hideCoinSummary = hideCoinSummary;
@@ -5977,6 +5939,7 @@ if (typeof window !== 'undefined') {
   window.__isTutorialRun = isTutorialRunActive;
   window.isTutorialRun = isTutorialRunActive;
   window.__isRerollDisabled = isRerollDisabled;
+  window.__countOwnedKinds = countOwnedKinds;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) loadoutSlots=[...v].slice(0,4); syncLoadoutOverlay();} });
