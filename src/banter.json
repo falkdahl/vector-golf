@@ -2,6 +2,56 @@
   "version": 1,
   "banters": [
     {
+      "id": "controls-first",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Before you swing, rookie rules. I talk, you listen. Aim with the arrow keys. Point her at the hole, not where the wind wants."
+        },
+        {
+          "speaker": "may",
+          "text": "Arrows to aim. Even I can manage that. Then what?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Hold space to charge your shot, release to shoot. Longer hold, bigger swing. Do not get greedy in a gale."
+        },
+        {
+          "speaker": "may",
+          "text": "And these little weather gadgets?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Left-click places a field modifier where you point. Right-click picks one back up. And if it all goes sideways, press R to reset to the tee."
+        }
+      ]
+    },
+    {
+      "id": "rewards-second",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Two ways to earn an upgrade out here: grab a treasure chest, or clear the hole. Both pay out a reward."
+        },
+        {
+          "speaker": "may",
+          "text": "And I can pick anything I like?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Only from the items you already own. The offering shows your shelf, nothing more. Buy more in the shop, see more on offer."
+        },
+        {
+          "speaker": "may",
+          "text": "What about the gadgets I left sitting on the grass?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Gone when the hole clears. Placed is spent. So right-click them to pick them back up before you hole out."
+        }
+      ]
+    },
+    {
       "id": "run-start-1",
       "lines": [
         {

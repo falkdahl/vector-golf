@@ -69,11 +69,16 @@ takes over the background canvas like a full cutscene.
   2. play the next run-start banter in place,
   3. show the `Hole 1` banner (`showHoleBanner(0)`) only after the banter
      completes (or immediately if the banter file is missing/invalid/empty).
-- Selection: run-start banters play round-robin — a persisted counter
-  (`BANTER_STATE_KEY = "golfVectorField.banter.v1"`, `{version:1, count}`)
-  picks `banters[count % banters.length]` and increments after each played
-  banter, so consecutive runs show different banters. `localStorage.clear()` /
-  campaign regeneration resets the rotation.
+- Selection: the first two banters are fixed onboarding — `banters[0]`
+  (`controls-first`: aim/shoot/place/remove/reset) plays on the first run,
+  `banters[1]` (`rewards-second`: chests/hole-clear rewards, owned-only offers,
+  placed modifiers lost on clear, right-click pickup) on the second run. After
+  those two have played, each run start picks randomly (`Math.random`) among
+  the rest (`banters[2:]`). A persisted counter (`BANTER_STATE_KEY =
+  "golfVectorField.banter.v1"`, `{version:1, count}`) tracks progress: `count`
+  `0` → first scene, `1` → second scene, `≥2` → random among the rest, and
+  increments after each played banter. `localStorage.clear()` / campaign
+  regeneration resets the sequence.
 - `showLoadout(courseId)` preloads `src/banter.json` in the background
   (`preloadBanterFile()`, fire-and-forget) so no fetch gap appears when the
   loadout closes.
@@ -86,7 +91,8 @@ takes over the background canvas like a full cutscene.
 - Runtime API (`src/banter.js`): `loadBanterFile()`, `preloadBanterFile()`,
   `getBanter(id)`, `listBanterIds()`, `validateBanter(data)`,
   `isBanterActive()`, `getActiveBanterId()`, `playBanter(idOrEntry,
-  {onComplete})`, `playRunStartBanter({onComplete})` (async, round-robin),
+  {onComplete})`, `playRunStartBanter({onComplete})` (async, first-two-fixed
+  then random among the rest),
   `updateBanter(dtSeconds)`, `handleBanterInput(e): boolean`, `skipBanter()`.
 - While `isBanterActive()`:
   - `update(dt)` ticks wind + `updateBanter(dt)` and returns early (physics
@@ -117,8 +123,9 @@ takes over the background canvas like a full cutscene.
       banter in place over hole 1 (terrain/wind visible, no cutscene
       background takeover), then shows `Hole 1` `1000ms`; missing/invalid file
       falls back to the banner immediately.
-- [ ] Consecutive run starts rotate through banters (`count % length`);
-      counter persists in `BANTER_STATE_KEY`.
+- [ ] Consecutive run starts play the fixed onboarding first (`controls-first`,
+      then `rewards-second`) and afterwards pick randomly among the remaining
+      banters; counter persists in `BANTER_STATE_KEY`.
 - [ ] While banter is active: no launch, charge, aim drift, placement, drag,
       `R`, `H`, or pause; ball stays at tee `AIMING`; wind keeps animating.
 
@@ -126,7 +133,7 @@ takes over the background canvas like a full cutscene.
 
 - `src/banter.json:1` (single data file, banters with id + lines)
 - `src/banter.js:1` (loader, validator, player, `BANTER_CPS=20`,
-  `BANTER_LINGER_MS=1000`, round-robin state)
+  `BANTER_LINGER_MS=1000`, onboarding-then-random selection state)
 - `src/main.js:1` (`startCourseWithLoadout` defers Hole 1 banner for banter,
   `showLoadout` preloads, `update`/input guards via `banterIsActive`)
 - `index.html:1` (existing `#cutscene-dialog` overlay, reused as-is)

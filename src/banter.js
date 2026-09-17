@@ -261,8 +261,20 @@ export function playBanter(idOrEntry, options = {}) {
 export async function playRunStartBanter(options = {}) {
   const data = await loadBanterFile();
   if (!data || !Array.isArray(data.banters) || !data.banters.length) return false;
+  const banters = data.banters;
   const count = loadBanterCount();
-  const entry = data.banters[count % data.banters.length];
+  // 12-banter: the first two scenes are fixed onboarding (controls, rewards);
+  // afterwards pick randomly among the rest.
+  let entry = null;
+  if (count === 0) {
+    entry = banters[0];
+  } else if (count === 1) {
+    entry = banters.length > 1 ? banters[1] : banters[0];
+  } else {
+    const rest = banters.slice(2);
+    entry = rest.length ? rest[Math.floor(Math.random() * rest.length)] : banters[0];
+  }
+  if (!entry) return false;
   const ok = playBanter(entry, {
     onComplete: (completed) => {
       try { bumpBanterCount(); } catch {}
