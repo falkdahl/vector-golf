@@ -263,8 +263,8 @@ export async function playRunStartBanter(options = {}) {
   if (!data || !Array.isArray(data.banters) || !data.banters.length) return false;
   const banters = data.banters;
   const count = loadBanterCount();
-  // 12-banter: the first three scenes are fixed onboarding (controls, rewards,
-  // stacking); afterwards pick randomly among the rest.
+  // 12-banter: the first four scenes are fixed onboarding (controls, rewards,
+  // stacking, attempts); afterwards pick randomly among the rest.
   let entry = null;
   if (count === 0) {
     entry = banters[0];
@@ -272,8 +272,10 @@ export async function playRunStartBanter(options = {}) {
     entry = banters.length > 1 ? banters[1] : banters[0];
   } else if (count === 2) {
     entry = banters.length > 2 ? banters[2] : banters[0];
+  } else if (count === 3) {
+    entry = banters.length > 3 ? banters[3] : banters[0];
   } else {
-    const rest = banters.slice(3);
+    const rest = banters.slice(4);
     entry = rest.length ? rest[Math.floor(Math.random() * rest.length)] : banters[0];
   }
   if (!entry) return false;

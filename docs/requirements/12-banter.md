@@ -69,19 +69,21 @@ takes over the background canvas like a full cutscene.
   2. play the next run-start banter in place,
   3. show the `Hole 1` banner (`showHoleBanner(0)`) only after the banter
      completes (or immediately if the banter file is missing/invalid/empty).
-- Selection: the first three banters are fixed onboarding — `banters[0]`
+- Selection: the first four banters are fixed onboarding — `banters[0]`
   (`controls-first`: aim/shoot/place/remove/reset) plays on the first run,
   `banters[1]` (`rewards-second`: chests/hole-clear rewards, owned-only offers,
-  placed modifiers lost on clear, right-click pickup) on the second run, and
+  placed modifiers lost on clear, right-click pickup) on the second run,
   `banters[2]` (`stacking-third`: stacking field modifiers, deflector/rotator
   direction twists, magnifying a Rotator or Deflector for the needed
-  trajectory) on the third run. After those three have played, each run start
-  picks randomly (`Math.random`) among the rest (`banters[3:]`). A persisted
-  counter (`BANTER_STATE_KEY =
+  trajectory) on the third run, and `banters[3]` (`attempts-fourth`: 10
+  attempts per hole, failing restarts the whole course, plan modifier usage
+  well) on the fourth run. After those four have played, each run start picks
+  randomly (`Math.random`) among the rest (`banters[4:]`). A persisted counter
+  (`BANTER_STATE_KEY =
   "golfVectorField.banter.v1"`, `{version:1, count}`) tracks progress: `count`
-  `0` → first scene, `1` → second scene, `2` → third scene, `≥3` → random
-  among the rest, and increments after each played banter.
-  `localStorage.clear()` / campaign regeneration resets the sequence.
+  `0` → first scene, `1` → second scene, `2` → third scene, `3` → fourth
+  scene, `≥4` → random among the rest, and increments after each played
+  banter. `localStorage.clear()` / campaign regeneration resets the sequence.
 - `showLoadout(courseId)` preloads `src/banter.json` in the background
   (`preloadBanterFile()`, fire-and-forget) so no fetch gap appears when the
   loadout closes.
@@ -94,7 +96,7 @@ takes over the background canvas like a full cutscene.
 - Runtime API (`src/banter.js`): `loadBanterFile()`, `preloadBanterFile()`,
   `getBanter(id)`, `listBanterIds()`, `validateBanter(data)`,
   `isBanterActive()`, `getActiveBanterId()`, `playBanter(idOrEntry,
-  {onComplete})`, `playRunStartBanter({onComplete})` (async, first-three-fixed
+  {onComplete})`, `playRunStartBanter({onComplete})` (async, first-four-fixed
   then random among the rest),
   `updateBanter(dtSeconds)`, `handleBanterInput(e): boolean`, `skipBanter()`.
 - While `isBanterActive()`:
@@ -127,9 +129,9 @@ takes over the background canvas like a full cutscene.
       background takeover), then shows `Hole 1` `1000ms`; missing/invalid file
       falls back to the banner immediately.
 - [ ] Consecutive run starts play the fixed onboarding first (`controls-first`,
-      then `rewards-second`, then `stacking-third`) and afterwards pick
-      randomly among the remaining banters; counter persists in
-      `BANTER_STATE_KEY`.
+      then `rewards-second`, then `stacking-third`, then `attempts-fourth`)
+      and afterwards pick randomly among the remaining banters; counter
+      persists in `BANTER_STATE_KEY`.
 - [ ] While banter is active: no launch, charge, aim drift, placement, drag,
       `R`, `H`, or pause; ball stays at tee `AIMING`; wind keeps animating.
 
