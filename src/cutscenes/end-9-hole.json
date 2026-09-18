@@ -1,0 +1,542 @@
+{
+  "id": "end-9-hole",
+  "title": "Last green of the 9-hole Course",
+  "background": {
+    "type": "image",
+    "src": "./img/cutscenes/bg-green.png",
+    "color": "#1a1a1a"
+  },
+  "duration": 64200,
+  "camera": {
+    "keyframes": []
+  },
+  "characters": [
+    {
+      "id": "may",
+      "character": "may",
+      "x": 1360,
+      "y": 262,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": 3,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 564,
+          "y": 157,
+          "scale": 1,
+          "easing": "linear"
+        },
+        {
+          "t": 4500,
+          "x": 564,
+          "y": 157,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 14000,
+          "x": 564,
+          "y": 157,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "may-front"
+        },
+        {
+          "t": 27200,
+          "x": 564,
+          "y": 157,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 59800,
+          "x": 564,
+          "y": 157,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 64000,
+          "x": 1360,
+          "y": 262,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "may-right"
+        }
+      ],
+      "sprite": "may-front"
+    },
+    {
+      "id": "caddy",
+      "character": "caddy",
+      "x": 1386,
+      "y": 215,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": 2,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 713,
+          "y": 114,
+          "scale": 1,
+          "easing": "linear"
+        },
+        {
+          "t": 3200,
+          "x": 713,
+          "y": 114,
+          "scale": 1,
+          "easing": "linear"
+        },
+        {
+          "t": 4900,
+          "x": 711,
+          "y": 145,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "caddy-left"
+        },
+        {
+          "t": 49100,
+          "x": 711,
+          "y": 145,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        },
+        {
+          "t": 59800,
+          "x": 711,
+          "y": 145,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        },
+        {
+          "t": 64000,
+          "x": 1386,
+          "y": 215,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        }
+      ],
+      "sprite": "caddy-front"
+    },
+    {
+      "id": "cortex",
+      "character": "cortex",
+      "x": 1025,
+      "y": 144,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": 0,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 1439,
+          "y": 62,
+          "scale": 1,
+          "easing": "linear"
+        },
+        {
+          "t": 17000,
+          "x": 1439,
+          "y": 62,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "cortex-left"
+        },
+        {
+          "t": 19500,
+          "x": 1025,
+          "y": 144,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "cortex-left"
+        },
+        {
+          "t": 61900,
+          "x": 1025,
+          "y": 144,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "cortex-front"
+        },
+        {
+          "t": 64000,
+          "x": 1025,
+          "y": 144,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "cortex-right"
+        }
+      ],
+      "sprite": "cortex-front"
+    },
+    {
+      "id": "slicer",
+      "character": "slicer",
+      "x": 1181,
+      "y": 418,
+      "scale": 0.8,
+      "anchor": "center",
+      "zIndex": 3,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 1456,
+          "y": 493,
+          "scale": 0.8,
+          "easing": "linear"
+        },
+        {
+          "t": 17000,
+          "x": 1456,
+          "y": 493,
+          "scale": 0.8,
+          "easing": "linear",
+          "sprite": "slicer-left"
+        },
+        {
+          "t": 19500,
+          "x": 1181,
+          "y": 418,
+          "scale": 0.8,
+          "easing": "linear",
+          "sprite": "slicer-left"
+        },
+        {
+          "t": 62500,
+          "x": 1181,
+          "y": 418,
+          "scale": 0.8,
+          "easing": "linear",
+          "sprite": "slicer-back"
+        },
+        {
+          "t": 63700,
+          "x": 1181,
+          "y": 418,
+          "scale": 0.8,
+          "easing": "linear",
+          "sprite": "slicer-right"
+        }
+      ],
+      "sprite": "slicer-front"
+    },
+    {
+      "id": "rat",
+      "character": "rat",
+      "x": 274,
+      "y": 50,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": 4,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 186,
+          "y": -156,
+          "scale": 1,
+          "easing": "linear"
+        },
+        {
+          "t": 23700,
+          "x": 186,
+          "y": -156,
+          "scale": 1,
+          "easing": "linear"
+        },
+        {
+          "t": 28000,
+          "x": 274,
+          "y": 50,
+          "scale": 1,
+          "easing": "linear"
+        },
+        {
+          "t": 28100,
+          "x": 274,
+          "y": 50,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "rat-right"
+        }
+      ],
+      "sprite": "rat-front"
+    },
+    {
+      "id": "acolyte",
+      "character": "acolyte",
+      "x": 136,
+      "y": 480,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": 5,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 70,
+          "y": 488,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-right"
+        },
+        {
+          "t": 8600,
+          "x": 70,
+          "y": 488,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-back"
+        },
+        {
+          "t": 14500,
+          "x": 70,
+          "y": 488,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-right"
+        }
+      ],
+      "sprite": "acolyte-front"
+    },
+    {
+      "id": "acolyte-2",
+      "character": "acolyte",
+      "x": 85,
+      "y": 303,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": 0,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 46,
+          "y": 400,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-right"
+        },
+        {
+          "t": 8000,
+          "x": 46,
+          "y": 400,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-front"
+        },
+        {
+          "t": 13752,
+          "x": 46,
+          "y": 400,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-right"
+        }
+      ],
+      "sprite": "acolyte-front"
+    },
+    {
+      "id": "acolyte-3",
+      "character": "acolyte",
+      "x": 260,
+      "y": 282,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": 7,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 288,
+          "y": 598,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-back"
+        }
+      ],
+      "sprite": "acolyte-front"
+    },
+    {
+      "id": "acolyte-4",
+      "character": "acolyte",
+      "x": 36,
+      "y": 150,
+      "scale": 1,
+      "anchor": "center",
+      "zIndex": -1,
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 36,
+          "y": 150,
+          "scale": 1,
+          "easing": "linear",
+          "sprite": "acolyte-right"
+        }
+      ],
+      "sprite": "acolyte-front"
+    }
+  ],
+  "dialogs": [
+    {
+      "t": 2000,
+      "speaker": "Caddy",
+      "text": "You did it Kid!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-caddy.png",
+      "portraitSide": "left",
+      "duration": 2000,
+      "texts": [
+        "You did it Kid!",
+        "You tied the Grandmasters record run!"
+      ],
+      "gaps": [
+        2000
+      ]
+    },
+    {
+      "t": null,
+      "speaker": "Acolyte",
+      "text": "She really did it...",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-acolyte.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 1000,
+      "texts": [
+        "She really did it...",
+        "can it be....",
+        "...a new Grandmaster?!"
+      ],
+      "gaps": [
+        1000,
+        1000
+      ]
+    },
+    {
+      "t": null,
+      "speaker": "May",
+      "text": "I knew I had it in me!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-may.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 1500
+    },
+    {
+      "t": 18700,
+      "speaker": "Grandmaster Cortex",
+      "text": "How can this be possible?!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portraitSide": "left",
+      "duration": 1500,
+      "texts": [
+        "How can this be possible?!",
+        "No one can beat the 9-hole course, except ME!"
+      ],
+      "gaps": [
+        1000
+      ]
+    },
+    {
+      "t": null,
+      "speaker": "Slicer",
+      "text": "They must have CHEATED master!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-slicer.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 1000
+    },
+    {
+      "t": null,
+      "speaker": "May",
+      "text": "Do NOT call me a cheater!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-may.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 1500,
+      "texts": [
+        "Do NOT call me a cheater!",
+        "Watch me as I finish the 18-hole course...",
+        "and take the Grandmaster title from you."
+      ],
+      "gaps": [
+        1000,
+        1000
+      ]
+    },
+    {
+      "t": null,
+      "speaker": "???",
+      "text": "Ah... the voice of a sore loser.",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-rat.png",
+      "portraitSide": "left",
+      "auto": true,
+      "texts": [
+        "Ah... the voice of a sore loser.",
+        "I see it has become part of your character Cortex."
+      ],
+      "gaps": [
+        1000
+      ],
+      "duration": 1500
+    },
+    {
+      "t": null,
+      "speaker": "Grandmaster Cortex",
+      "text": "And your obsession with my affairs suits you no better Ratko.",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 1000,
+      "texts": [
+        "And your obsession with my affairs suits you no better Ratko.",
+        "This is none of your business."
+      ],
+      "gaps": [
+        1000
+      ]
+    },
+    {
+      "t": null,
+      "speaker": "Caddy",
+      "text": "You can save your applause for when we take first place.",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-caddy.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 1500,
+      "texts": [
+        "You can save your applause for when we take first place.",
+        "Come May...",
+        "Let's go claim the victory everyone knows is ours."
+      ],
+      "gaps": [
+        2000,
+        1000
+      ]
+    }
+  ],
+  "intro": {
+    "blackMs": 500,
+    "titleFadeMs": 500,
+    "holdMs": 1000,
+    "fadeInMs": 500,
+    "enabled": true
+  },
+  "outro": {
+    "fadeOutMs": 500
+  }
+}
