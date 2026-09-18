@@ -167,20 +167,26 @@
     </div>
     <div id="loadout-overlay" class="hidden">
       <div class="loadout-card">
-        <h2 class="loadout-title">Choose your starting items</h2>
-        <div class="loadout-section">
-          <div id="loadout-slots" class="loadout-slots"></div>
-        </div>
-        <div class="loadout-storage-section">
-          <h3>Storage</h3>
-          <div id="personal-storage-grid" class="personal-storage-grid"></div>
-        </div>
-        <div class="loadout-shop-section">
-          <div class="shop-header" style="display:flex; align-items:center; gap:8px; justify-content:center;">
-            <h3>Shop</h3>
-            <span id="loadout-coins">💰 0</span>
+        <h2 class="loadout-title">Pack your golfbag</h2>
+        <div class="loadout-layout">
+          <div class="loadout-left">
+            <div class="loadout-section">
+              <div id="loadout-slots" class="loadout-slots"></div>
+            </div>
+            <div class="loadout-storage-section">
+              <h3>Your Items</h3>
+              <div id="personal-storage-grid" class="personal-storage-grid"></div>
+            </div>
           </div>
-          <div id="shop-grid" class="loadout-shop"></div>
+          <div class="loadout-right">
+            <div class="loadout-shop-section">
+              <div class="shop-header" style="display:flex; align-items:center; gap:8px; justify-content:center;">
+                <h3>Shop</h3>
+                <span id="loadout-coins">💰 0</span>
+              </div>
+              <div id="shop-grid" class="loadout-shop"></div>
+            </div>
+          </div>
         </div>
         <div class="loadout-actions">
           <button id="loadout-start-button">OK</button>

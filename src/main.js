@@ -813,10 +813,10 @@ function syncLoadoutOverlay() {
     const personal = getPersonalSupply();
     const coins = getCoins();
     const unlocked = getUnlockedLoadoutSlots();
-    // Title: ensure "Choose your starting items" (10-progression §2.2)
+    // Title: ensure "Pack your golfbag" (10-progression §2.2)
     try {
       const titleEl = overlay.querySelector('.loadout-title') || document.querySelector('#loadout-overlay .loadout-title');
-      if (titleEl && titleEl.textContent.trim() !== 'Choose your starting items') titleEl.textContent = 'Choose your starting items';
+      if (titleEl && titleEl.textContent.trim() !== 'Pack your golfbag') titleEl.textContent = 'Pack your golfbag';
     } catch {}
     // Shop visibility: hide shop when intro-3-hole chain just played for 3-hole course
     const shouldHideShop = !!(loadoutHideShopDueToIntro && loadoutCourseId && (()=>{ try{ const c=findCourseById(loadoutCourseId); return c && c.holeCount===3; }catch{return false;}})());
@@ -946,7 +946,8 @@ function syncLoadoutOverlay() {
         shop.appendChild(empty);
       }
     }
-    // Personal storage panel — separate visible panel showing owned counts (persistent storage)
+    // Personal storage panel ("Your Items") — owned types only, xN count badge
+    // bottom-right of each card. Unowned types are not rendered at all.
     try {
       const storeGrid = document.getElementById('personal-storage-grid');
       if (storeGrid) {
@@ -954,12 +955,9 @@ function syncLoadoutOverlay() {
         const types = ['liquifier', 'deflector', 'rotator', 'magnifier', 'fieldExtender', 'powerCell', 'freeShot'];
         const names = { liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', magnifier: 'Magnifier', fieldExtender: 'Field Extender', powerCell: 'Power Cell', freeShot: 'Free Shot' };
         const icons = { liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', magnifier: './img/magnifier-icon.png', fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
-        const inLoadout = {};
-        for (const v of loadoutSlots) if (v) inLoadout[v] = (inLoadout[v] || 0) + 1;
         for (const t of types) {
           const owned = personal[t] ?? 0;
-          const used = inLoadout[t] || 0;
-          const remaining = owned - used;
+          if (owned <= 0) continue;
           const div = document.createElement('div');
           div.className = 'storage-item';
           div.dataset.type = t;
@@ -973,8 +971,7 @@ function syncLoadoutOverlay() {
             div.appendChild(fb);
           }
           const nm = document.createElement('div'); nm.className = 'st-name'; nm.textContent = names[t]; div.appendChild(nm);
-          const ct = document.createElement('div'); ct.className = 'st-count'; ct.textContent = 'x' + owned + ' (in loadout ' + used + ', left ' + Math.max(0, remaining) + ')'; div.appendChild(ct);
-          if (owned <= 0) div.classList.add('none');
+          const ct = document.createElement('div'); ct.className = 'st-count'; ct.textContent = 'x' + owned; div.appendChild(ct);
           storeGrid.appendChild(div);
         }
       }

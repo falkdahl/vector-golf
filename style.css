@@ -1052,7 +1052,6 @@ body {
 .reward-bag-fallback { font: 700 20px system-ui, sans-serif; color: #FFD700; pointer-events: none; }
 .reward-bag-name { pointer-events: none; text-align: center; line-height: 1.2; }
 .reward-bag-key { font: 700 9px system-ui, sans-serif; color: #ff9a9a; pointer-events: none; }
-.loadout-storage-section { margin-top: 12px; }
 .loadout-storage-section h3 { font: 700 13px system-ui, sans-serif; color: white; text-align: center; margin: 0 0 6px; }
 .hotbar-slot.passive { cursor: default; }
 .hotbar-slot.passive:hover { filter: brightness(1.05); }
@@ -1707,8 +1706,8 @@ body {
   flex-direction: column;
   gap: 14px;
   align-items: center;
-  width: min(560px, 92%);
-  max-width: 92%;
+  width: auto;
+  max-width: 96%;
   max-height: 96%;
   height: auto;
   overflow: hidden;
@@ -1740,13 +1739,38 @@ body {
   color: rgba(255,255,255,0.85);
 }
 .loadout-layout {
-  display: contents;
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: center;
+  width: auto;
+  max-width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .loadout-left {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .loadout-right {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .loadout-section {
   background: transparent;
@@ -1765,16 +1789,19 @@ body {
   min-height: 0;
 }
 .loadout-storage-section {
-  background: rgba(52,152,219,0.09);
-  border: 1px solid rgba(52,152,219,0.18);
+  background: transparent;
+  border: none;
   padding: 10px;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: center;
   min-height: 0;
   overflow: hidden;
-  flex: 1;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
 }
 .loadout-shop-section {
@@ -1861,7 +1888,8 @@ body {
 .loadout-slot[data-type="powerCell"].filled { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
 .loadout-slot[data-type="freeShot"].filled { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.9); }
 .loadout-hint { margin: 0; font: 500 10px system-ui, sans-serif; color: rgba(255,255,255,0.7); }
-/* Storage panel (tactical rework): separate visible personal-storage grid */
+/* Storage panel ("Your Items"): chrome-less cards, owned types only.
+   Count badge sits bottom-right in larger gold text. */
 .storage-item {
   display: flex;
   flex-direction: column;
@@ -1869,28 +1897,40 @@ body {
   justify-content: center;
   gap: 2px;
   min-width: 96px;
-  padding: 6px 8px;
+  padding: 6px 8px 20px;
   border-radius: 8px;
   border: 2px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
+  background: transparent;
   user-select: none;
+  position: relative;
+  box-sizing: border-box;
 }
 .storage-item img { width: 28px; height: 28px; object-fit: contain; }
 .storage-item .st-name { font: 700 10px system-ui, sans-serif; color: white; }
-.storage-item .st-count { font: 600 9px system-ui, sans-serif; color: rgba(255,255,255,0.75); }
-.storage-item.none { opacity: 0.45; }
+.storage-item .st-count {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font: 700 14px system-ui, sans-serif;
+  color: #FFD700;
+  -webkit-text-stroke: 3px rgba(0,0,0,0.6);
+  paint-order: stroke fill;
+  line-height: 1;
+}
 /* Personal storage — square items, not full-width, wrap */
 .personal-storage-grid {
   width: 100%;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  justify-content: flex-start;
+  justify-content: center;
   align-content: flex-start;
-  overflow-y: auto;
-  flex: 1;
+  overflow: visible;
+  flex: 0 0 auto;
   padding: 2px;
   min-height: 0;
+  box-sizing: border-box;
 }
 .personal-item {
   display: flex;
@@ -1996,9 +2036,12 @@ body {
 }
 .shop-item button:disabled { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.45); cursor: not-allowed; }
 .shop-item button:hover:not(:disabled) { background: #1e8449; }
+@media (max-width: 1000px) {
+  .loadout-layout { flex-direction: column; align-items: center; overflow-y: auto; }
+  .loadout-card { overflow-y: auto; }
+  .loadout-slots { flex-wrap: wrap; justify-content: center; }
+}
 @media (max-width: 700px) {
-  .loadout-layout { grid-template-columns: 1fr; gap: 10px; overflow-y: auto; }
-  .loadout-slots { grid-template-columns: repeat(4, 1fr); }
   .loadout-slot { width: 72px; height: 96px; }
 }
 @media (max-height: 580px), (max-width: 520px) {
