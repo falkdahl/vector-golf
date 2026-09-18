@@ -946,8 +946,10 @@ function syncLoadoutOverlay() {
         shop.appendChild(empty);
       }
     }
-    // Personal storage panel ("Your Items") — owned types only, xN count badge
-    // bottom-right of each card. Unowned types are not rendered at all.
+    // Personal storage panel ("Your Items") — owned types only, xN remaining-count
+    // badge bottom-right (remaining = owned − countInLoadout, visual queue only;
+    // personalSupply never depletes). When remaining <= 0 the card stays rendered
+    // but semi-transparent (.depleted) to indicate all are packed.
     try {
       const storeGrid = document.getElementById('personal-storage-grid');
       if (storeGrid) {
@@ -955,11 +957,14 @@ function syncLoadoutOverlay() {
         const types = ['liquifier', 'deflector', 'rotator', 'magnifier', 'fieldExtender', 'powerCell', 'freeShot'];
         const names = { liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', magnifier: 'Magnifier', fieldExtender: 'Field Extender', powerCell: 'Power Cell', freeShot: 'Free Shot' };
         const icons = { liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', magnifier: './img/magnifier-icon.png', fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
+        const inLoadoutByType = {};
+        for (const v of loadoutSlots) if (v) inLoadoutByType[v] = (inLoadoutByType[v] || 0) + 1;
         for (const t of types) {
           const owned = personal[t] ?? 0;
           if (owned <= 0) continue;
+          const remaining = owned - (inLoadoutByType[t] || 0);
           const div = document.createElement('div');
-          div.className = 'storage-item';
+          div.className = 'storage-item' + (remaining <= 0 ? ' depleted' : '');
           div.dataset.type = t;
           if (icons[t]) {
             const im = document.createElement('img');
@@ -971,7 +976,7 @@ function syncLoadoutOverlay() {
             div.appendChild(fb);
           }
           const nm = document.createElement('div'); nm.className = 'st-name'; nm.textContent = names[t]; div.appendChild(nm);
-          const ct = document.createElement('div'); ct.className = 'st-count'; ct.textContent = 'x' + owned; div.appendChild(ct);
+          const ct = document.createElement('div'); ct.className = 'st-count'; ct.textContent = 'x' + Math.max(0, remaining); div.appendChild(ct);
           storeGrid.appendChild(div);
         }
       }
@@ -980,6 +985,7 @@ function syncLoadoutOverlay() {
     if (startBtn) startBtn.disabled = false;
     // sync picker if visible
     syncLoadoutPickerOverlay();
+    try { updateHotbarUI(); } catch {}
   } catch(e){ console.warn('syncLoadoutOverlay failed',e); }
 }
 function addToLoadout(type) {
@@ -2891,6 +2897,13 @@ function countOwnedKinds() {
     return n;
   } catch { return 0; }
 }
+// Reward card count: ceil(uniqueKinds / 2), max 3 (08 §5c).
+// 1 unique → 1 card, 2 uniques → 1 card, 3-4 → 2 cards, 5+ → 3 cards.
+function getRewardCardCount() {
+  const n = countOwnedKinds();
+  if (n <= 0) return 1;
+  return Math.min(3, Math.ceil(n / 2));
+}
 // Filter a seeded candidate order to owned kinds (preserving seeded order),
 // taking up to maxN distinct. Backfills from the full shuffled order, not just
 // the sliced head. Falls back to the unfiltered head when nothing is owned
@@ -2950,8 +2963,8 @@ function getSeededRewardOffer() {
   rewardSeedCounter++;
   const ownedPool = ownedPoolForCourse();
   const shuffled = seededShuffle([...ownedPool], seedStr);
-  const picked = shuffled.slice(0, 3);
-  return enforceNoFieldPowerTogether(picked, shuffled.slice(3));
+  const picked = shuffled.slice(0, getRewardCardCount());
+  return enforceNoFieldPowerTogether(picked, shuffled.slice(picked.length));
 }
 function getSeededRerollOffer() {
   // Tutorial run never rerolls (disabled), but keep single-liquifier shape for safety.
@@ -2964,8 +2977,8 @@ function getSeededRerollOffer() {
   rewardSeedCounter++;
   const ownedPool = ownedPoolForCourse();
   const shuffled = seededShuffle([...ownedPool], seedStr);
-  const picked = shuffled.slice(0, 3);
-  return enforceNoFieldPowerTogether(picked, shuffled.slice(3));
+  const picked = shuffled.slice(0, getRewardCardCount());
+  return enforceNoFieldPowerTogether(picked, shuffled.slice(picked.length));
 }
 function maybeFilterAreaUp(offer, seedStr) {
   // Legacy: Field Extender + Power Cell now combined slot, never together. Keep guard for legacy saves.
@@ -3007,9 +3020,9 @@ function isRerollDisabled() {
   if (rewardRerolled) return true;
   // Disabled on last attempt to prevent suicide — you cannot kill yourself with a re-roll
   if (getAttemptsLeft() <= 1) return true;
-  // Disabled while owning fewer than four different kinds (08 §6): re-rolling a
-  // tiny owned pool would just offer the same items back.
-  if (countOwnedKinds() < 4) return true;
+  // Disabled while owning fewer than two different kinds (08 §6): with a single
+  // owned kind re-rolling would just offer the same card back.
+  if (countOwnedKinds() < 2) return true;
   return false;
 }
 function rerollReward() {
@@ -3080,19 +3093,18 @@ function maybeShowRewardMenu() {
   }
 }
 
-// Reward discard UI (tactical rework): when the bag is full and a reward was chosen
-// (pendingRewardType), the modal itself shows the bag contents with destroy buttons
-// plus Skip — the hotbar underneath is clickable too, but the in-modal row is the
-// primary path (works with mouse even if the hotbar is collapsed).
+// Reward discard UI: when the bag is full and a reward was chosen
+// (pendingRewardType), discard happens via the golfbag hotbar underneath
+// (occupied slots get .discard-target dotted highlight). No in-overlay bag
+// cards are shown — #reward-bag-row shall not exist.
 function syncRewardDiscardUI(overlay) {
   const card = overlay.querySelector('.reward-card');
   if (!card) return;
   const pretty = { magnifier: 'Magnifier', liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', freeShot: 'Free Shot', fieldExtender: 'Field Extender', areaUp: 'Field Extender', powerCell: 'Power Cell' };
-  const icons = { magnifier: './img/magnifier-icon.png', liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', fieldExtender: './img/field-extender-icon.png', areaUp: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
   // Title reflects mode
   try {
     const titleEl = overlay.querySelector('.reward-title');
-    if (titleEl) titleEl.textContent = pendingRewardType ? ('Bag full — destroy one to take ' + (pretty[pendingRewardType] || pendingRewardType)) : 'Choose an Upgrade';
+    if (titleEl) titleEl.textContent = pendingRewardType ? ('Bag full — destroy one to take ' + (pretty[pendingRewardType] || pendingRewardType)) : 'Pick an Item';
   } catch {}
   // Highlight the chosen reward button
   try {
@@ -3116,10 +3128,11 @@ function syncRewardDiscardUI(overlay) {
     skipBtn.style.display = '';
     skipBtn.disabled = false;
   } catch {}
-  // Discard hint + in-modal bag row
+  // Discard hint (no in-overlay bag cards — discard via golfbag .discard-target)
   try {
     let discardEl = overlay.querySelector('#reward-discard-hint');
-    let bagRow = overlay.querySelector('#reward-bag-row');
+    const staleBagRow = overlay.querySelector('#reward-bag-row');
+    if (staleBagRow) staleBagRow.remove();
     if (pendingRewardType) {
       if (!discardEl) {
         discardEl = document.createElement('div');
@@ -3129,51 +3142,8 @@ function syncRewardDiscardUI(overlay) {
       }
       discardEl.style.display = '';
       discardEl.textContent = 'Your bag is full. Destroy one bag item to take ' + (pretty[pendingRewardType] || pendingRewardType) + ', or Skip.';
-      if (!bagRow) {
-        bagRow = document.createElement('div');
-        bagRow.id = 'reward-bag-row';
-        bagRow.className = 'reward-bag-row';
-        card.appendChild(bagRow);
-      }
-      bagRow.style.display = '';
-      bagRow.innerHTML = '';
-      for (let i = 0; i < GOLFBAG_SIZE; i++) {
-        const entry = golfbag[i];
-        const t = entry ? bagEntryType(entry) : null;
-        const b = document.createElement('button');
-        b.className = 'reward-bag-slot' + (t ? '' : ' empty');
-        b.dataset.slotIndex = String(i);
-        b.disabled = !t;
-        if (t) {
-          const ic = icons[t];
-          if (ic) {
-            const im = document.createElement('img');
-            im.src = ic; im.alt = t;
-            b.appendChild(im);
-          } else {
-            const fb = document.createElement('div');
-            fb.className = 'reward-bag-fallback';
-            fb.textContent = '★';
-            b.appendChild(fb);
-          }
-          const nm = document.createElement('div');
-          nm.className = 'reward-bag-name';
-          nm.textContent = (pretty[t] || t) + (t === 'freeShot' ? ' x' + (entry.charges ?? 0) : '');
-          b.appendChild(nm);
-          const ky = document.createElement('div');
-          ky.className = 'reward-bag-key';
-          ky.textContent = 'Destroy [' + (i + 1) + ']';
-          b.appendChild(ky);
-          b.title = 'Destroy ' + (pretty[t] || t) + ' and take ' + (pretty[pendingRewardType] || pendingRewardType);
-          b.addEventListener('click', () => { discardBagSlotAndClaimReward(i); });
-        } else {
-          b.textContent = 'Empty [' + (i + 1) + ']';
-        }
-        bagRow.appendChild(b);
-      }
     } else {
       if (discardEl) { discardEl.style.display = 'none'; discardEl.textContent = ''; }
-      if (bagRow) { bagRow.style.display = 'none'; bagRow.innerHTML = ''; }
     }
   } catch {}
 }
@@ -3318,10 +3288,10 @@ function syncRewardOverlay() {
       if (skipBtn) skipBtn.style.display = 'none';
       const discardEl = overlay.querySelector('#reward-discard-hint');
       if (discardEl) { discardEl.style.display = 'none'; discardEl.textContent = ''; }
-      const bagRow = overlay.querySelector('#reward-bag-row');
-      if (bagRow) { bagRow.style.display = 'none'; bagRow.innerHTML = ''; }
+      const staleBagRow = overlay.querySelector('#reward-bag-row');
+      if (staleBagRow) staleBagRow.remove();
       const titleEl = overlay.querySelector('.reward-title');
-      if (titleEl) titleEl.textContent = 'Choose an Upgrade';
+      if (titleEl) titleEl.textContent = 'Pick an Item';
     } catch {}
     pendingRewardType = null;
   }
@@ -3828,9 +3798,10 @@ function updateAttemptsUI() {
 
 function updateHotbarUI() {
   if (!hotbarEl && !golfbagContainerEl && !bottomBarEl) return;
-  // Bag+hotbar are always visible during gameplay including FLYING and reward
+  // Bag+hotbar are always visible during gameplay including FLYING and reward,
+  // but hidden while the loadout overlay is shown.
   let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
-  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut;
+  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || loadoutVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut;
   const hideHotbar = isOverlayHidden;
   const hideBag = isOverlayHidden;
   if (bottomBarEl) bottomBarEl.classList.toggle("hidden", isOverlayHidden);
@@ -5593,8 +5564,8 @@ function init() {
         e.preventDefault();
         return;
       }
-      // Bag-full escape hatch: Esc skips without reward (same as Skip button)
-      if (pendingRewardType && e.code === "Escape") {
+      // Escape skips without reward in all reward-menu modes (same as Skip/S button)
+      if (e.code === "Escape") {
         closeRewardMenuWithoutReward();
         e.preventDefault();
         return;
@@ -6391,6 +6362,7 @@ if (typeof window !== 'undefined') {
   window.isTutorialRun = isTutorialRunActive;
   window.__isRerollDisabled = isRerollDisabled;
   window.__countOwnedKinds = countOwnedKinds;
+  window.__getRewardCardCount = getRewardCardCount;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<5) p.push(null); loadoutSlots=p.slice(0,5); } syncLoadoutOverlay();} });

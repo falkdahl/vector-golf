@@ -1917,6 +1917,7 @@ body {
   paint-order: stroke fill;
   line-height: 1;
 }
+.storage-item.depleted { opacity: 0.45; }
 /* Personal storage — square items, not full-width, wrap */
 .personal-storage-grid {
   width: 100%;

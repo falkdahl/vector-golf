@@ -883,8 +883,8 @@ export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType =
   ctx.strokeStyle = "rgba(0,0,0,0.75)";
   ctx.lineWidth = 5;
   ctx.fillStyle = "white";
-  ctx.strokeText("Choose an Upgrade", width / 2, cardY + 28);
-  ctx.fillText("Choose an Upgrade", width / 2, cardY + 28);
+  ctx.strokeText("Pick an Item", width / 2, cardY + 28);
+  ctx.fillText("Pick an Item", width / 2, cardY + 28);
 
   // Buttons - 3 random offered
   const buttons = getRewardButtonsLayout(width, height, offered);
