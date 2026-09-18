@@ -5,6 +5,13 @@
 - **Type:** Functional + UI
 - **References:** `05-input-and-states.md` (attempts, GAME_OVER, banners), `06-wind-system.md` (supply), `04-physics-and-collision.md` (win check, treasure hit), `07-level-generation.md` (treasure placement), `03-rendering.md` (treasure rendering)
 
+## 0. Tactical Rework Amendment (2026-09-18, normative)
+
+- **Reward goes to an empty golfbag slot** (one item per reward). `claimReward(type)` grants via `grantRewardToBag`: spatial `+1` slot, `fieldExtender`/`powerCell` `+1` slot each (**+20%** area/strength, see `06` §0), `freeShot` = **one bag item with 3 charges** (`+1 item (3 shots)`).
+- **Bag full:** claiming sets `pendingRewardType` and keeps the menu open with title `Bag full — destroy one to take X`. The modal shows an in-overlay bag row (`#reward-bag-row`, 5 `Destroy [N]` buttons) plus hint and `Skip (take nothing) [Esc]`. Clicking a bag slot calls `discardBagSlotAndClaimReward(i)` (destroys that item — passives destroyable here — then grants). Hotkeys `1-5` discard, `Esc`/`S`/Skip closes without reward. The hotbar underneath stays clickable as a secondary path.
+- **Owned-only fix (bug):** offers are built from the owned pool FIRST (`ownedPoolForCourse()`), then seeded-shuffled and sliced to ≤3, with `fieldExtender`+`powerCell` never together (`enforceNoFieldPowerTogether`). This fixes the 9-hole bug where 2 cards were offered while owning 3 (old `COMBINED`-slot resolution excluded the owned passive from candidates entirely).
+- Reward hints updated: spatial `+1 to bag`, `freeShot` `+1 item (3 shots)`, `fieldExtender` `+20% area`, `powerCell` `+20% strength`.
+
 ## 1. Hole & Win Definition
 
 - Hole `hole={x,y,radius:14}` (12-16 tunable). Position per `07-level-generation.md`.

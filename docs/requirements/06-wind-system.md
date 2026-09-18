@@ -5,6 +5,16 @@
 - **Type:** Functional / UI
 - **References:** `02-canvas-system.md` (logical size, loop), `05-input-and-states.md` (states), `07-level-generation.md` (field budgets per tier), `03-rendering.md` (layer order)
 
+## 0. Tactical Rework Amendment (2026-09-18, normative — supersedes conflicting §3–§8 details)
+
+- **Golfbag = 5 slots, one item per slot, no stacking.** `golfbag[5]`, each `null | {type, charges?}`. All 7 types share the slots: `magnifier/liquifier/deflector/rotator/fieldExtender/powerCell/freeShot`.
+- **All 5 slots have hotkeys `1-5`.** Hotkey selects the bag slot (`selectedBagIndex`); spatial slots arm placement, passive slots (`fieldExtender/powerCell/freeShot`) select but never place (placement blocked via `canPlace`).
+- **Placement removes the item from the bag** (slot empties). Pickup (`right-click`/`Delete`/`Backspace`/drag-return) only succeeds if an empty slot exists; otherwise toast `Bag full — no space to pick up` + `not-allowed` cursor, modifier stays on board.
+- **Free Shot is a bag item with a count:** one slot holds `{type:'freeShot', charges}` (default 3 per item from loadout/reward). HUD `(+Y)` = sum of charges. Each free launch consumes one charge; when charges reach 0 the item is auto-removed (slot empties). Discarding the item loses remaining charges.
+- **Passives:** `fieldExtender`/`powerCell` live in bag slots, never placeable, but destroyable via reward-menu discard. Multipliers increased to **+20%** to compensate: `areaMultiplier = 1 + 0.20*fieldExtenderCount`, `powerMultiplier = 1 + 0.20*powerCellCount` (both in `src/main.js` and `src/vectorField.js`).
+- **Hotbar UI:** `#hotbar-grid` is `repeat(5,1fr)` rebuilt from `golfbag`; occupied slots show icon + hotkey `1-5` (+ `xN` charges only for Free Shot), empty slots are gray with dimmed hotkey. During reward discard mode (`pendingRewardType`) occupied slots get `.discard-target` highlight.
+- Legacy per-type `supply` counts and `fieldExtenderCount`/`powerCellCount` are derived from the bag via `syncDerivedFromBag()` and kept for physics/compat only.
+
 ## 1. Field Model `src/vectorField.js`
 
 ### 1.1 Grid & Sampling

@@ -35,12 +35,11 @@
       </div>
       <div id="hotbar">
         <div id="hotbar-grid">
-          <div class="hotbar-slot" data-type="liquifier"><img class="hotbar-icon-img" src="./img/liquifier-icon.png" alt="liquifier"><span class="hotbar-count">x1</span><span class="hotbar-hotkey">1</span><span class="hotbar-tooltip">Liquifier</span></div>
-          <div class="hotbar-slot" data-type="deflector"><img class="hotbar-icon-img" src="./img/deflector-icon.png" alt="deflector"><span class="hotbar-count">x1</span><span class="hotbar-hotkey">2</span><span class="hotbar-tooltip">Deflector</span></div>
-          <div class="hotbar-slot" data-type="rotator"><img class="hotbar-icon-img" src="./img/rotator-icon.png" alt="rotator"><span class="hotbar-count">x1</span><span class="hotbar-hotkey">3</span><span class="hotbar-tooltip">Rotator</span></div>
-          <div class="hotbar-slot" data-type="magnifier"><img class="hotbar-icon-img" src="./img/magnifier-icon.png" alt="magnifier"><span class="hotbar-count">x1</span><span class="hotbar-hotkey">4</span><span class="hotbar-tooltip">Magnifier</span></div>
-          <div class="hotbar-slot passive" data-type="fieldExtender"><img class="hotbar-icon-img" src="./img/field-extender-icon.png" alt="field extender"><span class="hotbar-count">x0</span><span class="hotbar-tooltip">Field Extender</span></div>
-          <div class="hotbar-slot passive" data-type="powerCell"><img class="hotbar-icon-img" src="./img/power-cell-icon.png" alt="power cell"><span class="hotbar-count">x0</span><span class="hotbar-tooltip">Power Cell</span></div>
+          <div class="hotbar-slot empty" data-slot-index="0" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">1</span></div>
+          <div class="hotbar-slot empty" data-slot-index="1" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">2</span></div>
+          <div class="hotbar-slot empty" data-slot-index="2" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">3</span></div>
+          <div class="hotbar-slot empty" data-slot-index="3" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">4</span></div>
+          <div class="hotbar-slot empty" data-slot-index="4" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">5</span></div>
         </div>
       </div>
     </div>
@@ -172,6 +171,10 @@
         <div class="loadout-section">
           <div id="loadout-slots" class="loadout-slots"></div>
         </div>
+        <div class="loadout-storage-section">
+          <h3>Storage</h3>
+          <div id="personal-storage-grid" class="personal-storage-grid"></div>
+        </div>
         <div class="loadout-shop-section">
           <div class="shop-header" style="display:flex; align-items:center; gap:8px; justify-content:center;">
             <h3>Shop</h3>
@@ -219,7 +222,7 @@
           <li>Space — Hold to charge power, release to shoot</li>
           <li>Click — Place selected modifier</li>
           <li>Right-click — Remove modifier</li>
-          <li>1 / 2 / 3 / 4 — Select Liquifier / Deflector / Rotator / Magnifier</li>
+          <li>1 / 2 / 3 / 4 / 5 — Select bag slot (spatial places, passives stay in bag)</li>
           <li>Attempts Left (+Y) — free shots shown after attempts left, auto-used on last attempt</li>
           <li>H — Toggle wind visualization</li>
           <li>R — Reset ball</li>
@@ -259,21 +262,21 @@
             <img class="help-item-icon" src="./img/field-extender-icon.png" alt="Field Extender">
             <div class="help-item-info">
               <span class="help-item-name">Field Extender</span>
-              <span class="help-item-desc">Passive: +15% radius for all spatial modifiers, retroactively grows existing bubbles (area).</span>
+              <span class="help-item-desc">Passive: +20% radius for all spatial modifiers, retroactively grows existing bubbles (area).</span>
             </div>
           </div>
           <div class="help-item" data-type="powerCell">
             <img class="help-item-icon" src="./img/power-cell-icon.png" alt="Power Cell">
             <div class="help-item-info">
               <span class="help-item-name">Power Cell</span>
-              <span class="help-item-desc">Passive: +15% strength for Magnifier, Deflector and Rotator (base 5 → 5.75), retroactive power boost.</span>
+              <span class="help-item-desc">Passive: +20% strength for Magnifier, Deflector and Rotator (base 5 → 6.0), retroactive power boost. Lives in a bag slot.</span>
             </div>
           </div>
           <div class="help-item" data-type="freeShot">
             <div class="help-item-icon help-item-icon--freeShot" aria-hidden="true">★</div>
             <div class="help-item-info">
               <span class="help-item-name">Free Shot</span>
-              <span class="help-item-desc">Passive: grants a free attempt not counted, shown as Attempts Left: X (+Y), auto-armed on last attempt with golden glow, no placement.</span>
+              <span class="help-item-desc">Bag item (one slot, 3 charges): free attempts not counted, shown as Attempts Left: X (+Y), auto-armed on last attempt with golden glow, no placement. Discarding loses remaining shots.</span>
             </div>
           </div>
         </div>

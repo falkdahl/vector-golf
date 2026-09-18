@@ -5,6 +5,13 @@
 - **Type:** Functional + Persistence + UI
 - **References:** `02-canvas-system.md` (overlay bounds), `06-wind-system.md` (modifiers/supply), `07-level-generation.md` (holes), `08-rewards-and-progression.md` (rewards), `09-persistence-and-campaign.md` (campaign/courses)
 
+## 0. Tactical Rework Amendment (2026-09-18, normative)
+
+- **`MAX_LOADOUT_SLOTS = 5`, `GOLFBAG_SLOTS = 5`.** Loadout overlay has 5 slots, **all unlocked from the beginning** (`getUnlockedLoadoutSlots() === 5`, no locked state, no `Clear N holes to unlock` text). `LOADOUT_KEY` slots length 5 (legacy 4-slot saves padded with `null`). Shop purchase cap per type is 5 (`owned >= 5` hidden, `All items maxed (5)`).
+- **Loadout panels:** title `Choose your starting items` + **Loadout slots (5)** + **Storage panel** (`#personal-storage-grid`, `.storage-item[data-type]` showing icon + `xOwned (in loadout U, left R)`) + **Shop** + `OK`. Storage is a separate visible panel (not only the picker overlay). Picker overlay remains for slot assignment (remaining = owned − in-loadout).
+- **Run supply derivation:** `startCourseWithLoadout` copies loadout slots 1:1 into `golfbag` via `setBagFromTypeList` (freeShot slots get 3 charges each). `STORAGE_KEY` persists `golfbag` + `selectedBagIndex`; legacy saves without `golfbag` expand legacy counts (truncated to 5).
+- **Shop stock milestones unchanged**, but bought items auto-fill first empty loadout slot (5 slots).
+
 ## 1. Currency & Persistent Storage
 
 ### 1.1 Storage Keys

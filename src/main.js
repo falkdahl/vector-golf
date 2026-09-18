@@ -405,13 +405,19 @@ function resetHotbarCollapsed() {
   syncHotbarCollapsedUI();
 }
 
-// Supply per REQ-020: per-type inventory, persistent personalSupply vs run supply (see 10-progression.md)
-// Run supply starts empty and is filled via loadout selection (4 slots) — default kept for backward compat tests that check resetSupply
+// Supply per tactical rework: 5-slot golfbag is source of truth (one item per slot, no stacking).
+// Run supply starts empty and is filled via loadout selection (5 slots) — default kept for backward compat tests that check resetSupply
 let supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+const GOLFBAG_SIZE = 5;
+const FREE_SHOT_CHARGES_PER_ITEM = 3;
+// Each entry: null | {type:string, charges?:number} (freeShot carries charges, others single-use)
+let golfbag = [{ type: 'liquifier' }, null, null, null, null];
+let selectedBagIndex = -1; // slot-based selection (hotkeys 1-5)
+let pendingRewardType = null; // reward chosen while bag full, awaiting discard/skip
 // Persistent progression (personal items never deplete) + loadout (10-progression.md)
 let loadoutVisible = false;
 let loadoutCourseId = null;
-let loadoutSlots = [null, null, null, null]; // 4 slots, each null or type string
+let loadoutSlots = [null, null, null, null, null]; // 5 slots, each null or type string, all unlocked
 // Timestamp (ms) when the loadout overlay last finished opening (stamped at the END
 // of showLoadout, when the overlay is actually interactive). Backdrop/Escape dismissal
 // ignores input within LOADOUT_OPEN_GRACE_MS so click/key overshoot from
@@ -458,11 +464,110 @@ function normalizeSupplyType(type) {
   return type;
 }
 function denormalizeSupplyType(type) { return type; } // kept for alias checks
+// --- Tactical 5-slot golfbag (source of truth) ---
+function bagEntryType(entry) { return entry && entry.type ? normalizeSupplyType(entry.type) : null; }
+function getGolfbag() { return golfbag.map(e => (e ? { ...e } : null)); }
+function golfbagUsedCount() { let n = 0; for (const e of golfbag) if (e) n++; return n; }
+function golfbagHasEmpty() { return golfbag.some(e => !e); }
+function golfbagFirstEmpty() { for (let i = 0; i < GOLFBAG_SIZE; i++) if (!golfbag[i]) return i; return -1; }
+function golfbagTotalFreeShots() { let n = 0; for (const e of golfbag) if (e && bagEntryType(e) === 'freeShot') n += Math.max(0, Math.floor(e.charges ?? 0)); return n; }
+function golfbagCountOf(type) { const t = normalizeSupplyType(type); let n = 0; for (const e of golfbag) if (e && bagEntryType(e) === t && t !== 'freeShot') n++; return n; }
+function syncDerivedFromBag() {
+  const counts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0 };
+  let fe = 0, pc = 0, fs = 0;
+  for (const e of golfbag) {
+    if (!e) continue;
+    const t = bagEntryType(e);
+    if (t === 'magnifier' || t === 'liquifier' || t === 'deflector' || t === 'rotator') counts[t]++;
+    else if (t === 'fieldExtender') fe++;
+    else if (t === 'powerCell') pc++;
+    else if (t === 'freeShot') fs += Math.max(0, Math.floor(e.charges ?? 0));
+  }
+  supply = { magnifier: counts.magnifier, liquifier: counts.liquifier, deflector: counts.deflector, rotator: counts.rotator, freeShot: fs };
+  fieldExtenderCount = fe; areaUpgradeCount = fe;
+  powerCellCount = pc;
+  try { setFieldPowerCellCount(pc); } catch {}
+  // Keep slot selection consistent
+  if (selectedBagIndex < 0 || selectedBagIndex >= GOLFBAG_SIZE || !golfbag[selectedBagIndex]) {
+    if (selectedModifier && !(supply[normalizeSupplyType(selectedModifier)] > 0)) { selectedModifier = null; selectedBagIndex = -1; }
+  } else {
+    selectedModifier = bagEntryType(golfbag[selectedBagIndex]);
+  }
+}
+function setBagFromTypeList(types) {
+  golfbag = [null, null, null, null, null];
+  const list = Array.isArray(types) ? types : [];
+  let idx = 0;
+  for (const raw of list) {
+    if (idx >= GOLFBAG_SIZE) break;
+    if (!raw) continue;
+    const t = normalizeSupplyType(typeof raw === 'string' ? raw : raw.type);
+    if (!t) continue;
+    if (t === 'freeShot') {
+      const ch = (typeof raw === 'object' && raw.charges != null) ? Math.max(1, Math.floor(raw.charges)) : FREE_SHOT_CHARGES_PER_ITEM;
+      golfbag[idx++] = { type: 'freeShot', charges: ch };
+    } else if (['magnifier', 'liquifier', 'deflector', 'rotator', 'fieldExtender', 'powerCell'].includes(t)) {
+      golfbag[idx++] = { type: t };
+    }
+  }
+  selectedBagIndex = -1; selectedModifier = null; pendingRewardType = null;
+  syncDerivedFromBag();
+}
+function addItemToBag(type, charges) {
+  const t = normalizeSupplyType(type);
+  if (!t) return false;
+  const empty = golfbagFirstEmpty();
+  if (empty === -1) return false;
+  if (t === 'freeShot') {
+    const ch = charges != null ? Math.max(1, Math.floor(charges)) : FREE_SHOT_CHARGES_PER_ITEM;
+    golfbag[empty] = { type: 'freeShot', charges: ch };
+  } else if (['magnifier', 'liquifier', 'deflector', 'rotator', 'fieldExtender', 'powerCell'].includes(t)) {
+    golfbag[empty] = { type: t };
+  } else return false;
+  syncDerivedFromBag();
+  return true;
+}
+function removeBagSlot(idx) {
+  if (idx < 0 || idx >= GOLFBAG_SIZE || !golfbag[idx]) return false;
+  golfbag[idx] = null;
+  if (selectedBagIndex === idx) { selectedBagIndex = -1; selectedModifier = null; }
+  // If the removed item was the armed freeShot and no shots remain, disarm
+  if (golfbagTotalFreeShots() <= 0 && isFreeShotActive) { isFreeShotActive = false; syncFreeShotGlow(); }
+  syncDerivedFromBag();
+  return true;
+}
+function consumeFreeShotCharge() {
+  for (let i = 0; i < GOLFBAG_SIZE; i++) {
+    const e = golfbag[i];
+    if (e && bagEntryType(e) === 'freeShot' && (e.charges ?? 0) > 0) {
+      e.charges = Math.max(0, Math.floor(e.charges) - 1);
+      if (e.charges <= 0) {
+        golfbag[i] = null;
+        if (selectedBagIndex === i) { selectedBagIndex = -1; selectedModifier = null; }
+      }
+      syncDerivedFromBag();
+      if (golfbagTotalFreeShots() <= 0 && isFreeShotActive) { /* caller decides armed state */ }
+      return true;
+    }
+  }
+  syncDerivedFromBag();
+  return false;
+}
+function selectBagSlot(idx) {
+  if (idx < 0 || idx >= GOLFBAG_SIZE) return false;
+  const e = golfbag[idx];
+  if (!e) { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); return true; }
+  const t = bagEntryType(e);
+  if (selectedBagIndex === idx) { selectedBagIndex = -1; selectedModifier = null; }
+  else { selectedBagIndex = idx; selectedModifier = t; }
+  updateHotbarUI();
+  return true;
+}
 let isFreeShotActive = false;
 let freeShotFlightActive = false;
 function isFreeShotActiveState() { return isFreeShotActive; }
 function isFreeShotFlightActiveState() { return freeShotFlightActive; }
-function canActivateFreeShot() { return (supply.freeShot ?? 0) > 0; }
+function canActivateFreeShot() { return golfbagTotalFreeShots() > 0; }
 function syncFreeShotGlow() {
   const edgeActive = isFreeShotActive || freeShotFlightActive;
   const ballActive = isFreeShotActive;
@@ -487,8 +592,8 @@ function setFreeShotActive(v) {
   }
   if (!canActivateFreeShot()) return false;
   isFreeShotActive = true;
-  // spatial selection mutually exclusive with freeShot
-  selectedModifier = null;
+  // slot selection cleared when arming free shot (spatial mutually exclusive)
+  selectedModifier = null; selectedBagIndex = -1;
   syncFreeShotGlow();
   updateHotbarUI();
   saveProgress();
@@ -507,7 +612,7 @@ function toggleFreeShot() {
     return false;
   }
   isFreeShotActive = true;
-  selectedModifier = null;
+  selectedModifier = null; selectedBagIndex = -1;
   syncFreeShotGlow();
   updateHotbarUI();
   saveProgress();
@@ -527,8 +632,10 @@ function clearFreeShotFlightGlow() {
 
 function canPlace(type) {
   const t = normalizeSupplyType(type);
-  if (!t || !(t in supply)) return false;
-  if (t === 'freeShot') return false;
+  if (!t) return false;
+  // Passives can never be placed (destroy-only in reward menu)
+  if (t === 'freeShot' || t === 'fieldExtender' || t === 'powerCell' || t === 'areaUp') return false;
+  if (!(t in supply)) return false;
   return (supply[t] ?? 0) > 0;
 }
 
@@ -538,14 +645,31 @@ function getSupply() {
 }
 
 function addToSupply(type, n = 1) {
+  // Tactical model: adding goes to the golfbag (one slot per item). n>1 fills multiple slots.
   const t = normalizeSupplyType(type);
+  if (!t) return;
+  const count = Math.max(1, Math.floor(n || 1));
+  if (t === 'freeShot') {
+    // Free Shot is special: one bag slot holds a counted item (default 3 charges).
+    // addToSupply('freeShot', 3) legacy means one item with 3 charges.
+    const charges = count === 1 ? FREE_SHOT_CHARGES_PER_ITEM : count;
+    addItemToBag('freeShot', charges);
+    updateHotbarUI();
+    return;
+  }
+  if (t === 'fieldExtender' || t === 'areaUp' || t === 'powerCell') {
+    for (let i = 0; i < count; i++) { if (!addItemToBag(t === 'areaUp' ? 'fieldExtender' : t)) break; }
+    updateHotbarUI();
+    return;
+  }
   if (!(t in supply)) return;
-  supply[t] = Math.max(0, supply[t] + n);
+  for (let i = 0; i < count; i++) { if (!addItemToBag(t)) break; }
   updateHotbarUI();
 }
 
 function resetSupply() {
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+  // Default bag: just a Liquifier (fresh-install parity)
+  setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
   updateHotbarUI();
 }
@@ -578,16 +702,8 @@ function getRunCoinsEarned() { return runCoinsEarned; }
 function getRunHolesCleared() { return runHolesCleared; }
 function isCoinSummaryVisible() { return coinSummaryVisible; }
 function getUnlockedLoadoutSlots() {
-  let unlocked = 1;
-  try {
-    const c3 = courses.find(c=>c.holeCount===3);
-    const c6 = courses.find(c=>c.holeCount===6);
-    const c9 = courses.find(c=>c.holeCount===9);
-    if (c3 && c3.bestTotal !== null && c3.bestTotal !== undefined) unlocked++;
-    if (c6 && c6.bestTotal !== null && c6.bestTotal !== undefined) unlocked++;
-    if (c9 && c9.bestTotal !== null && c9.bestTotal !== undefined) unlocked++;
-  } catch {}
-  return Math.min(4, Math.max(1, unlocked));
+  // Tactical rework: all 5 loadout slots unlocked from the beginning.
+  return GOLFBAG_SIZE;
 }
 
 let loadoutPickerVisible = false;
@@ -643,7 +759,7 @@ function syncLoadoutPickerOverlay() {
         const old = loadoutSlots[loadoutPickerSlotIndex];
         // count of this type in loadout excluding current slot's old value
         let count = 0;
-        for (let i=0;i<4;i++) if (i!==loadoutPickerSlotIndex && loadoutSlots[i]===t) count++;
+        for (let i=0;i<GOLFBAG_SIZE;i++) if (i!==loadoutPickerSlotIndex && loadoutSlots[i]===t) count++;
         if (count >= owned) { try{showToast('Not enough owned');}catch{} return; }
         loadoutSlots[loadoutPickerSlotIndex]=t;
         hideLoadoutPicker();
@@ -674,7 +790,7 @@ function syncLoadoutPickerOverlay() {
 }
 function showLoadoutPicker(slotIdx) {
   const unlocked = getUnlockedLoadoutSlots();
-  if (slotIdx<0||slotIdx>=4) return false;
+  if (slotIdx<0||slotIdx>=GOLFBAG_SIZE) return false;
   if (slotIdx >= unlocked) return false;
   loadoutPickerSlotIndex = slotIdx;
   loadoutPickerVisible = true;
@@ -738,22 +854,13 @@ function syncLoadoutOverlay() {
       slotsEl.innerHTML = '';
       const names2 = {liquifier:'Liquifier',deflector:'Deflector',rotator:'Rotator',magnifier:'Magnifier',fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shot'};
       const icons2 = {liquifier:'./img/liquifier-icon.png',deflector:'./img/deflector-icon.png',rotator:'./img/rotator-icon.png',magnifier:'./img/magnifier-icon.png',fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
-      for (let i=0;i<4;i++) {
-        const locked = i >= unlocked;
+      for (let i=0;i<GOLFBAG_SIZE;i++) {
+        // Tactical rework: all 5 slots unlocked from the beginning (no locked state)
         const t = loadoutSlots[i];
         const div = document.createElement('div');
         div.dataset.slot = String(i);
         div.dataset.type = t || '';
-        if (locked) {
-          div.className = 'loadout-slot locked empty';
-          const need = [3,6,9][i-1]||'?';
-          div.title = 'Locked — clear ' + need + ' holes to unlock';
-          // visible explanation inside locked slot
-          const unlockEl = document.createElement('div');
-          unlockEl.className = 'ls-unlock';
-          unlockEl.textContent = 'Clear ' + need + ' holes to unlock';
-          div.appendChild(unlockEl);
-        } else if (t) {
+        if (t) {
           div.className = 'loadout-slot filled';
           div.dataset.type = t;
           const ic = icons2[t];
@@ -835,10 +942,43 @@ function syncLoadoutOverlay() {
           const ss = getShopStock();
           for (const t of types) { if ((ss[t] ?? 0) > 0) { anyStock = true; break; } }
         } catch {}
-        empty.textContent = anyStock ? 'All items maxed (4)' : 'Shop is empty — clear courses to unlock stock';
+        empty.textContent = anyStock ? 'All items maxed (5)' : 'Shop is empty — clear courses to unlock stock';
         shop.appendChild(empty);
       }
     }
+    // Personal storage panel — separate visible panel showing owned counts (persistent storage)
+    try {
+      const storeGrid = document.getElementById('personal-storage-grid');
+      if (storeGrid) {
+        storeGrid.innerHTML = '';
+        const types = ['liquifier', 'deflector', 'rotator', 'magnifier', 'fieldExtender', 'powerCell', 'freeShot'];
+        const names = { liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', magnifier: 'Magnifier', fieldExtender: 'Field Extender', powerCell: 'Power Cell', freeShot: 'Free Shot' };
+        const icons = { liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', magnifier: './img/magnifier-icon.png', fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
+        const inLoadout = {};
+        for (const v of loadoutSlots) if (v) inLoadout[v] = (inLoadout[v] || 0) + 1;
+        for (const t of types) {
+          const owned = personal[t] ?? 0;
+          const used = inLoadout[t] || 0;
+          const remaining = owned - used;
+          const div = document.createElement('div');
+          div.className = 'storage-item';
+          div.dataset.type = t;
+          if (icons[t]) {
+            const im = document.createElement('img');
+            im.src = icons[t]; im.alt = t;
+            div.appendChild(im);
+          } else {
+            const fb = document.createElement('div');
+            fb.textContent = '★'; fb.style.font = '700 18px system-ui'; fb.style.color = '#FFD700';
+            div.appendChild(fb);
+          }
+          const nm = document.createElement('div'); nm.className = 'st-name'; nm.textContent = names[t]; div.appendChild(nm);
+          const ct = document.createElement('div'); ct.className = 'st-count'; ct.textContent = 'x' + owned + ' (in loadout ' + used + ', left ' + Math.max(0, remaining) + ')'; div.appendChild(ct);
+          if (owned <= 0) div.classList.add('none');
+          storeGrid.appendChild(div);
+        }
+      }
+    } catch {}
     const startBtn = document.getElementById('loadout-start-button');
     if (startBtn) startBtn.disabled = false;
     // sync picker if visible
@@ -860,9 +1000,7 @@ function addToLoadout(type) {
   syncLoadoutOverlay();
 }
 function removeFromLoadout(idx) {
-  const unlocked = getUnlockedLoadoutSlots();
-  if (idx<0||idx>=4) return;
-  if (idx >= unlocked) return;
+  if (idx<0||idx>=GOLFBAG_SIZE) return;
   // Slots are positional and never reorder: clearing leaves null in place.
   loadoutSlots[idx]=null;
   syncLoadoutOverlay();
@@ -884,15 +1022,14 @@ function showLoadout(courseId, opts) {
   let hasSaved = false;
   try {
     const saved = getLastLoadout();
-    if (Array.isArray(saved) && saved.length === 4) {
+    if (Array.isArray(saved) && (saved.length === 5 || saved.length === 4)) {
       hasSaved = true;
-      const unlocked = getUnlockedLoadoutSlots();
+      const src = saved.length === 4 ? [...saved, null] : saved;
       const personal = getPersonalSupply();
       const used = {};
-      const validated = [null,null,null,null];
-      for (let i=0;i<4;i++) {
-        if (i >= unlocked) { validated[i]=null; continue; }
-        const t = saved[i];
+      const validated = [null,null,null,null,null];
+      for (let i=0;i<GOLFBAG_SIZE;i++) {
+        const t = src[i];
         if (!t) { validated[i]=null; continue; }
         const norm = normalizeSupplyType(t);
         // check valid type and owned availability
@@ -909,14 +1046,13 @@ function showLoadout(courseId, opts) {
   if (hasSaved && preloaded) {
     loadoutSlots = preloaded;
   } else if (!hasSaved) {
-    // No saved loadout — pick random item from player's storage for each unlocked slot
+    // No saved loadout — pick random item from player's storage for each of the 5 slots
     try {
-      const unlocked = getUnlockedLoadoutSlots();
       const personal = getPersonalSupply();
       const available = { ...personal };
-      const rnd = [null,null,null,null];
+      const rnd = [null,null,null,null,null];
       const types = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
-      for (let i=0;i<unlocked;i++) {
+      for (let i=0;i<GOLFBAG_SIZE;i++) {
         const candidates = types.filter(tp => (available[tp] ?? 0) > 0);
         if (!candidates.length) { rnd[i]=null; continue; }
         const idx = Math.floor(Math.random() * candidates.length);
@@ -924,10 +1060,9 @@ function showLoadout(courseId, opts) {
         rnd[i]=chosen;
         available[chosen]--;
       }
-      // locked slots remain null
       loadoutSlots = rnd;
     } catch {
-      loadoutSlots = [null,null,null,null];
+      loadoutSlots = [null,null,null,null,null];
     }
   }
   loadoutVisible = true;
@@ -989,36 +1124,24 @@ function hideLoadout() {
 function startCourseWithLoadout(courseId, slots) {
   const course = findCourseById(courseId || loadoutCourseId);
   if (!course) return false;
-  // Persist last loadout before deriving supply — slots param or current loadoutSlots (full 4)
+  // Persist last loadout before deriving supply — slots param or current loadoutSlots (full 5)
   try {
     const toSave = Array.isArray(slots) ? (() => {
-      if (slots.length===4 && slots.every(v=>v===null || typeof v==='string')) return slots.slice(0,4);
-      const padded = [null,null,null,null];
-      const unlocked = getUnlockedLoadoutSlots();
+      if (slots.length===5 && slots.every(v=>v===null || typeof v==='string')) return slots.slice(0,5);
+      if (slots.length===4 && slots.every(v=>v===null || typeof v==='string')) return [...slots, null];
+      const padded = [null,null,null,null,null];
       let idx=0;
-      for (let i=0;i<4;i++) {
-        if (i>=unlocked) { padded[i]=null; continue; }
+      for (let i=0;i<GOLFBAG_SIZE;i++) {
         if (idx < slots.length) padded[i]=slots[idx++] || null;
         else padded[i]=null;
       }
       return padded;
-    })() : loadoutSlots.slice(0,4);
+    })() : loadoutSlots.slice(0,5);
     if (Array.isArray(toSave)) setLastLoadout(toSave);
   } catch {}
   const chosen = Array.isArray(slots) ? slots.filter(Boolean) : loadoutSlots.filter(Boolean);
-  // Derive run supply from chosen slots
-  const newSupply = { magnifier:0, liquifier:0, deflector:0, rotator:0, freeShot:0 };
-  let fe = 0, pc = 0;
-  for (const t of chosen) {
-    const nt = normalizeSupplyType(t);
-    if (nt==='magnifier') newSupply.magnifier++;
-    else if (nt==='liquifier') newSupply.liquifier++;
-    else if (nt==='deflector') newSupply.deflector++;
-    else if (nt==='rotator') newSupply.rotator++;
-    else if (nt==='fieldExtender' || nt==='areaUp') fe++;
-    else if (nt==='powerCell') pc++;
-    else if (nt==='freeShot') newSupply.freeShot++;
-  }
+  // Derive golfbag from chosen loadout slots (one bag slot per loadout slot; freeShot gets 3 charges)
+  setBagFromTypeList(chosen);
   setActiveCourse(course);
   clearProgress();
   // Tutorial run = loadout shown directly after the intro-3-hole chain for the 3-hole
@@ -1027,11 +1150,10 @@ function startCourseWithLoadout(courseId, slots) {
     isTutorialRun = !!(loadoutHideShopDueToIntro && course && course.holeCount === 3);
   } catch { isTutorialRun = !!loadoutHideShopDueToIntro; }
   currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-  supply = newSupply;
+  // golfbag already set via setBagFromTypeList (supply/FE/PC derived); just clear glow
   clearFreeShotGlow();
   maxAttempts=10;
-  areaUpgradeCount=fe; fieldExtenderCount=fe; powerCellCount=pc;
-  try{ setFieldPowerCellCount(pc);}catch{};
+  pendingRewardType=null;
   rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false; rewardMenuHover=null; rewardRerollHover=false; rewardClaimedFor=null;
   rewardSeedCounter=0;
   holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
@@ -1039,12 +1161,12 @@ function startCourseWithLoadout(courseId, slots) {
   freeShotBannerVisible=false; freeShotBannerTimer=0; freeShotBannerText='Free Shot!'; lastFreeShotBannerValue=null;
   pauseMenuVisible=false; pauseMenuHover=null; mainMenuVisible=false; mainMenuHover=null; courseMenuVisible=false; helpVisible=false; isInLevelPause=false;
   rewardChosenCounts={ magnifier:0, liquifier:0, deflector:0, rotator:0, freeShot:0, areaUp:0, fieldExtender:0, powerCell:0 };
-  modifiers=[]; syncModifiersToField(); selectedModifier=null;
+  modifiers=[]; syncModifiersToField(); selectedModifier=null; selectedBagIndex=-1; selectedBagIndex=-1;
   runHolesCleared=0; runCoinsEarned=0;
-  try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 1; }
+  try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 5; }
   runShopRestocked = false;
   deferredMenuReturn = false;
-  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
+  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null,null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
   loadLevel(0); gameState='AIMING';
@@ -1378,21 +1500,22 @@ let powerCellCount = 0; // new — +10% wind strength per stack for magnifier/de
 function getAreaUpgradeCount() { return fieldExtenderCount; }
 function getFieldExtenderCount() { return fieldExtenderCount; }
 function getPowerCellCount() { return powerCellCount; }
-function getAreaMultiplier() { return 1 + 0.15 * fieldExtenderCount; } // 1 + 0.15*n
+function getAreaMultiplier() { return 1 + 0.20 * fieldExtenderCount; } // 1 + 0.20*n
 function getEffectiveModifierRadius() { return BASE_MODIFIER_RADIUS * getAreaMultiplier(); }
-function getPowerMultiplier() { return 1 + 0.15 * powerCellCount; } // 1 + 0.15*n
+function getPowerMultiplier() { return 1 + 0.20 * powerCellCount; } // 1 + 0.20*n
 function getEffectiveModifierStrength() { return BASE_MODIFIER_STRENGTH * getPowerMultiplier(); }
 function addAreaUpgrade(n = 1) { return addFieldExtender(n); }
 function addFieldExtender(n = 1) {
-  fieldExtenderCount = Math.max(0, fieldExtenderCount + Math.floor(n));
-  areaUpgradeCount = fieldExtenderCount;
+  const count = Math.max(1, Math.floor(n || 1));
+  for (let i = 0; i < count; i++) { if (!addItemToBag('fieldExtender')) break; }
   const newR = getEffectiveModifierRadius();
   for (const m of modifiers) m.radius = newR;
   syncModifiersToField();
   updateHotbarUI();
 }
 function addPowerCell(n = 1) {
-  powerCellCount = Math.max(0, powerCellCount + Math.floor(n));
+  const count = Math.max(1, Math.floor(n || 1));
+  for (let i = 0; i < count; i++) { if (!addItemToBag('powerCell')) break; }
   syncModifiersToField();
   updateHotbarUI();
 }
@@ -1410,6 +1533,8 @@ function getSavePayload() {
     totalAttempts,
     maxAttempts,
     supply: { ...supply },
+    golfbag: golfbag.map(e => (e ? { ...e } : null)),
+    selectedBagIndex,
     isFreeShotActive,
     isTutorialRun,
     treasure: level && level.treasure ? { x: level.treasure.x, y: level.treasure.y, radius: level.treasure.radius, isCollected: !!level.treasure.isCollected } : null,
@@ -1472,22 +1597,62 @@ function loadProgress() {
     // migrated: if missing freeShot/rotate, default 0/1
     if (d.supply && d.supply.freeShot === undefined) supply.freeShot = 0;
     if (d.supply && d.supply.rotator === undefined) supply.rotator = 1;
+    // Tactical golfbag restore (new) with legacy fallback from supply counts
+    try {
+      if (Array.isArray(d.golfbag) && d.golfbag.length) {
+        const gb = [null, null, null, null, null];
+        for (let i = 0; i < GOLFBAG_SIZE; i++) {
+          const raw = d.golfbag[i];
+          if (!raw) { gb[i] = null; continue; }
+          const t = normalizeSupplyType(typeof raw === 'string' ? raw : raw.type);
+          if (!t) { gb[i] = null; continue; }
+          if (t === 'freeShot') gb[i] = { type: 'freeShot', charges: Math.max(1, Math.floor(raw.charges ?? d.supply?.freeShot ?? FREE_SHOT_CHARGES_PER_ITEM)) };
+          else if (['magnifier', 'liquifier', 'deflector', 'rotator', 'fieldExtender', 'powerCell'].includes(t)) gb[i] = { type: t };
+          else gb[i] = null;
+        }
+        golfbag = gb;
+        selectedBagIndex = Number.isInteger(d.selectedBagIndex) ? Math.max(-1, Math.min(GOLFBAG_SIZE - 1, d.selectedBagIndex)) : -1;
+        if (selectedBagIndex >= 0 && !golfbag[selectedBagIndex]) selectedBagIndex = -1;
+        selectedModifier = selectedBagIndex >= 0 ? bagEntryType(golfbag[selectedBagIndex]) : null;
+        syncDerivedFromBag();
+      } else {
+        // Legacy: expand supply + FE/PC counts into bag slots (truncate to 5)
+        const feLegacy = Math.max(0, Math.floor(d.fieldExtenderCount ?? d.areaUpgradeCount ?? 0));
+        const pcLegacy = Math.max(0, Math.floor(d.powerCellCount ?? 0));
+        const order = [];
+        for (let i = 0; i < (supply.liquifier ?? 0); i++) order.push('liquifier');
+        for (let i = 0; i < (supply.deflector ?? 0); i++) order.push('deflector');
+        for (let i = 0; i < (supply.rotator ?? 0); i++) order.push('rotator');
+        for (let i = 0; i < (supply.magnifier ?? 0); i++) order.push('magnifier');
+        for (let i = 0; i < feLegacy; i++) order.push('fieldExtender');
+        for (let i = 0; i < pcLegacy; i++) order.push('powerCell');
+        const fsTotal = Math.max(0, Math.floor(supply.freeShot ?? 0));
+        if (fsTotal > 0) order.push({ type: 'freeShot', charges: fsTotal });
+        setBagFromTypeList(order.slice(0, GOLFBAG_SIZE));
+        selectedBagIndex = -1; selectedModifier = null;
+      }
+    } catch { setBagFromTypeList(['liquifier']); }
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
     isTutorialRun = !!d.isTutorialRun;
     try { setWindFreeShotActive(isFreeShotActive); } catch {};
-    // Field Extender: support both legacy areaUpgradeCount and new fieldExtenderCount
-    if (d.fieldExtenderCount !== undefined) fieldExtenderCount = Math.max(0, Math.floor(d.fieldExtenderCount));
-    else if (d.areaUpgradeCount !== undefined) fieldExtenderCount = Math.max(0, Math.floor(d.areaUpgradeCount));
-    else fieldExtenderCount = 0;
-    areaUpgradeCount = fieldExtenderCount;
-    powerCellCount = Math.max(0, Math.floor(d.powerCellCount ?? 0));
-    try { setFieldPowerCellCount(powerCellCount); } catch {};
+    // Field Extender / Power Cell: golfbag is source of truth when present; only use legacy
+    // counts when no golfbag was stored (already handled above via setBagFromTypeList).
+    if (!Array.isArray(d.golfbag) || !d.golfbag.length) {
+      if (d.fieldExtenderCount !== undefined) fieldExtenderCount = Math.max(0, Math.floor(d.fieldExtenderCount));
+      else if (d.areaUpgradeCount !== undefined) fieldExtenderCount = Math.max(0, Math.floor(d.areaUpgradeCount));
+      else fieldExtenderCount = 0;
+      areaUpgradeCount = fieldExtenderCount;
+      powerCellCount = Math.max(0, Math.floor(d.powerCellCount ?? 0));
+      try { setFieldPowerCellCount(powerCellCount); } catch {};
+      syncDerivedFromBag();
+    }
     rewardPending = !!d.rewardPending;
     rewardOffered = Array.isArray(d.rewardOffered) && d.rewardOffered.length >= 1 && d.rewardOffered.length <= 3 ? [...d.rewardOffered] : [];
     // migrate legacy /maxAttempts offers to freeShot and legacy modifier names to new names
     rewardOffered = rewardOffered.map(t => t === '' ? 'freeShot' : t === 'maxAttempts' ? 'freeShot' : t === 'amplify' ? 'magnifier' : t === 'nullify' ? 'liquifier' : t === 'flip' ? 'deflector' : t === 'rotate' ? 'rotator' : t);
     rewardRerolled = !!d.rewardRerolled;
     rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length >= 1 && rewardOffered.length <= 3;
+    pendingRewardType = null;
     rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
     if (d.campaignSeed && typeof setCampaignSeed === 'function') {
       try { setCampaignSeed(String(d.campaignSeed)); } catch {};
@@ -1616,7 +1781,7 @@ function startNewGame() {
   // Generate fresh 18 levels with increasing difficulty per REQ-010
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+  setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
   hideSoftlockBanner();
   resetSoftlockDetection();
@@ -1625,7 +1790,7 @@ function startNewGame() {
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
   rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
-  modifiers = []; syncModifiersToField(); selectedModifier = null;
+  modifiers = []; syncModifiersToField(); selectedModifier = null; selectedBagIndex = -1;
   loadLevel(0);
   gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -2390,7 +2555,7 @@ function executePendingCampaignAction() {
       const res = regenerateCampaign();
       try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
       rewardSeedCounter = 0;
-      rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+      rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
       _lastCourseListSig = null;
       try { renderCourseList(); } catch {};
       syncCampaignSeedDisplay();
@@ -2405,7 +2570,7 @@ function executePendingCampaignAction() {
       const res = applyManualSeed(val);
       try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
       rewardSeedCounter = 0;
-      rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+      rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
       _lastCourseListSig = null;
       try { renderCourseList(); } catch {};
       syncCampaignSeedDisplay();
@@ -2452,7 +2617,7 @@ function handleCampaignRefreshViaConfirm() {
     const res = regenerateCampaign();
     try { courses = res.courses || loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
     rewardSeedCounter = 0;
-    rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+    rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
     _lastCourseListSig = null;
     try { renderCourseList(); } catch {};
     syncCampaignSeedDisplay();
@@ -2504,7 +2669,7 @@ function handleManualSeedApplyLegacy() {
     const res = applyManualSeed(val);
     try { courses = (res && res.courses) ? res.courses : loadCoursesFromStorage(); } catch { courses = loadCoursesFromStorage(); }
     rewardSeedCounter = 0;
-    rewardPending = false; rewardOffered = []; rewardMenuVisible = false; rewardRerolled = false;
+    rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
     _lastCourseListSig = null;
     try { renderCourseList(); } catch {};
     syncCampaignSeedDisplay();
@@ -2538,12 +2703,12 @@ function startNewGameFromMain() {
   isTutorialRun = false;
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 }; clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  setBagFromTypeList(['liquifier']); clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
-  modifiers = []; syncModifiersToField(); selectedModifier = null;
+  modifiers = []; syncModifiersToField(); selectedModifier = null; selectedBagIndex = -1;
   loadLevel(0); gameState = "AIMING";
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   syncPauseOverlay(); syncMainMenu();
@@ -2580,7 +2745,7 @@ function finishReturnToMainMenu() {
   isTutorialRun = false;
   deferredMenuReturn = false;
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+  setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
   hideSoftlockBanner(); resetSoftlockDetection();
   maxAttempts = 10;
@@ -2593,7 +2758,7 @@ function finishReturnToMainMenu() {
   attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ""; lastAttemptsBannerValue = null;
   freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = "Free Shot!"; lastFreeShotBannerValue = null;
   rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
-  modifiers = []; syncModifiersToField(); selectedModifier = null;
+  modifiers = []; syncModifiersToField(); selectedModifier = null; selectedBagIndex = -1;
   pauseMenuVisible = false; pauseMenuHover = null;
   mainMenuVisible = true; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
   gameState = "AIMING";
@@ -2750,6 +2915,33 @@ function filterOfferToOwned(candidates, maxN) {
   } catch {}
   return head;
 }
+// Owned-only rewards: build the candidate pool from owned kinds FIRST, then shuffle.
+// This fixes the bug where a 9-hole offer showed only 2 items while owning 3
+// (the old COMBINED-slot resolution could exclude the owned passive entirely).
+function ownedPoolForCourse() {
+  let full;
+  try {
+    const hc = activeCourse ? activeCourse.holeCount : null;
+    if (hc === 3 || hc === 6) full = ['magnifier', 'liquifier', 'deflector', 'rotator'];
+    else full = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'fieldExtender', 'powerCell'];
+  } catch { full = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'fieldExtender', 'powerCell']; }
+  try {
+    const p = getPersonalSupply();
+    const owned = full.filter(t => (p[normalizeSupplyType(t)] ?? 0) > 0);
+    if (owned.length) return owned;
+  } catch {}
+  return full.slice(0, 3);
+}
+function enforceNoFieldPowerTogether(picked, remainder) {
+  // Field Extender and Power Cell never appear together in one offer
+  if (picked.includes('fieldExtender') && picked.includes('powerCell')) {
+    const idx = picked.indexOf('powerCell');
+    const repl = (remainder || []).find(t => t !== 'fieldExtender' && t !== 'powerCell' && !picked.includes(t));
+    if (repl) picked[idx] = repl;
+    else picked.splice(idx, 1);
+  }
+  return picked;
+}
 function getSeededRewardOffer() {
   // Tutorial run (after intro-3-hole chain): only liquifiers, single card (08 §5b).
   if (isTutorialRun) {
@@ -2759,41 +2951,10 @@ function getSeededRewardOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':' + rewardSeedCounter;
   rewardSeedCounter++;
-  // 3-hole and 6-hole courses: rewards only consist of the four placeable
-  // field modifiers (08 §5). 9/18-hole courses use the full pool below.
-  // Either way the offer is filtered to owned kinds (08 §5c).
-  try {
-    const hc = activeCourse ? activeCourse.holeCount : null;
-    if (hc === 3 || hc === 6) {
-      const spatial = ['magnifier','liquifier','deflector','rotator'];
-      seededShuffle(spatial, seedStr);
-      return filterOfferToOwned(spatial, 3);
-    }
-  } catch {}
-  // Field Extender and Power Cell share one slot (combined) with same probability as other items, never together
-  const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
-  const effectivePool = [...basePool, 'COMBINED'];
-  seededShuffle(effectivePool, seedStr);
-  let ordered = effectivePool.map(t => {
-    if (t !== 'COMBINED') return t;
-    const pickSeed = hashSeedString(seedStr + ':pick');
-    const r = mulberry32Reward(pickSeed)();
-    return r < 0.5 ? 'fieldExtender' : 'powerCell';
-  });
-  // Ensure never both fieldExtender and powerCell together (legacy guard)
-  if (ordered.includes('fieldExtender') && ordered.includes('powerCell')) {
-    const dupIdx = ordered.indexOf('powerCell');
-    const notInOffer = REWARD_POOL.filter(x => !ordered.includes(x));
-    if (notInOffer.length) {
-      const pickSeed2 = hashSeedString(seedStr + ':dedup');
-      const rr = mulberry32Reward(pickSeed2)();
-      const pick = notInOffer[Math.floor(rr * notInOffer.length)];
-      ordered[dupIdx] = pick;
-    } else {
-      ordered[dupIdx] = 'magnifier';
-    }
-  }
-  return filterOfferToOwned(ordered, 3);
+  const ownedPool = ownedPoolForCourse();
+  const shuffled = seededShuffle([...ownedPool], seedStr);
+  const picked = shuffled.slice(0, 3);
+  return enforceNoFieldPowerTogether(picked, shuffled.slice(3));
 }
 function getSeededRerollOffer() {
   // Tutorial run never rerolls (disabled), but keep single-liquifier shape for safety.
@@ -2804,38 +2965,10 @@ function getSeededRerollOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':reroll:' + rewardSeedCounter;
   rewardSeedCounter++;
-  // 3-hole and 6-hole courses: rerolls draw from the four placeable field
-  // modifiers only (08 §5). Either way the offer is filtered to owned kinds (08 §5c).
-  try {
-    const hc = activeCourse ? activeCourse.holeCount : null;
-    if (hc === 3 || hc === 6) {
-      const spatial = ['magnifier','liquifier','deflector','rotator'];
-      seededShuffle(spatial, seedStr);
-      return filterOfferToOwned(spatial, 3);
-    }
-  } catch {}
-  const basePool = ['magnifier','liquifier','deflector','rotator','freeShot'];
-  const effectivePool = [...basePool, 'COMBINED'];
-  seededShuffle(effectivePool, seedStr);
-  let ordered = effectivePool.map(t => {
-    if (t !== 'COMBINED') return t;
-    const pickSeed = hashSeedString(seedStr + ':pick');
-    const r = mulberry32Reward(pickSeed)();
-    return r < 0.5 ? 'fieldExtender' : 'powerCell';
-  });
-  if (ordered.includes('fieldExtender') && ordered.includes('powerCell')) {
-    const dupIdx = ordered.indexOf('powerCell');
-    const notInOffer = REWARD_POOL.filter(x => !ordered.includes(x));
-    if (notInOffer.length) {
-      const pickSeed2 = hashSeedString(seedStr + ':dedup');
-      const rr = mulberry32Reward(pickSeed2)();
-      const pick = notInOffer[Math.floor(rr * notInOffer.length)];
-      ordered[dupIdx] = pick;
-    } else {
-      ordered[dupIdx] = 'magnifier';
-    }
-  }
-  return filterOfferToOwned(ordered, 3);
+  const ownedPool = ownedPoolForCourse();
+  const shuffled = seededShuffle([...ownedPool], seedStr);
+  const picked = shuffled.slice(0, 3);
+  return enforceNoFieldPowerTogether(picked, shuffled.slice(3));
 }
 function maybeFilterAreaUp(offer, seedStr) {
   // Legacy: Field Extender + Power Cell now combined slot, never together. Keep guard for legacy saves.
@@ -2898,6 +3031,8 @@ function rerollReward() {
     return true;
   }
   rewardRerolled = true;
+  // New offer invalidates any pending discard choice
+  pendingRewardType = null;
   // Deterministic reroll from campaign seed + counter (12-campaign)
   rewardOffered = getSeededRerollOffer();
   rewardMenuHover = null;
@@ -2935,6 +3070,7 @@ function maybeShowRewardMenu() {
   // 12-campaign: deterministic reward via campaignSeed + counter
   if (rewardPending) {
     rewardOffered = getSeededRewardOffer();
+    pendingRewardType = null;
     rewardMenuVisible = true;
     rewardMenuHover = null;
     rewardPending = false;
@@ -2947,6 +3083,103 @@ function maybeShowRewardMenu() {
   }
 }
 
+// Reward discard UI (tactical rework): when the bag is full and a reward was chosen
+// (pendingRewardType), the modal itself shows the bag contents with destroy buttons
+// plus Skip — the hotbar underneath is clickable too, but the in-modal row is the
+// primary path (works with mouse even if the hotbar is collapsed).
+function syncRewardDiscardUI(overlay) {
+  const card = overlay.querySelector('.reward-card');
+  if (!card) return;
+  const pretty = { magnifier: 'Magnifier', liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', freeShot: 'Free Shot', fieldExtender: 'Field Extender', areaUp: 'Field Extender', powerCell: 'Power Cell' };
+  const icons = { magnifier: './img/magnifier-icon.png', liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', fieldExtender: './img/field-extender-icon.png', areaUp: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
+  // Title reflects mode
+  try {
+    const titleEl = overlay.querySelector('.reward-title');
+    if (titleEl) titleEl.textContent = pendingRewardType ? ('Bag full — destroy one to take ' + (pretty[pendingRewardType] || pendingRewardType)) : 'Choose an Upgrade';
+  } catch {}
+  // Highlight the chosen reward button
+  try {
+    const btns = overlay.querySelectorAll('#reward-buttons .reward-button');
+    btns.forEach(b => {
+      const isPending = !!pendingRewardType && (b.dataset.type === pendingRewardType);
+      b.classList.toggle('pending', isPending);
+    });
+  } catch {}
+  // Skip button — always available while menu open
+  try {
+    let skipBtn = overlay.querySelector('#reward-skip-button');
+    if (!skipBtn) {
+      skipBtn = document.createElement('button');
+      skipBtn.id = 'reward-skip-button';
+      skipBtn.className = 'reward-skip-button';
+      skipBtn.textContent = 'Skip (take nothing) [Esc]';
+      skipBtn.addEventListener('click', () => { closeRewardMenuWithoutReward(); });
+      card.appendChild(skipBtn);
+    }
+    skipBtn.style.display = '';
+    skipBtn.disabled = false;
+  } catch {}
+  // Discard hint + in-modal bag row
+  try {
+    let discardEl = overlay.querySelector('#reward-discard-hint');
+    let bagRow = overlay.querySelector('#reward-bag-row');
+    if (pendingRewardType) {
+      if (!discardEl) {
+        discardEl = document.createElement('div');
+        discardEl.id = 'reward-discard-hint';
+        discardEl.className = 'reward-discard-hint';
+        card.appendChild(discardEl);
+      }
+      discardEl.style.display = '';
+      discardEl.textContent = 'Your bag is full. Destroy one bag item to take ' + (pretty[pendingRewardType] || pendingRewardType) + ', or Skip.';
+      if (!bagRow) {
+        bagRow = document.createElement('div');
+        bagRow.id = 'reward-bag-row';
+        bagRow.className = 'reward-bag-row';
+        card.appendChild(bagRow);
+      }
+      bagRow.style.display = '';
+      bagRow.innerHTML = '';
+      for (let i = 0; i < GOLFBAG_SIZE; i++) {
+        const entry = golfbag[i];
+        const t = entry ? bagEntryType(entry) : null;
+        const b = document.createElement('button');
+        b.className = 'reward-bag-slot' + (t ? '' : ' empty');
+        b.dataset.slotIndex = String(i);
+        b.disabled = !t;
+        if (t) {
+          const ic = icons[t];
+          if (ic) {
+            const im = document.createElement('img');
+            im.src = ic; im.alt = t;
+            b.appendChild(im);
+          } else {
+            const fb = document.createElement('div');
+            fb.className = 'reward-bag-fallback';
+            fb.textContent = '★';
+            b.appendChild(fb);
+          }
+          const nm = document.createElement('div');
+          nm.className = 'reward-bag-name';
+          nm.textContent = (pretty[t] || t) + (t === 'freeShot' ? ' x' + (entry.charges ?? 0) : '');
+          b.appendChild(nm);
+          const ky = document.createElement('div');
+          ky.className = 'reward-bag-key';
+          ky.textContent = 'Destroy [' + (i + 1) + ']';
+          b.appendChild(ky);
+          b.title = 'Destroy ' + (pretty[t] || t) + ' and take ' + (pretty[pendingRewardType] || pendingRewardType);
+          b.addEventListener('click', () => { discardBagSlotAndClaimReward(i); });
+        } else {
+          b.textContent = 'Empty [' + (i + 1) + ']';
+        }
+        bagRow.appendChild(b);
+      }
+    } else {
+      if (discardEl) { discardEl.style.display = 'none'; discardEl.textContent = ''; }
+      if (bagRow) { bagRow.style.display = 'none'; bagRow.innerHTML = ''; }
+    }
+  } catch {}
+}
 // HTML Reward Overlay (replaces canvas drawRewardMenu)
 function syncRewardOverlay() {
   const overlay = document.getElementById('reward-overlay');
@@ -2960,17 +3193,18 @@ function syncRewardOverlay() {
   // Offers hold 1–3 cards: single-card tutorial/owned-only offers up to full triples.
   const shouldBeVisible = !!(rewardMenuVisible && Array.isArray(rewardOffered) && rewardOffered.length >= 1 && rewardOffered.length <= 3);
   if (shouldBeVisible && isVisible && currentTypes === desiredTypes) {
-    // Just update reroll state, no rebuild
+    // Just update reroll/skip/discard state, no rebuild
     if (rerollBtn) {
       const shouldDisable = isRerollDisabled();
       if (rerollBtn.disabled !== shouldDisable) {
         rerollBtn.disabled = shouldDisable;
         rerollBtn.classList.toggle('disabled', shouldDisable);
-        rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
+        rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
       } else if (shouldDisable) {
-        rerollBtn.textContent = rewardRerolled ? 'Re-rolled' : '\u21BB Re-roll (1 attempt) [R]';
+        rerollBtn.textContent = rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
       }
     }
+    try { syncRewardDiscardUI(overlay); } catch {}
     return;
   }
   if (shouldBeVisible) {
@@ -2997,14 +3231,14 @@ function syncRewardOverlay() {
       powerCell: 'Power Cell'
     };
     const hintMap = {
-      magnifier: '+1 to supply',
-      liquifier: '+1 to supply',
-      deflector: '+1 to supply',
-      rotator: '+1 to supply',
-      freeShot: 'Supply +3',
-      fieldExtender: '+15% area',
-      areaUp: '+15% area',
-      powerCell: '+15% strength'
+      magnifier: '+1 to bag',
+      liquifier: '+1 to bag',
+      deflector: '+1 to bag',
+      rotator: '+1 to bag',
+      freeShot: '+1 item (3 shots)',
+      fieldExtender: '+20% area',
+      areaUp: '+20% area',
+      powerCell: '+20% strength'
     };
     const colorMap = {
       magnifier: '#e67e22',
@@ -3077,9 +3311,22 @@ function syncRewardOverlay() {
       rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
       rerollBtn.onclick = () => { if (!isRerollDisabled()) rerollReward(); };
     }
+    // Skip + in-modal discard UI (bag-full flow)
+    try { syncRewardDiscardUI(overlay); } catch {}
   } else {
     overlay.classList.add('hidden');
     if (btnContainer) btnContainer.innerHTML = '';
+    try {
+      const skipBtn = overlay.querySelector('#reward-skip-button');
+      if (skipBtn) skipBtn.style.display = 'none';
+      const discardEl = overlay.querySelector('#reward-discard-hint');
+      if (discardEl) { discardEl.style.display = 'none'; discardEl.textContent = ''; }
+      const bagRow = overlay.querySelector('#reward-bag-row');
+      if (bagRow) { bagRow.style.display = 'none'; bagRow.innerHTML = ''; }
+      const titleEl = overlay.querySelector('.reward-title');
+      if (titleEl) titleEl.textContent = 'Choose an Upgrade';
+    } catch {}
+    pendingRewardType = null;
   }
   // Hotbar stays visible during reward per spec; sync already handles
 }
@@ -3287,6 +3534,69 @@ function updateSoftlockDetection(dt) {
   return false;
 }
 
+function grantRewardToBag(normalized) {
+  // Returns true if granted to an empty slot. Free Shot grants one bag item with 3 charges.
+  if (normalized === 'freeShot' || normalized === 'maxAttempts') {
+    const ok = addItemToBag('freeShot', FREE_SHOT_CHARGES_PER_ITEM);
+    if (ok) rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
+    return ok;
+  }
+  if (normalized === 'areaUp' || normalized === 'fieldExtender') {
+    const ok = addItemToBag('fieldExtender');
+    if (ok) {
+      rewardChosenCounts.fieldExtender = Math.max(0, (rewardChosenCounts.fieldExtender || 0) + 1);
+      rewardChosenCounts.areaUp = Math.max(0, (rewardChosenCounts.areaUp || 0) + 1);
+    }
+    return ok;
+  }
+  if (normalized === 'powerCell') {
+    const ok = addItemToBag('powerCell');
+    if (ok) rewardChosenCounts.powerCell = Math.max(0, (rewardChosenCounts.powerCell || 0) + 1);
+    return ok;
+  }
+  const t = normalized;
+  if (!['magnifier', 'liquifier', 'deflector', 'rotator'].includes(t)) return false;
+  const ok = addItemToBag(t, 1);
+  if (ok && t in rewardChosenCounts) rewardChosenCounts[t] = Math.max(0, (rewardChosenCounts[t] || 0) + 1);
+  return ok;
+}
+function closeRewardMenuWithoutReward() {
+  pendingRewardType = null;
+  rewardClaimedFor = totalAttempts;
+  rewardMenuVisible = false;
+  rewardMenuHover = null;
+  rewardRerollHover = false;
+  rewardOffered = [];
+  rewardPending = false;
+  updateHotbarUI();
+  syncRewardOverlay();
+  if (canvas) canvas.style.cursor = "default";
+  saveProgress();
+  return true;
+}
+function discardBagSlotAndClaimReward(slotIdx) {
+  if (!rewardMenuVisible || !pendingRewardType) return false;
+  if (slotIdx < 0 || slotIdx >= GOLFBAG_SIZE || !golfbag[slotIdx]) return false;
+  const wanted = pendingRewardType;
+  // Destroy the existing item (passives can be destroyed here even though never placeable)
+  golfbag[slotIdx] = null;
+  syncDerivedFromBag();
+  const ok = grantRewardToBag(wanted);
+  if (!ok) { updateHotbarUI(); syncRewardOverlay(); return false; }
+  pendingRewardType = null;
+  rewardClaimedFor = totalAttempts;
+  rewardMenuVisible = false;
+  rewardMenuHover = null;
+  rewardRerollHover = false;
+  rewardOffered = [];
+  rewardPending = false;
+  updateHotbarUI();
+  syncRewardOverlay();
+  if (canvas) canvas.style.cursor = "default";
+  saveProgress();
+  return true;
+}
+function getPendingRewardType() { return pendingRewardType; }
 function claimReward(type) {
   if (!rewardMenuVisible) return false;
   // support legacy aliases (amplify→magnifier, nullify→liquifier, flip→deflector, rotate→rotator, areaUp→fieldExtender)
@@ -3294,29 +3604,25 @@ function claimReward(type) {
   const normalized = legacyNormalize(type);
   const normOffered = rewardOffered.map(legacyNormalize);
   if (!rewardOffered.includes(type) && !normOffered.includes(normalized)) return false;
-  // Idempotent: only once per trigger (rewardMenuVisible guards double-click)
-  if (type === 'freeShot' || normalized === 'freeShot') {
-    addToSupply('freeShot', 3); // Free Shoot Supply +3
-    rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
-  } else if (type === 'maxAttempts') {
-    // legacy: migrate old maxAttempts reward to freeShot
-    addToSupply('freeShot', 3);
-    rewardChosenCounts.freeShot = Math.max(0, (rewardChosenCounts.freeShot || 0) + 1);
-  } else if (type === 'areaUp' || normalized === 'fieldExtender' || type === 'fieldExtender') {
-    addFieldExtender(1); // Field Extender +15% (was +10% / +20%)
-    rewardChosenCounts.fieldExtender = Math.max(0, (rewardChosenCounts.fieldExtender || 0) + 1);
-    rewardChosenCounts.areaUp = Math.max(0, (rewardChosenCounts.areaUp || 0) + 1);
-  } else if (normalized === 'powerCell' || type === 'powerCell') {
-    addPowerCell(1); // Power Cell +15% strength
-    rewardChosenCounts.powerCell = Math.max(0, (rewardChosenCounts.powerCell || 0) + 1);
-  } else {
-    if (!(type in supply) && !(normalized in supply)) return false;
-    const t = (type in supply) ? type : normalized;
-    addToSupply(t, 1);
-    if (t in rewardChosenCounts) rewardChosenCounts[t] = Math.max(0, (rewardChosenCounts[t] || 0) + 1);
+  // Tactical: reward goes to an empty golfbag slot. If full, arm discard mode
+  // (choose a bag slot to destroy/replace) or Skip without reward.
+  if (!golfbagHasEmpty()) {
+    pendingRewardType = normalized;
+    updateHotbarUI();
+    syncRewardOverlay();
+    saveProgress();
+    return false;
+  }
+  const ok = grantRewardToBag(normalized);
+  if (!ok) {
+    pendingRewardType = normalized;
+    updateHotbarUI();
+    syncRewardOverlay();
+    return false;
   }
   // Mark first and general claimed for backward compat
   rewardClaimedFor = totalAttempts;
+  pendingRewardType = null;
   rewardMenuVisible = false;
   rewardMenuHover = null;
   rewardRerollHover = false;
@@ -3401,6 +3707,7 @@ function loadLevel(index) {
     rewardPending = true;
     rewardMenuVisible = false;
     rewardOffered = [];
+    pendingRewardType = null;
     rewardRerolled = false;
     rewardMenuHover = null;
     rewardRerollHover = false;
@@ -3410,6 +3717,7 @@ function loadLevel(index) {
     rewardPending = false;
     rewardMenuVisible = false;
     rewardOffered = [];
+    pendingRewardType = null;
     rewardRerolled = false;
     rewardMenuHover = null;
     rewardRerollHover = false;
@@ -3434,10 +3742,11 @@ function loadLevel(index) {
 function initLevel() {
   // REQ-020/022/023/024 + REQ-09 hole-start + treasure + REQ-025 reroll + REQ-028 pause stats: hole 1 no award before first attempt, holes >0 reward before first attempt
   if (currentHoleIndex === 0) {
-    supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+    setBagFromTypeList(['liquifier']);
     clearFreeShotGlow();
     maxAttempts = 10; 
   areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
+    try { syncDerivedFromBag(); } catch {}
     rewardPending = false;
     rewardMenuVisible = false;
     rewardClaimedFor = null;
@@ -3522,96 +3831,117 @@ function updateAttemptsUI() {
 
 function updateHotbarUI() {
   if (!hotbarEl && !golfbagContainerEl && !bottomBarEl) return;
-  // Bag+hotbar are always visible during gameplay including FLYING and reward (per updated spec)
-  // Only hide during overlays/menus/banners/WIN/GAME_OVER; collapsed is handled via CSS class
-  // Bottom-bar wrapper is the centered bottom element (gap 12px to bottom)
+  // Bag+hotbar are always visible during gameplay including FLYING and reward
   let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
   const isOverlayHidden = pauseMenuVisible || mainMenuVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut;
   const hideHotbar = isOverlayHidden;
   const hideBag = isOverlayHidden;
   if (bottomBarEl) bottomBarEl.classList.toggle("hidden", isOverlayHidden);
   if (hotbarEl) {
-    // Respect collapsed: when collapsed hotbar is hidden via .collapsed display:none, but still toggle hidden for overlay
     hotbarEl.classList.toggle("hidden", hideHotbar);
   }
   if (golfbagContainerEl) golfbagContainerEl.classList.toggle("hidden", hideBag);
-  // Ensure collapsed UI stays synced (grid hidden via CSS collapsed, bag remains with no background)
   syncHotbarCollapsedUI();
-  for (const slot of hotbarEl.querySelectorAll(".hotbar-slot")) {
-    const type = slot.dataset.type;
-    // Free Shot is no longer shown in hotbar; it is displayed in HUD as Attempts Left: X (+Y)
-    if (type === 'freeShot') {
-      // Hide legacy freeShot slot if it still exists in DOM (should have been replaced by rotate)
-      slot.style.display = 'none';
-      continue;
-    }
-    // Passive slots: Field Extender and Power Cell
-    if (type === 'fieldExtender' || type === 'areaUp' || type === 'powerCell') {
-      const isField = type === 'fieldExtender' || type === 'areaUp';
-      const count = isField ? fieldExtenderCount : powerCellCount;
-      const isEmpty = count === 0;
-      const countEl = slot.querySelector(".hotbar-count");
-      if (countEl) {
-        countEl.textContent = `x${count}`;
-        countEl.style.display = isEmpty ? "none" : "";
+  try { syncDerivedFromBag(); } catch {}
+  // Rebuild 5 slot-based hotbar from golfbag (one item per slot, no stacking)
+  const grid = hotbarGridEl || (hotbarEl ? hotbarEl.querySelector('#hotbar-grid') : null);
+  if (grid) {
+    const icons = { liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', magnifier: './img/magnifier-icon.png', fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
+    const names = { liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', magnifier: 'Magnifier', fieldExtender: 'Field Extender', powerCell: 'Power Cell', freeShot: 'Free Shot' };
+    const borders = { liquifier: '#1a4a6b', deflector: '#4a235a', rotator: '#6e1a12', magnifier: '#7a3a0a', fieldExtender: '#7a7a7a', powerCell: '#7a7a7a', freeShot: '#7a3a0a' };
+    const bgs = { liquifier: 'rgba(52,152,219,0.28)', deflector: 'rgba(155,89,182,0.28)', rotator: 'rgba(231,76,60,0.28)', magnifier: 'rgba(230,126,34,0.28)', fieldExtender: 'rgba(128,128,128,0.28)', powerCell: 'rgba(128,128,128,0.28)', freeShot: 'rgba(241,196,15,0.28)' };
+    // Only rebuild when bag shape/selection/pending changes to avoid hover flicker
+    const sig = golfbag.map(e => (e ? bagEntryType(e) + ':' + (e.charges ?? 1) : '-')).join('|') + '#' + selectedBagIndex + '#' + (pendingRewardType || '');
+    if (grid.dataset.bagSig !== sig) {
+      grid.dataset.bagSig = sig;
+      grid.innerHTML = '';
+      for (let i = 0; i < GOLFBAG_SIZE; i++) {
+        const entry = golfbag[i];
+        const t = entry ? bagEntryType(entry) : null;
+        const slot = document.createElement('div');
+        slot.className = 'hotbar-slot' + (t ? '' : ' empty');
+        slot.dataset.slotIndex = String(i);
+        slot.dataset.type = t || '';
+        if (t) {
+          slot.style.background = bgs[t] || '';
+          slot.style.borderColor = borders[t] || '';
+          slot.dataset.supply = '1';
+          slot.dataset.count = t === 'freeShot' ? String(entry.charges ?? 0) : '1';
+          const ic = icons[t];
+          if (ic) {
+            const im = document.createElement('img');
+            im.className = 'hotbar-icon-img';
+            im.src = ic; im.alt = t;
+            slot.appendChild(im);
+          } else {
+            const fb = document.createElement('div');
+            fb.className = 'hotbar-icon-img hotbar-free-fallback';
+            fb.textContent = '★';
+            fb.style.font = '700 22px system-ui'; fb.style.color = '#FFD700';
+            slot.appendChild(fb);
+          }
+          // Hotkey badge 1-5 on every occupied slot (all slots have hotkeys)
+          const hk = document.createElement('span');
+          hk.className = 'hotbar-hotkey';
+          hk.textContent = String(i + 1);
+          slot.appendChild(hk);
+          // Count badge: freeShot shows remaining charges xN; others show nothing (one per slot)
+          const cnt = document.createElement('span');
+          cnt.className = 'hotbar-count';
+          if (t === 'freeShot') { cnt.textContent = 'x' + (entry.charges ?? 0); cnt.style.display = ''; }
+          else { cnt.textContent = ''; cnt.style.display = 'none'; }
+          slot.appendChild(cnt);
+          const tip = document.createElement('span');
+          tip.className = 'hotbar-tooltip';
+          tip.textContent = names[t] || t;
+          slot.appendChild(tip);
+          if (i === selectedBagIndex) slot.classList.add('selected');
+          // Discard mode: highlight bag slots as destroy targets
+          if (pendingRewardType && rewardMenuVisible) {
+            slot.classList.add('discard-target');
+            slot.title = 'Click to destroy ' + (names[t] || t) + ' and take ' + pendingRewardType;
+            slot.style.cursor = 'pointer';
+          } else {
+            slot.style.cursor = (t === 'fieldExtender' || t === 'powerCell' || t === 'freeShot') ? 'default' : 'pointer';
+          }
+          slot.addEventListener('click', () => {
+            if (rewardMenuVisible && pendingRewardType) {
+              discardBagSlotAndClaimReward(i);
+              return;
+            }
+            if (rewardMenuVisible) return;
+            if (banterIsActive()) return;
+            if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
+            if (pauseMenuVisible || mainMenuVisible) return;
+            if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
+            selectBagSlot(i);
+          });
+        } else {
+          slot.style.background = 'rgba(128,128,128,0.28)';
+          slot.style.borderColor = '#7a7a7a';
+          slot.style.cursor = 'default';
+          slot.dataset.supply = '0';
+          slot.dataset.count = '0';
+          slot.title = 'Empty slot (' + (i + 1) + ')';
+          const hk = document.createElement('span');
+          hk.className = 'hotbar-hotkey hotbar-hotkey-empty';
+          hk.textContent = String(i + 1);
+          hk.style.display = '';
+          hk.style.opacity = '0.45';
+          slot.appendChild(hk);
+        }
+        grid.appendChild(slot);
       }
-      const iconEl = slot.querySelector(".hotbar-icon-img");
-      if (iconEl) iconEl.style.display = isEmpty ? "none" : "";
-      // empty gray handling
-      slot.classList.toggle("empty", isEmpty);
-      slot.classList.remove("selected", "disabled", "active");
-      slot.classList.add("passive");
-      slot.style.cursor = "default";
-      if (isEmpty) {
-        slot.style.background = "rgba(128,128,128,0.28)";
-        slot.style.borderColor = "rgba(128,128,128,0.82)";
-      } else {
-        slot.style.background = "";
-        slot.style.borderColor = "";
-      }
-      // hide hotkey badge if present (passive have no hotkey)
-      const hotkeyEl = slot.querySelector(".hotbar-hotkey");
-      if (hotkeyEl) hotkeyEl.style.display = "none";
-      slot.removeAttribute('title');
-      slot.dataset.supply = String(count);
-      slot.dataset.count = String(count);
-      continue;
-    }
-    // Active spatial slots
-    const activeCount = modifiers.filter(m => m.type === type).length;
-    const supplyCount = supply[type] ?? 0;
-    const isEmptyActive = supplyCount === 0;
-    const canPlaceThis = (supplyCount ?? 0) > 0;
-    slot.classList.toggle("selected", slot.dataset.type === selectedModifier && !isEmptyActive);
-    slot.classList.remove("active");
-    slot.classList.toggle("disabled", !canPlaceThis && !isEmptyActive);
-    slot.classList.toggle("empty", isEmptyActive);
-    slot.classList.remove("passive");
-    if (isEmptyActive) {
-      slot.style.cursor = "default";
-      slot.style.background = "rgba(128,128,128,0.28)";
-      slot.style.borderColor = "#7a7a7a";
     } else {
-      slot.style.cursor = "";
-      slot.style.background = "";
-      slot.style.borderColor = "";
+      // Update selection/discard classes without rebuild
+      const slots = grid.querySelectorAll('.hotbar-slot');
+      slots.forEach((slot, i) => {
+        slot.classList.toggle('selected', i === selectedBagIndex && !!golfbag[i]);
+        slot.classList.toggle('discard-target', !!(pendingRewardType && rewardMenuVisible && golfbag[i]));
+      });
     }
-    const hotkeyEl2 = slot.querySelector(".hotbar-hotkey");
-    if (hotkeyEl2) hotkeyEl2.style.display = isEmptyActive ? "none" : "";
-    // Update count badge — lower-right xN per new spec (e.g. x2) — hidden when empty
-    const countEl = slot.querySelector(".hotbar-count");
-    if (countEl) {
-      countEl.textContent = `x${supplyCount}`;
-      countEl.style.display = isEmptyActive ? "none" : "";
-    }
-    const iconEl2 = slot.querySelector(".hotbar-icon-img");
-    if (iconEl2) iconEl2.style.display = isEmptyActive ? "none" : "";
-    slot.removeAttribute('title');
-    // For testing: expose supply via dataset
-    slot.dataset.supply = String(supplyCount);
-    slot.dataset.active = String(activeCount);
   }
-  // Also update HUD attempts left display to show (+freeShot)
+  // Also update HUD attempts left display to show (+freeShot charges)
   try { updateAttemptsUI(); } catch {};
 }
 
@@ -3624,6 +3954,7 @@ function showGameOver() {
   rewardMenuVisible = false;
   rewardPending = false;
   rewardOffered = [];
+  pendingRewardType = null;
   rewardRerolled = false;
   rewardMenuHover = null;
   rewardRerollHover = false;
@@ -3735,18 +4066,19 @@ function placeModifier(x, y) {
   if (banterIsActive()) return;
   if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
-  if (!selectedModifier) return;
-  if (!canPlace(selectedModifier)) {
-    // REQ-020: reject placement if supply insufficient; keep selection for retry, update UI
+  if (selectedBagIndex < 0 || !golfbag[selectedBagIndex]) return;
+  const entry = golfbag[selectedBagIndex];
+  const type = bagEntryType(entry);
+  if (!type || !canPlace(type)) {
     updateHotbarUI();
     return;
   }
-  const type = normalizeSupplyType(selectedModifier);
-  supply[type] = Math.max(0, (supply[type] ?? 0) - 1);
+  // Tactical: item is removed from bag when placed (slot empties)
+  golfbag[selectedBagIndex] = null;
+  selectedBagIndex = -1; selectedModifier = null;
+  syncDerivedFromBag();
   modifiers.push({ id: Date.now() + Math.random(), type, x, y, radius: getEffectiveModifierRadius() });
   syncModifiersToField();
-  // Deselect after placement per requirement
-  selectedModifier = null;
   updateHotbarUI();
   mousePos = null;
   saveProgress();
@@ -3755,12 +4087,17 @@ function placeModifier(x, y) {
 function removeModifierAt(x, y) {
   const idx = modifiers.findIndex(m => Math.hypot(m.x - x, m.y - y) < m.radius);
   if (idx !== -1) {
+    // Tactical: can only be picked up again if there is bag space
+    if (!golfbagHasEmpty()) {
+      try { showToast('Bag full — no space to pick up (discard in reward menu)'); } catch {}
+      try { canvas.style.cursor = 'not-allowed'; setTimeout(() => { try { canvas.style.cursor = 'default'; } catch {} }, 900); } catch {}
+      updateHotbarUI();
+      return false;
+    }
     const [removed] = modifiers.splice(idx, 1);
     if (removed && removed.type) {
       const t = normalizeSupplyType(removed.type);
-      if (t in supply) {
-        supply[t] = Math.max(0, (supply[t] ?? 0) + 1);
-      }
+      addItemToBag(t);
     }
     syncModifiersToField();
     updateHotbarUI();
@@ -3923,7 +4260,7 @@ function resetGameAfterWin() {
   totalAttempts = 0;
   attempts = 0;
   // REQ-020/022/023/024: reset supply to one of each on new game, no award before first attempt
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+  setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
   maxAttempts = 10; 
   areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
@@ -3971,23 +4308,24 @@ function handleLaunch(angle, power) {
   if (mainMenuVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (gameState === "GAME_OVER") return;
-  // Deferred Game Over + Auto-arm: if this launch would be the last counted attempt and freeShot supply available, auto-arm it
-  if (!isFreeShotActive && (supply.freeShot ?? 0) > 0 && getAttemptsLeft() <= 1) {
+  // Deferred Game Over + Auto-arm: if this launch would be the last counted attempt and freeShot charges available, auto-arm it
+  if (!isFreeShotActive && golfbagTotalFreeShots() > 0 && getAttemptsLeft() <= 1) {
     isFreeShotActive = true;
     syncFreeShotGlow();
     updateHotbarUI();
   }
   // If no attempts left and no free shot armed, Game Over instead of launching (deferred to next attempt start)
-  if (getAttemptsLeft() <= 0 && !(isFreeShotActive && (supply.freeShot ?? 0) > 0)) {
+  if (getAttemptsLeft() <= 0 && !(isFreeShotActive && golfbagTotalFreeShots() > 0)) {
     showGameOver();
     return;
   }
   launchBall(angle, power);
-  // Free Shot: if armed and supply available, this launch is free — consume supply, mark flight as free, does NOT decrement counter now nor on reset
-  if (isFreeShotActive && (supply.freeShot ?? 0) > 0) {
-    supply.freeShot = Math.max(0, supply.freeShot - 1);
-    // Persist armed while supply remains, only clear when supply reaches 0
-    if (supply.freeShot > 0) {
+  // Free Shot: if armed and charges available, this launch is free — consume one charge, mark flight as free
+  // If the item's charges reach 0 it is automatically removed from the bag.
+  if (isFreeShotActive && golfbagTotalFreeShots() > 0) {
+    consumeFreeShotCharge();
+    // Persist armed while charges remain, only clear when none left
+    if (golfbagTotalFreeShots() > 0) {
       // keep isFreeShotActive true for next free, but hide ball glow during current flight
       isFreeShotActive = true;
       freeShotFlightActive = true;
@@ -4926,7 +5264,7 @@ function init() {
   pauseMenuVisible = false; rewardMenuVisible = false;
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
+  setBagFromTypeList(['liquifier']);
   maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   rewardPending = false; rewardOffered = []; rewardRerolled = false;
   resetHotbarCollapsed();
@@ -4986,36 +5324,10 @@ function init() {
     }
   );
 
-  // Hotbar selection per REQ-015 - updated for deselection via escape / same hotkey / same button + collapsible (clicks hidden when collapsed, but hotkeys still work)
+  // Hotbar selection: slot-based (1-5). Slots wire their own click handlers in
+  // updateHotbarUI when rebuilt (including discard-mode clicks during reward).
+  // Legacy type-based wiring removed.
   if (hotbarEl) {
-    hotbarEl.querySelectorAll(".hotbar-slot").forEach(slot => {
-      slot.addEventListener("click", () => {
-        // REQ-021: block hotbar selection while reward menu visible; REQ-028: block while pause; REQ-029: block while main menu; 11-banners block
-        if (rewardMenuVisible) return;
-        if (banterIsActive()) return;
-        if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
-        if (pauseMenuVisible) return;
-        if (mainMenuVisible) return;
-        if (gameState !== "AIMING" && gameState !== "CHARGING") return;
-        const type = slot.dataset.type;
-        // Free Shot is no longer in hotbar; treat all remaining types (magnifier/liquifier/deflector/rotator (legacy amplify/nullify/flip/rotate)) uniformly
-        if (type === 'freeShot') {
-          // Legacy freeShot slot should not exist; ignore
-          return;
-        }
-        // Passive modifiers: Field Extender and Power Cell are not selectable, no hotkey, show tooltip only
-        if (type === 'fieldExtender' || type === 'areaUp' || type === 'powerCell') {
-          return;
-        }
-        // When collapsed slots are display:none so click won't fire; no extra block needed but keep functional if called programmatically
-        if (selectedModifier === type) {
-          selectedModifier = null;
-        } else {
-          selectedModifier = type;
-        }
-        updateHotbarUI();
-      });
-    });
     updateHotbarUI();
     syncHotbarCollapsedUI();
   }
@@ -5266,8 +5578,7 @@ function init() {
       e.preventDefault();
       return;
     }
-    // REQ-021: when reward menu visible, 1/2/3 selects random offered reward by position, other inputs blocked; 11-banners: R rerolls (not 0)
-    // Bag remains openable while reward is showing, so allow I/Tab toggle even during reward
+    // Reward menu: 1/2/3 selects offered reward; 1-5 on bag discards when pending; S/Skip closes without reward
     if (rewardMenuVisible) {
       if (e.code === "KeyI" || e.code === "Tab") {
         const ae = document.activeElement;
@@ -5276,6 +5587,19 @@ function init() {
           toggleHotbar();
           e.preventDefault();
         }
+        return;
+      }
+      // Discard mode: Digit1-5 destroys that bag slot to take the pending reward
+      if (pendingRewardType && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4" || e.code === "Digit5")) {
+        const idx = Number(e.code.slice(5)) - 1;
+        discardBagSlotAndClaimReward(idx);
+        e.preventDefault();
+        return;
+      }
+      // Bag-full escape hatch: Esc skips without reward (same as Skip button)
+      if (pendingRewardType && e.code === "Escape") {
+        closeRewardMenuWithoutReward();
+        e.preventDefault();
         return;
       }
       if (e.code === "Digit1" && rewardOffered[0]) {
@@ -5287,6 +5611,9 @@ function init() {
       } else if (e.code === "Digit3" && rewardOffered[2]) {
         claimReward(rewardOffered[2]);
         e.preventDefault();
+      } else if (e.code === "KeyS") {
+        closeRewardMenuWithoutReward();
+        e.preventDefault();
       } else if (e.code === "KeyR" && !isRerollDisabled()) {
         rerollReward();
         e.preventDefault();
@@ -5296,8 +5623,8 @@ function init() {
       } else if (e.code === "Digit0" || e.code === "Numpad0") {
         // Digit0 no longer rerolls; blocked
         e.preventDefault();
-      } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4") {
-        // Block aiming/charging while menu open (including Digit4 which is not used - only 3 options)
+      } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4" || e.code === "Digit5") {
+        // Block aiming/charging while menu open (Digit4/5 reserved for bag discard when pending)
         e.preventDefault();
       }
       return;
@@ -5319,8 +5646,8 @@ function init() {
         return;
       }
       // In AIMING/CHARGING handle deselection first per 07 spec (Escape clears selection/active) before opening pause
-      if ((gameState === "AIMING" || gameState === "CHARGING") && (selectedModifier !== null || isFreeShotActive)) {
-        selectedModifier = null;
+      if ((gameState === "AIMING" || gameState === "CHARGING") && (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive)) {
+        selectedModifier = null; selectedBagIndex = -1;
         if (isFreeShotActive) clearFreeShotGlow();
         updateHotbarUI();
         e.preventDefault();
@@ -5335,8 +5662,8 @@ function init() {
         return;
       }
       // Not in level (entry menu hidden?): handle deselection fallback
-      if (selectedModifier !== null || isFreeShotActive) {
-        selectedModifier = null;
+      if (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive) {
+        selectedModifier = null; selectedBagIndex = -1;
         if (isFreeShotActive) clearFreeShotGlow();
         updateHotbarUI();
         e.preventDefault();
@@ -5370,25 +5697,11 @@ function init() {
         }
       }
     }
-    if (e.code === "Digit1") {
-      if (selectedModifier === 'liquifier') selectedModifier = null;
-      else selectedModifier = 'liquifier';
-      updateHotbarUI();
-      e.preventDefault();
-    } else if (e.code === "Digit2") {
-      if (selectedModifier === 'deflector') selectedModifier = null;
-      else selectedModifier = 'deflector';
-      updateHotbarUI();
-      e.preventDefault();
-    } else if (e.code === "Digit3") {
-      if (selectedModifier === 'rotator') selectedModifier = null;
-      else selectedModifier = 'rotator';
-      updateHotbarUI();
-      e.preventDefault();
-    } else if (e.code === "Digit4") {
-      if (selectedModifier === 'magnifier') selectedModifier = null;
-      else selectedModifier = 'magnifier';
-      updateHotbarUI();
+    // Tactical 5-slot bag: Digit1-5 selects the bag slot (all slots have hotkeys).
+    // Spatial slots arm placement; passive slots (Field Extender/Power Cell/Free Shot) select but never place.
+    if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4" || e.code === "Digit5") {
+      const idx = Number(e.code.slice(5)) - 1;
+      selectBagSlot(idx);
       e.preventDefault();
     } else if ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH")) {
       // Secret: Ctrl+Shift+H / Ctrl+Shift+G / Alt+H → prompt for exact hole (hidden)
@@ -5400,15 +5713,20 @@ function init() {
         else if (input.trim() !== "") alert(`Invalid hole. Enter 1-${LEVELS.length}`);
       }
     } else if (e.code === "Delete" || e.code === "Backspace") {
-      // Remove last modifier and refund supply (inventory model)
+      // Remove last modifier and return to bag if space (tactical model)
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
-        const removed = modifiers.pop();
-        if (removed && removed.type && removed.type in supply) {
-          supply[removed.type] = Math.max(0, (supply[removed.type] ?? 0) + 1);
+        if (!golfbagHasEmpty()) {
+          try { showToast('Bag full — no space to pick up'); } catch {}
+          updateHotbarUI();
+        } else {
+          const removed = modifiers.pop();
+          if (removed && removed.type) {
+            addItemToBag(normalizeSupplyType(removed.type));
+          }
+          syncModifiersToField();
+          updateHotbarUI();
+          saveProgress();
         }
-        syncModifiersToField();
-        updateHotbarUI();
-        saveProgress();
       }
     }
   });
@@ -5644,13 +5962,29 @@ function init() {
 
 // Helpers for REQ-020 testing / external acquisition
 function setSupply(newSupply) {
-  supply = {
-    magnifier: Math.max(0, newSupply.magnifier ?? newSupply.amplify ?? 0),
-    liquifier: Math.max(0, newSupply.liquifier ?? newSupply.nullify ?? 0),
-    deflector: Math.max(0, newSupply.deflector ?? newSupply.flip ?? 0),
-    rotator: Math.max(0, newSupply.rotator ?? newSupply.rotate ?? 0),
-    freeShot: Math.max(0, newSupply.freeShot ?? 0),
-  };
+  // Compat: convert counts to bag slots (truncate to 5, freeShot total becomes one item when >0)
+  try {
+    const order = [];
+    const mag = Math.max(0, Math.floor(newSupply.magnifier ?? newSupply.amplify ?? 0));
+    const liq = Math.max(0, Math.floor(newSupply.liquifier ?? newSupply.nullify ?? 0));
+    const def = Math.max(0, Math.floor(newSupply.deflector ?? newSupply.flip ?? 0));
+    const rot = Math.max(0, Math.floor(newSupply.rotator ?? newSupply.rotate ?? 0));
+    const fs = Math.max(0, Math.floor(newSupply.freeShot ?? 0));
+    for (let i = 0; i < liq; i++) order.push('liquifier');
+    for (let i = 0; i < def; i++) order.push('deflector');
+    for (let i = 0; i < rot; i++) order.push('rotator');
+    for (let i = 0; i < mag; i++) order.push('magnifier');
+    if (fs > 0) order.push({ type: 'freeShot', charges: fs });
+    setBagFromTypeList(order.slice(0, GOLFBAG_SIZE));
+  } catch {
+    supply = {
+      magnifier: Math.max(0, newSupply.magnifier ?? newSupply.amplify ?? 0),
+      liquifier: Math.max(0, newSupply.liquifier ?? newSupply.nullify ?? 0),
+      deflector: Math.max(0, newSupply.deflector ?? newSupply.flip ?? 0),
+      rotator: Math.max(0, newSupply.rotator ?? newSupply.rotate ?? 0),
+      freeShot: Math.max(0, newSupply.freeShot ?? 0),
+    };
+  }
   updateHotbarUI();
 }
 function getModifiers() { return [...modifiers]; }
@@ -5689,8 +6023,14 @@ if (typeof window !== 'undefined') {
   window.__setRewardMenuVisible = setRewardMenuVisible;
   window.__getRewardOffered = getRewardOffered;
   window.__setRewardOffered = setRewardOffered;
-  window.__getFreeShotSupply = () => supply.freeShot ?? 0;
-  window.__setFreeShotSupply = (v) => { supply.freeShot = Math.max(0, Math.floor(v)); updateHotbarUI(); };
+  window.__getFreeShotSupply = () => golfbagTotalFreeShots();
+  window.__setFreeShotSupply = (v) => {
+    const n = Math.max(0, Math.floor(v));
+    // Compat: set total charges across a single freeShot bag item (or remove if 0)
+    for (let i = 0; i < GOLFBAG_SIZE; i++) if (golfbag[i] && bagEntryType(golfbag[i]) === 'freeShot') golfbag[i] = null;
+    if (n > 0) addItemToBag('freeShot', n);
+    syncDerivedFromBag(); updateHotbarUI();
+  };
   window.__isFreeShotActive = isFreeShotActiveState;
   window.__getIsFreeShotActive = isFreeShotActiveState;
   window.__isFreeShotFlightActive = isFreeShotFlightActiveState;
@@ -5975,6 +6315,18 @@ if (typeof window !== 'undefined') {
   window.__setRewardSeedCounter = setRewardSeedCounter;
   window.__seededShuffle = seededShuffle;
   window.__getSeededRewardOffer = getSeededRewardOffer;
+  window.__getGolfbag = getGolfbag;
+  window.__golfbagUsedCount = golfbagUsedCount;
+  window.__golfbagHasEmpty = golfbagHasEmpty;
+  window.__golfbagTotalFreeShots = golfbagTotalFreeShots;
+  window.__addItemToBag = addItemToBag;
+  window.__removeBagSlot = removeBagSlot;
+  window.__selectBagSlot = selectBagSlot;
+  window.__getSelectedBagIndex = () => selectedBagIndex;
+  window.__getPendingRewardType = getPendingRewardType;
+  window.__closeRewardMenuWithoutReward = closeRewardMenuWithoutReward;
+  window.__discardBagSlotAndClaimReward = discardBagSlotAndClaimReward;
+  window.__getBagFromTypeList = setBagFromTypeList;
   window.__isCampaignEditVisible = isCampaignEditVisible;
   window.__isCampaignConfirmVisible = isCampaignConfirmVisible;
   window.__showCampaignEditOverlay = showCampaignEditOverlay;
@@ -6044,11 +6396,11 @@ if (typeof window !== 'undefined') {
   window.__countOwnedKinds = countOwnedKinds;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
-  Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) loadoutSlots=[...v].slice(0,4); syncLoadoutOverlay();} });
+  Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<5) p.push(null); loadoutSlots=p.slice(0,5); } syncLoadoutOverlay();} });
   Object.defineProperty(window, 'coinSummaryVisible', { get: ()=>coinSummaryVisible, set:(v)=>{coinSummaryVisible=!!v; syncCoinSummaryOverlay();} });
   Object.defineProperty(window, 'runHolesCleared', { get: ()=>runHolesCleared, set:(v)=>{runHolesCleared=Math.max(0,Math.floor(v));} });
   Object.defineProperty(window, 'runCoinsEarned', { get: ()=>runCoinsEarned, set:(v)=>{runCoinsEarned=Math.max(0,Math.floor(v));} });
-  Object.defineProperty(window, 'loadoutUnlockedAtRunStart', { get: ()=>loadoutUnlockedAtRunStart, set:(v)=>{loadoutUnlockedAtRunStart=Math.max(1,Math.min(4,Math.floor(v)));} });
+  Object.defineProperty(window, 'loadoutUnlockedAtRunStart', { get: ()=>loadoutUnlockedAtRunStart, set:(v)=>{loadoutUnlockedAtRunStart=Math.max(1,Math.min(5,Math.floor(v)));} });
   window.__loadoutUnlockedAtRunStart = loadoutUnlockedAtRunStart;
   window.__getLoadoutUnlockedAtRunStart = () => loadoutUnlockedAtRunStart;
   Object.defineProperty(window, 'campaignEditVisible', { get: () => campaignEditVisible, set: (v) => { campaignEditVisible = !!v; syncCampaignEditOverlay(); } });
@@ -6114,7 +6466,7 @@ function playCutsceneWrapped(idOrData, opts) {
 }
 try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {

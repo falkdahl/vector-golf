@@ -1000,7 +1000,7 @@ body {
 }
 #hotbar-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   align-items: center;
 }
@@ -1035,8 +1035,25 @@ body {
 .hotbar-slot[data-type="nullify"] { background: rgba(52,152,219,0.28); border-color: rgba(52,152,219,0.9); }
 .hotbar-slot[data-type="flip"] { background: rgba(155,89,182,0.28); border-color: rgba(155,89,182,0.9); }
 .hotbar-slot[data-type="rotate"] { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.9); }
-.hotbar-slot[data-type="fieldExtender"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); cursor: default; }
-.hotbar-slot[data-type="powerCell"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); cursor: default; }
+.hotbar-slot[data-type="fieldExtender"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
+.hotbar-slot[data-type="powerCell"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
+.hotbar-slot[data-type="freeShot"] { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.9); }
+.hotbar-slot.discard-target { outline: 2px dashed rgba(255,215,0,0.9); outline-offset: 2px; cursor: pointer; }
+.hotbar-slot.discard-target:hover { transform: scale(1.10); filter: brightness(1.12); }
+.reward-skip-button { margin-top: 10px; padding: 8px 16px; font: 700 12px system-ui, sans-serif; color: white; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.35); border-radius: 8px; cursor: pointer; }
+.reward-skip-button:hover { background: rgba(255,255,255,0.2); }
+.reward-discard-hint { margin-top: 8px; font: 600 11px system-ui, sans-serif; color: #FFD700; text-align: center; max-width: 420px; }
+.reward-button.pending { outline: 2px solid #FFD700; outline-offset: 2px; }
+.reward-bag-row { display: flex; gap: 8px; justify-content: center; align-items: stretch; margin-top: 6px; flex-wrap: wrap; max-width: 480px; }
+.reward-bag-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 76px; min-height: 96px; padding: 6px 4px; border-radius: 8px; border: 2px solid rgba(255,215,0,0.65); background: rgba(255,255,255,0.07); cursor: pointer; color: white; font: 600 9px system-ui, sans-serif; }
+.reward-bag-slot:hover:not(:disabled) { background: rgba(231,76,60,0.30); border-color: #e74c3c; transform: scale(1.04); }
+.reward-bag-slot:disabled { opacity: 0.45; cursor: default; }
+.reward-bag-slot img { width: 30px; height: 30px; object-fit: contain; pointer-events: none; }
+.reward-bag-fallback { font: 700 20px system-ui, sans-serif; color: #FFD700; pointer-events: none; }
+.reward-bag-name { pointer-events: none; text-align: center; line-height: 1.2; }
+.reward-bag-key { font: 700 9px system-ui, sans-serif; color: #ff9a9a; pointer-events: none; }
+.loadout-storage-section { margin-top: 12px; }
+.loadout-storage-section h3 { font: 700 13px system-ui, sans-serif; color: white; text-align: center; margin: 0 0 6px; }
 .hotbar-slot.passive { cursor: default; }
 .hotbar-slot.passive:hover { filter: brightness(1.05); }
 .hotbar-slot.selected {
@@ -1844,6 +1861,24 @@ body {
 .loadout-slot[data-type="powerCell"].filled { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
 .loadout-slot[data-type="freeShot"].filled { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.9); }
 .loadout-hint { margin: 0; font: 500 10px system-ui, sans-serif; color: rgba(255,255,255,0.7); }
+/* Storage panel (tactical rework): separate visible personal-storage grid */
+.storage-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 96px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  user-select: none;
+}
+.storage-item img { width: 28px; height: 28px; object-fit: contain; }
+.storage-item .st-name { font: 700 10px system-ui, sans-serif; color: white; }
+.storage-item .st-count { font: 600 9px system-ui, sans-serif; color: rgba(255,255,255,0.75); }
+.storage-item.none { opacity: 0.45; }
 /* Personal storage — square items, not full-width, wrap */
 .personal-storage-grid {
   width: 100%;
