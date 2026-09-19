@@ -458,8 +458,17 @@ let loadoutUnlockedAtRunStart = 1;
 // until dismissal. runShopRestocked tracks whether this run restocked the shop.
 let deferredMenuReturn = false;
 let runShopRestocked = false;
+// First-clear tracking for the active run (10-progression.md §1.2/§4, 11-cutscenes §11d):
+// runFirstCourseClear is true when this run cleared its course for the first time
+// ever (bestTotal null → set in maybeUpdateHighScore); only then is the +50
+// Course Cleared bonus awarded. runUnlockedNewCourse is true when that first
+// clear generated the next staged course. Both reset at run start.
+let runFirstCourseClear = false;
+let runUnlockedNewCourse = false;
 function isMenuReturnDeferred() { return !!deferredMenuReturn; }
 function isShopRestockedThisRun() { return !!runShopRestocked; }
+function isCourseFirstClearThisRun() { return !!runFirstCourseClear; }
+function isNewCourseUnlockedThisRun() { return !!runUnlockedNewCourse; }
 function normalizeSupplyType(type) {
   if (type === 'amplify') return 'magnifier';
   if (type === 'nullify') return 'liquifier';
@@ -1231,6 +1240,8 @@ function startCourseWithLoadout(courseId, slots) {
   runHolesCleared=0; runCoinsEarned=0;
   try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 4; }
   runShopRestocked = false;
+  runFirstCourseClear = false;
+  runUnlockedNewCourse = false;
   deferredMenuReturn = false;
   loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
   loadoutHideShopDueToIntro = false;
@@ -1294,7 +1305,8 @@ function fastForwardCoinSummary() {
   }
   const unlockEl = document.getElementById('coin-summary-unlock');
   const shopEl = document.getElementById('coin-summary-shop');
-  syncCoinSummaryNotices(unlockEl, shopEl, false);
+  const courseEl = document.getElementById('coin-summary-course');
+  syncCoinSummaryNotices(unlockEl, shopEl, courseEl, false);
   coinSummaryAnimDone = true;
   syncProgressionDisplay();
   try { syncMainMenu(); } catch {}
@@ -1320,16 +1332,18 @@ function animateCoinSummaryAmount(from, to, duration = 320) {
   };
   requestAnimationFrame(step);
 }
-// End-screen notice lines (10-progression.md §4): loadout-slot unlock and shop
-// restock. animate=true fades them in for the animated sequence; false shows final.
+// End-screen notice lines (10-progression.md §4): loadout-slot unlock, shop
+// restock and new-course unlock. animate=true fades them in for the animated
+// sequence; false shows final.
 function isLoadoutSlotUnlockedThisRun() {
   try {
     return getUnlockedLoadoutSlots() > (loadoutUnlockedAtRunStart ?? 1);
   } catch { return false; }
 }
-function syncCoinSummaryNotices(unlockEl, shopEl, animate) {
+function syncCoinSummaryNotices(unlockEl, shopEl, courseEl, animate) {
   const showUnlock = isLoadoutSlotUnlockedThisRun();
   const showShop = isShopRestockedThisRun();
+  const showCourse = isNewCourseUnlockedThisRun();
   const showLine = (elm, text, show) => {
     if (!elm) return;
     elm.textContent = text;
@@ -1349,6 +1363,7 @@ function syncCoinSummaryNotices(unlockEl, shopEl, animate) {
   };
   showLine(unlockEl, 'Loadout slot unlocked', showUnlock);
   showLine(shopEl, 'New items in the shop', showShop);
+  showLine(courseEl, 'New Course Unlocked', showCourse);
 }
 function syncCoinSummaryOverlay() {
   const el = document.getElementById('coin-summary-overlay');
@@ -1361,6 +1376,7 @@ function syncCoinSummaryOverlay() {
     const details = document.getElementById('coin-summary-details');
     const unlockEl = document.getElementById('coin-summary-unlock');
     const shopEl = document.getElementById('coin-summary-shop');
+    const courseEl = document.getElementById('coin-summary-course');
     // Keep legacy elements hidden — do not show You earned / cleared texts per new spec
     if (txt) { txt.textContent = `You earned ${coinSummaryCoins} coins: ${coinSummaryHoles} holes × ${COINS_PER_HOLE} coins per hole`; txt.classList.add('hidden'); }
     if (br) { br.textContent = coinSummaryHoles>0 ? `${coinSummaryHoles} hole${coinSummaryHoles===1?'':'s'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
@@ -1389,7 +1405,7 @@ function syncCoinSummaryOverlay() {
         const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
         if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
-      syncCoinSummaryNotices(unlockEl, shopEl, false);
+      syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), false);
     } else if (!isCoinSummaryAnimating()) {
       // Initial render before animation starts: show final instantly if not animating path
       // This fallback keeps old behaviour for non-animated calls
@@ -1416,7 +1432,7 @@ function syncCoinSummaryOverlay() {
         const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
         if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
-      syncCoinSummaryNotices(unlockEl, shopEl, false);
+      syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), false);
       coinSummaryAnimDone = true;
     }
   } else el.classList.add('hidden');
@@ -1450,10 +1466,12 @@ function showCoinSummary(holes, coins) {
   const details = document.getElementById('coin-summary-details');
   const unlockEl = document.getElementById('coin-summary-unlock');
   const shopEl = document.getElementById('coin-summary-shop');
+  const courseEl = document.getElementById('coin-summary-course');
   if (amt) amt.textContent = `+0`;
   if (details) details.innerHTML = '';
   if (unlockEl) { unlockEl.textContent = `Loadout slot unlocked`; unlockEl.style.display = 'none'; unlockEl.style.opacity = '0'; }
   if (shopEl) { shopEl.textContent = `New items in the shop`; shopEl.style.display = 'none'; shopEl.style.opacity = '0'; }
+  if (courseEl) { courseEl.textContent = `New Course Unlocked`; courseEl.style.display = 'none'; courseEl.style.opacity = '0'; }
   syncProgressionDisplay();
   try { syncMainMenu(); } catch {}
 
@@ -1492,14 +1510,14 @@ function showCoinSummary(holes, coins) {
     coinSummaryAnimTimers.push(t2);
     const t3 = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
-      syncCoinSummaryNotices(unlockEl, shopEl, true);
+      syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), true);
       coinSummaryAnimDone = true;
     }, 1320);
     coinSummaryAnimTimers.push(t3);
   } else {
     const t2b = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
-      syncCoinSummaryNotices(unlockEl, shopEl, true);
+      syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), true);
       coinSummaryAnimDone = true;
     }, 780);
     coinSummaryAnimTimers.push(t2b);
@@ -1521,7 +1539,8 @@ function hideCoinSummary() {
 function finalizeRunCoinsAndShowSummary() {
   const holes = runHolesCleared;
   let coins = holes * COINS_PER_HOLE;
-  // Course completion bonus +50 if final hole WIN (full course cleared)
+  // Course completion bonus +50 only on the FIRST clear of a course (final hole
+  // WIN where this run set bestTotal null → number). Replays earn holes only.
   let isCourseComplete = false;
   try {
     if (gameState === "WIN") {
@@ -1534,7 +1553,7 @@ function finalizeRunCoinsAndShowSummary() {
       }
     }
   } catch {}
-  if (isCourseComplete) coins += COURSE_COMPLETE_BONUS;
+  if (isCourseComplete && runFirstCourseClear) coins += COURSE_COMPLETE_BONUS;
   runCoinsEarned = coins;
   if (coins>0) addCoins(coins);
   else { // still ensure progression saved even if 0
@@ -1618,6 +1637,8 @@ function getSavePayload() {
     modifiers: modifiers.map(m => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })),
     aimAngle: getAimAngle(),
     rewardChosenCounts: { ...rewardChosenCounts },
+    runFirstCourseClear: !!runFirstCourseClear,
+    runUnlockedNewCourse: !!runUnlockedNewCourse,
     paused: pauseMenuVisible,
     savedAt: Date.now()
   };
@@ -1723,6 +1744,8 @@ function loadProgress() {
     rewardMenuVisible = !!d.rewardMenuVisible && rewardOffered.length >= 1 && rewardOffered.length <= 3;
     pendingRewardType = null;
     rewardSeedCounter = Number.isFinite(d.rewardSeedCounter) ? Math.max(0, Math.floor(d.rewardSeedCounter)) : 0;
+    runFirstCourseClear = !!d.runFirstCourseClear;
+    runUnlockedNewCourse = !!d.runUnlockedNewCourse;
     if (d.campaignSeed && typeof setCampaignSeed === 'function') {
       try { setCampaignSeed(String(d.campaignSeed)); } catch {};
     }
@@ -2080,10 +2103,17 @@ function maybeUpdateHighScore() {
   if (firstClear) {
     try { grantShopMilestoneStock(activeCourse.holeCount); } catch {}
   }
+  // First-clear + unlock tracking for this run (coin bonus, summary notices,
+  // end-9-hole cutscene). Replays leave both flags false.
+  if (firstClear) {
+    runFirstCourseClear = true;
+  }
   // Auto-generate next stage if this stage was just cleared (or already cleared)
   if (activeCourse.bestTotal !== null) {
     const next = ensureNextStageUnlocked(courses);
     if (next) {
+      // A new staged course was generated by this run's clear.
+      runUnlockedNewCourse = true;
       try { renderCourseList(); } catch {};
     } else if (updated) {
       // still re-render to show unlock
@@ -4272,9 +4302,43 @@ function advanceHole() {
   }
 }
 
+function isEnd9HoleCutsceneDue() {
+  try {
+    if (cutsceneIsActive()) return false;
+    if (gameState !== "WIN") return false;
+    if (!activeCourse || activeCourse.holeCount !== 9) return false;
+    if (!runFirstCourseClear) return false;
+    if (cutsceneHasSeen('end-9-hole')) return false;
+    return true;
+  } catch { return false; }
+}
 function returnToMainMenu() {
   // REQ-009/011 final-hole: clear run, keep COURSES_KEY/bestTotal, show splash
   // Ensure per-course bestTotal already saved via maybeUpdateHighScore before calling
+  // 11-cutscenes §11d: first 9-hole clear plays end-9-hole after victory, before summary.
+  if (isEnd9HoleCutsceneDue()) {
+    playEnd9HoleThenReturn();
+    return;
+  }
+  continueReturnToMainMenu();
+}
+function playEnd9HoleThenReturn() {
+  // Hide the victory overlay so the cutscene background is visible; the summary
+  // (and deferred menu return) runs on completion/skip. Never blocks on failure.
+  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch {}
+  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch {}
+  const proceed = () => { try { cutsceneMarkSeen('end-9-hole'); } catch {} continueReturnToMainMenu(); };
+  const fallback = () => { console.warn('[end-9-hole] failed to load, skipping to summary'); proceed(); };
+  try {
+    cutsceneLoad('end-9-hole').then((loaded) => {
+      if (!loaded) { fallback(); return; }
+      let ok = false;
+      try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
+      if (!ok) fallback();
+    }).catch(() => { fallback(); });
+  } catch (e) { fallback(); }
+}
+function continueReturnToMainMenu() {
   // Coin economy: add coins for holes cleared this run and show summary
   try { finalizeRunCoinsAndShowSummary(); } catch {}
   if (coinSummaryVisible) {
@@ -6477,6 +6541,9 @@ if (typeof window !== 'undefined') {
   window.__isCoinSummaryAnimating = isCoinSummaryAnimating;
   window.__isMenuReturnDeferred = isMenuReturnDeferred;
   window.__isShopRestockedThisRun = isShopRestockedThisRun;
+  window.__isCourseFirstClearThisRun = isCourseFirstClearThisRun;
+  window.__isNewCourseUnlockedThisRun = isNewCourseUnlockedThisRun;
+  window.__isEnd9HoleCutsceneDue = isEnd9HoleCutsceneDue;
   window.__finishReturnToMainMenu = finishReturnToMainMenu;
   window.__fastForwardCoinSummary = fastForwardCoinSummary;
   window.__showCoinSummary = showCoinSummary;
