@@ -27,27 +27,35 @@
       ]
     },
     {
-      "id": "rewards-second",
+      "id": "attempts-fourth",
       "lines": [
         {
           "speaker": "caddy",
-          "text": "Two ways to earn an upgrade out here: grab a treasure chest, or clear the hole. Both pay out a reward."
+          "text": "One last rule before we walk, and it is the big one. You get 10 attempts per hole. Not per course. Per hole."
         },
         {
           "speaker": "may",
-          "text": "And I can pick anything I like?"
+          "text": "And if I need an eleventh?"
         },
         {
           "speaker": "caddy",
-          "text": "Only from the items you already own. The offering shows your shelf, nothing more. Buy more in the shop, see more on offer."
+          "text": "Then the trial is over and you start the whole course from the beginning. No mercy, no extra balls."
         },
         {
           "speaker": "may",
-          "text": "What about the gadgets I left sitting on the grass?"
+          "text": "So every shot counts twice."
         },
         {
           "speaker": "caddy",
-          "text": "Gone when the hole clears. Placed is spent. So right-click them to pick them back up before you hole out."
+          "text": "Exactly. Plan your field modifiers well. Spend them where they win you the hole, not where they look pretty."
+        },
+        {
+          "speaker": "may",
+          "text": "No exceptions? No eleventh shot, ever?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Well... word is there are free shots out there. Shots that do not count. Rare as an honest Marshal. If one ever finds you, spend it like it is your last."
         }
       ]
     },
@@ -81,35 +89,27 @@
       ]
     },
     {
-      "id": "attempts-fourth",
+      "id": "rewards-second",
       "lines": [
         {
           "speaker": "caddy",
-          "text": "One last rule before we walk, and it is the big one. You get 10 attempts per hole. Not per course. Per hole."
+          "text": "Two ways to earn an upgrade out here: grab a treasure chest, or clear the hole. Both pay out a reward."
         },
         {
           "speaker": "may",
-          "text": "And if I need an eleventh?"
+          "text": "And I can pick anything I like?"
         },
         {
           "speaker": "caddy",
-          "text": "Then the trial is over and you start the whole course from the beginning. No mercy, no extra balls."
+          "text": "Only from the items you already own. The offering shows your shelf, nothing more. Buy more in the shop, see more on offer."
         },
         {
           "speaker": "may",
-          "text": "So every shot counts twice."
+          "text": "What about the gadgets I left sitting on the grass?"
         },
         {
           "speaker": "caddy",
-          "text": "Exactly. Plan your field modifiers well. Spend them where they win you the hole, not where they look pretty."
-        },
-        {
-          "speaker": "may",
-          "text": "No exceptions? No eleventh shot, ever?"
-        },
-        {
-          "speaker": "caddy",
-          "text": "Well... word is there are free shots out there. Shots that do not count. Rare as an honest Marshal. If one ever finds you, spend it like it is your last."
+          "text": "Gone when the hole clears. Placed is spent. So right-click them to pick them back up before you hole out."
         }
       ]
     },

@@ -71,19 +71,31 @@ takes over the background canvas like a full cutscene.
      completes (or immediately if the banter file is missing/invalid/empty).
 - Selection: the first four banters are fixed onboarding — `banters[0]`
   (`controls-first`: aim/shoot/place/remove/reset) plays on the first run,
-  `banters[1]` (`rewards-second`: chests/hole-clear rewards, owned-only offers,
-  placed modifiers lost on clear, right-click pickup) on the second run,
+  `banters[1]` (`attempts-fourth`: 10 attempts per hole, failing restarts the
+  whole course, plan modifier usage well) on the second run,
   `banters[2]` (`stacking-third`: stacking field modifiers, deflector/rotator
   direction twists, magnifying a Rotator or Deflector for the needed
-  trajectory) on the third run, and `banters[3]` (`attempts-fourth`: 10
-  attempts per hole, failing restarts the whole course, plan modifier usage
-  well) on the fourth run. After those four have played, each run start picks
-  randomly (`Math.random`) among the rest (`banters[4:]`). A persisted counter
-  (`BANTER_STATE_KEY =
-  "golfVectorField.banter.v1"`, `{version:1, count}`) tracks progress: `count`
+  trajectory) on the third run, and `banters[3]` (`rewards-second`:
+  chests/hole-clear rewards, owned-only offers, placed modifiers lost on
+  clear, right-click pickup) on the fourth run. Selection is resolved by
+  banter id (`controls-first`, `attempts-fourth`, `stacking-third`,
+  `rewards-second` in that order) with positional fallback to `banters[0..3]`
+  when an id is missing. After those four have played, each run start draws
+  from a **shuffle bag** over the rest (all banters whose id is not one of
+  the four onboarding ids, i.e. `banters[4:]` in the canonical file order):
+  the bag holds each remaining banter id exactly once in `Math.random`
+  shuffled order, one id is popped per played banter, and the bag is only
+  rebuilt and reshuffled once fully empty — so every remaining banter plays
+  exactly once per cycle with no repeats until the whole cycle completes. A
+  persisted counter plus last-played id plus bag (`BANTER_STATE_KEY =
+  "golfVectorField.banter.v1"`, `{version:1, count, lastId, bag:string[]}`)
+  tracks progress: `count`
   `0` → first scene, `1` → second scene, `2` → third scene, `3` → fourth
-  scene, `≥4` → random among the rest, and increments after each played
-  banter. `localStorage.clear()` / campaign regeneration resets the sequence.
+  scene, `≥4` → pop next id from the bag (rebuilding + reshuffling when
+  empty; stored bags are repaired by dropping unknown ids and appending any
+  missing current ids), and increments after each played banter (updating
+  `lastId` to the played entry's id and persisting the remaining bag).
+  `localStorage.clear()` / campaign regeneration resets the sequence.
 - `showLoadout(courseId)` preloads `src/banter.json` in the background
   (`preloadBanterFile()`, fire-and-forget) so no fetch gap appears when the
   loadout closes.
@@ -96,8 +108,8 @@ takes over the background canvas like a full cutscene.
 - Runtime API (`src/banter.js`): `loadBanterFile()`, `preloadBanterFile()`,
   `getBanter(id)`, `listBanterIds()`, `validateBanter(data)`,
   `isBanterActive()`, `getActiveBanterId()`, `playBanter(idOrEntry,
-  {onComplete})`, `playRunStartBanter({onComplete})` (async, first-four-fixed
-  then random among the rest),
+  {onComplete})`,   `playRunStartBanter({onComplete})` (async, first-four-fixed
+  then one draw per run from the persisted shuffle bag),
   `updateBanter(dtSeconds)`, `handleBanterInput(e): boolean`, `skipBanter()`.
 - While `isBanterActive()`:
   - `update(dt)` ticks wind + `updateBanter(dt)` and returns early (physics
@@ -136,9 +148,11 @@ takes over the background canvas like a full cutscene.
       background takeover), then shows `Hole 1` `1000ms`; missing/invalid file
       falls back to the banner immediately.
 - [ ] Consecutive run starts play the fixed onboarding first (`controls-first`,
-      then `rewards-second`, then `stacking-third`, then `attempts-fourth`)
-      and afterwards pick randomly among the remaining banters; counter
-      persists in `BANTER_STATE_KEY`.
+      then `attempts-fourth`, then `stacking-third`, then `rewards-second`)
+      and afterwards draw from a shuffle bag over the remaining banters: each
+      remaining id plays exactly once per cycle (no repeats until the bag is
+      empty, then it is reshuffled); `count` + `lastId` + `bag` persist in
+      `BANTER_STATE_KEY`.
 - [ ] While banter is active: no launch, charge, aim drift, placement, drag,
       `R`, `H`, or pause; ball stays at tee `AIMING`; wind keeps animating.
 - [ ] Skip button: `#banter-skip-button` (`Skip »`) is visible in the top-right corner (`top` within `20px`, `right` within `20px` of `#game-container`, `z-index:14` above dialog) while banter is active and hidden (`display:none`) otherwise; clicking it ends the banter at once (Hole 1 banner still shows, counter still bumps) without also advancing dialog; same pill design as `#cutscene-skip-button`.

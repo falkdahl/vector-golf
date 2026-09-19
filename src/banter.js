@@ -95,22 +95,86 @@ export function listBanterIds() {
 }
 
 // --- Round-robin state: which banter plays on the next run start ---
-function loadBanterCount() {
+// Fixed onboarding order (by id): controls, attempts, stacking, rewards.
+// Afterwards each run draws from a persisted shuffle bag holding every
+// non-onboarding id exactly once; the bag is only reshuffled when empty,
+// so no banter repeats until the full cycle completes.
+export const ONBOARDING_BANTER_IDS = [
+  'controls-first',
+  'attempts-fourth',
+  'stacking-third',
+  'rewards-second',
+];
+
+function loadBanterState() {
   try {
     const raw = localStorage.getItem(BANTER_STATE_KEY);
-    if (!raw) return 0;
+    if (!raw) return { count: 0, lastId: null, bag: null };
     const d = JSON.parse(raw);
-    if (!d || d.version !== 1) return 0;
-    return Math.max(0, Math.floor(d.count || 0));
+    if (!d || d.version !== 1) return { count: 0, lastId: null, bag: null };
+    return {
+      count: Math.max(0, Math.floor(d.count || 0)),
+      lastId: typeof d.lastId === 'string' && d.lastId ? d.lastId : null,
+      bag: Array.isArray(d.bag) ? d.bag.filter((id) => typeof id === 'string' && id) : null,
+    };
+  } catch { return { count: 0, lastId: null, bag: null }; }
+}
+
+function loadBanterCount() {
+  return loadBanterState().count;
+}
+
+function saveBanterState(state) {
+  try {
+    const payload = { version: 1, count: Math.max(0, Math.floor(state.count || 0)) };
+    if (state.lastId) payload.lastId = state.lastId;
+    if (Array.isArray(state.bag)) payload.bag = state.bag.filter((id) => typeof id === 'string' && id);
+    localStorage.setItem(BANTER_STATE_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
+function bumpBanterCount(lastId = null, bag = undefined) {
+  try {
+    const prev = loadBanterState();
+    const next = { count: prev.count + 1, lastId: prev.lastId, bag: prev.bag };
+    if (typeof lastId === 'string' && lastId) next.lastId = lastId;
+    if (Array.isArray(bag)) next.bag = bag;
+    saveBanterState(next);
+    return next.count;
   } catch { return 0; }
 }
 
-function bumpBanterCount() {
-  try {
-    const n = loadBanterCount() + 1;
-    localStorage.setItem(BANTER_STATE_KEY, JSON.stringify({ version: 1, count: n }));
-    return n;
-  } catch { return 0; }
+// Fisher-Yates shuffle of ids (banter variety is UX, Math.random is fine).
+export function shuffleBanterIds(ids) {
+  const arr = Array.isArray(ids) ? [...ids] : [];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Repair a stored bag against the currently available ids: drop unknown
+// ids, then append any missing ids in shuffled order. Returns a fresh array.
+export function normalizeBanterBag(storedBag, restIds) {
+  const valid = new Set(Array.isArray(restIds) ? restIds : []);
+  const seen = new Set();
+  const bag = [];
+  for (const id of Array.isArray(storedBag) ? storedBag : []) {
+    if (typeof id !== 'string' || !id || !valid.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    bag.push(id);
+  }
+  const missing = [];
+  for (const id of valid) {
+    if (!seen.has(id)) missing.push(id);
+  }
+  return bag.concat(shuffleBanterIds(missing));
+}
+
+export function peekBanterBag() {
+  const st = loadBanterState();
+  return Array.isArray(st.bag) ? [...st.bag] : null;
 }
 
 // --- Playback state (in-place dialog, no cutscene takeover) ---
@@ -262,26 +326,28 @@ export async function playRunStartBanter(options = {}) {
   const data = await loadBanterFile();
   if (!data || !Array.isArray(data.banters) || !data.banters.length) return false;
   const banters = data.banters;
-  const count = loadBanterCount();
-  // 12-banter: the first four scenes are fixed onboarding (controls, rewards,
-  // stacking, attempts); afterwards pick randomly among the rest.
+  const byId = new Map(banters.map((b) => [b && b.id, b]));
+  const { count, bag: storedBag } = loadBanterState();
+  // 12-banter: the first four scenes are fixed onboarding (controls,
+  // attempts, stacking, rewards); afterwards draw from the shuffle bag.
   let entry = null;
-  if (count === 0) {
-    entry = banters[0];
-  } else if (count === 1) {
-    entry = banters.length > 1 ? banters[1] : banters[0];
-  } else if (count === 2) {
-    entry = banters.length > 2 ? banters[2] : banters[0];
-  } else if (count === 3) {
-    entry = banters.length > 3 ? banters[3] : banters[0];
+  let remainingBag = null;
+  if (count >= 0 && count < ONBOARDING_BANTER_IDS.length) {
+    entry = byId.get(ONBOARDING_BANTER_IDS[count]) || banters[count] || banters[0];
   } else {
-    const rest = banters.slice(4);
-    entry = rest.length ? rest[Math.floor(Math.random() * rest.length)] : banters[0];
+    const rest = banters.filter((b) => b && !ONBOARDING_BANTER_IDS.includes(b.id));
+    const pool = rest.length ? rest : banters.slice(ONBOARDING_BANTER_IDS.length);
+    const restIds = pool.map((b) => b.id);
+    let bag = normalizeBanterBag(storedBag, restIds);
+    if (!bag.length) bag = shuffleBanterIds(restIds);
+    const nextId = bag.shift();
+    remainingBag = bag;
+    entry = (nextId && byId.get(nextId)) || pool[Math.floor(Math.random() * pool.length)] || banters[0];
   }
   if (!entry) return false;
   const ok = playBanter(entry, {
     onComplete: (completed) => {
-      try { bumpBanterCount(); } catch {}
+      try { bumpBanterCount(entry.id, remainingBag !== null ? remainingBag : undefined); } catch {}
       if (options.onComplete) try { options.onComplete(completed); } catch {}
     },
   });
@@ -369,6 +435,10 @@ if (typeof window !== 'undefined') {
     validateBanter,
     listBanterIds,
     getBanter,
+    ONBOARDING_BANTER_IDS,
+    shuffleBanterIds,
+    normalizeBanterBag,
+    peekBanterBag,
     SPEAKERS,
     BANTER_CPS,
     BANTER_LINGER_MS,
