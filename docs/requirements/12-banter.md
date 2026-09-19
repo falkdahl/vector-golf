@@ -112,6 +112,13 @@ takes over the background canvas like a full cutscene.
   which runs after any cutscene chain has completed; the cutscene branch in
   `update()`/input handlers keeps priority.
 
+## 6. Skip Button — Same Design as Cutscene Skip
+
+- Every banter shows a **Skip button** in the **top-right corner** of the canvas while it is active: `<button id="banter-skip-button">Skip »</button>` as a direct child of `#game-container` (bounded, `position:absolute; top:10px; right:12px; z-index:14` above the dialog `z-index:12`), `hidden` otherwise (`classList` contains `hidden` iff `!isBanterActive()`; `display:none` when hidden).
+- Styling is identical to `#cutscene-skip-button` (small unobtrusive pill: `font:700 11px system-ui`, white on `rgba(0,0,0,0.55)`, `1px solid rgba(255,255,255,0.35)`, `border-radius:8px`, `padding:6px 12px`, `cursor:pointer`; hover `background:rgba(0,0,0,0.75)`).
+- Clicking it calls `skipBanter()` (ends immediately via `finishActive`, invoking `onComplete` so the `Hole 1` banner shows and the banter counter still bumps). The click is `preventDefault()`-ed and `stopPropagation()`-ed so it never also advances dialog via the dialog/canvas click handlers.
+- Visibility is synced from `syncBanterSkipButton()` in `src/main.js`, called on banter start, on `onComplete`, and every frame in the `update()` banter branch, so the button is visible throughout the banter and never leaks into gameplay, menus, loadout, cutscenes, or reward overlays. Wired once in `init()` (`#banter-skip-button` click → `banterSkip()` when `isBanterActive()`), exposed as `window.__syncBanterSkipButton` for tests. The cutscene skip button stays hidden during banter (`cutsceneIsActive()===false`).
+
 ## Acceptance Criteria
 
 - [ ] `src/banter.json` is a single file with `version:1` and `banters[]`; each
@@ -134,6 +141,7 @@ takes over the background canvas like a full cutscene.
       persists in `BANTER_STATE_KEY`.
 - [ ] While banter is active: no launch, charge, aim drift, placement, drag,
       `R`, `H`, or pause; ball stays at tee `AIMING`; wind keeps animating.
+- [ ] Skip button: `#banter-skip-button` (`Skip »`) is visible in the top-right corner (`top` within `20px`, `right` within `20px` of `#game-container`, `z-index:14` above dialog) while banter is active and hidden (`display:none`) otherwise; clicking it ends the banter at once (Hole 1 banner still shows, counter still bumps) without also advancing dialog; same pill design as `#cutscene-skip-button`.
 
 ## File Paths
 

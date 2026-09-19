@@ -4,8 +4,8 @@ export const COINS_PER_HOLE = 10;
 export const COURSE_COMPLETE_BONUS = 50;
 export const SHOP_PRICE_SPATIAL = 50;
 export const SHOP_PRICE_PASSIVE = 150;
-export const MAX_LOADOUT_SLOTS = 5;
-export const GOLFBAG_SLOTS = 5;
+export const MAX_LOADOUT_SLOTS = 4;
+export const GOLFBAG_SLOTS = 4;
 export const SHOP_INITIAL_STOCK = {
   magnifier: 0,
   liquifier: 0,
@@ -220,10 +220,10 @@ export function getLastLoadout() {
     const d = JSON.parse(raw);
     if (!d || d.version !== 1) return null;
     const slots = d.slots;
-    if (!Array.isArray(slots) || (slots.length !== 5 && slots.length !== 4)) return null;
-    // Migrate legacy 4-slot saves by padding to 5
-    const padded = slots.length === 4 ? [...slots, null] : slots;
-    const cleaned = padded.map(v => {
+    if (!Array.isArray(slots) || (slots.length !== 4 && slots.length !== 5)) return null;
+    // Normalize to 4 slots: legacy 5-slot saves truncated to first 4
+    const sized = slots.length === 5 ? slots.slice(0, 4) : slots;
+    const cleaned = sized.map(v => {
       if (v === null || v === undefined) return null;
       return normalizeLoadoutType(String(v));
     });
@@ -234,9 +234,9 @@ export function getLastLoadout() {
 
 export function setLastLoadout(slots) {
   try {
-    if (!Array.isArray(slots) || (slots.length !== 5 && slots.length !== 4)) return false;
-    const padded = slots.length === 4 ? [...slots, null] : slots;
-    const cleaned = padded.map(v => {
+    if (!Array.isArray(slots) || (slots.length !== 4 && slots.length !== 5)) return false;
+    const sized = slots.length === 5 ? slots.slice(0, 4) : slots;
+    const cleaned = sized.map(v => {
       if (v === null || v === undefined) return null;
       return normalizeLoadoutType(String(v));
     });

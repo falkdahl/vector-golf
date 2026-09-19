@@ -45,7 +45,7 @@ import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPosi
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
-import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload } from "./banter.js";
+import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip } from "./banter.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -405,19 +405,23 @@ function resetHotbarCollapsed() {
   syncHotbarCollapsedUI();
 }
 
-// Supply per tactical rework: 5-slot golfbag is source of truth (one item per slot, no stacking).
-// Run supply starts empty and is filled via loadout selection (5 slots) — default kept for backward compat tests that check resetSupply
+// Supply per tactical rework: 4-slot golfbag is source of truth (one item per slot, no stacking).
+// Run supply starts empty and is filled via loadout selection (4 slots) — default kept for backward compat tests that check resetSupply
 let supply = { magnifier: 0, liquifier: 1, deflector: 0, rotator: 0, freeShot: 0 };
-const GOLFBAG_SIZE = 5;
+const GOLFBAG_SIZE = 4;
 const FREE_SHOT_CHARGES_PER_ITEM = 3;
 // Each entry: null | {type:string, charges?:number} (freeShot carries charges, others single-use)
-let golfbag = [{ type: 'liquifier' }, null, null, null, null];
-let selectedBagIndex = -1; // slot-based selection (hotkeys 1-5)
+let golfbag = [{ type: 'liquifier' }, null, null, null];
+let selectedBagIndex = -1; // slot-based selection (hotkeys 1-4)
 let pendingRewardType = null; // reward chosen while bag full, awaiting discard/skip
+// Pickup-discard mode: right-clicking a field modifier while the bag is full arms
+// this instead of toasting. Clicking a bag slot discards it and completes the
+// pickup; clicking the map or Escape cancels. Same .discard-target highlight.
+let pendingPickup = null; // null | { type:string, modifierId:number|string|null, modifierIndex:number }
 // Persistent progression (personal items never deplete) + loadout (10-progression.md)
 let loadoutVisible = false;
 let loadoutCourseId = null;
-let loadoutSlots = [null, null, null, null, null]; // 5 slots, each null or type string, all unlocked
+let loadoutSlots = [null, null, null, null]; // 4 slots, each null or type string, all unlocked
 // Timestamp (ms) when the loadout overlay last finished opening (stamped at the END
 // of showLoadout, when the overlay is actually interactive). Backdrop/Escape dismissal
 // ignores input within LOADOUT_OPEN_GRACE_MS so click/key overshoot from
@@ -464,7 +468,7 @@ function normalizeSupplyType(type) {
   return type;
 }
 function denormalizeSupplyType(type) { return type; } // kept for alias checks
-// --- Tactical 5-slot golfbag (source of truth) ---
+// --- Tactical 4-slot golfbag (source of truth) ---
 function bagEntryType(entry) { return entry && entry.type ? normalizeSupplyType(entry.type) : null; }
 function getGolfbag() { return golfbag.map(e => (e ? { ...e } : null)); }
 function golfbagUsedCount() { let n = 0; for (const e of golfbag) if (e) n++; return n; }
@@ -487,15 +491,18 @@ function syncDerivedFromBag() {
   fieldExtenderCount = fe; areaUpgradeCount = fe;
   powerCellCount = pc;
   try { setFieldPowerCellCount(pc); } catch {}
-  // Keep slot selection consistent
+  // Keep slot selection consistent (Free Shot is display-only, never a selection)
   if (selectedBagIndex < 0 || selectedBagIndex >= GOLFBAG_SIZE || !golfbag[selectedBagIndex]) {
     if (selectedModifier && !(supply[normalizeSupplyType(selectedModifier)] > 0)) { selectedModifier = null; selectedBagIndex = -1; }
+    if (selectedModifier === 'freeShot') { selectedModifier = null; selectedBagIndex = -1; }
+  } else if (bagEntryType(golfbag[selectedBagIndex]) === 'freeShot') {
+    selectedBagIndex = -1; selectedModifier = null;
   } else {
     selectedModifier = bagEntryType(golfbag[selectedBagIndex]);
   }
 }
 function setBagFromTypeList(types) {
-  golfbag = [null, null, null, null, null];
+  golfbag = [null, null, null, null];
   const list = Array.isArray(types) ? types : [];
   let idx = 0;
   for (const raw of list) {
@@ -558,9 +565,64 @@ function selectBagSlot(idx) {
   const e = golfbag[idx];
   if (!e) { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); return true; }
   const t = bagEntryType(e);
+  // Free Shot is fully passive/display-only: never selectable, never placeable.
+  if (t === 'freeShot') { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); return true; }
   if (selectedBagIndex === idx) { selectedBagIndex = -1; selectedModifier = null; }
   else { selectedBagIndex = idx; selectedModifier = t; }
   updateHotbarUI();
+  return true;
+}
+// --- Pickup-discard mode (bag full + right-click pickup) ---
+function isPickupDiscardActive() { return !!pendingPickup; }
+function getPendingPickup() { return pendingPickup ? { ...pendingPickup } : null; }
+function enterPickupDiscard(modifierRef) {
+  if (!modifierRef || !modifierRef.type) return false;
+  if (rewardMenuVisible || banterIsActive()) return false;
+  pendingPickup = {
+    type: normalizeSupplyType(modifierRef.type),
+    modifierId: modifierRef.id ?? null,
+    modifierIndex: Number.isInteger(modifierRef.index) ? modifierRef.index : -1,
+  };
+  // Clear any armed placement while choosing what to discard
+  selectedBagIndex = -1; selectedModifier = null;
+  updateHotbarUI();
+  try { showToast('Bag full — click a bag item to discard, or click map / Esc to cancel'); } catch {}
+  return true;
+}
+function cancelPickupDiscard() {
+  if (!pendingPickup) return false;
+  pendingPickup = null;
+  updateHotbarUI();
+  return true;
+}
+function discardBagSlotForPickup(slotIdx) {
+  if (!pendingPickup) return false;
+  if (slotIdx < 0 || slotIdx >= GOLFBAG_SIZE || !golfbag[slotIdx]) return false;
+  const wanted = pendingPickup;
+  // Find the targeted modifier on the board (by id first, then index, then type fallback)
+  let midx = -1;
+  if (wanted.modifierId !== null && wanted.modifierId !== undefined) {
+    midx = modifiers.findIndex(m => m.id === wanted.modifierId);
+  }
+  if (midx === -1 && wanted.modifierIndex >= 0 && wanted.modifierIndex < modifiers.length) {
+    const cand = modifiers[wanted.modifierIndex];
+    if (cand && normalizeSupplyType(cand.type) === wanted.type) midx = wanted.modifierIndex;
+  }
+  if (midx === -1) {
+    midx = modifiers.findIndex(m => normalizeSupplyType(m.type) === wanted.type);
+  }
+  if (midx === -1) { pendingPickup = null; updateHotbarUI(); return false; }
+  // Discard the chosen bag item, then complete the pickup into the freed slot
+  golfbag[slotIdx] = null;
+  syncDerivedFromBag();
+  const [removed] = modifiers.splice(midx, 1);
+  if (removed && removed.type) addItemToBag(normalizeSupplyType(removed.type));
+  else syncDerivedFromBag();
+  pendingPickup = null;
+  selectedBagIndex = -1; selectedModifier = null;
+  syncModifiersToField();
+  updateHotbarUI();
+  saveProgress();
   return true;
 }
 let isFreeShotActive = false;
@@ -702,7 +764,7 @@ function getRunCoinsEarned() { return runCoinsEarned; }
 function getRunHolesCleared() { return runHolesCleared; }
 function isCoinSummaryVisible() { return coinSummaryVisible; }
 function getUnlockedLoadoutSlots() {
-  // Tactical rework: all 5 loadout slots unlocked from the beginning.
+  // Tactical rework: all 4 loadout slots unlocked from the beginning.
   return GOLFBAG_SIZE;
 }
 
@@ -855,7 +917,7 @@ function syncLoadoutOverlay() {
       const names2 = {liquifier:'Liquifier',deflector:'Deflector',rotator:'Rotator',magnifier:'Magnifier',fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shot'};
       const icons2 = {liquifier:'./img/liquifier-icon.png',deflector:'./img/deflector-icon.png',rotator:'./img/rotator-icon.png',magnifier:'./img/magnifier-icon.png',fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
       for (let i=0;i<GOLFBAG_SIZE;i++) {
-        // Tactical rework: all 5 slots unlocked from the beginning (no locked state)
+        // Tactical rework: all 4 slots unlocked from the beginning (no locked state)
         const t = loadoutSlots[i];
         const div = document.createElement('div');
         div.dataset.slot = String(i);
@@ -942,7 +1004,7 @@ function syncLoadoutOverlay() {
           const ss = getShopStock();
           for (const t of types) { if ((ss[t] ?? 0) > 0) { anyStock = true; break; } }
         } catch {}
-        empty.textContent = anyStock ? 'All items maxed (5)' : 'Shop is empty — clear courses to unlock stock';
+        empty.textContent = anyStock ? 'All items maxed (4)' : 'Shop is empty — clear courses to unlock stock';
         shop.appendChild(empty);
       }
     }
@@ -1025,12 +1087,12 @@ function showLoadout(courseId, opts) {
   let hasSaved = false;
   try {
     const saved = getLastLoadout();
-    if (Array.isArray(saved) && (saved.length === 5 || saved.length === 4)) {
+    if (Array.isArray(saved) && (saved.length === 4 || saved.length === 5)) {
       hasSaved = true;
-      const src = saved.length === 4 ? [...saved, null] : saved;
+      const src = saved.length === 5 ? saved.slice(0, 4) : saved;
       const personal = getPersonalSupply();
       const used = {};
-      const validated = [null,null,null,null,null];
+      const validated = [null,null,null,null];
       for (let i=0;i<GOLFBAG_SIZE;i++) {
         const t = src[i];
         if (!t) { validated[i]=null; continue; }
@@ -1049,11 +1111,11 @@ function showLoadout(courseId, opts) {
   if (hasSaved && preloaded) {
     loadoutSlots = preloaded;
   } else if (!hasSaved) {
-    // No saved loadout — pick random item from player's storage for each of the 5 slots
+    // No saved loadout — pick random item from player's storage for each of the 4 slots
     try {
       const personal = getPersonalSupply();
       const available = { ...personal };
-      const rnd = [null,null,null,null,null];
+      const rnd = [null,null,null,null];
       const types = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
       for (let i=0;i<GOLFBAG_SIZE;i++) {
         const candidates = types.filter(tp => (available[tp] ?? 0) > 0);
@@ -1065,7 +1127,7 @@ function showLoadout(courseId, opts) {
       }
       loadoutSlots = rnd;
     } catch {
-      loadoutSlots = [null,null,null,null,null];
+      loadoutSlots = [null,null,null,null];
     }
   }
   loadoutVisible = true;
@@ -1127,19 +1189,19 @@ function hideLoadout() {
 function startCourseWithLoadout(courseId, slots) {
   const course = findCourseById(courseId || loadoutCourseId);
   if (!course) return false;
-  // Persist last loadout before deriving supply — slots param or current loadoutSlots (full 5)
+  // Persist last loadout before deriving supply — slots param or current loadoutSlots (full 4)
   try {
     const toSave = Array.isArray(slots) ? (() => {
-      if (slots.length===5 && slots.every(v=>v===null || typeof v==='string')) return slots.slice(0,5);
-      if (slots.length===4 && slots.every(v=>v===null || typeof v==='string')) return [...slots, null];
-      const padded = [null,null,null,null,null];
+      if (slots.length===4 && slots.every(v=>v===null || typeof v==='string')) return slots.slice(0,4);
+      if (slots.length===5 && slots.every(v=>v===null || typeof v==='string')) return slots.slice(0,4);
+      const padded = [null,null,null,null];
       let idx=0;
       for (let i=0;i<GOLFBAG_SIZE;i++) {
         if (idx < slots.length) padded[i]=slots[idx++] || null;
         else padded[i]=null;
       }
       return padded;
-    })() : loadoutSlots.slice(0,5);
+    })() : loadoutSlots.slice(0,4);
     if (Array.isArray(toSave)) setLastLoadout(toSave);
   } catch {}
   const chosen = Array.isArray(slots) ? slots.filter(Boolean) : loadoutSlots.filter(Boolean);
@@ -1157,6 +1219,7 @@ function startCourseWithLoadout(courseId, slots) {
   clearFreeShotGlow();
   maxAttempts=10;
   pendingRewardType=null;
+  pendingPickup=null;
   rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false; rewardMenuHover=null; rewardRerollHover=false; rewardClaimedFor=null;
   rewardSeedCounter=0;
   holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
@@ -1166,10 +1229,10 @@ function startCourseWithLoadout(courseId, slots) {
   rewardChosenCounts={ magnifier:0, liquifier:0, deflector:0, rotator:0, freeShot:0, areaUp:0, fieldExtender:0, powerCell:0 };
   modifiers=[]; syncModifiersToField(); selectedModifier=null; selectedBagIndex=-1; selectedBagIndex=-1;
   runHolesCleared=0; runCoinsEarned=0;
-  try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 5; }
+  try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 4; }
   runShopRestocked = false;
   deferredMenuReturn = false;
-  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null,null];
+  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
   loadLevel(0); gameState='AIMING';
@@ -1181,9 +1244,10 @@ function startCourseWithLoadout(courseId, slots) {
   saveProgress();
   // 12-banter: in-place May/Caddy dialog after loadout closes, before Hole 1 banner.
   try {
-    banterPlayRunStart({ onComplete: () => { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} } }).then((ok) => {
+    banterPlayRunStart({ onComplete: () => { try { syncBanterSkipButton(); } catch {} try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} } }).then((ok) => {
+      try { syncBanterSkipButton(); } catch {}
       if (!ok) { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} }
-    }).catch(() => { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} });
+    }).catch(() => { try { syncBanterSkipButton(); } catch {} try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} });
   } catch { try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {} }
   return true;
 }
@@ -1603,7 +1667,7 @@ function loadProgress() {
     // Tactical golfbag restore (new) with legacy fallback from supply counts
     try {
       if (Array.isArray(d.golfbag) && d.golfbag.length) {
-        const gb = [null, null, null, null, null];
+        const gb = [null, null, null, null];
         for (let i = 0; i < GOLFBAG_SIZE; i++) {
           const raw = d.golfbag[i];
           if (!raw) { gb[i] = null; continue; }
@@ -1616,10 +1680,12 @@ function loadProgress() {
         golfbag = gb;
         selectedBagIndex = Number.isInteger(d.selectedBagIndex) ? Math.max(-1, Math.min(GOLFBAG_SIZE - 1, d.selectedBagIndex)) : -1;
         if (selectedBagIndex >= 0 && !golfbag[selectedBagIndex]) selectedBagIndex = -1;
+        // Free Shot is display-only: never restore it as a selection
+        if (selectedBagIndex >= 0 && golfbag[selectedBagIndex] && bagEntryType(golfbag[selectedBagIndex]) === 'freeShot') selectedBagIndex = -1;
         selectedModifier = selectedBagIndex >= 0 ? bagEntryType(golfbag[selectedBagIndex]) : null;
         syncDerivedFromBag();
       } else {
-        // Legacy: expand supply + FE/PC counts into bag slots (truncate to 5)
+        // Legacy: expand supply + FE/PC counts into bag slots (truncate to 4)
         const feLegacy = Math.max(0, Math.floor(d.fieldExtenderCount ?? d.areaUpgradeCount ?? 0));
         const pcLegacy = Math.max(0, Math.floor(d.powerCellCount ?? 0));
         const order = [];
@@ -3081,6 +3147,7 @@ function maybeShowRewardMenu() {
   if (rewardPending) {
     rewardOffered = getSeededRewardOffer();
     pendingRewardType = null;
+    pendingPickup = null;
     rewardMenuVisible = true;
     rewardMenuHover = null;
     rewardPending = false;
@@ -3692,6 +3759,8 @@ function loadLevel(index) {
   }
   // REQ-015 collapsible: reset to expanded on new hole
   resetHotbarCollapsed();
+  // Pickup-discard targets the previous hole's modifiers — always clear on hole load
+  pendingPickup = null;
   // 11-banners: reset attempts banner dedupe for new hole, hide any previous banner
   lastAttemptsBannerValue = null;
   attemptsBannerVisible = false;
@@ -3811,7 +3880,7 @@ function updateHotbarUI() {
   if (golfbagContainerEl) golfbagContainerEl.classList.toggle("hidden", hideBag);
   syncHotbarCollapsedUI();
   try { syncDerivedFromBag(); } catch {}
-  // Rebuild 5 slot-based hotbar from golfbag (one item per slot, no stacking)
+  // Rebuild 4 slot-based hotbar from golfbag (one item per slot, no stacking)
   const grid = hotbarGridEl || (hotbarEl ? hotbarEl.querySelector('#hotbar-grid') : null);
   if (grid) {
     const icons = { liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', magnifier: './img/magnifier-icon.png', fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
@@ -3819,7 +3888,7 @@ function updateHotbarUI() {
     const borders = { liquifier: '#1a4a6b', deflector: '#4a235a', rotator: '#6e1a12', magnifier: '#7a3a0a', fieldExtender: '#7a7a7a', powerCell: '#7a7a7a', freeShot: '#7a3a0a' };
     const bgs = { liquifier: 'rgba(52,152,219,0.28)', deflector: 'rgba(155,89,182,0.28)', rotator: 'rgba(231,76,60,0.28)', magnifier: 'rgba(230,126,34,0.28)', fieldExtender: 'rgba(128,128,128,0.28)', powerCell: 'rgba(128,128,128,0.28)', freeShot: 'rgba(241,196,15,0.28)' };
     // Only rebuild when bag shape/selection/pending changes to avoid hover flicker
-    const sig = golfbag.map(e => (e ? bagEntryType(e) + ':' + (e.charges ?? 1) : '-')).join('|') + '#' + selectedBagIndex + '#' + (pendingRewardType || '');
+    const sig = golfbag.map(e => (e ? bagEntryType(e) + ':' + (e.charges ?? 1) : '-')).join('|') + '#' + selectedBagIndex + '#' + (pendingRewardType || '') + '#' + (pendingPickup ? 'pickup:' + pendingPickup.type : '');
     if (grid.dataset.bagSig !== sig) {
       grid.dataset.bagSig = sig;
       grid.innerHTML = '';
@@ -3848,11 +3917,13 @@ function updateHotbarUI() {
             fb.style.font = '700 22px system-ui'; fb.style.color = '#FFD700';
             slot.appendChild(fb);
           }
-          // Hotkey badge 1-5 on every occupied slot (all slots have hotkeys)
-          const hk = document.createElement('span');
-          hk.className = 'hotbar-hotkey';
-          hk.textContent = String(i + 1);
-          slot.appendChild(hk);
+          // Hotkey badge 1-4 on every occupied slot except Free Shot (display-only, not selectable)
+          if (t !== 'freeShot') {
+            const hk = document.createElement('span');
+            hk.className = 'hotbar-hotkey';
+            hk.textContent = String(i + 1);
+            slot.appendChild(hk);
+          }
           // Count badge: freeShot shows remaining charges xN; others show nothing (one per slot)
           const cnt = document.createElement('span');
           cnt.className = 'hotbar-count';
@@ -3863,11 +3934,17 @@ function updateHotbarUI() {
           tip.className = 'hotbar-tooltip';
           tip.textContent = names[t] || t;
           slot.appendChild(tip);
-          if (i === selectedBagIndex) slot.classList.add('selected');
-          // Discard mode: highlight bag slots as destroy targets
-          if (pendingRewardType && rewardMenuVisible) {
+          if (i === selectedBagIndex && t !== 'freeShot') slot.classList.add('selected');
+          // Discard mode: highlight bag slots as destroy targets (reward or pickup-discard)
+          const inRewardDiscard = !!(pendingRewardType && rewardMenuVisible);
+          const inPickupDiscard = !!pendingPickup;
+          if (inRewardDiscard) {
             slot.classList.add('discard-target');
             slot.title = 'Click to destroy ' + (names[t] || t) + ' and take ' + pendingRewardType;
+            slot.style.cursor = 'pointer';
+          } else if (inPickupDiscard) {
+            slot.classList.add('discard-target');
+            slot.title = 'Click to discard ' + (names[t] || t) + ' and pick up ' + (names[pendingPickup.type] || pendingPickup.type);
             slot.style.cursor = 'pointer';
           } else {
             slot.style.cursor = (t === 'fieldExtender' || t === 'powerCell' || t === 'freeShot') ? 'default' : 'pointer';
@@ -3875,6 +3952,10 @@ function updateHotbarUI() {
           slot.addEventListener('click', () => {
             if (rewardMenuVisible && pendingRewardType) {
               discardBagSlotAndClaimReward(i);
+              return;
+            }
+            if (pendingPickup) {
+              discardBagSlotForPickup(i);
               return;
             }
             if (rewardMenuVisible) return;
@@ -3904,8 +3985,8 @@ function updateHotbarUI() {
       // Update selection/discard classes without rebuild
       const slots = grid.querySelectorAll('.hotbar-slot');
       slots.forEach((slot, i) => {
-        slot.classList.toggle('selected', i === selectedBagIndex && !!golfbag[i]);
-        slot.classList.toggle('discard-target', !!(pendingRewardType && rewardMenuVisible && golfbag[i]));
+        slot.classList.toggle('selected', i === selectedBagIndex && !!golfbag[i] && bagEntryType(golfbag[i]) !== 'freeShot');
+        slot.classList.toggle('discard-target', !!((pendingRewardType && rewardMenuVisible && golfbag[i]) || (pendingPickup && golfbag[i])));
       });
     }
   }
@@ -3916,6 +3997,7 @@ function updateHotbarUI() {
 function showGameOver() {
   if (gameState === "GAME_OVER") return;
   clearFreeShotFlightGlow();
+  pendingPickup = null;
   hideSoftlockBanner();
   resetSoftlockDetection();
   // Hide and clear any pending reward — Game Over takes precedence over reward screen
@@ -4032,6 +4114,7 @@ function getCanvasMousePos(e) {
 function placeModifier(x, y) {
   if (loadoutVisible || coinSummaryVisible) return;
   if (banterIsActive()) return;
+  if (pendingPickup) return;
   if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   if (selectedBagIndex < 0 || !golfbag[selectedBagIndex]) return;
@@ -4055,11 +4138,10 @@ function placeModifier(x, y) {
 function removeModifierAt(x, y) {
   const idx = modifiers.findIndex(m => Math.hypot(m.x - x, m.y - y) < m.radius);
   if (idx !== -1) {
-    // Tactical: can only be picked up again if there is bag space
+    // Tactical: can only be picked up again if there is bag space;
+    // when full, enter pickup-discard mode instead of just toasting.
     if (!golfbagHasEmpty()) {
-      try { showToast('Bag full — no space to pick up (discard in reward menu)'); } catch {}
-      try { canvas.style.cursor = 'not-allowed'; setTimeout(() => { try { canvas.style.cursor = 'default'; } catch {} }, 900); } catch {}
-      updateHotbarUI();
+      enterPickupDiscard({ type: modifiers[idx].type, id: modifiers[idx].id, index: idx });
       return false;
     }
     const [removed] = modifiers.splice(idx, 1);
@@ -4416,7 +4498,11 @@ function update(dt) {
   // 11-cutscenes: when active, freeze game physics but advance cutscene & wind
   try { if (cutsceneIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch {} return; } } catch {}
   // 12-banter: in-place dialog freezes physics/input like the Hole 1 banner but keeps terrain+wind visible
-  try { if (banterIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; banterUpdate(dt); try { updateHotbarUI(); } catch {} if (charging) { resetCharge(); gameState = "AIMING"; } return; } } catch {}
+  try { if (banterIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; banterUpdate(dt); try { updateHotbarUI(); } catch {} try { syncBanterSkipButton(); } catch {} if (charging) { resetCharge(); gameState = "AIMING"; } if (!banterIsActive()) { try { syncBanterSkipButton(); } catch {} } return; } } catch {}
+  // Banter just ended on this tick (auto-advance inside banterUpdate above also
+  // returns through the branch, but a banter that ended between frames needs a
+  // sync so the skip button never leaks into gameplay).
+  try { syncBanterSkipButton(); } catch {}
   // REQ-004: wind shader + particles advance even when menu is blocking ball physics
   const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {}; try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
   // REQ-021: when reward menu visible, block aiming/charging but still animate wind
@@ -5070,6 +5156,18 @@ function init() {
       try { if (cutsceneIsActive()) cutsceneSkip(); } catch {}
     });
   }
+  // 12-banter §6: Skip button top-right, same pill design — ends the active banter at once.
+  const banterSkipBtn = document.getElementById('banter-skip-button');
+  if (banterSkipBtn && !banterSkipBtn._banterBound) {
+    banterSkipBtn._banterBound = true;
+    banterSkipBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch {}
+      try { if (banterIsActive()) banterSkip(); } catch {}
+      try { syncBanterSkipButton(); } catch {}
+    });
+  }
 
   // Parallax layered menu background - subtle mouse parallax with 4 splash layers
   try { initParallax(); } catch (e) { console.warn('parallax init failed', e); }
@@ -5292,7 +5390,7 @@ function init() {
     }
   );
 
-  // Hotbar selection: slot-based (1-5). Slots wire their own click handlers in
+  // Hotbar selection: slot-based (1-4). Slots wire their own click handlers in
   // updateHotbarUI when rebuilt (including discard-mode clicks during reward).
   // Legacy type-based wiring removed.
   if (hotbarEl) {
@@ -5546,7 +5644,7 @@ function init() {
       e.preventDefault();
       return;
     }
-    // Reward menu: 1/2/3 selects offered reward; 1-5 on bag discards when pending; S/Skip closes without reward
+    // Reward menu: 1/2/3 selects offered reward; 1-4 on bag discards when pending; S/Skip closes without reward
     if (rewardMenuVisible) {
       if (e.code === "KeyI" || e.code === "Tab") {
         const ae = document.activeElement;
@@ -5557,8 +5655,8 @@ function init() {
         }
         return;
       }
-      // Discard mode: Digit1-5 destroys that bag slot to take the pending reward
-      if (pendingRewardType && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4" || e.code === "Digit5")) {
+      // Discard mode: Digit1-4 destroys that bag slot to take the pending reward
+      if (pendingRewardType && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4")) {
         const idx = Number(e.code.slice(5)) - 1;
         discardBagSlotAndClaimReward(idx);
         e.preventDefault();
@@ -5592,7 +5690,7 @@ function init() {
         // Digit0 no longer rerolls; blocked
         e.preventDefault();
       } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4" || e.code === "Digit5") {
-        // Block aiming/charging while menu open (Digit4/5 reserved for bag discard when pending)
+        // Block aiming/charging while menu open (Digit4 reserved for bag discard when pending)
         e.preventDefault();
       }
       return;
@@ -5604,6 +5702,12 @@ function init() {
     if (e.code === "Escape" || e.code === "KeyP") {
       // REQ-028/029 Escape/P in level shows main menu with backdrop, works even in FLYING
       if (gameState === "WIN" || rewardMenuVisible) {
+        e.preventDefault();
+        return;
+      }
+      // Pickup-discard mode: Escape (or P) leaves the mode without picking up
+      if (pendingPickup && (gameState === "AIMING" || gameState === "CHARGING")) {
+        cancelPickupDiscard();
         e.preventDefault();
         return;
       }
@@ -5665,11 +5769,19 @@ function init() {
         }
       }
     }
-    // Tactical 5-slot bag: Digit1-5 selects the bag slot (all slots have hotkeys).
-    // Spatial slots arm placement; passive slots (Field Extender/Power Cell/Free Shot) select but never place.
-    if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4" || e.code === "Digit5") {
+    // Tactical 4-slot bag: Digit1-4 selects the bag slot.
+    // Spatial slots arm placement; passive slots (Field Extender/Power Cell) select but never place;
+    // Free Shot is display-only and never selectable. In pickup-discard mode 1-4 discards that slot.
+    if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4") {
       const idx = Number(e.code.slice(5)) - 1;
-      selectBagSlot(idx);
+      if (pendingPickup) {
+        discardBagSlotForPickup(idx);
+      } else {
+        selectBagSlot(idx);
+      }
+      e.preventDefault();
+    } else if (e.code === "Digit5" || e.code === "Numpad5") {
+      // No 5th slot — ignore (legacy 5-slot saves truncated to 4)
       e.preventDefault();
     } else if ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH")) {
       // Secret: Ctrl+Shift+H / Ctrl+Shift+G / Alt+H → prompt for exact hole (hidden)
@@ -5681,11 +5793,12 @@ function init() {
         else if (input.trim() !== "") alert(`Invalid hole. Enter 1-${LEVELS.length}`);
       }
     } else if (e.code === "Delete" || e.code === "Backspace") {
-      // Remove last modifier and return to bag if space (tactical model)
+      // Remove last modifier and return to bag if space (tactical model);
+      // when full, arm pickup-discard for the last modifier instead of only toasting.
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
         if (!golfbagHasEmpty()) {
-          try { showToast('Bag full — no space to pick up'); } catch {}
-          updateHotbarUI();
+          const last = modifiers[modifiers.length - 1];
+          enterPickupDiscard({ type: last.type, id: last.id, index: modifiers.length - 1 });
         } else {
           const removed = modifiers.pop();
           if (removed && removed.type) {
@@ -5818,6 +5931,12 @@ function init() {
     }
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     if (e.button !== 0) return; // only left
+    // Pickup-discard mode: any map press leaves the mode (click handler finalizes the cancel)
+    if (pendingPickup) {
+      cancelPickupDiscard();
+      e.preventDefault();
+      return;
+    }
     const pos = getCanvasMousePos(e);
     const idx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     if (idx !== -1) {
@@ -5884,6 +6003,12 @@ function init() {
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     if (isDragging) return; // was dragging, not a placement click
     const pos = getCanvasMousePos(e);
+    // Pickup-discard mode: clicking anywhere on the map leaves the mode without picking up
+    if (pendingPickup) {
+      cancelPickupDiscard();
+      e.preventDefault();
+      return;
+    }
     // If clicked on existing modifier and not dragging, do not place (drag handles move, click on existing previously removed - now we keep draggable, so click on existing should not place nor remove)
     const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     if (overIdx !== -1) {
@@ -5899,12 +6024,23 @@ function init() {
     if (rewardMenuVisible) return;
     if (pauseMenuVisible) return;
     if (mainMenuVisible) return;
+    if (banterIsActive()) return;
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     const pos = getCanvasMousePos(e);
     // If dragging, cancel drag and remove?
     if (isDragging) {
       isDragging = false;
       draggingIdx = -1;
+    }
+    const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+    if (pendingPickup) {
+      // Right-click another modifier switches the pickup target; empty map cancels.
+      if (overIdx !== -1) {
+        enterPickupDiscard({ type: modifiers[overIdx].type, id: modifiers[overIdx].id, index: overIdx });
+      } else {
+        cancelPickupDiscard();
+      }
+      return;
     }
     removeModifierAt(pos.x, pos.y);
   });
@@ -5930,7 +6066,7 @@ function init() {
 
 // Helpers for REQ-020 testing / external acquisition
 function setSupply(newSupply) {
-  // Compat: convert counts to bag slots (truncate to 5, freeShot total becomes one item when >0)
+  // Compat: convert counts to bag slots (truncate to 4, freeShot total becomes one item when >0)
   try {
     const order = [];
     const mag = Math.max(0, Math.floor(newSupply.magnifier ?? newSupply.amplify ?? 0));
@@ -6365,11 +6501,11 @@ if (typeof window !== 'undefined') {
   window.__getRewardCardCount = getRewardCardCount;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
-  Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<5) p.push(null); loadoutSlots=p.slice(0,5); } syncLoadoutOverlay();} });
+  Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<4) p.push(null); loadoutSlots=p.slice(0,4); } syncLoadoutOverlay();} });
   Object.defineProperty(window, 'coinSummaryVisible', { get: ()=>coinSummaryVisible, set:(v)=>{coinSummaryVisible=!!v; syncCoinSummaryOverlay();} });
   Object.defineProperty(window, 'runHolesCleared', { get: ()=>runHolesCleared, set:(v)=>{runHolesCleared=Math.max(0,Math.floor(v));} });
   Object.defineProperty(window, 'runCoinsEarned', { get: ()=>runCoinsEarned, set:(v)=>{runCoinsEarned=Math.max(0,Math.floor(v));} });
-  Object.defineProperty(window, 'loadoutUnlockedAtRunStart', { get: ()=>loadoutUnlockedAtRunStart, set:(v)=>{loadoutUnlockedAtRunStart=Math.max(1,Math.min(5,Math.floor(v)));} });
+  Object.defineProperty(window, 'loadoutUnlockedAtRunStart', { get: ()=>loadoutUnlockedAtRunStart, set:(v)=>{loadoutUnlockedAtRunStart=Math.max(1,Math.min(4,Math.floor(v)));} });
   window.__loadoutUnlockedAtRunStart = loadoutUnlockedAtRunStart;
   window.__getLoadoutUnlockedAtRunStart = () => loadoutUnlockedAtRunStart;
   Object.defineProperty(window, 'campaignEditVisible', { get: () => campaignEditVisible, set: (v) => { campaignEditVisible = !!v; syncCampaignEditOverlay(); } });
@@ -6386,6 +6522,16 @@ function syncCutsceneSkipButton() {
     if (!btn) return;
     let active = false;
     try { active = cutsceneIsActive(); } catch {}
+    btn.classList.toggle('hidden', !active);
+  } catch {}
+}
+// 12-banter §6: Skip button, same pill design, visible only while banter is active.
+function syncBanterSkipButton() {
+  try {
+    const btn = document.getElementById('banter-skip-button');
+    if (!btn) return;
+    let active = false;
+    try { active = banterIsActive(); } catch {}
     btn.classList.toggle('hidden', !active);
   } catch {}
 }
@@ -6433,9 +6579,9 @@ function playCutsceneWrapped(idOrData, opts) {
   }
   return ok;
 }
-try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
+try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
