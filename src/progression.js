@@ -1,11 +1,14 @@
 export const PROGRESSION_KEY = "golfVectorField.progression.v1";
 export const LOADOUT_KEY = "golfVectorField.loadout.v1";
 export const COINS_PER_HOLE = 10;
-export const COURSE_COMPLETE_BONUS = 50;
+export const COINS_PER_ATTEMPT = 1;
+export const COURSE_COMPLETE_BONUS = 100;
 export const SHOP_PRICE_SPATIAL = 50;
-export const SHOP_PRICE_PASSIVE = 150;
+export const SHOP_PRICE_PASSIVE = 100;
 export const MAX_LOADOUT_SLOTS = 4;
 export const GOLFBAG_SLOTS = 4;
+export const LOADOUT_SLOT_COSTS = [10, 100, 150]; // cost for slot 2,3,4 (10,100,150)
+export const DEFAULT_UNLOCKED_SLOTS = 1;
 export const SHOP_INITIAL_STOCK = {
   magnifier: 0,
   liquifier: 0,
@@ -48,6 +51,8 @@ let progression = {
   coins: 0,
   personalSupply: { ...DEFAULT_PERSONAL_SUPPLY },
   shopStock: { ...SHOP_INITIAL_STOCK },
+  unlockedLoadoutSlots: DEFAULT_UNLOCKED_SLOTS,
+  runsStarted: 0,
   savedAt: Date.now()
 };
 
@@ -57,6 +62,8 @@ export function getProgression() {
     coins: progression.coins,
     personalSupply: { ...progression.personalSupply },
     shopStock: { ...progression.shopStock },
+    unlockedLoadoutSlots: progression.unlockedLoadoutSlots ?? DEFAULT_UNLOCKED_SLOTS,
+    runsStarted: progression.runsStarted ?? 0,
     savedAt: progression.savedAt
   };
 }
@@ -128,11 +135,49 @@ export function addShopStock(type, n = 1) {
   return true;
 }
 
+export function getRunsStarted() {
+  return Math.max(0, Math.floor(progression.runsStarted ?? 0));
+}
+export function incrementRunsStarted() {
+  progression.runsStarted = getRunsStarted() + 1;
+  saveProgression();
+  return progression.runsStarted;
+}
+export function getUnlockedLoadoutSlots() {
+  return Math.max(1, Math.min(MAX_LOADOUT_SLOTS, Math.floor(progression.unlockedLoadoutSlots ?? DEFAULT_UNLOCKED_SLOTS)));
+}
+export function getNextLoadoutSlotCost() {
+  const cur = getUnlockedLoadoutSlots();
+  if (cur >= MAX_LOADOUT_SLOTS) return null;
+  // cur 1 => cost for slot 2 is 10, cur 2 => 100, cur 3 =>150
+  return LOADOUT_SLOT_COSTS[cur - 1] ?? null;
+}
+export function canUnlockNextLoadoutSlot() {
+  const cost = getNextLoadoutSlotCost();
+  if (cost == null) return false;
+  return progression.coins >= cost;
+}
+export function unlockNextLoadoutSlot() {
+  const cost = getNextLoadoutSlotCost();
+  if (cost == null) return false;
+  if (progression.coins < cost) return false;
+  progression.coins = Math.max(0, progression.coins - cost);
+  progression.unlockedLoadoutSlots = Math.min(MAX_LOADOUT_SLOTS, getUnlockedLoadoutSlots() + 1);
+  saveProgression();
+  return true;
+}
+export function setUnlockedLoadoutSlots(n) {
+  progression.unlockedLoadoutSlots = Math.max(1, Math.min(MAX_LOADOUT_SLOTS, Math.floor(n)));
+  saveProgression();
+}
+
 export function saveProgression() {
   try {
     progression.savedAt = Date.now();
     // Ensure shopStock exists
     if (!progression.shopStock) progression.shopStock = { ...SHOP_INITIAL_STOCK };
+    if (!Number.isFinite(progression.unlockedLoadoutSlots)) progression.unlockedLoadoutSlots = DEFAULT_UNLOCKED_SLOTS;
+    if (!Number.isFinite(progression.runsStarted)) progression.runsStarted = 0;
     localStorage.setItem(PROGRESSION_KEY, JSON.stringify(progression));
   } catch {}
 }
@@ -173,6 +218,13 @@ export function loadProgression() {
     } else {
       progression.shopStock = { ...SHOP_INITIAL_STOCK };
     }
+    // Load unlocked slots — legacy saves default to 1; previously course-clear based saves migrate to 1 and allow buying
+    if (Number.isFinite(d.unlockedLoadoutSlots)) {
+      progression.unlockedLoadoutSlots = Math.max(1, Math.min(MAX_LOADOUT_SLOTS, Math.floor(d.unlockedLoadoutSlots)));
+    } else {
+      progression.unlockedLoadoutSlots = DEFAULT_UNLOCKED_SLOTS;
+    }
+    progression.runsStarted = Math.max(0, Math.floor(d.runsStarted ?? 0));
     progression.savedAt = d.savedAt || Date.now();
     return getProgression();
   } catch {
@@ -181,6 +233,8 @@ export function loadProgression() {
       coins: 0,
       personalSupply: { ...DEFAULT_PERSONAL_SUPPLY },
       shopStock: { ...SHOP_INITIAL_STOCK },
+      unlockedLoadoutSlots: DEFAULT_UNLOCKED_SLOTS,
+      runsStarted: 0,
       savedAt: Date.now()
     };
     try { saveProgression(); } catch {}
@@ -195,6 +249,8 @@ export function clearProgression() {
     coins: 0,
     personalSupply: { ...DEFAULT_PERSONAL_SUPPLY },
     shopStock: { ...SHOP_INITIAL_STOCK },
+    unlockedLoadoutSlots: DEFAULT_UNLOCKED_SLOTS,
+    runsStarted: 0,
     savedAt: Date.now()
   };
 }
@@ -264,4 +320,14 @@ if (typeof window !== 'undefined') {
   window.__getShopStockCount = getShopStockCount;
   window.__addShopStock = addShopStock;
   window.__costFor = costFor;
+  window.__getUnlockedLoadoutSlots = getUnlockedLoadoutSlots;
+  window.__getNextLoadoutSlotCost = getNextLoadoutSlotCost;
+  window.__unlockNextLoadoutSlot = unlockNextLoadoutSlot;
+  window.__LOADOUT_SLOT_COSTS = LOADOUT_SLOT_COSTS;
+  window.__COURSE_COMPLETE_BONUS = COURSE_COMPLETE_BONUS;
+  window.__COINS_PER_HOLE = COINS_PER_HOLE;
+  window.__COINS_PER_ATTEMPT = COINS_PER_ATTEMPT;
+  window.__SHOP_PRICE_PASSIVE = SHOP_PRICE_PASSIVE;
+  window.__getRunsStarted = getRunsStarted;
+  window.__incrementRunsStarted = incrementRunsStarted;
 }

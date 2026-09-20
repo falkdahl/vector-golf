@@ -43,7 +43,7 @@ import {
 } from "./windThree.js";
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
-import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout } from "./progression.js";
+import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COINS_PER_ATTEMPT, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, LOADOUT_SLOT_COSTS, DEFAULT_UNLOCKED_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout, getUnlockedLoadoutSlots as getProgressionUnlockedSlots, getNextLoadoutSlotCost, canUnlockNextLoadoutSlot, unlockNextLoadoutSlot, setUnlockedLoadoutSlots, getRunsStarted, incrementRunsStarted } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip } from "./banter.js";
 
@@ -443,11 +443,12 @@ let loadoutHideShopDueToIntro = false;
 // (see 08-rewards-and-progression.md §5b). Persisted in STORAGE_KEY, cleared on run end.
 let isTutorialRun = false;
 function isTutorialRunActive() { return !!isTutorialRun; }
-// Run coin tracking: 10 per hole cleared (COINS_PER_HOLE)
+// Run coin tracking: 10 per hole cleared (COINS_PER_HOLE) + 1 per attempt (COINS_PER_ATTEMPT)
 let runHolesCleared = 0;
 let runCoinsEarned = 0;
 let coinSummaryVisible = false;
 let coinSummaryHoles = 0;
+let coinSummaryAttempts = 0;
 let coinSummaryCoins = 0;
 let coinSummaryAnimDone = false;
 let coinSummaryAnimTimers = [];
@@ -480,9 +481,10 @@ function denormalizeSupplyType(type) { return type; } // kept for alias checks
 // --- Tactical 4-slot golfbag (source of truth) ---
 function bagEntryType(entry) { return entry && entry.type ? normalizeSupplyType(entry.type) : null; }
 function getGolfbag() { return golfbag.map(e => (e ? { ...e } : null)); }
-function golfbagUsedCount() { let n = 0; for (const e of golfbag) if (e) n++; return n; }
-function golfbagHasEmpty() { return golfbag.some(e => !e); }
-function golfbagFirstEmpty() { for (let i = 0; i < GOLFBAG_SIZE; i++) if (!golfbag[i]) return i; return -1; }
+function getEffectiveGolfbagSize() { try { return getUnlockedLoadoutSlots(); } catch { return GOLFBAG_SIZE; } }
+function golfbagUsedCount() { let n = 0; const eff = getEffectiveGolfbagSize(); for (let i = 0; i < eff; i++) if (golfbag[i]) n++; return n; }
+function golfbagHasEmpty() { const eff = getEffectiveGolfbagSize(); for (let i = 0; i < eff; i++) if (!golfbag[i]) return true; return false; }
+function golfbagFirstEmpty() { const eff = getEffectiveGolfbagSize(); for (let i = 0; i < eff; i++) if (!golfbag[i]) return i; return -1; }
 function golfbagTotalFreeShots() { let n = 0; for (const e of golfbag) if (e && bagEntryType(e) === 'freeShot') n += Math.max(0, Math.floor(e.charges ?? 0)); return n; }
 function golfbagCountOf(type) { const t = normalizeSupplyType(type); let n = 0; for (const e of golfbag) if (e && bagEntryType(e) === t && t !== 'freeShot') n++; return n; }
 function syncDerivedFromBag() {
@@ -501,7 +503,7 @@ function syncDerivedFromBag() {
   powerCellCount = pc;
   try { setFieldPowerCellCount(pc); } catch {}
   // Keep slot selection consistent (Free Shot is display-only, never a selection)
-  if (selectedBagIndex < 0 || selectedBagIndex >= GOLFBAG_SIZE || !golfbag[selectedBagIndex]) {
+  if (selectedBagIndex < 0 || selectedBagIndex >= getEffectiveGolfbagSize() || !golfbag[selectedBagIndex]) {
     if (selectedModifier && !(supply[normalizeSupplyType(selectedModifier)] > 0)) { selectedModifier = null; selectedBagIndex = -1; }
     if (selectedModifier === 'freeShot') { selectedModifier = null; selectedBagIndex = -1; }
   } else if (bagEntryType(golfbag[selectedBagIndex]) === 'freeShot') {
@@ -544,7 +546,7 @@ function addItemToBag(type, charges) {
   return true;
 }
 function removeBagSlot(idx) {
-  if (idx < 0 || idx >= GOLFBAG_SIZE || !golfbag[idx]) return false;
+  if (idx < 0 || idx >= getEffectiveGolfbagSize() || !golfbag[idx]) return false;
   golfbag[idx] = null;
   if (selectedBagIndex === idx) { selectedBagIndex = -1; selectedModifier = null; }
   // If the removed item was the armed freeShot and no shots remain, disarm
@@ -570,7 +572,7 @@ function consumeFreeShotCharge() {
   return false;
 }
 function selectBagSlot(idx) {
-  if (idx < 0 || idx >= GOLFBAG_SIZE) return false;
+  if (idx < 0 || idx >= getEffectiveGolfbagSize()) return false;
   const e = golfbag[idx];
   if (!e) { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); return true; }
   const t = bagEntryType(e);
@@ -606,7 +608,7 @@ function cancelPickupDiscard() {
 }
 function discardBagSlotForPickup(slotIdx) {
   if (!pendingPickup) return false;
-  if (slotIdx < 0 || slotIdx >= GOLFBAG_SIZE || !golfbag[slotIdx]) return false;
+  if (slotIdx < 0 || slotIdx >= getEffectiveGolfbagSize() || !golfbag[slotIdx]) return false;
   const wanted = pendingPickup;
   // Find the targeted modifier on the board (by id first, then index, then type fallback)
   let midx = -1;
@@ -773,8 +775,7 @@ function getRunCoinsEarned() { return runCoinsEarned; }
 function getRunHolesCleared() { return runHolesCleared; }
 function isCoinSummaryVisible() { return coinSummaryVisible; }
 function getUnlockedLoadoutSlots() {
-  // Tactical rework: all 4 loadout slots unlocked from the beginning.
-  return GOLFBAG_SIZE;
+  try { return getProgressionUnlockedSlots(); } catch { return DEFAULT_UNLOCKED_SLOTS || 1; }
 }
 
 let loadoutPickerVisible = false;
@@ -926,11 +927,40 @@ function syncLoadoutOverlay() {
       const names2 = {liquifier:'Liquifier',deflector:'Deflector',rotator:'Rotator',magnifier:'Magnifier',fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shot'};
       const icons2 = {liquifier:'./img/liquifier-icon.png',deflector:'./img/deflector-icon.png',rotator:'./img/rotator-icon.png',magnifier:'./img/magnifier-icon.png',fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
       for (let i=0;i<GOLFBAG_SIZE;i++) {
-        // Tactical rework: all 4 slots unlocked from the beginning (no locked state)
+        const isLocked = i >= unlocked;
         const t = loadoutSlots[i];
         const div = document.createElement('div');
         div.dataset.slot = String(i);
         div.dataset.type = t || '';
+        if (isLocked) {
+          const cost = LOADOUT_SLOT_COSTS[i - 1] ?? 10;
+          const isNext = i === unlocked;
+          const affordable = isNext && coins >= cost;
+          div.className = 'loadout-slot locked' + (affordable ? ' affordable' : '');
+          div.title = isNext ? `Buy slot ${i+1} for ${cost} coins` : `Locked — buy slot ${unlocked+1} first`;
+          // lock icon is via CSS ::after, add explicit lock text for accessibility
+          const btn = document.createElement('button');
+          btn.className = 'loadout-unlock-button' + (affordable ? ' affordable' : '');
+          btn.textContent = `Buy ${cost}💰`;
+          btn.title = `Buy ${cost}💰`;
+          btn.disabled = !affordable;
+          btn.style.opacity = affordable ? '1' : '0.6';
+          btn.style.cursor = affordable ? 'pointer' : 'not-allowed';
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const ok = unlockNextLoadoutSlot();
+            if (ok) {
+              showToast(`Slot ${getUnlockedLoadoutSlots()} unlocked`);
+              syncLoadoutOverlay();
+              syncProgressionDisplay();
+            } else {
+              showToast('Not enough coins');
+            }
+          });
+          div.appendChild(btn);
+          slotsEl.appendChild(div);
+          continue;
+        }
         if (t) {
           div.className = 'loadout-slot filled';
           div.dataset.type = t;
@@ -1217,6 +1247,7 @@ function startCourseWithLoadout(courseId, slots) {
   // Derive golfbag from chosen loadout slots (one bag slot per loadout slot; freeShot gets 3 charges)
   setBagFromTypeList(chosen);
   setActiveCourse(course);
+  try { incrementRunsStarted(); } catch {}
   clearProgress();
   // Tutorial run = loadout shown directly after the intro-3-hole chain for the 3-hole
   // course (shop hidden). Whole run gets liquifier-only single-card rewards, no re-roll.
@@ -1238,7 +1269,7 @@ function startCourseWithLoadout(courseId, slots) {
   rewardChosenCounts={ magnifier:0, liquifier:0, deflector:0, rotator:0, freeShot:0, areaUp:0, fieldExtender:0, powerCell:0 };
   modifiers=[]; syncModifiersToField(); selectedModifier=null; selectedBagIndex=-1; selectedBagIndex=-1;
   runHolesCleared=0; runCoinsEarned=0;
-  try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 4; }
+  try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 1; }
   runShopRestocked = false;
   runFirstCourseClear = false;
   runUnlockedNewCourse = false;
@@ -1272,7 +1303,7 @@ function isCoinSummaryAnimating() {
 function fastForwardCoinSummary() {
   if (!coinSummaryVisible) return false;
   clearCoinSummaryAnimTimers();
-  const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+  const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + coinSummaryAttempts * COINS_PER_ATTEMPT + COURSE_COMPLETE_BONUS;
   // Show final state instantly
   const el = document.getElementById('coin-summary-overlay');
   if (el) el.classList.remove('hidden');
@@ -1299,8 +1330,9 @@ function fastForwardCoinSummary() {
       r.append(a, ic, lb);
       return r;
     };
-    if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
-    else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
+    if (coinSummaryHoles > 0) details.appendChild(makeRow(coinSummaryHoles * COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+    else details.appendChild(makeRow(0, `Hole Completed (x0)`));
+    if (coinSummaryAttempts > 0) details.appendChild(makeRow(coinSummaryAttempts * COINS_PER_ATTEMPT, `Attempt (x${coinSummaryAttempts})`));
     if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
   }
   const unlockEl = document.getElementById('coin-summary-unlock');
@@ -1400,9 +1432,10 @@ function syncCoinSummaryOverlay() {
           r.append(a, ic, lb);
           return r;
         };
-        if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
-        else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
-        const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+        if (coinSummaryHoles > 0) details.appendChild(makeRow(coinSummaryHoles * COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+        else details.appendChild(makeRow(0, `Hole Completed (x0)`));
+        if (coinSummaryAttempts > 0) details.appendChild(makeRow(coinSummaryAttempts * COINS_PER_ATTEMPT, `Attempt (x${coinSummaryAttempts})`));
+        const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + coinSummaryAttempts * COINS_PER_ATTEMPT + COURSE_COMPLETE_BONUS;
         if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
       syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), false);
@@ -1427,9 +1460,10 @@ function syncCoinSummaryOverlay() {
           r.append(a, ic, lb);
           return r;
         };
-        if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
-        else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
-        const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+        if (coinSummaryHoles > 0) details.appendChild(makeRow(coinSummaryHoles * COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+        else details.appendChild(makeRow(0, `Hole Completed (x0)`));
+        if (coinSummaryAttempts > 0) details.appendChild(makeRow(coinSummaryAttempts * COINS_PER_ATTEMPT, `Attempt (x${coinSummaryAttempts})`));
+        const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + coinSummaryAttempts * COINS_PER_ATTEMPT + COURSE_COMPLETE_BONUS;
         if (isCourseBonus) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
       }
       syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), false);
@@ -1437,9 +1471,26 @@ function syncCoinSummaryOverlay() {
     }
   } else el.classList.add('hidden');
 }
-function showCoinSummary(holes, coins) {
+function showCoinSummary(holes, attemptsOrCoins, coins) {
+  // Supports both showCoinSummary(holes, coins) legacy and showCoinSummary(holes, attempts, coins)
+  let attempts = 0;
+  let totalCoins = 0;
+  if (coins !== undefined) {
+    // 3-arg form: holes, attempts, coins
+    attempts = Math.max(0, Math.floor(attemptsOrCoins||0));
+    totalCoins = Math.max(0, Math.floor(coins||0));
+  } else {
+    // legacy 2-arg: holes, coins — infer attempts from difference if possible
+    totalCoins = Math.max(0, Math.floor(attemptsOrCoins||0));
+    const inferred = totalCoins - Math.max(0, Math.floor(holes||0)) * COINS_PER_HOLE;
+    // if inferred looks like course bonus, subtract it
+    const hasBonus = holes > 0 && inferred >= COURSE_COMPLETE_BONUS && totalCoins === holes * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+    attempts = hasBonus ? 0 : Math.max(0, inferred >0 && inferred < 100 ? inferred : 0);
+    if (hasBonus) attempts = 0;
+  }
   coinSummaryHoles = Math.max(0, Math.floor(holes||0));
-  coinSummaryCoins = Math.max(0, Math.floor(coins||0));
+  coinSummaryAttempts = attempts;
+  coinSummaryCoins = totalCoins;
   // Do not show overlay if no money was gained
   if (coinSummaryCoins <= 0) {
     coinSummaryVisible = false;
@@ -1453,8 +1504,9 @@ function showCoinSummary(holes, coins) {
   coinSummaryVisible = true;
   coinSummaryAnimDone = false;
   clearCoinSummaryAnimTimers();
-  const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
+  const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + coinSummaryAttempts * COINS_PER_ATTEMPT + COURSE_COMPLETE_BONUS;
   const holeCoins = coinSummaryHoles * COINS_PER_HOLE;
+  const attemptCoins = coinSummaryAttempts * COINS_PER_ATTEMPT;
   // Prepare overlay in initial animated state
   const el = document.getElementById('coin-summary-overlay');
   if (el) el.classList.remove('hidden');
@@ -1495,31 +1547,45 @@ function showCoinSummary(holes, coins) {
   const t1 = setTimeout(() => {
     if (!coinSummaryVisible || coinSummaryAnimDone) return;
     if (details) {
-      if (coinSummaryHoles > 0) details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
-      else details.appendChild(makeRow(COINS_PER_HOLE, `Hole Completed (x0)`));
+      if (coinSummaryHoles > 0) details.appendChild(makeRow(coinSummaryHoles * COINS_PER_HOLE, `Hole Completed (x${coinSummaryHoles})`));
+      else details.appendChild(makeRow(0, `Hole Completed (x0)`));
     }
     animateCoinSummaryAmount(0, holeCoins, 380);
   }, 420);
   coinSummaryAnimTimers.push(t1);
+  const attemptDelay = 820;
+  const hasAttempts = coinSummaryAttempts > 0;
+  if (hasAttempts) {
+    const t1b = setTimeout(() => {
+      if (!coinSummaryVisible || coinSummaryAnimDone) return;
+      if (details) details.appendChild(makeRow(attemptCoins, `Attempt (x${coinSummaryAttempts})`));
+      animateCoinSummaryAmount(holeCoins, holeCoins + attemptCoins, 380);
+    }, attemptDelay);
+    coinSummaryAnimTimers.push(t1b);
+  }
   if (isCourseBonus) {
+    const courseDelay = hasAttempts ? 1220 : 920;
+    const fromAmt = holeCoins + attemptCoins;
     const t2 = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
       if (details) details.appendChild(makeRow(COURSE_COMPLETE_BONUS, `Course Completed`));
-      animateCoinSummaryAmount(holeCoins, coinSummaryCoins, 380);
-    }, 920);
+      animateCoinSummaryAmount(fromAmt, coinSummaryCoins, 380);
+    }, courseDelay);
     coinSummaryAnimTimers.push(t2);
+    const noticeDelayCourse = hasAttempts ? 1620 : 1320;
     const t3 = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
       syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), true);
       coinSummaryAnimDone = true;
-    }, 1320);
+    }, noticeDelayCourse);
     coinSummaryAnimTimers.push(t3);
   } else {
+    const noticeDelay = hasAttempts ? 1120 : 780;
     const t2b = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
       syncCoinSummaryNotices(unlockEl, shopEl, document.getElementById('coin-summary-course'), true);
       coinSummaryAnimDone = true;
-    }, 780);
+    }, noticeDelay);
     coinSummaryAnimTimers.push(t2b);
   }
 }
@@ -1538,8 +1604,9 @@ function hideCoinSummary() {
 }
 function finalizeRunCoinsAndShowSummary() {
   const holes = runHolesCleared;
-  let coins = holes * COINS_PER_HOLE;
-  // Course completion bonus +50 only on the FIRST clear of a course (final hole
+  const attempts = Math.max(0, Math.floor(totalAttempts));
+  let coins = holes * COINS_PER_HOLE + attempts * COINS_PER_ATTEMPT;
+  // Course completion bonus +100 only on the FIRST clear of a course (final hole
   // WIN where this run set bestTotal null → number). Replays earn holes only.
   let isCourseComplete = false;
   try {
@@ -1561,7 +1628,7 @@ function finalizeRunCoinsAndShowSummary() {
   }
   // Do not show "Run Completed" overlay if no money was gained (coins==0)
   if (coins > 0) {
-    showCoinSummary(holes, coins);
+    showCoinSummary(holes, attempts, coins);
   } else {
     coinSummaryVisible = false;
     syncCoinSummaryOverlay();
@@ -2126,11 +2193,28 @@ function maybeUpdateCourseRecord() { return maybeUpdateHighScore(); }
 // of a course (bestTotal null → set); replays must not call this.
 // announce=true (from a live run) flags the end screen's "New items in the shop"
 // notice; init reconciliation passes announce=false.
+function isFirstRestockStockPresent() {
+  try {
+    const ss = getShopStock();
+    if (ss && (ss.deflector > 0 || ss.rotator > 0 || ss.magnifier > 0)) return true;
+  } catch {}
+  try {
+    const ps = getPersonalSupply();
+    if (ps && (ps.deflector > 0 || ps.rotator > 0 || ps.magnifier > 0)) return true;
+  } catch {}
+  return false;
+}
 function grantShopMilestoneStock(holeCount, announce = true) {
   const n = Math.floor(Number(holeCount));
   let granted = false;
   if (n === 3) {
-    // First tutorial run: a deflector, a rotator and a magnifier come into stock.
+    // First restock: a deflector, a rotator and a magnifier come into stock.
+    // Guard double-grant: if stock for those 3 is already present (via second-run guarantee
+    // or earlier clear), the 3-hole clear milestone is considered already satisfied.
+    // NOTE: do NOT use isShopRestockedFirstTime() here because it also checks bestTotal
+    // which was just set for this clear, causing the first 3-hole clear on first run to
+    // incorrectly appear as already restocked and block its own grant.
+    try { if (isFirstRestockStockPresent()) return granted; } catch {}
     granted = addShopStock('deflector', 1) || granted;
     granted = addShopStock('rotator', 1) || granted;
     granted = addShopStock('magnifier', 1) || granted;
@@ -2153,7 +2237,8 @@ function grantShopMilestoneStock(holeCount, announce = true) {
 // 11-cutscenes §11c: shop counts as restocked for the first time when any shop
 // stock exists (first milestone granted) or — if already emptied by purchases —
 // when the 3-hole course has been cleared (which is what grants the first
-// restock: deflector + rotator + magnifier).
+// restock: deflector + rotator + magnifier) or when the guaranteed second-run
+// restock has fired (personalSupply for those 3 now >0 even if shop emptied).
 function isShopRestockedFirstTime() {
   try {
     const ss = getShopStock();
@@ -2167,7 +2252,43 @@ function isShopRestockedFirstTime() {
     const c3 = Array.isArray(courses) ? courses.find(x => x && x.holeCount === 3) : null;
     if (c3 && c3.bestTotal !== null && c3.bestTotal !== undefined) return true;
   } catch {}
+  try {
+    const ps = getPersonalSupply();
+    if (ps && (ps.deflector > 0 || ps.rotator > 0 || ps.magnifier > 0)) return true;
+  } catch {}
   return false;
+}
+function ensureFirstRestockOnSecondRun() {
+  try {
+    if (getRunsStarted() < 1) return false;
+    if (isShopRestockedFirstTime()) return false;
+    // Guarantee first restock: deflector+rotator+magnifier, same as 3-hole clear.
+    // This is a start-of-run gift, not a clear-triggered restock, so it does NOT set
+    // runShopRestocked (coin summary notice is for clear-triggered restocks only).
+    let granted = false;
+    granted = addShopStock('deflector', 1) || granted;
+    granted = addShopStock('rotator', 1) || granted;
+    granted = addShopStock('magnifier', 1) || granted;
+    if (granted) {
+      try { syncLoadoutOverlay(); } catch {}
+      try { syncProgressionDisplay(); } catch {}
+    }
+    return granted;
+  } catch { return false; }
+}
+function ensureFirstRestockStock() {
+  try {
+    if (isFirstRestockStockPresent()) return false;
+    let granted = false;
+    granted = addShopStock('deflector', 1) || granted;
+    granted = addShopStock('rotator', 1) || granted;
+    granted = addShopStock('magnifier', 1) || granted;
+    if (granted) {
+      try { syncLoadoutOverlay(); } catch {}
+      try { syncProgressionDisplay(); } catch {}
+    }
+    return granted;
+  } catch { return false; }
 }
 function getCourseRecord(courseId) {
   const c = findCourseById(courseId);
@@ -2355,6 +2476,8 @@ function handleCoursePlay(courseId) {
     console.warn('[prologue] check failed', e);
     // Fall through to normal loadout
   }
+  // Guarantee first restock on second run regardless of clear (10-progression §1.6)
+  try { ensureFirstRestockOnSecondRun(); } catch {}
   // 11-cutscenes §11c: on the start of the run where the shop is restocked for
   // the first time, play "first-restock" before the loadout overlay is shown.
   try {
@@ -2376,6 +2499,7 @@ function handleCoursePlay(courseId) {
       cutsceneLoad('first-restock').then((data) => {
         if (!data) {
           console.warn('[first-restock] failed to load first-restock.json, skipping to loadout');
+          try { ensureFirstRestockStock(); } catch {}
           showLoadout(courseId);
           syncProgressionDisplay();
           return;
@@ -2383,6 +2507,7 @@ function handleCoursePlay(courseId) {
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
             try { cutsceneMarkSeen('first-restock'); } catch {}
+            try { ensureFirstRestockStock(); } catch {}
             showLoadout(courseId);
             syncProgressionDisplay();
           }
@@ -2390,6 +2515,7 @@ function handleCoursePlay(courseId) {
         if (!ok) {
           console.warn('[first-restock] playCutscene failed, skipping to loadout');
           try { cutsceneMarkSeen('first-restock'); } catch {}
+          try { ensureFirstRestockStock(); } catch {}
           showLoadout(courseId);
           syncProgressionDisplay();
         } else {
@@ -2399,6 +2525,7 @@ function handleCoursePlay(courseId) {
         }
       }).catch((e) => {
         console.warn('[first-restock] load error', e);
+        try { ensureFirstRestockStock(); } catch {}
         showLoadout(courseId);
         syncProgressionDisplay();
       });
@@ -3910,19 +4037,21 @@ function updateHotbarUI() {
   if (golfbagContainerEl) golfbagContainerEl.classList.toggle("hidden", hideBag);
   syncHotbarCollapsedUI();
   try { syncDerivedFromBag(); } catch {}
-  // Rebuild 4 slot-based hotbar from golfbag (one item per slot, no stacking)
+  // Rebuild golfbag hotbar from golfbag (one item per slot, no stacking) — only unlocked slots
   const grid = hotbarGridEl || (hotbarEl ? hotbarEl.querySelector('#hotbar-grid') : null);
   if (grid) {
+    const eff = getEffectiveGolfbagSize();
+    grid.style.gridTemplateColumns = `repeat(${eff}, 1fr)`;
     const icons = { liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', magnifier: './img/magnifier-icon.png', fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
     const names = { liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', magnifier: 'Magnifier', fieldExtender: 'Field Extender', powerCell: 'Power Cell', freeShot: 'Free Shot' };
     const borders = { liquifier: '#1a4a6b', deflector: '#4a235a', rotator: '#6e1a12', magnifier: '#7a3a0a', fieldExtender: '#7a7a7a', powerCell: '#7a7a7a', freeShot: '#7a3a0a' };
     const bgs = { liquifier: 'rgba(52,152,219,0.28)', deflector: 'rgba(155,89,182,0.28)', rotator: 'rgba(231,76,60,0.28)', magnifier: 'rgba(230,126,34,0.28)', fieldExtender: 'rgba(128,128,128,0.28)', powerCell: 'rgba(128,128,128,0.28)', freeShot: 'rgba(241,196,15,0.28)' };
     // Only rebuild when bag shape/selection/pending changes to avoid hover flicker
-    const sig = golfbag.map(e => (e ? bagEntryType(e) + ':' + (e.charges ?? 1) : '-')).join('|') + '#' + selectedBagIndex + '#' + (pendingRewardType || '') + '#' + (pendingPickup ? 'pickup:' + pendingPickup.type : '');
+    const sig = eff + '|' + golfbag.slice(0, eff).map(e => (e ? bagEntryType(e) + ':' + (e.charges ?? 1) : '-')).join('|') + '#' + selectedBagIndex + '#' + (pendingRewardType || '') + '#' + (pendingPickup ? 'pickup:' + pendingPickup.type : '');
     if (grid.dataset.bagSig !== sig) {
       grid.dataset.bagSig = sig;
       grid.innerHTML = '';
-      for (let i = 0; i < GOLFBAG_SIZE; i++) {
+      for (let i = 0; i < eff; i++) {
         const entry = golfbag[i];
         const t = entry ? bagEntryType(entry) : null;
         const slot = document.createElement('div');
@@ -6374,8 +6503,14 @@ if (typeof window !== 'undefined') {
   window.__clearHighScore = clearHighScore;
   window.__maybeUpdateHighScore = maybeUpdateHighScore;
   window.__grantShopMilestoneStock = grantShopMilestoneStock;
+  window.__ensureFirstRestockOnSecondRun = ensureFirstRestockOnSecondRun;
+  window.__ensureFirstRestockStock = ensureFirstRestockStock;
+  window.__isFirstRestockStockPresent = isFirstRestockStockPresent;
   window.__isShopRestockedFirstTime = isShopRestockedFirstTime;
   window.isShopRestockedFirstTime = isShopRestockedFirstTime;
+  window.__getRunsStarted = getRunsStarted;
+  window.getRunsStarted = getRunsStarted;
+  window.__incrementRunsStarted = incrementRunsStarted;
   window.__isMainMenuVisible = isMainMenuVisible;
   window.__syncMainMenu = syncMainMenu;
   window.__startNewGameFromMain = startNewGameFromMain;
@@ -6537,6 +6672,11 @@ if (typeof window !== 'undefined') {
   window.__getPersonalSupply = getPersonalSupply;
   window.__getRunCoinsEarned = getRunCoinsEarned;
   window.__getRunHolesCleared = getRunHolesCleared;
+  window.__coinSummaryAttempts = coinSummaryAttempts;
+  Object.defineProperty(window, 'coinSummaryAttempts', { get: ()=>coinSummaryAttempts, set:(v)=>{coinSummaryAttempts=Math.max(0,Math.floor(v));} });
+  Object.defineProperty(window, '__coinSummaryAttempts', { get: ()=>coinSummaryAttempts, set:(v)=>{coinSummaryAttempts=Math.max(0,Math.floor(v));} });
+  window.__COINS_PER_ATTEMPT = COINS_PER_ATTEMPT;
+  window.COINS_PER_ATTEMPT = COINS_PER_ATTEMPT;
   window.__isCoinSummaryVisible = isCoinSummaryVisible;
   window.__isCoinSummaryAnimating = isCoinSummaryAnimating;
   window.__isMenuReturnDeferred = isMenuReturnDeferred;
@@ -6553,9 +6693,20 @@ if (typeof window !== 'undefined') {
   window.__syncProgressionDisplay = syncProgressionDisplay;
   window.__PROGRESSION_KEY = PROGRESSION_KEY;
   window.__COINS_PER_HOLE = COINS_PER_HOLE;
+  window.__COINS_PER_ATTEMPT = COINS_PER_ATTEMPT;
   window.__COURSE_COMPLETE_BONUS = COURSE_COMPLETE_BONUS;
   window.__SHOP_PRICE_SPATIAL = SHOP_PRICE_SPATIAL;
   window.__SHOP_PRICE_PASSIVE = SHOP_PRICE_PASSIVE;
+  window.getCoins = getCoins;
+  window.__getCoins = getCoins;
+  window.__LOADOUT_SLOT_COSTS = LOADOUT_SLOT_COSTS;
+  window.__DEFAULT_UNLOCKED_SLOTS = DEFAULT_UNLOCKED_SLOTS;
+  window.__getUnlockedLoadoutSlots = getUnlockedLoadoutSlots;
+  window.getUnlockedLoadoutSlots = getUnlockedLoadoutSlots;
+  window.__getNextLoadoutSlotCost = getNextLoadoutSlotCost;
+  window.__canUnlockNextLoadoutSlot = canUnlockNextLoadoutSlot;
+  window.__unlockNextLoadoutSlot = unlockNextLoadoutSlot;
+  window.__setUnlockedLoadoutSlots = setUnlockedLoadoutSlots;
   window.__costFor = costFor;
   window.__loadProgression = loadProgression;
   window.__saveProgression = saveProgression;
