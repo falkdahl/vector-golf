@@ -5,12 +5,12 @@
 - **Type:** Functional + UI
 - **References:** `05-input-and-states.md` (attempts, GAME_OVER, banners), `06-wind-system.md` (supply), `04-physics-and-collision.md` (win check, treasure hit), `07-level-generation.md` (treasure placement), `03-rendering.md` (treasure rendering)
 
-## 0. Tactical Rework Amendment (2026-09-18, normative)
+## 0. Tactical Rework Amendment (2026-09-21, normative — shop/coins/loadout removed, passive slots re-added)
 
-- **Reward goes to an empty golfbag slot** (one item per reward). `claimReward(type)` grants via `grantRewardToBag`: spatial `+1` slot, `fieldExtender`/`powerCell` `+1` slot each (**+20%** area/strength, see `06` §0), `freeShot` = **one bag item with 3 charges** (`+1 item (3 shots)`).
-- **Bag full:** claiming sets `pendingRewardType` and keeps the menu open with title `Bag full — destroy one to take X`. No in-overlay bag cards are shown (`#reward-bag-row` shall not exist). The player discards via the golfbag hotbar underneath: occupied slots get `.discard-target` dotted highlight, plus hint and `Skip (take nothing) [Esc]`. Clicking a bag slot calls `discardBagSlotAndClaimReward(i)` (destroys that item — passives destroyable here — then grants). Hotkeys `1-4` discard, `Esc`/`S`/Skip closes without reward.
-- **Owned-only fix (bug):** offers are built from the owned pool FIRST (`ownedPoolForCourse()`), then seeded-shuffled and sliced to ≤3, with `fieldExtender`+`powerCell` never together (`enforceNoFieldPowerTogether`). This fixes the 9-hole bug where 2 cards were offered while owning 3 (old `COMBINED`-slot resolution excluded the owned passive from candidates entirely).
-- Reward hints updated: spatial `+1 to bag`, `freeShot` `+1 item (3 shots)`, `fieldExtender` `+20% area`, `powerCell` `+20% strength`.
+- **Reward goes to an empty golfbag slot for spatial, or increments passive stack.** `claimReward(type)` grants via `grantRewardToBag`: spatial `+1` slot (one item per slot), `fieldExtender`/`rangeModifier(powerCell)` `+1` to passive stack each (**+20%** area/strength, see `06` §0), `freeShot` = **+3 to passive freeShot stack** (`Free Shots`). Passive rewards are stackable with `xN` badge, not one per slot limit.
+- **Bag full (spatial only):** claiming a spatial when all 4 spatial slots occupied sets `pendingRewardType` and keeps the menu open with title `Bag full — destroy one to take X`. No in-overlay bag cards are shown (`#reward-bag-row` shall not exist). The player discards via the spatial golfbag hotbar underneath: occupied spatial slots get `.discard-target` dotted highlight, plus hint and `Skip (take nothing) [Esc]`. Clicking a spatial bag slot calls `discardBagSlotAndClaimReward(i)` (destroys that item then grants). Hotkeys `1-4` discard, `Esc`/`S`/Skip closes without reward. Passive grants never trigger bag-full (stackable).
+- **Owned-only fix removed** — Shop/coins removed, all items unlocked from start per `10-progression.md`. **All reward screens offer exactly 3 options from the full pool** `['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot']` (`getSeededRewardOffer` `shuffled.slice(0,3)`) **and are always re-rollable once** (`isRerollDisabled` only checks `rewardRerolled`).
+- Reward hints updated: spatial `+1 to bag`, `freeShot` `+3 Free Shots`, `fieldExtender` `+20% area`, `rangeModifier(powerCell)` `+20% strength`. See `10-progression.md` for starting overlay `Choose 2 starting items` (4 spatial, no reroll, 2 picks).
 
 ## 1. Hole & Win Definition
 

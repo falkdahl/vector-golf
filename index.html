@@ -24,7 +24,7 @@
     <div id="hud">
       <span id="hud-hole">Hole: 1/3</span>
       <span id="hud-attempts">Attempts Left: 10</span>
-      <span id="hud-total">Total: 0</span>
+      <span id="hud-total">Points: 0</span>
     </div>
     <div id="bottom-bar">
       <div id="golfbag-wrapper">
@@ -40,6 +40,18 @@
           <div class="hotbar-slot empty" data-slot-index="2" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">3</span></div>
           <div class="hotbar-slot empty" data-slot-index="3" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">4</span></div>
         </div>
+        <div id="passive-hotbar-grid">
+          <div class="hotbar-slot passive" data-type="fieldExtender"><img class="hotbar-icon-img" src="./img/field-extender-icon.png" alt="fieldExtender"><span class="hotbar-count hidden">x0</span></div>
+          <div class="hotbar-slot passive" data-type="powerCell"><img class="hotbar-icon-img" src="./img/power-cell-icon.png" alt="powerCell"><span class="hotbar-count hidden">x0</span></div>
+          <div class="hotbar-slot passive" data-type="freeShot"><div class="hotbar-icon" style="color:#FFD700">★</div><span class="hotbar-count hidden">x0</span></div>
+        </div>
+      </div>
+    </div>
+    <div id="starting-items-overlay" class="hidden">
+      <div class="reward-card">
+        <h2 class="reward-title">Choose 2 starting items</h2>
+        <div id="starting-items-grid" class="reward-buttons"></div>
+        <button id="starting-ok-button" class="main-menu-button" disabled>OK</button>
       </div>
     </div>
     <div id="reward-overlay" class="hidden">
@@ -164,57 +176,21 @@
         </div>
       </div>
     </div>
-    <div id="loadout-overlay" class="hidden">
-      <div class="loadout-card">
-        <div class="loadout-layout">
-          <div class="loadout-left">
-            <div class="loadout-section">
-              <h2 class="loadout-title">Pack your golfbag</h2>
-              <div id="loadout-slots" class="loadout-slots"></div>
-            </div>
-            <div class="loadout-storage-section">
-              <h3>Your Items</h3>
-              <div id="personal-storage-grid" class="personal-storage-grid"></div>
-            </div>
-          </div>
-          <div class="loadout-right">
-            <div class="loadout-shop-section">
-              <div class="shop-header" style="display:flex; align-items:center; gap:8px; justify-content:center;">
-                <h3>Shop</h3>
-                <span id="loadout-coins">💰 0</span>
-              </div>
-              <div id="shop-grid" class="loadout-shop"></div>
-            </div>
-          </div>
-        </div>
-        <div class="loadout-actions">
-          <button id="loadout-start-button">OK</button>
-        </div>
-      </div>
-    </div>
-    <div id="loadout-item-picker-overlay" class="hidden">
-      <div class="loadout-picker-card">
-        <h3>Your Items</h3>
-        <div id="loadout-picker-grid" class="loadout-picker-grid"></div>
-      </div>
-    </div>
     <div id="coin-summary-overlay" class="hidden">
       <div class="coin-summary-card">
-        <h3>Run Complete</h3>
+        <h3>Hole Complete</h3>
         <div class="coin-summary-big">
-          <span id="coin-summary-amount">+0</span>
-          <span class="coin-big-icon">💰</span>
+          <span id="coin-summary-amount">+0 points</span>
         </div>
         <div id="coin-summary-details" class="coin-details-rows"></div>
-        <div id="coin-summary-unlock" class="coin-unlock-info">Loadout slot unlocked</div>
-        <div id="coin-summary-shop" class="coin-shop-info">New items in the shop</div>
-        <div id="coin-summary-course" class="coin-course-info">New Course Unlocked</div>
-        <p id="coin-summary-text" class="hidden">You earned 0 coins: 0 holes × 10 coins per hole</p>
+        <div id="coin-summary-unlock" class="coin-unlock-info hidden">Loadout slot unlocked</div>
+        <div id="coin-summary-shop" class="coin-shop-info hidden">New items in the shop</div>
+        <div id="coin-summary-course" class="coin-course-info hidden">New Course Unlocked</div>
+        <p id="coin-summary-text" class="hidden">You earned 0 points</p>
         <p id="coin-summary-breakdown" class="coin-breakdown hidden"></p>
         <button id="coin-summary-ok">Continue</button>
       </div>
     </div>
-    <div id="progression-coins-display" class="hidden">Coins: 0</div>
     <div id="help-overlay" class="hidden">
       <div class="help-card">
         <h3>How to Play</h3>
@@ -272,10 +248,10 @@
             </div>
           </div>
           <div class="help-item" data-type="powerCell">
-            <img class="help-item-icon" src="./img/power-cell-icon.png" alt="Power Cell">
+            <img class="help-item-icon" src="./img/power-cell-icon.png" alt="Range Modifier">
             <div class="help-item-info">
-              <span class="help-item-name">Power Cell</span>
-              <span class="help-item-desc">Passive: +20% strength for Magnifier, Deflector and Rotator (base 5 → 6.0), retroactive power boost. Lives in a bag slot.</span>
+              <span class="help-item-name">Range Modifier</span>
+              <span class="help-item-desc">Passive: +20% strength for Magnifier, Deflector and Rotator (base 5 → 6.0), retroactive power boost. Stackable xN in passive slot.</span>
             </div>
           </div>
           <div class="help-item" data-type="freeShot">

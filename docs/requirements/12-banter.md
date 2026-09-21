@@ -61,7 +61,13 @@ takes over the background canvas like a full cutscene.
   linger). On the last box it closes the banter. `Escape`/`Enter` also advance.
   There is no Skip button; banter is 3–4 short boxes.
 
-## 4. Trigger — After Loadout Closes, Before Hole 1 Banner
+## 4. Trigger — After Banter, Before Starting Overlay and Hole 1 Banner (2026-09-21 amendment, supersedes loadout trigger)
+
+- **Banter plays over the loaded level** (`setActiveCourse`/`loadLevel(0)` preview behind, `mainMenuVisible=false`, terrain visible) **with no other menu visible, not even the top `Attempts` bar** (`#hud` `hidden` while `banterIsActive()`, `bottomBar` hidden).
+
+- **Starting Items overlay (Choose 2) is shown AFTER banter has played** (per 10-progression 2026-09-21). `handleCoursePlay(courseId)` shall first play the next run-start banter in place (over main menu or loaded hole preview), and only after its `onComplete` show `#starting-items-overlay` `Choose 2 starting items` before the run starts. `startCourseWithStartingItems` no longer plays banter; it directly shows `Hole 1` banner.
+
+## 4b. Legacy Trigger — After Loadout Closes, Before Hole 1 Banner (deprecated, kept for reference)
 
 - `startCourseWithLoadout(courseId, slots)` (the loadout `OK` path) shall:
   1. perform the normal run setup and `loadLevel(0)` with the `Hole 1` banner
