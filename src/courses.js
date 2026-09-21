@@ -1,4 +1,4 @@
-import { generateLevels, LEVELS, LEVEL } from "./levels.js";
+import { generateLevels, generateTutorialLevels, LEVELS, LEVEL } from "./levels.js";
 
 export const COURSES_KEY = "golfVectorField.courses.v1";
 
@@ -145,6 +145,37 @@ export function generateCampaignCourse(holeCount = 18, campaignSeedVal = getOrCr
     options = campaignSeedVal;
     campaignSeedVal = getOrCreateCampaignSeed();
   }
+  // Fixed tutorial for 3-hole: always "The 3-Hole Trial" with deterministic holes, not seed-dependent
+  if (holeCount === 3) {
+    let prevLevelsCopy = null;
+    let prevLevelCopy = null;
+    try {
+      prevLevelsCopy = JSON.parse(JSON.stringify(LEVELS));
+      prevLevelCopy = JSON.parse(JSON.stringify(LEVEL));
+    } catch {}
+    const holes = generateTutorialLevels();
+    const holesCopy = JSON.parse(JSON.stringify(holes));
+    try {
+      if (prevLevelsCopy) {
+        LEVELS.length = 0;
+        for (const h of prevLevelsCopy) LEVELS.push(h);
+      }
+      if (prevLevelCopy) {
+        for (const k of Object.keys(LEVEL)) delete LEVEL[k];
+        Object.assign(LEVEL, prevLevelCopy);
+      }
+    } catch {}
+    return {
+      id: deterministicIdForCourse(campaignSeedVal, 3),
+      name: "The 3-Hole Trial",
+      holes: holesCopy,
+      holeCount: 3,
+      seed: 0,
+      campaignSeed: String(campaignSeedVal),
+      createdAt: Date.now(),
+      bestTotal: null
+    };
+  }
   const derived = deriveCourseSeed(campaignSeedVal, holeCount);
   let difficulty = null;
   if (options && typeof options === 'object' && options.difficulty && ['easy','medium','hard'].includes(options.difficulty)) {
@@ -169,7 +200,7 @@ export function generateCampaignCourse(holeCount = 18, campaignSeedVal = getOrCr
     prevLevelsCopy = JSON.parse(JSON.stringify(LEVELS));
     prevLevelCopy = JSON.parse(JSON.stringify(LEVEL));
   } catch {}
-  const holes = (holeCount === 3 && difficulty) ? generateLevels(derived, holeCount, { difficulty }) : generateLevels(derived, holeCount);
+  const holes = generateLevels(derived, holeCount);
   const holesCopy = JSON.parse(JSON.stringify(holes));
   try {
     if (prevLevelsCopy) {
@@ -206,6 +237,9 @@ export function generateCourse(holeCount = 18, seed = Date.now(), options = {}) 
     seed = Date.now();
   }
   if (![3,6,9,18].includes(holeCount)) throw new Error("holeCount must be 3, 6, 9 or 18");
+  if (holeCount === 3) {
+    return generateCampaignCourse(3, campaignSeed !== null ? campaignSeed : generateCampaignSeed(), options);
+  }
   // If campaignSeed is provided in options, use deterministic path
   if (options && typeof options === 'object' && options.campaignSeed !== undefined && options.campaignSeed !== null) {
     const cs = String(options.campaignSeed);
@@ -226,7 +260,7 @@ export function generateCourse(holeCount = 18, seed = Date.now(), options = {}) 
     prevLevelsCopy = JSON.parse(JSON.stringify(LEVELS));
     prevLevelCopy = JSON.parse(JSON.stringify(LEVEL));
   } catch {}
-  const holes = (holeCount === 3 && difficulty) ? generateLevels(seed, holeCount, { difficulty }) : generateLevels(seed, holeCount);
+  const holes = generateLevels(seed, holeCount);
   // Deep clone holes to avoid reference sharing with global LEVELS
   const holesCopy = JSON.parse(JSON.stringify(holes));
   // Restore global LEVELS / LEVEL to not pollute active course (prevents 3-hole win from becoming 6-hole LEVELS)
@@ -366,8 +400,28 @@ export function loadCourses() {
     }
     // Fix legacy bug where collected treasure was persisted in course definition — always reset for stored courses
     try { normalizeCourseTreasures(valid); } catch {}
+    // Tutorial migration: enforce fixed The 3-Hole Trial (name + holes) for all campaigns
+    try {
+      for (const c of valid) {
+        if (c && c.holeCount === 3) {
+          if (c.name !== "The 3-Hole Trial") c.name = "The 3-Hole Trial";
+          // Replace holes with fixed tutorial levels (preserve bestTotal/id)
+          try {
+            const fixed = generateTutorialLevels();
+            c.holes = JSON.parse(JSON.stringify(fixed));
+            c.seed = 0;
+          } catch {}
+        }
+      }
+    } catch {}
     // Normalize to staged unlocking model — only generates if a previously-unlocked stage is missing (once per unlock)
     const staged = ensureStagedCourses(valid, campaignSeed);
+    // Ensure 3-hole is still fixed after staging (in case it was generated with old name via ensureStagedCourses fallback)
+    try {
+      for (const c of staged) {
+        if (c && c.holeCount === 3 && c.name !== "The 3-Hole Trial") c.name = "The 3-Hole Trial";
+      }
+    } catch {}
     // Detect name fixes for duplicates
     const namesChanged = staged.some((c,i) => valid[i] && c.name !== valid[i].name);
     // If staged differs (e.g. old save had 18 only, or missing 3), or names were fixed for uniqueness, persist normalized with campaignSeed

@@ -116,13 +116,19 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   let vortexes = DEFAULT_VORTEXES;
 
   // Support explicit positions per REQ-034: source near tee, sink near green, doublets in trees
+  // And unaryFlow per 13-tutorial (headwind on hole 1): constant vector added to every cell
   let explicitSourcePositions = null;
   let explicitSinkPositions = null;
   let explicitDoubletPositions = null;
   let explicitVortexPositions = null;
+  let unaryFlow = null;
   if (typeof nSources === 'object' && nSources !== null) {
     const opts = nSources;
-    // Ignore unaryFlow if present
+    // Extract unaryFlow if present (13-tutorial headwind) — not ignored anymore
+    if (opts.unaryFlow && typeof opts.unaryFlow === 'object') unaryFlow = { x: Number(opts.unaryFlow.x) || 0, y: Number(opts.unaryFlow.y) || 0 };
+    else if (opts.unary && typeof opts.unary === 'object') unaryFlow = { x: Number(opts.unary.x) || 0, y: Number(opts.unary.y) || 0 };
+    else if (Array.isArray(opts.unaryFlow)) unaryFlow = { x: Number(opts.unaryFlow[0])||0, y: Number(opts.unaryFlow[1])||0 };
+    if (opts._unaryFlow && typeof opts._unaryFlow === 'object') unaryFlow = { x: Number(opts._unaryFlow.x)||0, y: Number(opts._unaryFlow.y)||0 };
     sources = Math.max(0, Math.floor(opts.sources ?? opts.nSources ?? DEFAULT_SOURCES));
     sinks = Math.max(0, Math.floor(opts.sinks ?? opts.nSinks ?? DEFAULT_SINKS));
     doublets = Math.max(0, Math.floor(opts.doublets ?? opts.nDoublets ?? DEFAULT_DOUBLETS));
@@ -142,9 +148,15 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
     if (typeof nSinks === 'number') sinks = Math.max(0, Math.floor(nSinks));
     if (typeof nDoublets === 'number') doublets = Math.max(0, Math.floor(nDoublets));
     if (typeof nVortexes === 'number') vortexes = Math.max(0, Math.floor(nVortexes));
+    // legacy 6th arg as unary object
+    if (_ignoredUnary && typeof _ignoredUnary === 'object' && (_ignoredUnary.x !== undefined || _ignoredUnary.y !== undefined)) {
+      unaryFlow = { x: Number(_ignoredUnary.x)||0, y: Number(_ignoredUnary.y)||0 };
+    }
   }
+  // If unaryFlow present and non-zero, allow zero components (tutorial hole1)
+  const hasUnary = !!(unaryFlow && (Math.abs(unaryFlow.x) > 1e-9 || Math.abs(unaryFlow.y) > 1e-9));
 
-  // Enforce mandatory constraints: at least one vortex or doublet inside (except Level 1 tutorial 1,1,0,0), at least one source and one sink at edge
+  // Enforce mandatory constraints: at least one vortex or doublet inside (except Level 1 tutorial 1,1,0,0 and unary tutorial), at least one source and one sink at edge
   // Save originals before coercion to distinguish Level 1 (1,1,0,0) from all-zero
   const origSourcesRaw = (typeof nSources === 'object' && nSources !== null) ? (nSources.sources ?? nSources.nSources) : nSources;
   const origSinksRaw = (typeof nSources === 'object' && nSources !== null) ? (nSources.sinks ?? nSources.nSinks) : nSinks;
@@ -152,15 +164,17 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   const origVortexesRaw = (typeof nSources === 'object' && nSources !== null) ? (nSources.vortexes ?? nSources.nVortexes ?? nSources.vortex) : nVortexes;
   const isLevel1Tutorial = (sources === 1 && sinks === 1 && doublets === 0 && vortexes === 0);
   const allZero = (typeof origSourcesRaw === 'number' && origSourcesRaw===0 && typeof origSinksRaw==='number' && origSinksRaw===0 && typeof origDoubletsRaw==='number' && origDoubletsRaw===0 && typeof origVortexesRaw==='number' && origVortexesRaw===0);
-  if (sources === 0) sources = 1;
-  if (sinks === 0) sinks = 1;
-  if (vortexes === 0 && doublets === 0) {
-    if (isLevel1Tutorial) {
-      // Level 1 exception: allow 0 interior for simple source->sink cross-breeze
-    } else if (allZero) {
-      vortexes = 1; // 0,0,0,0 -> 1,1,0,1
-    } else {
-      vortexes = 1; // any other 0 interior (e.g., 2,2,0,0) -> add vortex
+  if (!hasUnary) {
+    if (sources === 0) sources = 1;
+    if (sinks === 0) sinks = 1;
+    if (vortexes === 0 && doublets === 0) {
+      if (isLevel1Tutorial) {
+        // Level 1 exception: allow 0 interior for simple source->sink cross-breeze
+      } else if (allZero) {
+        vortexes = 1; // 0,0,0,0 -> 1,1,0,1
+      } else {
+        vortexes = 1; // any other 0 interior (e.g., 2,2,0,0) -> add vortex
+      }
     }
   }
 
@@ -248,7 +262,28 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
 
   const totalElements = sources + sinks + doublets + vortexes;
 
-  // Raw field via superposition at cell centers: Vraw = Σ sources(edge) + Σ sinks(edge) + Σ doublets(inside) + Σ vortexes(inside) — no unary
+  // 13-tutorial: unary-only headwind — generate uniform field directly and skip varying-strength post-process
+  if (hasUnary && totalElements === 0) {
+    const ux = unaryFlow.x;
+    const uy = unaryFlow.y;
+    cols = c; rows = r; canvasW = width; canvasH = height; cellW = canvasW / cols; cellH = canvasH / rows;
+    field = [];
+    // Keep raw magnitude as is; ensure field is uniform for predictable tutorial tuning
+    // Do not apply fallback varying-strength biases — keep exact unary direction/magnitude
+    for (let row = 0; row < rows; row++) {
+      field[row] = [];
+      for (let col = 0; col < cols; col++) {
+        field[row][col] = { x: ux, y: uy };
+      }
+    }
+    _lastSourcePositions = [];
+    _lastSinkPositions = [];
+    _lastDoubletPositions = [];
+    _lastVortexPositions = [];
+    return field;
+  }
+
+  // Raw field via superposition at cell centers: Vraw = Σ sources(edge) + Σ sinks(edge) + Σ doublets(inside) + Σ vortexes(inside) + unary
   const rawField = [];
   let minRaw = Infinity;
   let maxRaw = -Infinity;
@@ -257,7 +292,7 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
     for (let col = 0; col < cols; col++) {
       const cx = col * cellW + cellW / 2;
       const cy = row * cellH + cellH / 2;
-      let vx = 0, vy = 0;
+      let vx = hasUnary ? unaryFlow.x : 0, vy = hasUnary ? unaryFlow.y : 0;
 
       // Sources at edge
       for (const s of srcList) {

@@ -50,14 +50,14 @@ When the player clicks an unlocked course play button in `#staged-course-list` w
 - `POINTS_FIRST_ATTEMPT_BONUS = 50` if `holeAttempts===0` at win (first attempt, no prior failure; `holeAttempts` increments on each failure reset; clearing with `holeAttempts===0` means first attempt — award 50).
 - No `COURSE_COMPLETE_BONUS` (`100` removed). Points are sum of above per hole, aggregated across run.
 
-### 3.2 Run Points Calculation — Clearing Shot Only
+### 3.2 Run Points Calculation — Clearing Shot Only (Updated: only on hole clear)
 - Per hole cleared: `holePoints = 10 (cleared hole) + traversedOnClearingShot*10 + (firstAttempt ? 50 : 0) - holeAttemptsCount` where `traversedOnClearingShot` is number of distinct field modifiers the ball was inside **on the shot that cleared the hole** (tracked per-shot `modifiersTraversedThisShot`, not the whole hole), and `holeAttemptsCount` is failures before win. Example: `10p - cleared hole` + `20p - Modifier Bonus (x2 on clearing shot)` + `50p - First Try Bonus` - `3p - three attempts` = `77p` net for that hole. Only the clearing shot's modifiers count.
-- `totalPoints` is incremented incrementally `-1` per failed attempt (visible in HUD immediately) and `+10 + traversedOnClearingShot*10 + firstBonus` at each hole win (so net per hole is as above).
-- Run totals: `runPoints = sum(holePoints across cleared holes)` (already reflected in `totalPoints` via incremental).
-- `totalPoints` may be negative, HUD shows negative. No clamp. `STORAGE_KEY` persists `totalPoints` for resume.
+- `totalPoints` is **only updated when a hole is cleared**, not live during the hole. Failed attempts do **not** immediately decrement the HUD; the `-1` per attempt is applied as part of `holePoints` (`- holeAttemptsCount`) at the moment the hole is cleared. While the player is still on a hole, `Points:` stays at the value from the previous cleared holes.
+- Run totals: `runPoints = sum(holePoints across cleared holes)` (reflected in `totalPoints` only after each `checkWin`/`advanceHole`).
+- `totalPoints` may be negative after a hole with many attempts, HUD shows negative. No clamp. `STORAGE_KEY` persists `totalPoints` for resume.
 
-### 3.3 HUD — Point Tracker
-- HUD `#hud-total` text changes from `Total: Y` to **`Points: N`** (label `Points:` not `Total:`). Updates after each attempt result and after each hole win. `updateAttemptsUI()` sets `hudTotal.textContent = 'Points: ' + getTotalPoints()`.
+### 3.3 HUD — Point Tracker (Updated: only on hole clear)
+- HUD `#hud-total` text changes from `Total: Y` to **`Points: N`** (label `Points:` not `Total:`). **Only updates when a hole is cleared** (`checkWin` → `advanceHole`/`showPerHoleSummary`), not after each failed attempt. `updateAttemptsUI()` sets `hudTotal.textContent = 'Points: ' + getTotalPoints()` but `getTotalPoints()` only changes on `holePoints` addition.
 - `#hud-attempts` still `Attempts Left: X (+Y)` for freeShot.
 - `#progression-coins-display` removed/hidden.
 
@@ -72,7 +72,7 @@ When the player clicks an unlocked course play button in `#staged-course-list` w
 ## 5. Persistence Interactions
 
 - `STORAGE_KEY` now persists `totalPoints` (alias `points`) and `passiveCounts`/`fieldExtenderCount`/`powerCellCount`/`freeShot` and `modifiers` etc., but not `coins`/`shopStock`/`loadout`. Legacy saves with `coins` are ignored/migrated to 0 points.
-- `COURSES_KEY` unchanged, `bestTotal` now means best points? Or still attempts? Spec says change "Total attempts" tracker to point tracker — `bestTotal` comparison should be by points (higher is better). If legacy `bestTotal` exists as attempts lower is better, treat as stale and allow overwrite on next win with points.
+- `COURSES_KEY` unchanged, `bestTotal` now means best points (higher is better) and **only updated when the course is fully cleared** (all holes, `checkWin` on final hole). Clearing a single hole does **not** update `bestTotal`; abandoning via `End Run`/`Game Over` does not update `bestTotal`. If legacy `bestTotal` exists as attempts lower is better, treat as stale and allow overwrite on next win with points (still only on full clear).
 
 ## Acceptance Criteria
 
@@ -80,7 +80,7 @@ When the player clicks an unlocked course play button in `#staged-course-list` w
 - [ ] All bag slots unlocked: `#hotbar-grid` shows 4 spatial slots `54×54` with icons and hotkeys `1-4` from start, no `🔒`, no buy buttons. `getUnlockedLoadoutSlots()===4` if kept.
 - [ ] Passive slots re-added: `querySelectorAll('.hotbar-slot.passive').length===3` with `data-type="fieldExtender"`, `data-type="powerCell"` (alias `rangeModifier`) and `data-type="freeShot"`, each `54×54`, no hotkey (`querySelector('.hotbar-slot.passive .hotbar-hotkey')===null`), stack badge `span.hotbar-count` shows `xN` when `N>0` (`getComputedStyle !== none` and `textContent === 'x'+N`) else hidden, not placeable (`canPlace('fieldExtender')===false` etc.).
 - [ ] First hole overlay: clicking unlocked course with no save shows `#starting-items-overlay` over the loaded hole (`mainMenuVisible===false`, terrain visible behind dim `0.55`), title exactly `Choose 2 starting items`, contains exactly 4 cards `data-type="magnifier|liquifier|deflector|rotator"` with `src="./img/<type>-icon.png"` and no reroll button (`querySelector('#starting-reroll-button')===null` or `display:none`). Clicking `liquifier` removes it (`querySelector('[data-type="liquifier"]')===null`) and leaves 3; after picking 2 the overlay hides and `showHoleBanner` for hole 1 appears. No `R` reroll path.
-- [ ] Points HUD: `#hud-total` text starts with `Points:` (`textContent.startsWith('Points:')`) and updates after attempts/hole wins, reflecting `getTotalPoints()` which is `-attempts + modifiers*10 + firstBonus50`.
+- [ ] Points HUD: `#hud-total` text starts with `Points:` (`textContent.startsWith('Points:')`) and **only updates when a hole is cleared** (not live during the hole), reflecting `getTotalPoints()` which is sum of `10 + traversed*10 + firstBonus - attempts` per cleared hole.
 - [ ] End-of-hole summary: after each non-final hole win, `#coin-summary-overlay` (or alias) becomes visible (`!hidden`) over the level (`mainMenuVisible===false`) with `background:rgba(0,0,0,0.55)`, card `transparent`, title `Hole Complete`/`Run Complete`, big amount text contains `+` and number and word `points` (e.g. `+70 points`, not `💰`), breakdown rows each contain number + `p` + ` - ` + label + `(x` where applicable (e.g. `20p - Modifier Bonus (x2)`, `50p - First Try Bonus`, `-3p - Attempts (x3)`), and **no** `💰` in `#coin-summary-details`. `Continue` (`#coin-summary-ok`) closes summary and advances to next hole (non-final) or returns to main menu (final). `course cleared` `100` bonus not awarded.
 - [ ] Points math: clearing a hole on first attempt with 2 modifiers traversed yields `70` (`2*10 +50 -0` with 0 attempts cost counted? If attempt cost `-1` per attempt *including* the winning attempt, then first clear with 2 modifiers and 1 attempt would be `2*10+50-1=69`. Both `70` (0) or `69` (1) are acceptable if spec-consistent; test will check that traversed count *10 and first bonus 50 are reflected and that attempts subtract (`-1p - Attempts (x1)` vs `-2p` etc.) and that `modifiersTraversed*10` appears as `20p` for 2. No `100p - Course Completed` row when clearing a course.
 - [ ] No regression: treasure, modifiers, hole banner `Hole 1 1000ms`, aim/charge, softlock, cutscenes, banter, help items still functional.

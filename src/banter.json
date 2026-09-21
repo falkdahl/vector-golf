@@ -101,7 +101,7 @@
         },
         {
           "speaker": "caddy",
-          "text": "Only from the items you already own. The offering shows your shelf, nothing more. Buy more in the shop, see more on offer."
+          "text": "Your golf bag holds four gadgets, no more. Pick a reward and it goes straight in — but if your bag is full, you'll have to drop one to make room."
         },
         {
           "speaker": "may",
@@ -109,7 +109,7 @@
         },
         {
           "speaker": "caddy",
-          "text": "Gone when the hole clears. Placed is spent. So right-click them to pick them back up before you hole out."
+          "text": "Gone when the hole clears. Placed is spent. So right-click them to pick them back up before you hole out — and if your bag is full, drop a spare first."
         }
       ]
     },
@@ -421,6 +421,15 @@
         {
           "speaker": "may",
           "text": "A full set of four, then. Pity they only make one golf club at a time."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-liquifier-reminder",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "You are fighting the wind head-on — place your Liquifier to nullify the gale and the ball will reach the hole."
         }
       ]
     }

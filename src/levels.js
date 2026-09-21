@@ -853,5 +853,82 @@ export function generateLevels(seed = 42, count = 18, options = {}) {
   return LEVELS;
 }
 
+export const TUTORIAL_SEED = 0xC0FFEE;
+export const TUTORIAL_HOLE_TUNE = {
+  // heavy headwind for tutorial: strong enough to feel, hole shortened to compensate
+  // unaryFlow is field units (*90 = effective px/s). -1.95 => -175.5 px/s heavy headwind (tuned down from -2.4, -1.6..-1.95 still blocks 100% without liquifier but allows liquifier at 110 to reach)
+  // Hole shortened to ~610 distance (90->700) so 600 power without liquifier falls ~82px short (center), with liquifier covering launch point (center 110, radius 54) still reaches hole
+  unaryX: -1.95,
+  unaryY: 0,
+};
+
+// Generate the fixed 3-hole Trial levels (not seed-dependent)
+export function generateTutorialLevels() {
+  // Hole 1: straight fairway, no obstacles, no treasure, heavy unary headwind, shorter hole
+  const tee1 = { x: 90, y: 360 };
+  const hole1 = { x: 700, y: 360, radius: 14 };
+  const spine1 = sampleBezier(tee1, null, null, hole1, 20);
+  const terrain1 = {
+    green: { x: hole1.x, y: hole1.y, r: 70 },
+    teeBox: { x: tee1.x, y: tee1.y, r: 70 },
+    fairwayPath: spine1,
+    widthFairway: 110,
+    widthRough: 190,
+    noiseSeed: 1,
+    warpScale: 0.008,
+    warpStrength: 8,
+    _p1: null,
+    _p2: null,
+    shape: 'I',
+  };
+  attachNoiseToTerrain(terrain1);
+  const field1 = {
+    cols: 32, rows: 18, strength: 90, seed: 101,
+    sources: 0, sinks: 0, doublets: 0, vortexes: 0,
+    unaryFlow: { x: TUTORIAL_HOLE_TUNE.unaryX, y: TUTORIAL_HOLE_TUNE.unaryY },
+  };
+
+  const level1 = {
+    id: 'hole-1',
+    name: 'Hole 1',
+    canvas: { width: LOGICAL_W, height: LOGICAL_H },
+    tee: tee1,
+    hole: hole1,
+    obstacles: [],
+    waterHazards: [],
+    treasure: null,
+    terrain: terrain1,
+    field: field1,
+    difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 1, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 },
+    treesOnFairwayCount: 0,
+    waterOnFairwayCount: 0,
+  };
+
+  // Holes 2-3: deterministic Easy generation (always same for all playthroughs)
+  // Generate 6 easy holes with a fixed seed and take first 3, then override hole1 with our custom and adjust treasures
+  const fixedLevels = _generateLevelsInternal(TUTORIAL_SEED, 3, { difficulty: 'easy' });
+  // fixedLevels[0] is Easy hole1 — discard, keep our custom level1
+  // holes 2,3 correspond to fixedLevels[1], fixedLevels[2] — make them deterministic and ensure no water collisions etc are already satisfied
+  // For tutorial spec: hole2 no treasure, hole3 has chest
+  const level2Raw = fixedLevels[1];
+  const level3Raw = fixedLevels[2];
+  // Ensure hole2 treasure null, hole3 chest present (if missing, fallback)
+  level2Raw.id = 'hole-2';
+  level2Raw.name = 'Hole 2';
+  level2Raw.treasure = null;
+  // Hole3 keep its treasure (generateTreasureForHole already created one); ensure it exists
+  level3Raw.id = 'hole-3';
+  level3Raw.name = 'Hole 3';
+  if (!level3Raw.treasure) {
+    const rand = mulberry32(TUTORIAL_SEED + 2*7919+977);
+    level3Raw.treasure = generateTreasureForHole(level3Raw.obstacles, level3Raw.obstacles.slice(0,2), level3Raw.terrain, level3Raw.tee, level3Raw.hole, level3Raw.waterHazards, rand, LOGICAL_W, LOGICAL_H);
+  } else {
+    level3Raw.treasure = { ...level3Raw.treasure, isCollected: false };
+  }
+  // Provide copy with IDs fixed
+  const levels = [level1, level2Raw, level3Raw];
+  return levels;
+}
+
 export let LEVELS = [];
 export let LEVEL = { id: "hole-1", name: "Hole 1", canvas: { width: LOGICAL_W, height: LOGICAL_H }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], waterHazards: [], treasure: { x: 400, y: 360, radius: 12, isCollected: false, nearTreeId: -1 }, terrain: null, field: { cols: 32, rows: 18, strength: 80, seed: 42, sources: 1, sinks: 1, doublets: 1, vortexes: 0 }, difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 3, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 } };
