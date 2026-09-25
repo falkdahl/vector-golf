@@ -338,7 +338,14 @@ function setActiveCourse(course) {
       for (const h of course.holes) {
         const clone = JSON.parse(JSON.stringify(h));
         // Ensure fresh run starts with all treasures uncollected; runtime collect will set true on clone only
-        if (clone && clone.treasure) clone.treasure.isCollected = false;
+        if (clone) {
+          if (Array.isArray(clone.treasures)) clone.treasures.forEach(t=>{ if(t) t.isCollected=false; });
+          if (clone.treasure) clone.treasure.isCollected = false;
+          // keep single treasure in sync with first of array for backward compat
+          if (Array.isArray(clone.treasures) && clone.treasures.length && clone.treasure) {
+            clone.treasure.isCollected = !!clone.treasures[0].isCollected;
+          }
+        }
         LEVELS.push(clone);
       }
       // Also update LEVEL alias to first hole
@@ -369,8 +376,17 @@ function saveCourses() {
   try { saveCoursesToStorage(courses); } catch {};
 }
 function findCourseById(id) { return courses.find(c => c.id === id) || null; }
-function isTutorialCourse(course) { return !!(course && course.holeCount === 3 && (course.name === "The 3-Hole Trial" || course.name === "3-hole Trial")); }
+function isTutorialCourse(course) { return !!(course && (course.name === "The Proving Grounds" || course.name === "The 3-Hole Trial" || course.name === "3-hole Trial")); }
 function isTutorialActive() { return isTutorialCourse(activeCourse); }
+function getLevelTreasures(lvl){
+  if(!lvl) return [];
+  if(Array.isArray(lvl.treasures) && lvl.treasures.length) return lvl.treasures;
+  if(lvl.treasure) return [lvl.treasure];
+  return [];
+}
+function getUncollectedTreasures(lvl){
+  return getLevelTreasures(lvl).filter(t=>t && !t.isCollected);
+}
 // Tutorial reminder state
 let tutorialLiquifierReminderShown = false;
 let tutorialHole3RewardBanterShown = false;
@@ -969,7 +985,7 @@ function startCourseWithStartingItems(courseId){
   // Tutorial run = loadout shown directly after the intro-3-hole chain for the 3-hole
   // course (shop hidden). Whole run gets liquifier-only single-card rewards, no re-roll.
   try {
-    isTutorialRun = !!(loadoutHideShopDueToIntro && course && course.holeCount === 3);
+    isTutorialRun = !!(loadoutHideShopDueToIntro && course && isTutorialCourse(course));
   } catch { isTutorialRun = !!loadoutHideShopDueToIntro; }
   currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
   totalPoints=0; runPointsEarned=0; runCoinsEarned=0;
@@ -1050,6 +1066,11 @@ function startTutorialCourse(courseId){
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
   tutorialLiquifierReminderShown=false;
+  tutorialHole1Liquifier3Shown=false;
+  tutorialHole1Liquifier10Shown=false;
+  tutorialHole3RotatorShown=false;
+  tutorialHole2RotatorShown=false;
+  tutorialHole2GadgetsReminderShown=false;
   tutorialHole3RewardBanterShown=false;
   loadLevel(0); gameState='AIMING';
   holeStartAttempts = 0;
@@ -1075,30 +1096,132 @@ function startTutorialCourse(courseId){
 }
 
 function grantTutorialHole2Modifiers(){
-  setBagFromTypeList(['magnifier','liquifier','deflector','rotator']);
+  // Exactly deflector, rotator, magnifier regardless of previous bag
+  setBagFromTypeList(['deflector','rotator','magnifier']);
   updateHotbarUI();
+  saveProgress();
+}
+function grantTutorialHole3EmptyBag(){
+  setBagFromTypeList([]);
+  // ensure passives cleared? Keep passives 0 for hole3 (empty bag, no passive)
+  passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
+  try{ syncDerivedFromBag(); }catch{}
+  updateHotbarUI();
+  saveProgress();
+}
+function grantTutorialHole4Spatial(){
+  // Start hole4 with one liquifier, one deflector, one rotator and one magnifier (4 spatial), no passives yet
+  setBagFromTypeList(['liquifier','deflector','rotator','magnifier']);
+  updateHotbarUI();
+  saveProgress();
+}
+function grantTutorialHole4Passives(){
+  // Legacy: One field extender + one power cell, spatial empty — kept for compat but hole4 now starts spatial
+  golfbag = [null,null,null,null];
+  passiveCounts = { fieldExtender:1, powerCell:1, freeShot:0 };
+  try{ syncDerivedFromBag(); }catch{}
+  updateHotbarUI();
+  saveProgress();
+}
+function showTutorialHole4PassiveReward(){
+  // Show reward menu with fieldExtender, powerCell, freeShot after hole4 banter
+  tutorialHole4StartRewardPending = true;
+  rewardOffered = ['fieldExtender','powerCell','freeShot'];
+  pendingRewardType = null;
+  pendingPickup = null;
+  rewardMenuVisible = true;
+  rewardMenuHover = null;
+  rewardPending = false;
+  rewardRerolled = false;
+  rewardRerollHover = false;
+  updateHotbarUI();
+  syncRewardOverlay();
   saveProgress();
 }
 
 function maybeShowTutorialLiquifierReminder(){
+  // Legacy single reminder deprecated — now split into 3 and 10 attempt triggers
+  return false;
+}
+let tutorialHole1Liquifier3Shown = false;
+let tutorialHole1Liquifier10Shown = false;
+let tutorialHole3RotatorShown = false;
+let tutorialHole2RotatorShown = false;
+let tutorialHole2GadgetsReminderShown = false;
+let tutorialHole4StartRewardPending = false;
+function maybeShowTutorialHole1LiquifierReminder(){
   if(!isTutorialActive()) return false;
   if(currentHoleIndex!==0) return false;
-  if(holeAttempts <5) return false;
-  if(tutorialLiquifierReminderShown) return false;
   if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible) return false;
   if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
-  tutorialLiquifierReminderShown=true;
-  try{ banterPlay('tutorial-liquifier-reminder', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
+  if(!tutorialHole1Liquifier3Shown && holeAttempts >=3){
+    tutorialHole1Liquifier3Shown = true;
+    try{ banterPlay('tutorial-hole1-liquifier-3', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
+    try{ syncBanterSkipButton(); }catch{}
+    return true;
+  }
+  if(!tutorialHole1Liquifier10Shown && holeAttempts >=10){
+    tutorialHole1Liquifier10Shown = true;
+    try{ banterPlay('tutorial-hole1-liquifier-10', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
+    try{ syncBanterSkipButton(); }catch{}
+    return true;
+  }
+  return false;
+}
+function maybeShowTutorialHole3RotatorReminder(){
+  // Legacy hole3 rotator reminder moved to hole2 — keep for compat but never trigger on hole3
+  return false;
+}
+function maybeShowTutorialHole2RotatorReminder(){
+  if(!isTutorialActive()) return false;
+  if(currentHoleIndex!==1) return false;
+  if(holeAttempts <3) return false;
+  if(tutorialHole2RotatorShown) return false;
+  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible) return false;
+  if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
+  tutorialHole2RotatorShown = true;
+  try{ banterPlay('tutorial-hole3-rotator-reminder', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
+  try{ syncBanterSkipButton(); }catch{}
+  return true;
+}
+function maybeShowTutorialHole2GadgetsReminder(){
+  if(!isTutorialActive()) return false;
+  if(currentHoleIndex!==1) return false;
+  if(holeAttempts <5) return false;
+  if(tutorialHole2GadgetsReminderShown) return false;
+  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible) return false;
+  if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
+  tutorialHole2GadgetsReminderShown=true;
+  try{ banterPlay('tutorial-hole2-gadgets-reminder', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
   try{ syncBanterSkipButton(); }catch{}
   return true;
 }
 
 function handleTutorialHole1To2Chain(){
   const needCutscene = (()=>{ try{ return !cutsceneHasSeen('first-restock'); }catch{ return true; }})();
+  const prepareHole2ThenBanter = ()=>{
+    try{
+      // Load Hole 2 now (after cutscene, before banter, so no glimpse before cutscene)
+      loadLevel(1);
+      // suppress auto Hole banner — will show after banter
+      holeBannerVisible=false; holeBannerTimer=0;
+      // bag grant before banter (so banter sees correct bag)
+      grantTutorialHole2Modifiers();
+      holeBannerVisible=false; holeBannerTimer=0;
+      gameState='AIMING';
+      if(typeof winOverlay!=='undefined' && winOverlay) winOverlay.classList.add('hidden');
+      updateAttemptsUI(); updateHotbarUI();
+      saveProgress();
+      try{ syncMainMenu(); }catch{}
+      try{ redrawBottom(); }catch{}
+    }catch(e){ console.warn('prepareHole2 failed',e); }
+  };
   const startStackingBanter = ()=>{
     (async()=>{
       try{ await banterLoadFile(); }catch{}
-      const ok = banterPlay('stacking-third', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(1, getTotalHoles()); }catch{} saveProgress(); }});
+      // Try new id first, fallback to legacy stacking-third
+      let ok = banterPlay('tutorial-field-modifiers', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(1, getTotalHoles()); }catch{} saveProgress(); }});
+      if(!ok) ok = banterPlay('stacking-third', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(1, getTotalHoles()); }catch{} saveProgress(); }});
       if(!ok) try{ showHoleBanner(1, getTotalHoles()); }catch{}
       try{ syncBanterSkipButton(); }catch{}
     })();
@@ -1116,28 +1239,28 @@ function handleTutorialHole1To2Chain(){
     cutsceneLoad('first-restock').then(data=>{
       if(!data){
         try{ cutsceneMarkSeen('first-restock'); }catch{}
-        grantTutorialHole2Modifiers();
+        prepareHole2ThenBanter();
         startStackingBanter();
         return;
       }
       const ok = playCutsceneWrapped(data, {onComplete:()=>{
          try{ cutsceneMarkSeen('first-restock'); }catch{}
-         grantTutorialHole2Modifiers();
+         prepareHole2ThenBanter();
          startStackingBanter();
       }});
       if(!ok){
         try{ cutsceneMarkSeen('first-restock'); }catch{}
-        grantTutorialHole2Modifiers();
+        prepareHole2ThenBanter();
         startStackingBanter();
       }
       try{ syncMainMenu(); }catch{}
       try{ redrawBottom(); }catch{}
     }).catch(()=>{
-      grantTutorialHole2Modifiers();
+      prepareHole2ThenBanter();
       startStackingBanter();
     });
   } else {
-    grantTutorialHole2Modifiers();
+    prepareHole2ThenBanter();
     startStackingBanter();
   }
 }
@@ -1352,6 +1475,7 @@ function syncCoinSummaryOverlay() {
   } else el.classList.add('hidden');
 }
 function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, courseBonus=0){
+  if (isTutorialActive()) return;
   // New per-hole points summary (10-progression 2026-09-21)
   coinSummaryHoles = traversed;
   coinSummaryAttempts = attemptsOnHole;
@@ -1531,7 +1655,7 @@ function hideCoinSummary() {
     const prevIdx = currentHoleIndex;
     pendingHoleAdvance=false;
     if (wasTut && prevIdx === 0) {
-      // 13-tutorial: hole1 -> hole2 bypasses summary? Summary already dismissed, now handle tutorial transition to hole2 with cutscene+banter
+      // 13-tutorial: hole1 -> hole2 — cutscene BEFORE Hole2 is drawn (no glimpse)
       try{
         try{ consumePlacedModifiersFromSupply(); }catch{}
         clearFreeShotGlow();
@@ -1539,17 +1663,88 @@ function hideCoinSummary() {
         holeAttempts=0;
         holeStartAttempts=0;
         modifiersTraversedThisHole = new Set();
-        tutorialLiquifierReminderShown = true; // prevent further reminder on hole1 after win
-        loadLevel(1);
-        // suppress auto Hole banner — will show after cutscene+stacking banter
-        holeBannerVisible=false; holeBannerTimer=0;
+        tutorialLiquifierReminderShown = true;
+        tutorialHole1Liquifier3Shown = true;
+        tutorialHole1Liquifier10Shown = true;
+        tutorialHole2RotatorShown = false;
+        tutorialHole2GadgetsReminderShown = false;
+        tutorialHole3RotatorShown = false;
+        // Do NOT loadLevel yet — handleTutorialHole1To2Chain will load after cutscene (or immediately if skipped)
         gameState='AIMING';
         if(winOverlay) winOverlay.classList.add('hidden');
         updateAttemptsUI(); updateHotbarUI();
         saveProgress();
         try{ syncMainMenu(); }catch{}
         handleTutorialHole1To2Chain();
-      }catch(e){ console.warn('tutorial pending advance failed',e); try{ showHoleBanner(1, getTotalHoles()); }catch{} }
+      }catch(e){ console.warn('tutorial pending advance failed',e); try{ loadLevel(1); showHoleBanner(1, getTotalHoles()); }catch{} }
+      return;
+    }
+    if (wasTut && prevIdx === 1) {
+      // hole2 -> hole3: empty bag, no reward at start, rewards banter before Hole3 banner
+      try{
+        try{ consumePlacedModifiersFromSupply(); }catch{}
+        clearFreeShotGlow();
+        currentHoleIndex = 2;
+        holeAttempts=0;
+        holeStartAttempts=0;
+        modifiersTraversedThisHole = new Set();
+        tutorialHole2RotatorShown = true;
+        tutorialHole2GadgetsReminderShown = true;
+        tutorialHole3RotatorShown = false;
+        grantTutorialHole3EmptyBag();
+        loadLevel(2);
+        // suppress reward menu — will be handled via treasure, not at hole start
+        rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; syncRewardOverlay();
+        // banter before banner
+        holeBannerVisible=false; holeBannerTimer=0;
+        gameState='AIMING';
+        if(winOverlay) winOverlay.classList.add('hidden');
+        updateAttemptsUI(); updateHotbarUI();
+        saveProgress();
+        try{ syncMainMenu(); }catch{}
+        // Play rewards banter then Hole 3 banner
+        (async()=>{
+          try{ await banterLoadFile(); }catch{}
+          const ok = banterPlay('tutorial-rewards', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(2, getTotalHoles()); }catch{} saveProgress(); }});
+          // also alias rewards-second for compat
+          if(!ok) { try{ banterPlay('rewards-second', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(2, getTotalHoles()); }catch{} }}); }catch{} if(!banterIsActive()) try{ showHoleBanner(2, getTotalHoles()); }catch{} }
+          try{ syncBanterSkipButton(); }catch{}
+        })();
+      }catch(e){ console.warn('tutorial hole2->3 failed',e); try{ showHoleBanner(2, getTotalHoles()); }catch{} }
+      return;
+    }
+    if (wasTut && prevIdx === 2) {
+      // hole3 -> hole4: start with 4 spatial (liquifier/deflector/rotator/magnifier), banter, then reward with passives
+      try{
+        try{ consumePlacedModifiersFromSupply(); }catch{}
+        clearFreeShotGlow();
+        currentHoleIndex = 3;
+        holeAttempts=0;
+        holeStartAttempts=0;
+        modifiersTraversedThisHole = new Set();
+        tutorialHole3RotatorShown = true;
+        grantTutorialHole4Spatial();
+        loadLevel(3);
+        // Do not show reward yet — suppress at load, will show after banter
+        rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; syncRewardOverlay();
+        holeBannerVisible=false; holeBannerTimer=0;
+        gameState='AIMING';
+        if(winOverlay) winOverlay.classList.add('hidden');
+        updateAttemptsUI(); updateHotbarUI();
+        saveProgress();
+        try{ syncMainMenu(); }catch{}
+        (async()=>{
+          try{ await banterLoadFile(); }catch{}
+          const ok = banterPlay('tutorial-passives', {onComplete: ()=>{
+            try{ syncBanterSkipButton(); }catch{}
+            // After banter, show hole4 passive reward (fieldExtender/powerCell/freeShot)
+            try{ showTutorialHole4PassiveReward(); }catch{}
+            saveProgress();
+          }});
+          if(!ok) try{ showTutorialHole4PassiveReward(); }catch{}
+          try{ syncBanterSkipButton(); }catch{}
+        })();
+      }catch(e){ console.warn('tutorial hole3->4 failed',e); try{ showHoleBanner(3, getTotalHoles()); }catch{} }
       return;
     }
     // generic advance (including tutorial hole2->hole3)
@@ -1630,7 +1825,7 @@ let maxAttempts = 10;
 function getMaxAttempts() { return maxAttempts; }
 function setMaxAttempts(v) { maxAttempts = Math.max(10, Math.floor(v)); updateAttemptsUI(); }
 function addMaxAttempts(n = 1) { maxAttempts = Math.max(10, maxAttempts + Math.floor(n)); updateAttemptsUI(); saveProgress(); }
-function getAttemptsLeft() { return Math.max(0, maxAttempts - holeAttempts); }
+function getAttemptsLeft() { if (isTutorialActive()) return 999; return Math.max(0, maxAttempts - holeAttempts); }
 
 // Modifier Area +10% (Field Extender) and Power Cell +10% strength per REQ-023/06 — renamed from Area Up
 const BASE_MODIFIER_RADIUS = MODIFIER_RADIUS; // 54 base per REQ-015 (reduced 40% from 90 = 90*0.6)
@@ -1681,6 +1876,7 @@ function getSavePayload() {
     isFreeShotActive,
     isTutorialRun,
     treasure: level && level.treasure ? { x: level.treasure.x, y: level.treasure.y, radius: level.treasure.radius, isCollected: !!level.treasure.isCollected } : null,
+    treasures: getLevelTreasures(level).map(t=>({ x:t.x, y:t.y, radius:t.radius, isCollected:!!t.isCollected })),
     areaUpgradeCount: fieldExtenderCount,
     fieldExtenderCount,
     powerCellCount,
@@ -1817,12 +2013,36 @@ function loadProgress() {
     if (d.campaignSeed && typeof setCampaignSeed === 'function') {
       try { setCampaignSeed(String(d.campaignSeed)); } catch {};
     }
-    // Restore treasure collected state for current hole (one per hole near tree, see 08 §4)
+    // Restore treasure collected state for current hole (supports 3 chests on hole3)
     // Only mutate runtime LEVELS/level, not the stored course definition (which stays false for future runs)
     try {
-      if (d.treasure && typeof d.treasure.isCollected === 'boolean') {
+      if (Array.isArray(d.treasures) && d.treasures.length) {
+        const curTreasures = getLevelTreasures(LEVELS[currentHoleIndex]);
+        const curLevelTreasures = getLevelTreasures(level);
+        for (let i=0;i<d.treasures.length;i++){
+          const src = d.treasures[i];
+          if (!src || typeof src.isCollected!=='boolean') continue;
+          if (curTreasures[i]) curTreasures[i].isCollected = !!src.isCollected;
+          if (curLevelTreasures[i]) curLevelTreasures[i].isCollected = !!src.isCollected;
+        }
+        // keep single pointer in sync (repoint only, never mutate array elements via shared ref)
+        try {
+          const L = LEVELS[currentHoleIndex];
+          if (L && Array.isArray(L.treasures) && L.treasures.length) L.treasure = L.treasures.find(t=>!t.isCollected) || L.treasures[0];
+          else if (L && L.treasure && curTreasures[0] && L.treasure !== curTreasures[0]) L.treasure.isCollected = !!curTreasures[0].isCollected;
+        } catch {}
+        try {
+          if (level && Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
+          else if (level && level.treasure && curLevelTreasures[0] && level.treasure !== curLevelTreasures[0]) level.treasure.isCollected = !!curLevelTreasures[0].isCollected;
+        } catch {}
+      } else if (d.treasure && typeof d.treasure.isCollected === 'boolean') {
         if (LEVELS[currentHoleIndex] && LEVELS[currentHoleIndex].treasure) LEVELS[currentHoleIndex].treasure.isCollected = !!d.treasure.isCollected;
         if (typeof level !== 'undefined' && level && level.treasure) level.treasure.isCollected = !!d.treasure.isCollected;
+        // also sync array if present
+        const curTreasures = getLevelTreasures(LEVELS[currentHoleIndex]);
+        const curLevelTreasures = getLevelTreasures(level);
+        if (curTreasures[0]) curTreasures[0].isCollected = !!d.treasure.isCollected;
+        if (curLevelTreasures[0]) curLevelTreasures[0].isCollected = !!d.treasure.isCollected;
       }
     } catch {};
     // Restore gameState, handle legacy saves
@@ -2375,7 +2595,7 @@ function handleCoursePlay(courseId) {
   // For 3-hole Trial tutorial, prologue/intro still play when not yet seen, but after they complete we start the tutorial (controls-first banter), not the generic Starting Items overlay.
   try {
     const course = findCourseById(courseId);
-    const isThreeHole = !!(course && course.holeCount === 3);
+    const isThreeHole = !!(course && isTutorialCourse(course));
     const notSeen = !cutsceneHasSeen('prologue');
     const canPlayPrologue = isThreeHole && notSeen && !cutsceneIsActive();
     if (canPlayPrologue) {
@@ -3226,8 +3446,20 @@ const freeShotBannerDuration = 1000;
 let lastFreeShotBannerValue = null;
 
 function getRewardRerolled() { return rewardRerolled; }
+function isTutorialHole3MandatoryReward() {
+  try {
+    if (!isTutorialActive() || currentHoleIndex !== 2) return false;
+    if (!Array.isArray(rewardOffered)) return false;
+    if (rewardOffered.length === 3 && rewardOffered.includes('deflector') && rewardOffered.includes('rotator') && rewardOffered.includes('magnifier')) return true;
+    // Legacy 2-option variant for backward compat
+    if (rewardOffered.length === 2 && rewardOffered.includes('rotator') && rewardOffered.includes('deflector')) return true;
+    return false;
+  } catch { return false; }
+}
 function isRerollDisabled() {
   if (rewardRerolled) return true;
+  // Tutorial hole 3 chests (deflector/rotator/magnifier) are mandatory: no re-roll, must pick one.
+  if (isTutorialHole3MandatoryReward()) return true;
   return false;
 }
 function rerollReward() {
@@ -3282,18 +3514,45 @@ function maybeShowRewardMenu() {
   // Allow reward menu in AIMING, CHARGING and FLYING — treasure pickup shows immediately even mid-flight
   if (gameState !== "AIMING" && gameState !== "CHARGING" && gameState !== "FLYING") return;
   // REQ-021 per-hole: no reward before first attempt on hole 1, reward before first attempt on holes >0 via rewardPending set on hole entry
-  // 13-tutorial: on hole 3 (index 2) play rewards-second banter before showing the reward menu
-  if (rewardPending && isTutorialActive() && currentHoleIndex === 2 && !tutorialHole3RewardBanterShown) {
-    if (banterIsActive() || cutsceneIsActive()) return;
-    tutorialHole3RewardBanterShown = true;
-    try { banterPlay('rewards-second', { onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ maybeShowRewardMenu(); }catch{} } }); } catch {}
-    try{ syncBanterSkipButton(); }catch{}
-    return;
-  }
+  // 13-tutorial: hole3 3 chests each give deflector/rotator/magnifier, hole4 chest gives passives (no banner after)
   // 12-campaign: deterministic reward via campaignSeed + counter
   if (rewardPending) {
-    // Tutorial hole2 never shows reward (already cleared in loadLevel), skip if still pending
-    if (isTutorialActive() && currentHoleIndex === 1) { rewardPending=false; return; }
+    // Tutorial holes 1-4 have no start reward; hole3 (3 chests) and hole4 chest give rewards
+    if (isTutorialActive() && (currentHoleIndex === 1 || currentHoleIndex === 2 || currentHoleIndex === 3)) {
+      // For hole3 treasure trigger, check treasure collected — special 2-option, otherwise suppress
+      if (currentHoleIndex === 2 && getLevelTreasures(level).some(t=>t && t.isCollected)) {
+        // hole3: 3 chests each give deflector/rotator/magnifier (3 options)
+        rewardOffered = ['deflector','rotator','magnifier'];
+        pendingRewardType = null;
+        pendingPickup = null;
+        rewardMenuVisible = true;
+        rewardMenuHover = null;
+        rewardPending = false;
+        rewardRerolled = false;
+        rewardRerollHover = false;
+        updateHotbarUI();
+        syncRewardOverlay();
+        saveProgress();
+        return;
+      }
+      if (currentHoleIndex === 3 && getLevelTreasures(level).some(t=>t && t.isCollected)) {
+        // hole4 chest: show passive triple as reward (no banner after)
+        rewardOffered = ['fieldExtender','powerCell','freeShot'];
+        pendingRewardType = null;
+        pendingPickup = null;
+        rewardMenuVisible = true;
+        rewardMenuHover = null;
+        rewardPending = false;
+        rewardRerolled = false;
+        rewardRerollHover = false;
+        updateHotbarUI();
+        syncRewardOverlay();
+        saveProgress();
+        return;
+      }
+      // For hole2/3/4 start (no treasure), suppress
+      rewardPending=false; return;
+    }
     rewardOffered = getSeededRewardOffer();
     pendingRewardType = null;
     pendingPickup = null;
@@ -3330,8 +3589,9 @@ function syncRewardDiscardUI(overlay) {
       b.classList.toggle('pending', isPending);
     });
   } catch {}
-  // Skip button — always available while menu open
+  // Skip button — always available while menu open, except special tutorial hole3 treasure (mandatory 3 chests)
   try {
+    const isSpecialTut = !!(isTutorialActive() && currentHoleIndex===2 && Array.isArray(rewardOffered) && ((rewardOffered.length===3 && rewardOffered.includes('deflector') && rewardOffered.includes('rotator') && rewardOffered.includes('magnifier')) || (rewardOffered.length===2 && rewardOffered.includes('rotator') && rewardOffered.includes('deflector'))));
     let skipBtn = overlay.querySelector('#reward-skip-button');
     if (!skipBtn) {
       skipBtn = document.createElement('button');
@@ -3341,8 +3601,13 @@ function syncRewardDiscardUI(overlay) {
       skipBtn.addEventListener('click', () => { closeRewardMenuWithoutReward(); });
       card.appendChild(skipBtn);
     }
-    skipBtn.style.display = '';
-    skipBtn.disabled = false;
+    if (isSpecialTut) {
+      skipBtn.style.display = 'none';
+      skipBtn.disabled = true;
+    } else {
+      skipBtn.style.display = '';
+      skipBtn.disabled = false;
+    }
   } catch {}
   // Discard hint (no in-overlay bag cards — discard via golfbag .discard-target)
   try {
@@ -3634,12 +3899,14 @@ const SOFTLOCK_THRESHOLD = 75;
 const SOFTLOCK_MAX_SAMPLES = Math.ceil(SOFTLOCK_WINDOW / SOFTLOCK_SAMPLE_INTERVAL);
 
 function isLastAttemptForSoftlock() {
+  if (isTutorialActive()) return false;
   const left = getAttemptsLeft();
   const free = supply.freeShot ?? 0;
   // Last attempt state is set when attempts left is one and no free shots (checked after counter decreased on reset)
   return left === 1 && free === 0;
 }
 function isLastAttemptForReset() {
+  if (isTutorialActive()) return false;
   const left = getAttemptsLeft();
   const free = supply.freeShot ?? 0;
   // Last attempt state: attempts left is one and no free shots -> cannot reset on last attempt (R disabled after launch, pause Reset hidden)
@@ -3744,6 +4011,14 @@ function grantRewardToBag(normalized) {
   return ok;
 }
 function closeRewardMenuWithoutReward() {
+  // Tutorial hole3 (3 chests) reward is mandatory — cannot skip (deflector/rotator/magnifier)
+  if (isTutorialActive() && currentHoleIndex===2 && Array.isArray(rewardOffered) && rewardOffered.length===3 && rewardOffered.includes('deflector') && rewardOffered.includes('rotator') && rewardOffered.includes('magnifier')) {
+    return false;
+  }
+  // Legacy 2-option check for backward compat
+  if (isTutorialActive() && currentHoleIndex===2 && Array.isArray(rewardOffered) && rewardOffered.length===2 && rewardOffered.includes('rotator') && rewardOffered.includes('deflector')) {
+    return false;
+  }
   pendingRewardType = null;
   rewardClaimedFor = totalAttempts;
   rewardMenuVisible = false;
@@ -3755,6 +4030,11 @@ function closeRewardMenuWithoutReward() {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
+  // Tutorial hole4: after skipping start passive reward, still show hole banner (not for chest)
+  if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
+    tutorialHole4StartRewardPending = false;
+    try{ showHoleBanner(3, getTotalHoles()); }catch{}
+  }
   return true;
 }
 function discardBagSlotAndClaimReward(slotIdx) {
@@ -3777,6 +4057,10 @@ function discardBagSlotAndClaimReward(slotIdx) {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
+  if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
+    tutorialHole4StartRewardPending = false;
+    try{ showHoleBanner(3, getTotalHoles()); }catch{}
+  }
   return true;
 }
 function getPendingRewardType() { return pendingRewardType; }
@@ -3815,6 +4099,11 @@ function claimReward(type) {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
+  // Tutorial hole4: after claiming start passive reward (not chest), show hole banner to start play
+  if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
+    tutorialHole4StartRewardPending = false;
+    try{ showHoleBanner(3, getTotalHoles()); }catch{}
+  }
   return true;
 }
 
@@ -3885,11 +4174,11 @@ function loadLevel(index) {
   setAimAngle(Math.atan2(dy, dx));
   // REQ-09: queue reward before first attempt on holes >0 (except first hole of course), treasure handled separately
   // Free Shot: clear armed state on hole advance per 09 §3
-  // 13-tutorial: hole2 (index 1) has no reward; hole3 (index 2) reward is deferred behind rewards-second banter
+  // 13-tutorial: hole2 (1) no reward, hole3 (2) no reward at start (treasure triggers special rotator/deflector), hole4 (3) no reward
   const isTut = isTutorialActive();
   if (index > 0) {
     clearFreeShotGlow();
-    if (isTut && index === 1) {
+    if (isTut && (index === 1 || index === 2 || index === 3)) {
       rewardPending = false;
       rewardMenuVisible = false;
       rewardOffered = [];
@@ -3898,15 +4187,7 @@ function loadLevel(index) {
       rewardMenuHover = null;
       rewardRerollHover = false;
       syncRewardOverlay();
-    } else if (isTut && index === 2) {
-      rewardPending = true;
-      rewardMenuVisible = false;
-      rewardOffered = [];
-      pendingRewardType = null;
-      rewardRerolled = false;
-      rewardMenuHover = null;
-      rewardRerollHover = false;
-      tutorialHole3RewardBanterShown = false;
+      if (index === 2) tutorialHole3RewardBanterShown = false;
     } else {
       rewardPending = true;
       rewardMenuVisible = false;
@@ -4027,11 +4308,27 @@ function updateAttemptsUI() {
   try {
     if (hudHoleEl) hudHoleEl.textContent = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
     if (hudAttemptsEl) {
-      const attemptsLeft = Math.max(0, maxAttempts - holeAttempts);
-      const freeShot = Math.max(0, Math.floor(supply.freeShot ?? 0));
-      hudAttemptsEl.textContent = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft}`;
+      if (isTutorialActive()) {
+        hudAttemptsEl.classList.add('hidden');
+        hudAttemptsEl.style.display = 'none';
+      } else {
+        hudAttemptsEl.classList.remove('hidden');
+        hudAttemptsEl.style.display = '';
+        const attemptsLeft = Math.max(0, maxAttempts - holeAttempts);
+        const freeShot = Math.max(0, Math.floor(supply.freeShot ?? 0));
+        hudAttemptsEl.textContent = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft}`;
+      }
     }
-    if (hudTotalEl) hudTotalEl.textContent = `Points: ${totalPoints}`;
+    if (hudTotalEl) {
+      if (isTutorialActive()) {
+        hudTotalEl.classList.add('hidden');
+        hudTotalEl.style.display = 'none';
+      } else {
+        hudTotalEl.classList.remove('hidden');
+        hudTotalEl.style.display = '';
+        hudTotalEl.textContent = `Points: ${totalPoints}`;
+      }
+    }
     if (hudEl) {
       let isCut2=false; try{ isCut2=cutsceneIsActive(); }catch{}
       let isBanter=false; try{ isBanter=banterIsActive(); }catch{}
@@ -4426,32 +4723,26 @@ function resetBall() {
       attempts = totalAttempts;
       updateAttemptsUI();
       saveProgress();
-      const left = getAttemptsLeft();
-      const free = supply.freeShot ?? 0;
-      if (left === 0 && free === 0) {
-        // No attempts remaining -> Game Over (do not return to AIMING)
-        // set state to GAME_OVER via showGameOver after resetting physics already done
-        // Need to ensure we don't stay in AIMING
-        showGameOver();
-        return;
-      } else if (left === 1) {
-        if (free > 0) {
-          // Free Shot! banner and turn on free shot modifier
-          // showFreeShotBanner will also set isFreeShotActive true
-          try { showFreeShotBanner(); } catch {};
-          // If banner not shown due to dedup or other block, still ensure free shot armed
-          if (!isFreeShotActive) {
-            isFreeShotActive = true;
-            syncFreeShotGlow();
-            updateHotbarUI();
-            saveProgress();
+      if (!isTutorialActive()) {
+        const left = getAttemptsLeft();
+        const free = supply.freeShot ?? 0;
+        if (left === 0 && free === 0) {
+          showGameOver();
+          return;
+        } else if (left === 1) {
+          if (free > 0) {
+            try { showFreeShotBanner(); } catch {};
+            if (!isFreeShotActive) {
+              isFreeShotActive = true;
+              syncFreeShotGlow();
+              updateHotbarUI();
+              saveProgress();
+            }
+          } else {
+            try { showAttemptsBanner(1); } catch {};
           }
-        } else {
-          // Last Attempt banner
-          try { showAttemptsBanner(1); } catch {};
+          try { syncPauseOverlay(); } catch {};
         }
-        // Ensure pause overlay hide logic updated
-        try { syncPauseOverlay(); } catch {};
       }
     }
   }
@@ -4462,12 +4753,24 @@ function resetBall() {
   maybeShowRewardMenu();
   saveProgress();
   try { syncPauseOverlay(); } catch {};
-  // 13-tutorial: reminder after 5 failures on hole1
-  try { maybeShowTutorialLiquifierReminder(); } catch {}
+  // 13-tutorial: reminders (hole1 3/10, hole2 rotator 3 + gadgets 5)
+  try { maybeShowTutorialHole1LiquifierReminder(); } catch {}
+  try { maybeShowTutorialHole2RotatorReminder(); } catch {}
+  try { maybeShowTutorialHole2GadgetsReminder(); } catch {}
 }
 
 function advanceHole() {
   if (currentHoleIndex < getTotalHoles() - 1) {
+    if (isTutorialActive()) {
+      // No points or summary on tutorial
+      const wasIdx = currentHoleIndex;
+      // Defer via same pending mechanism but without showing overlay — hideCoinSummary will handle tutorial branching immediately
+      // To avoid showing overlay, set pending and directly invoke hideCoinSummary path via timeout
+      pendingHoleAdvance = true;
+      // For tutorial, auto-advance without needing user to dismiss overlay
+      setTimeout(()=>{ try{ hideCoinSummary(); }catch{} }, 50);
+      return;
+    }
     // Points per hole: -1 per attempt, +10 per modifier traversed, +50 first attempt — only applied on hole clear
     const traversed = modifiersTraversedThisShot ? modifiersTraversedThisShot.size : 0;
     const attemptsOnHole = holeAttempts; // failures before this win (0 means first try)
@@ -4613,8 +4916,8 @@ function handleLaunch(angle, power) {
     syncFreeShotGlow();
     updateHotbarUI();
   }
-  // If no attempts left and no free shot armed, Game Over instead of launching (deferred to next attempt start)
-  if (getAttemptsLeft() <= 0 && !(isFreeShotActive && golfbagTotalFreeShots() > 0)) {
+  // If no attempts left and no free shot armed, Game Over instead of launching (deferred to next attempt start) — not on tutorial (infinite)
+  if (!isTutorialActive() && getAttemptsLeft() <= 0 && !(isFreeShotActive && golfbagTotalFreeShots() > 0)) {
     showGameOver();
     return;
   }
@@ -4680,7 +4983,31 @@ function checkWin() {
       advanceHole();
       return true;
     }
-    // Final hole: points per hole + course completed bonus 50 — only added on clear, not live, subtract attempts
+    // Final hole: points per hole + course completed bonus 50 — only added on clear, not live, subtract attempts — not on tutorial
+    if (isTutorialActive()) {
+      ball.vel.x = 0;
+      ball.vel.y = 0;
+      ball.isMoving = false;
+      ball.z = 0;
+      ball.vz = 0;
+      clearFreeShotFlightGlow();
+      hideSoftlockBanner();
+      resetSoftlockDetection();
+      // No points, no summary on tutorial final hole — play congratulations banter before returning
+      try{ maybeUpdateHighScore(); }catch{}
+      gameState = "WIN";
+      updateAttemptsUI();
+      if (winOverlay) winOverlay.classList.add("hidden");
+      if (nextHoleButton) nextHoleButton.classList.add("hidden");
+      if (continueButton) continueButton.classList.add("hidden");
+      (async()=>{
+        try{ await banterLoadFile(); }catch{}
+        const ok = banterPlay('tutorial-hole4-complete', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ finishReturnToMainMenu(); }catch{} }});
+        if(!ok) setTimeout(()=>{ try{ finishReturnToMainMenu(); }catch{} }, 600);
+        try{ syncBanterSkipButton(); }catch{}
+      })();
+      return true;
+    }
     const traversedF = modifiersTraversedThisShot ? modifiersTraversedThisShot.size : 0;
     const attemptsF = holeAttempts;
     const firstBonusF = attemptsF === 0 ? 50 : 0;
@@ -4857,10 +5184,15 @@ function update(dt) {
   }
 
   updateHotbarUI();
-  // 13-tutorial: reminder after 5 failures on hole1 (once)
-  if(isTutorialActive() && currentHoleIndex===0 && !tutorialLiquifierReminderShown && holeAttempts>=5 && (gameState==="AIMING"||gameState==="CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible && !banterIsActive() && !cutsceneIsActive()){
-    try{ maybeShowTutorialLiquifierReminder(); }catch{}
-    if(banterIsActive()) return;
+  // 13-tutorial: hole1 liquifier reminders at 3 and 10, hole2 rotator at 3 + gadgets at 5
+  if(isTutorialActive() && (gameState==="AIMING"||gameState==="CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible && !banterIsActive() && !cutsceneIsActive()){
+    if(currentHoleIndex===0){
+      if(!tutorialHole1Liquifier3Shown && holeAttempts>=3){ try{ maybeShowTutorialHole1LiquifierReminder(); }catch{} if(banterIsActive()) return; }
+      if(!tutorialHole1Liquifier10Shown && holeAttempts>=10){ try{ maybeShowTutorialHole1LiquifierReminder(); }catch{} if(banterIsActive()) return; }
+    } else if(currentHoleIndex===1){
+      if(!tutorialHole2RotatorShown && holeAttempts>=3){ try{ maybeShowTutorialHole2RotatorReminder(); }catch{} if(banterIsActive()) return; }
+      if(!tutorialHole2GadgetsReminderShown && holeAttempts>=5){ try{ maybeShowTutorialHole2GadgetsReminder(); }catch{} if(banterIsActive()) return; }
+    }
   }
   // 11-banners: maybe show attempts/freeShot banner (triggered after counter decreased to 1)
   if ((gameState === "AIMING" || gameState === "CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible) {
@@ -4878,14 +5210,21 @@ function update(dt) {
 
   if (gameState === "AIMING" || gameState === "CHARGING") {
     updateForceBar();
-    // Treasure hit check also in AIMING/CHARGING (for drift or if treasure somehow at tee)
-    if (level && level.treasure && !level.treasure.isCollected && !rewardMenuVisible) {
+    // Treasure hit check also in AIMING/CHARGING (for drift or if treasure somehow at tee) — supports 3 chests on hole3
+    if (level && !rewardMenuVisible) {
       try {
-        if (checkTreasureHit(ball.pos, BALL_RADIUS, level.treasure)) {
-          collectTreasure(level.treasure);
-          rewardPending = true;
-          saveProgress();
-          maybeShowRewardMenu();
+        for (const tr of getUncollectedTreasures(level)) {
+          if (checkTreasureHit(ball.pos, BALL_RADIUS, tr)) {
+            collectTreasure(tr);
+            // Keep single treasure pointer in sync for backward compat (repoint only,
+            // never mutate isCollected — mutating via level.treasure would un-collect
+            // the just-collected 2nd/3rd chest on tutorial hole 3).
+            if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
+            rewardPending = true;
+            saveProgress();
+            maybeShowRewardMenu();
+            break;
+          }
         }
       } catch {};
     }
@@ -4903,16 +5242,21 @@ function update(dt) {
     // Deferred Game Over: last shot where attemptsLeft becomes 0 is allowed to finish (no immediate Game Over while FLYING)
     // Game Over will be checked only when starting the next attempt (handleLaunch entry) or on reroll
 
-    // Treasure hit (one per hole near tree, see 09 §3) - non-fatal, shows reward immediately (even mid-flight)
-    if (level && level.treasure && !level.treasure.isCollected && !rewardMenuVisible) {
+    // Treasure hit (supports 3 chests on hole3) - non-fatal, shows reward immediately (even mid-flight)
+    if (level && !rewardMenuVisible) {
       try {
-        if (checkTreasureHit(ball.pos, BALL_RADIUS, level.treasure)) {
-          collectTreasure(level.treasure);
-          rewardPending = true;
-          saveProgress();
-          maybeShowRewardMenu();
-          // If reward menu is now visible, freeze physics immediately (do not process OOB/bounce this tick)
-          if (rewardMenuVisible) return;
+        for (const tr of getUncollectedTreasures(level)) {
+          if (checkTreasureHit(ball.pos, BALL_RADIUS, tr)) {
+            collectTreasure(tr);
+            // Keep single treasure pointer in sync for backward compat (repoint only,
+            // never mutate isCollected — see AIMING branch above).
+            if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
+            rewardPending = true;
+            saveProgress();
+            maybeShowRewardMenu();
+            if (rewardMenuVisible) return;
+            break;
+          }
         }
       } catch {};
     }
@@ -4997,8 +5341,8 @@ function render() {
   try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH); } catch {};
   drawObstacles(ctx, level.obstacles);
   drawHole(ctx, level.hole);
-  if (level.treasure) {
-    try { drawTreasure(ctx, level.treasure); } catch {};
+  for (const tr of getLevelTreasures(level)) {
+    if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
   }
   drawBall(ctx, ball);
   // During the end screen (over the level) no aim/preview/force-bar/softlock chrome
@@ -5045,7 +5389,19 @@ function loop(now) {
     return;
   }
   if (gameState === "WIN") {
-    // Still render even when paused
+    // Still render even when paused. Exception: the tutorial hole-4
+    // congratulations banter plays while WIN — its typewriter runs on
+    // banterUpdate(dt) and wind on updateWindUniforms, both of which live
+    // in update() that this branch otherwise skips. Tick them here so the
+    // text animates and wind keeps moving behind the dialog.
+    try {
+      if (banterIsActive()) {
+        const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
+        try { updateWindUniforms(dt, getWindAt); } catch {}
+        try { banterUpdate(dt); } catch {}
+        try { syncBanterSkipButton(); } catch {}
+      }
+    } catch {}
     render();
     requestAnimationFrame(loop);
     lastTime = now;

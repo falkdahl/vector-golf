@@ -22,7 +22,7 @@
         },
         {
           "speaker": "caddy",
-          "text": "Left-click places a field modifier where you point. Right-click picks one back up. And if it all goes sideways, press R to reset to the tee."
+          "text": "Left-click places a field modifier where you point. Right-click picks one back up. Use hotkeys 1 to 4 to select an item in your bag. And if it all goes sideways, press R to reset to the tee, or press Escape to pause."
         }
       ]
     },
@@ -89,6 +89,27 @@
       ]
     },
     {
+      "id": "tutorial-field-modifiers",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Listen up. When you have a good direction you want to keep, use a Liquifier — it nullifies the wind and preserves your line."
+        },
+        {
+          "speaker": "caddy",
+          "text": "If the wind is not blowing the way you need, use a Deflector to flip it 180 degrees or a Rotator to turn it 90 degrees."
+        },
+        {
+          "speaker": "caddy",
+          "text": "If you need more power, drop a Magnifier — it magnifies the wind five times."
+        },
+        {
+          "speaker": "caddy",
+          "text": "And remember: field modifiers can be placed on top of each other to combine their effects. Stack them wisely."
+        }
+      ]
+    },
+    {
       "id": "rewards-second",
       "lines": [
         {
@@ -110,6 +131,36 @@
         {
           "speaker": "caddy",
           "text": "Gone when the hole clears. Placed is spent. So right-click them to pick them back up before you hole out — and if your bag is full, drop a spare first."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-rewards",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "You can only hold 4 items in your golf bag and if your bag is full you have to discard one to pick up another."
+        },
+        {
+          "speaker": "caddy",
+          "text": "You get a reward by clearing a hole or picking up treasure chests."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Chests are great if you are in need of more items but you have to balance how many attempts you spend trying to grab one."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-passives",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "There are some passive items that you can always pick up even if your bag is full, they stack outside of your bag and you can carry how many you like."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Field Extender gives you +20% area for your modifiers, Power Cell gives +20% strength, and Free Shot gives you a free attempt that does not count."
         }
       ]
     },
@@ -429,7 +480,60 @@
       "lines": [
         {
           "speaker": "caddy",
-          "text": "You are fighting the wind head-on — place your Liquifier to nullify the gale and the ball will reach the hole."
+          "text": "You are fighting a strong head wind — place your Liquifier to remove the head wind and keep your shot straight."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-hole1-liquifier-3",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "This head wind will push you back — use your Liquifier to remove the head wind."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-hole1-liquifier-10",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Still stuck against that head wind? Your Liquifier will remove the head wind — place it and shoot straight."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-hole3-rotator-reminder",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "This upwards wind is pushing you off — try the Rotator, it will turn the upwards wind into forward wind."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-hole2-gadgets-reminder",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Try the new gadgets you got from the old man — the Deflector, Rotator and Magnifier can turn this crosswind in your favour."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-hole4-complete",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Congratulations May — you are now ready to take on the challenges of Mt. Aeoulus!"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Remember, on the real trials you only have 10 attempts per hole and any modifiers on the ground when a hole is cleared are lost."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Item management is the key to clear a course. Choose wisely, place wisely."
         }
       ]
     }

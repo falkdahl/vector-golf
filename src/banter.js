@@ -94,11 +94,23 @@ export function listBanterIds() {
   return (banterCache.banters || []).map((b) => b.id);
 }
 
-// --- Round-robin state: which banter plays on the next run start ---
-// Fixed onboarding order (by id): controls, attempts, stacking, rewards.
-// Afterwards each run draws from a persisted shuffle bag holding every
-// non-onboarding id exactly once; the bag is only reshuffled when empty,
-// so no banter repeats until the full cycle completes.
+// --- Tutorial vs non-tutorial banter (2026-09-25) ---
+// Tutorial banters only play on The Proving Grounds (per-hole fixed). They are excluded from the non-tutorial shuffle bag.
+export const TUTORIAL_BANTER_IDS = [
+  'controls-first',
+  'tutorial-field-modifiers',
+  'stacking-third',
+  'tutorial-rewards',
+  'rewards-second',
+  'tutorial-passives',
+  'tutorial-hole2-gadgets-reminder',
+  'tutorial-liquifier-reminder',
+  'tutorial-hole1-liquifier-3',
+  'tutorial-hole1-liquifier-10',
+  'tutorial-hole3-rotator-reminder',
+  'tutorial-hole4-complete',
+];
+// Legacy onboarding order kept for compat but no longer used for non-tutorial runs
 export const ONBOARDING_BANTER_IDS = [
   'controls-first',
   'attempts-fourth',
@@ -327,27 +339,20 @@ export async function playRunStartBanter(options = {}) {
   if (!data || !Array.isArray(data.banters) || !data.banters.length) return false;
   const banters = data.banters;
   const byId = new Map(banters.map((b) => [b && b.id, b]));
-  const { count, bag: storedBag } = loadBanterState();
-  // 12-banter: the first four scenes are fixed onboarding (controls,
-  // attempts, stacking, rewards); afterwards draw from the shuffle bag.
-  let entry = null;
-  let remainingBag = null;
-  if (count >= 0 && count < ONBOARDING_BANTER_IDS.length) {
-    entry = byId.get(ONBOARDING_BANTER_IDS[count]) || banters[count] || banters[0];
-  } else {
-    const rest = banters.filter((b) => b && !ONBOARDING_BANTER_IDS.includes(b.id));
-    const pool = rest.length ? rest : banters.slice(ONBOARDING_BANTER_IDS.length);
-    const restIds = pool.map((b) => b.id);
-    let bag = normalizeBanterBag(storedBag, restIds);
-    if (!bag.length) bag = shuffleBanterIds(restIds);
-    const nextId = bag.shift();
-    remainingBag = bag;
-    entry = (nextId && byId.get(nextId)) || pool[Math.floor(Math.random() * pool.length)] || banters[0];
-  }
+  const { bag: storedBag } = loadBanterState();
+  // Tutorial banters are excluded from the non-tutorial shuffle bag; every non-tutorial run draws from that bag without repeats until cycle completes
+  const rest = banters.filter((b) => b && !TUTORIAL_BANTER_IDS.includes(b.id));
+  const pool = rest.length ? rest : banters.filter((b) => b && !TUTORIAL_BANTER_IDS.includes(b.id));
+  const restIds = pool.map((b) => b.id);
+  let bag = normalizeBanterBag(storedBag, restIds);
+  if (!bag.length) bag = shuffleBanterIds(restIds);
+  const nextId = bag.shift();
+  const remainingBag = bag;
+  const entry = (nextId && byId.get(nextId)) || pool[Math.floor(Math.random() * pool.length)] || banters[0];
   if (!entry) return false;
   const ok = playBanter(entry, {
     onComplete: (completed) => {
-      try { bumpBanterCount(entry.id, remainingBag !== null ? remainingBag : undefined); } catch {}
+      try { bumpBanterCount(entry.id, remainingBag); } catch {}
       if (options.onComplete) try { options.onComplete(completed); } catch {}
     },
   });

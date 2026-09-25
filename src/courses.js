@@ -145,7 +145,7 @@ export function generateCampaignCourse(holeCount = 18, campaignSeedVal = getOrCr
     options = campaignSeedVal;
     campaignSeedVal = getOrCreateCampaignSeed();
   }
-  // Fixed tutorial for 3-hole: always "The 3-Hole Trial" with deterministic holes, not seed-dependent
+  // Fixed tutorial for 3-hole: always "The Proving Grounds" with deterministic holes, not seed-dependent
   if (holeCount === 3) {
     let prevLevelsCopy = null;
     let prevLevelCopy = null;
@@ -167,9 +167,9 @@ export function generateCampaignCourse(holeCount = 18, campaignSeedVal = getOrCr
     } catch {}
     return {
       id: deterministicIdForCourse(campaignSeedVal, 3),
-      name: "The 3-Hole Trial",
+      name: "The Proving Grounds",
       holes: holesCopy,
-      holeCount: 3,
+      holeCount: holesCopy.length,
       seed: 0,
       campaignSeed: String(campaignSeedVal),
       createdAt: Date.now(),
@@ -289,7 +289,7 @@ export function validateCourse(c) {
   if (!c || typeof c !== 'object') throw new Error("Invalid course data");
   if (typeof c.id !== 'string' || c.id.length < 8) throw new Error("Invalid course data");
   if (typeof c.name !== 'string' || !c.name.trim()) throw new Error("Invalid course data");
-  if (!Array.isArray(c.holes) || ![3,6,9,18].includes(c.holes.length)) throw new Error("Invalid course data");
+  if (!Array.isArray(c.holes) || ![3,4,6,9,18].includes(c.holes.length)) throw new Error("Invalid course data");
   for (const h of c.holes) {
     if (!h || typeof h.tee !== 'object' || typeof h.hole !== 'object' || !Array.isArray(h.obstacles) || typeof h.field !== 'object') {
       throw new Error("Invalid course data");
@@ -298,14 +298,16 @@ export function validateCourse(c) {
   return true;
 }
 
-export const STAGES = [3, 6, 9, 18];
+export const STAGES = [4, 6, 9, 18];
 
 export function isStageUnlocked(courses, holeCount) {
-  if (holeCount === 3) return true;
+  // Legacy 3-hole stage alias to 4 (The Proving Grounds)
+  if (holeCount === 3) holeCount = 4;
+  if (holeCount === 4) return true;
   const idx = STAGES.indexOf(holeCount);
   if (idx <= 0) return false;
   const prevHoleCount = STAGES[idx - 1];
-  const prev = courses.find(c => c.holeCount === prevHoleCount);
+  const prev = courses.find(c => c.holeCount === prevHoleCount || (prevHoleCount===4 && c.holeCount===3));
   return !!prev && prev.bestTotal !== null;
 }
 
@@ -335,17 +337,17 @@ export function ensureStagedCourses(courses, campaignSeedParam) {
       let gen;
       if (cs) {
         const existingNames = new Set(staged.map(c => c.name));
-        if (hc === 3) gen = generateCampaignCourse(3, cs, { difficulty: 'easy', existingNames });
+        if (hc === 4) gen = generateCampaignCourse(3, cs, { difficulty: 'easy', existingNames });
         else gen = generateCampaignCourse(hc, cs, { existingNames });
       } else {
-        gen = hc === 3 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(hc, Date.now());
+        gen = hc === 4 ? generateCourse(3, Date.now(), { difficulty: 'easy' }) : generateCourse(hc, Date.now());
       }
       staged.push(gen);
     } else {
       break;
     }
   }
-  // If no courses (fresh), create 3-easy with campaignSeed
+  // If no courses (fresh), create 4-easy (The Proving Grounds) with campaignSeed
   if (staged.length === 0) {
     let def;
     if (cs) {
@@ -400,15 +402,17 @@ export function loadCourses() {
     }
     // Fix legacy bug where collected treasure was persisted in course definition — always reset for stored courses
     try { normalizeCourseTreasures(valid); } catch {}
-    // Tutorial migration: enforce fixed The 3-Hole Trial (name + holes) for all campaigns
+    // Tutorial migration: enforce fixed The Proving Grounds (name + holes) for all campaigns
     try {
       for (const c of valid) {
-        if (c && c.holeCount === 3) {
-          if (c.name !== "The 3-Hole Trial") c.name = "The 3-Hole Trial";
+        if (c && (c.holeCount === 3 || c.name === "The 3-Hole Trial" || c.name === "3-hole Trial" || c.name === "The Proving Grounds")) {
+          if (c.name !== "The Proving Grounds") c.name = "The Proving Grounds";
+          // Normalize holeCount to actual holes length (now 4)
           // Replace holes with fixed tutorial levels (preserve bestTotal/id)
           try {
             const fixed = generateTutorialLevels();
             c.holes = JSON.parse(JSON.stringify(fixed));
+            c.holeCount = fixed.length;
             c.seed = 0;
           } catch {}
         }
@@ -419,7 +423,17 @@ export function loadCourses() {
     // Ensure 3-hole is still fixed after staging (in case it was generated with old name via ensureStagedCourses fallback)
     try {
       for (const c of staged) {
-        if (c && c.holeCount === 3 && c.name !== "The 3-Hole Trial") c.name = "The 3-Hole Trial";
+        if (c && (c.holeCount === 3 || c.holeCount === 4) && (c.name === "The 3-Hole Trial" || c.name === "3-hole Trial" || c.name === "The Proving Grounds")) {
+          if (c.name !== "The Proving Grounds") c.name = "The Proving Grounds";
+          // Ensure holes are the fixed 4-hole set
+          try {
+            const fixed = generateTutorialLevels();
+            if (c.holes.length !== fixed.length) {
+              c.holes = JSON.parse(JSON.stringify(fixed));
+              c.holeCount = fixed.length;
+            }
+          } catch {}
+        }
       }
     } catch {}
     // Detect name fixes for duplicates
@@ -480,9 +494,12 @@ function normalizeCourseTreasures(courseList) {
   for (const c of courseList) {
     if (!c || !Array.isArray(c.holes)) continue;
     for (const h of c.holes) {
+      if (Array.isArray(h.treasures)) h.treasures.forEach(t=>{ if(t && typeof t.isCollected==='boolean') t.isCollected=false; });
       if (h && h.treasure && typeof h.treasure.isCollected === 'boolean') {
         h.treasure.isCollected = false;
       }
+      // keep single in sync with first of array
+      if (Array.isArray(h.treasures) && h.treasures.length && h.treasure) h.treasure.isCollected = !!h.treasures[0].isCollected;
     }
   }
 }
@@ -490,6 +507,7 @@ function normalizeCourseTreasures(courseList) {
 export function resetCourseTreasures(course) {
   if (!course || !Array.isArray(course.holes)) return;
   for (const h of course.holes) {
+    if (Array.isArray(h.treasures)) h.treasures.forEach(t=>{ if(t) t.isCollected=false; });
     if (h && h.treasure) h.treasure.isCollected = false;
   }
 }

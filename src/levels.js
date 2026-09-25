@@ -860,13 +860,16 @@ export const TUTORIAL_HOLE_TUNE = {
   // Hole shortened to ~610 distance (90->700) so 600 power without liquifier falls ~82px short (center), with liquifier covering launch point (center 110, radius 54) still reaches hole
   unaryX: -1.95,
   unaryY: 0,
+  // side wind bottom->top for hole2/3
+  sideX: 0,
+  sideY: -2.0,
 };
 
-// Generate the fixed 3-hole Trial levels (not seed-dependent)
+// Generate the fixed 4-hole Proving Grounds levels (not seed-dependent)
 export function generateTutorialLevels() {
-  // Hole 1: straight fairway, no obstacles, no treasure, heavy unary headwind, shorter hole
-  const tee1 = { x: 90, y: 360 };
-  const hole1 = { x: 700, y: 360, radius: 14 };
+  // Hole 1: straight fairway, no obstacles, no treasure, heavy unary headwind, centered
+  const tee1 = { x: 320, y: 360 };
+  const hole1 = { x: 940, y: 360, radius: 14 };
   const spine1 = sampleBezier(tee1, null, null, hole1, 20);
   const terrain1 = {
     green: { x: hole1.x, y: hole1.y, r: 70 },
@@ -904,29 +907,137 @@ export function generateTutorialLevels() {
     waterOnFairwayCount: 0,
   };
 
-  // Holes 2-3: deterministic Easy generation (always same for all playthroughs)
-  // Generate 6 easy holes with a fixed seed and take first 3, then override hole1 with our custom and adjust treasures
-  const fixedLevels = _generateLevelsInternal(TUTORIAL_SEED, 3, { difficulty: 'easy' });
-  // fixedLevels[0] is Easy hole1 — discard, keep our custom level1
-  // holes 2,3 correspond to fixedLevels[1], fixedLevels[2] — make them deterministic and ensure no water collisions etc are already satisfied
-  // For tutorial spec: hole2 no treasure, hole3 has chest
-  const level2Raw = fixedLevels[1];
-  const level3Raw = fixedLevels[2];
-  // Ensure hole2 treasure null, hole3 chest present (if missing, fallback)
-  level2Raw.id = 'hole-2';
-  level2Raw.name = 'Hole 2';
-  level2Raw.treasure = null;
-  // Hole3 keep its treasure (generateTreasureForHole already created one); ensure it exists
-  level3Raw.id = 'hole-3';
-  level3Raw.name = 'Hole 3';
-  if (!level3Raw.treasure) {
-    const rand = mulberry32(TUTORIAL_SEED + 2*7919+977);
-    level3Raw.treasure = generateTreasureForHole(level3Raw.obstacles, level3Raw.obstacles.slice(0,2), level3Raw.terrain, level3Raw.tee, level3Raw.hole, level3Raw.waterHazards, rand, LOGICAL_W, LOGICAL_H);
-  } else {
-    level3Raw.treasure = { ...level3Raw.treasure, isCollected: false };
+  // Hole 2: straight fairway without obstacles, strong unary side wind bottom->top, no treasure — full width slightly shortened (shortened more per request)
+  const tee2 = { x: 120, y: 360 };
+  const hole2 = { x: 1080, y: 360, radius: 14 };
+  const spine2 = sampleBezier(tee2, null, null, hole2, 20);
+  const terrain2 = {
+    green: { x: hole2.x, y: hole2.y, r: 70 },
+    teeBox: { x: tee2.x, y: tee2.y, r: 70 },
+    fairwayPath: spine2,
+    widthFairway: 110,
+    widthRough: 190,
+    noiseSeed: 2,
+    warpScale: 0.008,
+    warpStrength: 8,
+    _p1: null,
+    _p2: null,
+    shape: 'I',
+  };
+  attachNoiseToTerrain(terrain2);
+  const field2 = {
+    cols: 32, rows: 18, strength: 90, seed: 102,
+    sources: 0, sinks: 0, doublets: 0, vortexes: 0,
+    unaryFlow: { x: TUTORIAL_HOLE_TUNE.sideX, y: TUTORIAL_HOLE_TUNE.sideY },
+  };
+  const level2 = {
+    id: 'hole-2',
+    name: 'Hole 2',
+    canvas: { width: LOGICAL_W, height: LOGICAL_H },
+    tee: tee2,
+    hole: hole2,
+    obstacles: [],
+    waterHazards: [],
+    treasure: null,
+    terrain: terrain2,
+    field: field2,
+    difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 1, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 },
+    treesOnFairwayCount: 0,
+    waterOnFairwayCount: 0,
+  };
+
+  // Hole 3: same as hole2 but with treasure in middle of fairway
+  const tee3 = { x: tee2.x, y: tee2.y };
+  const hole3 = { x: hole2.x, y: hole2.y, radius: 14 };
+  const spine3 = sampleBezier(tee3, null, null, hole3, 20);
+  const terrain3 = {
+    green: { x: hole3.x, y: hole3.y, r: 70 },
+    teeBox: { x: tee3.x, y: tee3.y, r: 70 },
+    fairwayPath: spine3,
+    widthFairway: 110,
+    widthRough: 190,
+    noiseSeed: 3,
+    warpScale: 0.008,
+    warpStrength: 8,
+    _p1: null,
+    _p2: null,
+    shape: 'I',
+  };
+  attachNoiseToTerrain(terrain3);
+  const field3 = {
+    cols: 32, rows: 18, strength: 90, seed: 103,
+    sources: 0, sinks: 0, doublets: 0, vortexes: 0,
+    unaryFlow: { x: TUTORIAL_HOLE_TUNE.sideX, y: TUTORIAL_HOLE_TUNE.sideY },
+  };
+  // 3 treasures spread along fairway (25%, 50%, 75%) — each gives deflector/rotator/magnifier
+  const treasures3 = [];
+  for (let ti = 0; ti < 3; ti++) {
+    const t = (ti + 1) / 4; // 0.25, 0.5, 0.75
+    const x = Math.round(tee3.x + (hole3.x - tee3.x) * t);
+    const y = Math.round((tee3.y + hole3.y) / 2 + (ti === 0 ? -14 : ti === 2 ? 14 : 0));
+    treasures3.push({ x, y, radius: 12, isCollected: false, nearTreeId: -1 });
   }
-  // Provide copy with IDs fixed
-  const levels = [level1, level2Raw, level3Raw];
+  const treasure3 = treasures3[0]; // backward compat single
+  const level3 = {
+    id: 'hole-3',
+    name: 'Hole 3',
+    canvas: { width: LOGICAL_W, height: LOGICAL_H },
+    tee: tee3,
+    hole: hole3,
+    obstacles: [],
+    waterHazards: [],
+    treasure: treasure3,
+    treasures: treasures3,
+    terrain: terrain3,
+    field: field3,
+    difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 1, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 },
+    treesOnFairwayCount: 0,
+    waterOnFairwayCount: 0,
+  };
+
+  // Hole 4: same as hole 3 (full width side wind) but start with field extender+power cell
+  const tee4 = { x: tee3.x, y: tee3.y };
+  const hole4 = { x: hole3.x, y: hole3.y, radius: 14 };
+  const spine4 = sampleBezier(tee4, null, null, hole4, 20);
+  const terrain4 = {
+    green: { x: hole4.x, y: hole4.y, r: 70 },
+    teeBox: { x: tee4.x, y: tee4.y, r: 70 },
+    fairwayPath: spine4,
+    widthFairway: 110,
+    widthRough: 190,
+    noiseSeed: 4,
+    warpScale: 0.008,
+    warpStrength: 8,
+    _p1: null,
+    _p2: null,
+    shape: 'I',
+  };
+  attachNoiseToTerrain(terrain4);
+  const field4 = {
+    cols: 32, rows: 18, strength: 90, seed: 104,
+    sources: 0, sinks: 0, doublets: 0, vortexes: 0,
+    unaryFlow: { x: TUTORIAL_HOLE_TUNE.sideX, y: TUTORIAL_HOLE_TUNE.sideY },
+  };
+  const midX4 = (tee4.x + hole4.x) / 2;
+  const midY4 = (tee4.y + hole4.y) / 2;
+  const treasure4 = { x: Math.round(midX4), y: Math.round(midY4), radius: 12, isCollected: false, nearTreeId: -1 };
+  const level4 = {
+    id: 'hole-4',
+    name: 'Hole 4',
+    canvas: { width: LOGICAL_W, height: LOGICAL_H },
+    tee: tee4,
+    hole: hole4,
+    obstacles: [],
+    waterHazards: [],
+    treasure: treasure4,
+    terrain: terrain4,
+    field: field4,
+    difficulty: { shape: 'I', shapeTier: 0, fieldComponents: 1, treesOnFairway: 0, waterOnFairway: 0, tier: 'easy', score: 0 },
+    treesOnFairwayCount: 0,
+    waterOnFairwayCount: 0,
+  };
+
+  const levels = [level1, level2, level3, level4];
   return levels;
 }
 

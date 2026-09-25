@@ -2,13 +2,12 @@
 
 - **ID:** 12-banter
 - **Type:** Functional + UI
-- **References:** `11-cutscenes.md` (dialog box style/input), `10-progression.md` §2 (loadout), `05-input-and-states.md` §6 (Hole 1 banner), `02-canvas-system.md` (loop dt), `01-infrastructure.md` (static hosting)
+- **References:** `11-cutscenes.md` (dialog box style/input), `10-progression.md` §2 (loadout), `05-input-and-states.md` §6 (Hole 1 banner), `02-canvas-system.md` (loop dt), `01-infrastructure.md` (static hosting), `13-tutorial.md` (tutorial banters)
 
 ## 1. Purpose
 
 Short in-place conversations between May and Caddy that play at the start of a
-run, after the loadout overlay closes and before the `Hole 1` banner shows.
-Banter stays on the loaded hole (terrain, ball, wind visible behind); it never
+run and between tutorial holes. Banter stays on the loaded hole (terrain, ball, wind visible behind); it never
 takes over the background canvas like a full cutscene.
 
 ## 2. Data File — Single JSON (`src/banter.json`)
@@ -39,8 +38,7 @@ takes over the background canvas like a full cutscene.
   - `speaker` (case-insensitive) is one of:
     - `may` → display name `May`, portrait `./img/cutscenes/portrait-may.png`
     - `caddy` → display name `Caddy`, portrait `./img/cutscenes/portrait-caddy.png`
-- Validation: `validateBanter(data)` returns `{valid, errors}`; invalid files or
-  entries are ignored (banter skipped, run continues to the Hole 1 banner).
+- Includes tutorial banters (see §4c) and non-tutorial pool (see §4d). IDs for tutorial: `controls-first` (hole1 controls), `tutorial-field-modifiers` (hole2 field modifiers, alias `stacking-third` for compat), `tutorial-rewards` (hole3 rewards, alias `rewards-second`), `tutorial-passives` (hole4 passives), `tutorial-hole2-gadgets-reminder` (hole2 5-attempt reminder), `tutorial-liquifier-reminder` legacy kept but not used on hole1. Validation: `validateBanter(data)` returns `{valid, errors}`; invalid files or entries are ignored (banter skipped, run continues to the Hole 1 banner).
 
 ## 3. Dialog Presentation — Cutscene Dialog Box
 
@@ -61,61 +59,37 @@ takes over the background canvas like a full cutscene.
   linger). On the last box it closes the banter. `Escape`/`Enter` also advance.
   There is no Skip button; banter is 3–4 short boxes.
 
-## 4. Trigger — After Banter, Before Starting Overlay and Hole 1 Banner (2026-09-21 amendment, supersedes loadout trigger)
+## 4. Triggers
 
-- **Banter plays over the loaded level** (`setActiveCourse`/`loadLevel(0)` preview behind, `mainMenuVisible=false`, terrain visible) **with no other menu visible, not even the top `Attempts` bar** (`#hud` `hidden` while `banterIsActive()`, `bottomBar` hidden).
+### 4a. Tutorial Course — Fixed Per-Hole Banters (2026-09-25, supersedes previous tutorial trigger)
 
-- **Starting Items overlay (Choose 2) is shown AFTER banter has played** (per 10-progression 2026-09-21). `handleCoursePlay(courseId)` shall first play the next run-start banter in place (over main menu or loaded hole preview), and only after its `onComplete` show `#starting-items-overlay` `Choose 2 starting items` before the run starts. `startCourseWithStartingItems` no longer plays banter; it directly shows `Hole 1` banner.
+Tutorial banters **only play on `The Proving Grounds`** (`activeCourse.name==="The Proving Grounds"`). They are **not** shown on other courses.
 
-## 4b. Legacy Trigger — After Loadout Closes, Before Hole 1 Banner (deprecated, kept for reference)
+- **Hole 1 start:** `controls-first` (tutorial-controls) — Caddy describes controls: aim with arrows, shoot with space, reset with r, pause with escape, place items with left-click, pick up items with right click, hotkeys to select an item in the bag. Plays immediately after `handleCoursePlay` loads hole 1 preview, before `Hole 1` banner. Always replays on each tutorial run (no seen gating, not part of `BANTER_STATE_KEY` shuffle).
+- **Hole 2 start:** `tutorial-field-modifiers` (stacking-third) — Caddy tells player to use a liquifier when they have a good direction they want to keep, deflector and rotator if wind is not blowing the way they need and magnifier if they need more power. Also teaches that field modifiers can be placed on top of each other to combine their effects. Plays after `first-restock` cutscene (or immediately if cutscene skipped) over Hole 2 preview, before `Hole 2` banner. Always replays.
+- **Hole 2 reminder (5 attempts):** `tutorial-hole2-gadgets-reminder` — one-sentence caddy reminder to try the new gadgets they got from the old man. Triggered when `holeAttempts>=5 && currentHoleIndex===1` while `isTutorialActive()` and `AIMING`/`CHARGING`, once per Hole 2 run. Contains `gadget` and `old man`.
+- **Hole 3 start:** `tutorial-rewards` (rewards-second) — Caddy explains you can only hold 4 items in your golf bag and if you ever pick up an item when the bag is full you have to discard one. He also explains you get a reward by clearing a hole or picking up treasure chests. Chests are great if you are in need of more items but you have to balance how many attempts you spend trying to grab one. Plays over Hole 3 preview before `Hole 3` banner (reward menu at start is suppressed; treasure triggers special rotator/deflector reward after chest). Always replays.
+- **Hole 4 start:** `tutorial-passives` — Caddy explains there are some passive items that you can always pick up even if your bag is full, they stack outside of your bag and you can carry how many you like. He explains effects of field extender, power cell and free shot (field extender +20% area, power cell +20% strength, free shot free attempt). Plays over Hole 4 preview before `Hole 4` banner. Always replays.
 
-- `startCourseWithLoadout(courseId, slots)` (the loadout `OK` path) shall:
-  1. perform the normal run setup and `loadLevel(0)` with the `Hole 1` banner
-     **suppressed** (`holeBannerVisible=false`),
-  2. play the next run-start banter in place,
-  3. show the `Hole 1` banner (`showHoleBanner(0)`) only after the banter
-     completes (or immediately if the banter file is missing/invalid/empty).
-- Selection: the first four banters are fixed onboarding — `banters[0]`
-  (`controls-first`: aim/shoot/place/remove/reset) plays on the first run,
-  `banters[1]` (`attempts-fourth`: 10 attempts per hole, failing restarts the
-  whole course, plan modifier usage well) on the second run,
-  `banters[2]` (`stacking-third`: stacking field modifiers, deflector/rotator
-  direction twists, magnifying a Rotator or Deflector for the needed
-  trajectory) on the third run, and `banters[3]` (`rewards-second`:
-  chests/hole-clear rewards, owned-only offers, placed modifiers lost on
-  clear, right-click pickup) on the fourth run. Selection is resolved by
-  banter id (`controls-first`, `attempts-fourth`, `stacking-third`,
-  `rewards-second` in that order) with positional fallback to `banters[0..3]`
-  when an id is missing. After those four have played, each run start draws
-  from a **shuffle bag** over the rest (all banters whose id is not one of
-  the four onboarding ids, i.e. `banters[4:]` in the canonical file order):
-  the bag holds each remaining banter id exactly once in `Math.random`
-  shuffled order, one id is popped per played banter, and the bag is only
-  rebuilt and reshuffled once fully empty — so every remaining banter plays
-  exactly once per cycle with no repeats until the whole cycle completes. A
-  persisted counter plus last-played id plus bag (`BANTER_STATE_KEY =
-  "golfVectorField.banter.v1"`, `{version:1, count, lastId, bag:string[]}`)
-  tracks progress: `count`
-  `0` → first scene, `1` → second scene, `2` → third scene, `3` → fourth
-  scene, `≥4` → pop next id from the bag (rebuilding + reshuffling when
-  empty; stored bags are repaired by dropping unknown ids and appending any
-  missing current ids), and increments after each played banter (updating
-  `lastId` to the played entry's id and persisting the remaining bag).
-  `localStorage.clear()` / campaign regeneration resets the sequence.
-- `showLoadout(courseId)` preloads `src/banter.json` in the background
-  (`preloadBanterFile()`, fire-and-forget) so no fetch gap appears when the
-  loadout closes.
-- Reloading mid-banter is not persisted: the run itself was already saved by
-  `startCourseWithLoadout`, so a reload auto-resumes at hole 1 without
-  replaying the banter.
+Tutorial banters are not persisted in `BANTER_STATE_KEY`; they do not consume the non-tutorial shuffle bag.
+
+### 4b. Non-Tutorial Courses — Random Shuffle-Bag (2026-09-25, supersedes previous onboarding fixed order)
+
+When playing **any course other than `The Proving Grounds`**, the first hole start shows a **random non-tutorial banter** from a **shuffle bag** over the remaining banters (all banters whose `id` is not one of the tutorial ids `controls-first`, `tutorial-field-modifiers`, `stacking-third`, `tutorial-rewards`, `rewards-second`, `tutorial-passives`, `tutorial-hole2-gadgets-reminder`, `tutorial-liquifier-reminder`). The bag holds each non-tutorial id exactly once in `Math.random` shuffled order, one id is popped per run start, and the bag is only rebuilt and reshuffled once fully empty — so every non-tutorial banter plays exactly once per cycle with no repeats until the whole cycle completes. A persisted state `BANTER_STATE_KEY = "golfVectorField.banter.v1"` `{version:1, count, lastId, bag:string[]}` tracks progress (count increments per played non-tutorial banter, lastId/bag persisted). Tutorial banters do not affect this state. `loadBanterFile` preload still happens, but tutorial course bypasses this bag entirely.
+
+- `handleCoursePlay` for non-tutorial courses shall load hole 1 preview, then call `playRunStartBanter` (which now draws from the non-tutorial shuffle bag) → `Hole 1` banner.
+- Reloading mid-banter is not persisted: the run itself was already saved, so reload auto-resumes at hole 1 without replaying the banter.
+- `showLoadout` / `showStartingItems` preloading still fire-and-forget `preloadBanterFile()`.
+
+### 4c. Legacy Trigger — After Loadout Closes, Before Hole 1 Banner (deprecated, kept for reference)
+- Previous fixed onboarding `controls-first, attempts-fourth, stacking-third, rewards-second` in order then shuffle bag is superseded by §4a/§4b.
 
 ## 5. Blocking & Loop Integration (`src/main.js` + `src/banter.js`)
 
 - Runtime API (`src/banter.js`): `loadBanterFile()`, `preloadBanterFile()`,
   `getBanter(id)`, `listBanterIds()`, `validateBanter(data)`,
   `isBanterActive()`, `getActiveBanterId()`, `playBanter(idOrEntry,
-  {onComplete})`,   `playRunStartBanter({onComplete})` (async, first-four-fixed
-  then one draw per run from the persisted shuffle bag),
+  {onComplete})`,   `playRunStartBanter({onComplete})` (now non-tutorial shuffle bag only, tutorial handled separately via `playBanter('controls-first')` etc.),
   `updateBanter(dtSeconds)`, `handleBanterInput(e): boolean`, `skipBanter()`.
 - While `isBanterActive()`:
   - `update(dt)` ticks wind + `updateBanter(dt)` and returns early (physics
@@ -126,50 +100,31 @@ takes over the background canvas like a full cutscene.
   - `input.js` guards: `gameStateGetter` returns `"BANTER"` while active (so
     `Space` never starts charging), `onReset`/`onToggleWind` no-op.
   - `handleLaunch`/`placeModifier`/hotbar clicks no-op.
-- Banter never overlaps a cutscene: it only starts from `startCourseWithLoadout`,
-  which runs after any cutscene chain has completed; the cutscene branch in
-  `update()`/input handlers keeps priority.
+- Banter never overlaps a cutscene: tutorial cutscenes play before banter; the cutscene branch in `update()`/input handlers keeps priority.
 
 ## 6. Skip Button — Same Design as Cutscene Skip
 
 - Every banter shows a **Skip button** in the **top-right corner** of the canvas while it is active: `<button id="banter-skip-button">Skip »</button>` as a direct child of `#game-container` (bounded, `position:absolute; top:10px; right:12px; z-index:14` above the dialog `z-index:12`), `hidden` otherwise (`classList` contains `hidden` iff `!isBanterActive()`; `display:none` when hidden).
 - Styling is identical to `#cutscene-skip-button` (small unobtrusive pill: `font:700 11px system-ui`, white on `rgba(0,0,0,0.55)`, `1px solid rgba(255,255,255,0.35)`, `border-radius:8px`, `padding:6px 12px`, `cursor:pointer`; hover `background:rgba(0,0,0,0.75)`).
-- Clicking it calls `skipBanter()` (ends immediately via `finishActive`, invoking `onComplete` so the `Hole 1` banner shows and the banter counter still bumps). The click is `preventDefault()`-ed and `stopPropagation()`-ed so it never also advances dialog via the dialog/canvas click handlers.
+- Clicking it calls `skipBanter()` (ends immediately via `finishActive`, invoking `onComplete` so the `Hole 1` banner shows and the banter counter still bumps for non-tutorial; tutorial banters do not bump the counter). The click is `preventDefault()`-ed and `stopPropagation()`-ed so it never also advances dialog via the dialog/canvas click handlers.
 - Visibility is synced from `syncBanterSkipButton()` in `src/main.js`, called on banter start, on `onComplete`, and every frame in the `update()` banter branch, so the button is visible throughout the banter and never leaks into gameplay, menus, loadout, cutscenes, or reward overlays. Wired once in `init()` (`#banter-skip-button` click → `banterSkip()` when `isBanterActive()`), exposed as `window.__syncBanterSkipButton` for tests. The cutscene skip button stays hidden during banter (`cutsceneIsActive()===false`).
 
 ## Acceptance Criteria
 
-- [ ] `src/banter.json` is a single file with `version:1` and `banters[]`; each
-      entry has a unique `id` and 1–12 `lines` of `{speaker: may|caddy, text:
-      1–500 chars}`; `validateBanter` accepts it.
-- [ ] `May` boxes show speaker `May` + `./img/cutscenes/portrait-may.png`,
-      `Caddy` boxes show `Caddy` + `./img/cutscenes/portrait-caddy.png`, in the
-      existing `#cutscene-dialog` `.cutscene-dialog-box` JRPG style.
-- [ ] Typewriter reveals at 20 cps; each box lingers 1000ms; next dialog starts
-      at the end of the previous one (±150ms tolerance).
-- [ ] First press of `Space`/`R`/click while revealing fast-forwards to full
-      text; next press advances; last box closes the banter.
-- [ ] Closing the loadout (`OK`) suppresses the `Hole 1` banner, plays a
-      banter in place over hole 1 (terrain/wind visible, no cutscene
-      background takeover), then shows `Hole 1` `1000ms`; missing/invalid file
-      falls back to the banner immediately.
-- [ ] Consecutive run starts play the fixed onboarding first (`controls-first`,
-      then `attempts-fourth`, then `stacking-third`, then `rewards-second`)
-      and afterwards draw from a shuffle bag over the remaining banters: each
-      remaining id plays exactly once per cycle (no repeats until the bag is
-      empty, then it is reshuffled); `count` + `lastId` + `bag` persist in
-      `BANTER_STATE_KEY`.
-- [ ] While banter is active: no launch, charge, aim drift, placement, drag,
-      `R`, `H`, or pause; ball stays at tee `AIMING`; wind keeps animating.
-- [ ] Skip button: `#banter-skip-button` (`Skip »`) is visible in the top-right corner (`top` within `20px`, `right` within `20px` of `#game-container`, `z-index:14` above dialog) while banter is active and hidden (`display:none`) otherwise; clicking it ends the banter at once (Hole 1 banner still shows, counter still bumps) without also advancing dialog; same pill design as `#cutscene-skip-button`.
+- [ ] `src/banter.json` is a single file with `version:1` and `banters[]`; each entry has a unique `id` and 1–12 `lines` of `{speaker: may|caddy, text: 1–500 chars}`; `validateBanter` accepts it. Must contain tutorial ids `controls-first`, `tutorial-field-modifiers` (or `stacking-third`), `tutorial-rewards` (or `rewards-second`), `tutorial-passives`, `tutorial-hole2-gadgets-reminder` and at least 8 `run-start-*` non-tutorial ids.
+- [ ] `May` boxes show speaker `May` + `./img/cutscenes/portrait-may.png`, `Caddy` boxes show `Caddy` + `./img/cutscenes/portrait-caddy.png`, in the existing `#cutscene-dialog` `.cutscene-dialog-box` JRPG style.
+- [ ] Typewriter reveals at 20 cps; each box lingers 1000ms; next dialog starts at the end of the previous one (±150ms tolerance).
+- [ ] First press of `Space`/`R`/click while revealing fast-forwards to full text; next press advances; last box closes the banter.
+- [ ] Tutorial course `The Proving Grounds` shows `controls-first` over hole1 before `Hole 1` banner, `tutorial-field-modifiers` over hole2 before `Hole 2` banner, `tutorial-rewards` over hole3 before `Hole 3` banner, `tutorial-passives` over hole4 before `Hole 4` banner, each with required keywords (controls: `arrow`+`space`+`r`+`escape`+`left-click`+`right`+`hotkey`; field modifiers: `liquifier`+`good direction`+`deflector`+`rotator`+`magnifier`+`power`+`combine`/`stack`; rewards: `4`+`bag`+`discard`+`treasure`/`reward`+`balance`/`attempt`; passives: `passive`+`stack`+`bag`+`field extender`+`power cell`+`free shot`+`20% area`+`20% strength`). Missing/invalid file falls back to banner immediately. Tutorial banters replay every run, not gated by `BANTER_STATE_KEY`.
+- [ ] Non-tutorial course first hole shows a random banter from the non-tutorial pool (excluding tutorial ids) via shuffle bag: each remaining id plays exactly once per cycle with no repeats until the bag is empty, then reshuffled; `count` + `lastId` + `bag` persist in `BANTER_STATE_KEY`. Consecutive runs on non-tutorial courses cycle without repeats; tutorial runs do not consume the bag.
+- [ ] While banter is active: no launch, charge, aim drift, placement, drag, `R`, `H`, or pause; ball stays at tee `AIMING`; wind keeps animating.
+- [ ] Skip button: `#banter-skip-button` (`Skip »`) is visible in the top-right corner (`top` within `20px`, `right` within `20px` of `#game-container`, `z-index:14` above dialog) while banter is active and hidden (`display:none`) otherwise; clicking it ends the banter at once (Hole banner still shows) without also advancing dialog; same pill design as `#cutscene-skip-button`.
 
 ## File Paths
 
 - `src/banter.json:1` (single data file, banters with id + lines)
-- `src/banter.js:1` (loader, validator, player, `BANTER_CPS=20`,
-  `BANTER_LINGER_MS=1000`, onboarding-then-random selection state)
-- `src/main.js:1` (`startCourseWithLoadout` defers Hole 1 banner for banter,
-  `showLoadout` preloads, `update`/input guards via `banterIsActive`)
+- `src/banter.js:1` (loader, validator, player, `BANTER_CPS=20`, `BANTER_LINGER_MS=1000`, `TUTORIAL_BANTER_IDS` + non-tutorial shuffle bag)
+- `src/main.js:1` (tutorial per-hole banter sequencing via `isTutorialActive()`, non-tutorial `playRunStartBanter` via shuffle bag)
 - `index.html:1` (existing `#cutscene-dialog` overlay, reused as-is)
 - `style.css:1` (existing `.cutscene-dialog-box` JRPG styles, reused as-is)
 - `docs/requirements/12-banter.md:1` (this file)
