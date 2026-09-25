@@ -402,6 +402,90 @@ let golfbagIconEl = null;
 let bottomBarEl = null;
 let draggingIdx = -1;
 let isDragging = false;
+// 14-cheat-mode (Hashimoto Protocol, testing only): Konami code arms ball drag & drop.
+// Session-scoped, never persisted.
+let cheatMode = false;
+let cheatDraggingBall = false;
+let cheatSuppressClick = false;
+let cheatMousePos = null;
+const KONAMI_SEQUENCE = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','KeyB','KeyA'];
+const CHEAT_GRAB_RADIUS_PAD = 10;
+function isCheatMode() { return !!cheatMode; }
+function isCheatDraggingBall() { return !!cheatDraggingBall; }
+function activateCheatMode() {
+  cheatMode = true;
+  try { showToast('Hashimoto Protocol Activated'); } catch {}
+  return true;
+}
+function deactivateCheatMode() {
+  // Drop a held ball in place first so it never sticks to the cursor.
+  try { if (cheatDraggingBall) dropCheatBall(null); } catch {}
+  cheatDraggingBall = false;
+  cheatMousePos = null;
+  cheatSuppressClick = false;
+  cheatMode = false;
+  try { showToast('Hashimoto Protocol Disabled'); } catch {}
+  return true;
+}
+function toggleCheatMode() {
+  if (cheatMode) return deactivateCheatMode();
+  return activateCheatMode();
+}
+function cheatClampPos(pos) {
+  return {
+    x: Math.max(BALL_RADIUS, Math.min(LOGICAL_W - BALL_RADIUS, pos.x)),
+    y: Math.max(BALL_RADIUS, Math.min(LOGICAL_H - BALL_RADIUS, pos.y)),
+  };
+}
+function cheatGrabBlocked() {
+  if (mainMenuVisible) return true;
+  if (pauseMenuVisible) return true;
+  if (rewardMenuVisible) return true;
+  if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return true;
+  if (coinSummaryVisible) return true;
+  if (startingItemsVisible || loadoutVisible) return true;
+  try { if (cutsceneIsActive()) return true; } catch {}
+  try { if (banterIsActive()) return true; } catch {}
+  if (gameState !== 'AIMING' && gameState !== 'CHARGING' && gameState !== 'FLYING') return true;
+  return false;
+}
+function tryCheatGrabBall(pos) {
+  if (!cheatMode || cheatDraggingBall) return false;
+  if (cheatGrabBlocked()) return false;
+  if (!pos || !ball || !ball.pos) return false;
+  if (Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) > BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) return false;
+  const clamped = cheatClampPos(pos);
+  cheatMousePos = clamped;
+  cheatSuppressClick = false;
+  if (gameState === 'AIMING' || gameState === 'CHARGING') {
+    // Counts as launched (see 14-cheat-mode §3): enter FLYING without initial velocity.
+    ball.isMoving = true;
+    ball.vel = { x: 0, y: 0 };
+    ball.z = 0; ball.vz = 0;
+    gameState = 'FLYING';
+    modifiersTraversedThisShot = new Set();
+    resetCharge();
+    resetSoftlockDetection();
+    updateForceBar();
+    saveProgress();
+  }
+  ball.pos.x = clamped.x; ball.pos.y = clamped.y;
+  ball.vel = { x: 0, y: 0 };
+  cheatDraggingBall = true;
+  return true;
+}
+function dropCheatBall(pos) {
+  if (!cheatDraggingBall) return false;
+  const clamped = pos ? cheatClampPos(pos) : { x: ball.pos.x, y: ball.pos.y };
+  ball.pos.x = clamped.x; ball.pos.y = clamped.y;
+  ball.vel = { x: 0, y: 0 };
+  cheatDraggingBall = false;
+  cheatMousePos = null;
+  cheatSuppressClick = true;
+  resetSoftlockDetection();
+  saveProgress();
+  return true;
+}
 let isHotbarCollapsed = false;
 function isHotbarCollapsedState() { return isHotbarCollapsed; }
 function syncHotbarCollapsedUI() {
@@ -4159,6 +4243,10 @@ function setupCanvases() { return setupCanvas(); }
 
 function loadLevel(index) {
   currentHoleIndex = index;
+  // 14-cheat-mode: new hole cancels any ball drag.
+  cheatDraggingBall = false;
+  cheatMousePos = null;
+  cheatSuppressClick = false;
   level = LEVELS[currentHoleIndex];
   windStrength = level.field.strength ?? WIND_STRENGTH;
   createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
@@ -4684,6 +4772,9 @@ function removeModifierAt(x, y) {
 function resetBall() {
   const wasFlying = gameState === "FLYING" || ball.isMoving;
   const wasFreeFlight = freeShotFlightActive;
+  // 14-cheat-mode: a reset cancels any ball drag so the ball can't stick to the cursor.
+  cheatDraggingBall = false;
+  cheatMousePos = null;
   physicsResetBall(level.tee);
   resetCharge();
   // Keep aimAngle between attempts per REQ-019 - do NOT reset to tee->hole
@@ -5231,6 +5322,19 @@ function update(dt) {
   }
 
   if (gameState === "FLYING") {
+    // 14-cheat-mode: held ball sticks to the cursor — wind visuals keep
+    // animating but the ball ignores wind/win/treasure/collision until dropped.
+    if (cheatDraggingBall) {
+      try { updateWindUniforms(dt, getWindAt); } catch {};
+      try {
+        if (cheatMousePos) {
+          const c = cheatClampPos(cheatMousePos);
+          ball.pos.x = c.x; ball.pos.y = c.y;
+        }
+        ball.vel = { x: 0, y: 0 };
+      } catch {};
+      return;
+    }
     try { updateWindUniforms(dt, getWindAt); } catch {};
     updateBall(dt, getWindAt, windStrength, LOGICAL_W, LOGICAL_H);
 
@@ -6478,6 +6582,31 @@ function init() {
     }
   });
 
+  // 14-cheat-mode: Konami code arms ball drag & drop (Hashimoto Protocol, testing only).
+  // Passive observer like the "hole" secret above — never consumes input.
+  let _konamiProgress = 0;
+  window.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.repeat) return;
+    try {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+    } catch {}
+    const code = e.code;
+    if (typeof code !== "string" || !code) return;
+    if (code === "ShiftLeft" || code === "ShiftRight" || code === "ControlLeft" || code === "ControlRight" || code === "AltLeft" || code === "AltRight" || code === "MetaLeft" || code === "MetaRight" || code === "CapsLock") return;
+    if (code === KONAMI_SEQUENCE[_konamiProgress]) {
+      _konamiProgress++;
+      if (_konamiProgress >= KONAMI_SEQUENCE.length) {
+        _konamiProgress = 0;
+        try { toggleCheatMode(); } catch {}
+      }
+    } else {
+      // Overlap restart (e.g. Up,Up,Up restarts at 1), otherwise reset.
+      _konamiProgress = (code === KONAMI_SEQUENCE[0]) ? 1 : 0;
+    }
+  });
+
   // Canvas mouse for modifier placement & dragging per updated REQ-015 + REQ-020 + REQ-021
   canvas.addEventListener("mousemove", (e) => {
     if (mainMenuVisible) {
@@ -6510,17 +6639,52 @@ function init() {
       return;
     }
     if (gameState !== "AIMING" && gameState !== "CHARGING") {
+      // 14-cheat-mode: held ball follows the cursor in FLYING; hovering the
+      // ball in a grabbable state shows a grab cursor.
+      if (cheatMode && !rewardMenuVisible) {
+        const pos = getCanvasMousePos(e);
+        if (cheatDraggingBall) {
+          const c = cheatClampPos(pos);
+          cheatMousePos = c;
+          try {
+            if (ball && ball.pos) { ball.pos.x = c.x; ball.pos.y = c.y; ball.vel = { x: 0, y: 0 }; }
+          } catch {}
+          canvas.style.cursor = "grabbing";
+          return;
+        }
+        if (!pauseMenuVisible && !mainMenuVisible && (gameState === "FLYING") && ball && ball.pos &&
+            Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) <= BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) {
+          canvas.style.cursor = "grab";
+          return;
+        }
+      }
       mousePos = null;
       return;
     }
     const pos = getCanvasMousePos(e);
     mousePos = pos;
+    // 14-cheat-mode: held ball follows the cursor; hovering the ball shows grab.
+    if (cheatMode && cheatDraggingBall) {
+      const c = cheatClampPos(pos);
+      cheatMousePos = c;
+      try {
+        if (ball && ball.pos) { ball.pos.x = c.x; ball.pos.y = c.y; ball.vel = { x: 0, y: 0 }; }
+      } catch {}
+      canvas.style.cursor = "grabbing";
+      return;
+    }
     if (isDragging && draggingIdx !== -1) {
       modifiers[draggingIdx].x = pos.x;
       modifiers[draggingIdx].y = pos.y;
       syncModifiersToField();
       canvas.style.cursor = "grabbing";
     } else {
+      // 14-cheat-mode: hovering the ball shows grab (ball wins over modifiers).
+      if (cheatMode && !cheatGrabBlocked() && ball && ball.pos &&
+          Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) <= BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) {
+        canvas.style.cursor = "grab";
+        return;
+      }
       // Update cursor based on hover over modifier
       const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
       if (overIdx !== -1) {
@@ -6554,6 +6718,16 @@ function init() {
       e.preventDefault();
       return;
     }
+    // 14-cheat-mode: grabbing the ball takes precedence over modifier drag.
+    // (Not while resolving a pickup-discard — that flow keeps the map click.)
+    if (cheatMode && e.button === 0 && !cheatDraggingBall && !pendingPickup) {
+      const pos = getCanvasMousePos(e);
+      if (tryCheatGrabBall(pos)) {
+        canvas.style.cursor = "grabbing";
+        e.preventDefault();
+        return;
+      }
+    }
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
     if (e.button !== 0) return; // only left
     // Pickup-discard mode: any map press leaves the mode (click handler finalizes the cancel)
@@ -6573,6 +6747,14 @@ function init() {
     }
   });
   window.addEventListener("mouseup", (e) => {
+    // 14-cheat-mode: dropping the ball ends the drag; wind resumes next tick.
+    if (cheatDraggingBall) {
+      try {
+        const pos = getCanvasMousePos(e);
+        dropCheatBall(pos);
+      } catch { try { dropCheatBall(null); } catch {} }
+      canvas.style.cursor = "default";
+    }
     if (isDragging && draggingIdx !== -1) {
       const pos = getCanvasMousePos(e);
       // If mouse released outside canvas, pos may be out of bounds, but still update
@@ -6622,6 +6804,13 @@ function init() {
         }
       }
       // Click outside buttons while menu open = ignore (block placement)
+      e.preventDefault();
+      return;
+    }
+    // 14-cheat-mode: swallow the click that ends a ball drag so it can never
+    // place a modifier (even if the drop caused an instant reset to AIMING).
+    if (cheatSuppressClick) {
+      cheatSuppressClick = false;
       e.preventDefault();
       return;
     }
@@ -7147,6 +7336,14 @@ if (typeof window !== 'undefined') {
   window.__isTutorialRun = isTutorialRunActive;
   window.isTutorialRun = isTutorialRunActive;
   window.__isRerollDisabled = isRerollDisabled;
+  // 14-cheat-mode test hooks (session-only, never persisted)
+  window.__isCheatMode = isCheatMode;
+  window.__activateCheatMode = activateCheatMode;
+  window.__deactivateCheatMode = deactivateCheatMode;
+  window.__toggleCheatMode = toggleCheatMode;
+  window.__isCheatDraggingBall = isCheatDraggingBall;
+  window.__tryCheatGrabBall = tryCheatGrabBall;
+  window.__dropCheatBall = dropCheatBall;
   window.__countOwnedKinds = countOwnedKinds;
   window.__getRewardCardCount = getRewardCardCount;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
@@ -7232,7 +7429,7 @@ function playCutsceneWrapped(idOrData, opts) {
 try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
- totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance };
+ totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
