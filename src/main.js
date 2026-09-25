@@ -1730,7 +1730,13 @@ function hideCoinSummary() {
   if (pendingCourseComplete) {
     pendingCourseComplete=false;
     pendingHoleAdvance=false;
-    // Course completed – go to main menu (no Run Completed overlay, just Hole Completed already shown)
+    // Course completed – go to main menu (no Run Completed overlay, just Hole Completed already shown).
+    // 11-cutscenes §11d: first 9-hole clear plays end-9-hole here, after the
+    // Hole Complete summary is dismissed and before returning to the menu.
+    // (This is the normal course-complete path — the Continue/R exits funnel
+    // through returnToMainMenu(), but they are hidden on final holes, so the
+    // cutscene check must also live here or it never fires.)
+    if (isEnd9HoleCutsceneDue()) { try { playEnd9HoleThenReturn(); } catch { try { finishReturnToMainMenu(); } catch {} } return; }
     try{ finishReturnToMainMenu(); }catch{ try{ clearProgress(); mainMenuVisible=true; syncMainMenu(); }catch{} }
     return;
   }
@@ -5493,13 +5499,19 @@ function loop(now) {
     return;
   }
   if (gameState === "WIN") {
-    // Still render even when paused. Exception: the tutorial hole-4
-    // congratulations banter plays while WIN — its typewriter runs on
-    // banterUpdate(dt) and wind on updateWindUniforms, both of which live
-    // in update() that this branch otherwise skips. Tick them here so the
-    // text animates and wind keeps moving behind the dialog.
+    // Still render even when paused. Exception: overlays that play while WIN
+    // need their updates ticked here, since update() is otherwise skipped:
+    // - tutorial hole-4 congratulations banter (typewriter via banterUpdate,
+    //   wind via updateWindUniforms),
+    // - end-9-hole cutscene (camera/dialog via cutsceneUpdate, wind visuals).
+    // Without these ticks both would be frozen (same root cause).
     try {
-      if (banterIsActive()) {
+      if (cutsceneIsActive()) {
+        const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
+        try { updateWindUniforms(dt, getWindAt); } catch {}
+        try { cutsceneUpdate(dt); } catch {}
+        try { syncCutsceneSkipButton(); } catch {}
+      } else if (banterIsActive()) {
         const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
         try { updateWindUniforms(dt, getWindAt); } catch {}
         try { banterUpdate(dt); } catch {}
