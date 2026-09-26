@@ -1400,13 +1400,13 @@ function fastForwardCoinSummary() {
     if(details){
       details.innerHTML='';
       const makeRow=(a,l)=>{ const r=document.createElement('div'); r.className='coin-detail-row'; r.textContent=a+' - '+l; return r; };
-      details.appendChild(makeRow('10p','cleared hole'));
+      details.appendChild(makeRow('10p','Cleared hole'));
       details.appendChild(makeRow((traversed*10)+'p','Modifier Bonus (x'+traversed+')'));
-      if(inferredFirst>0) details.appendChild(makeRow(inferredFirst+'p','First Try Bonus'));
+      if(inferredFirst>0) details.appendChild(makeRow(inferredFirst+'p','Hole-in-One'));
       // Course bonus if present (infer from holePoints vs traversed/first)
       const inferredCourse = Math.max(0, holePoints - 10 - traversed*10 - inferredFirst);
       if(inferredCourse>0) details.appendChild(makeRow(inferredCourse+'p','course completed'));
-      const attLabel = attemptsOnHole===3 ? 'three attempts' : (attemptsOnHole>0? `Attempts (x${attemptsOnHole})` : 'Attempts (x0)');
+      const attLabel = `Failed Attempts (x${attemptsOnHole})`;
       details.appendChild(makeRow((attemptsOnHole>0? '-'+attemptsOnHole+'p':'0p'), attLabel));
     }
     const unlockEl=document.getElementById('coin-summary-unlock'); if(unlockEl){ unlockEl.classList.add('hidden'); unlockEl.textContent=''; unlockEl.style.display='none'; }
@@ -1610,17 +1610,17 @@ function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, c
       r.textContent=amtStr+' - '+label;
       return r;
     };
-    // Base cleared hole bonus 10p
-    details.appendChild(makeRow('10p','cleared hole'));
+    // Base Cleared hole bonus 10p
+    details.appendChild(makeRow('10p','Cleared hole'));
     if(traversed>0) details.appendChild(makeRow((traversed*10)+'p','Modifier Bonus (x'+traversed+')'));
-    if(firstBonus>0) details.appendChild(makeRow(firstBonus+'p','First Try Bonus'));
+    if(firstBonus>0) details.appendChild(makeRow(firstBonus+'p','Hole-in-One'));
     if(courseBonus>0) details.appendChild(makeRow(courseBonus+'p','course completed'));
-    // Attempts row with -N p and three attempts wording
+    // Failed Attempts row with -N p
     if(attemptsOnHole>0) {
-      const label = attemptsOnHole===3 ? 'three attempts' : (attemptsOnHole===1 ? 'one attempt' : `Attempts (x${attemptsOnHole})`);
+      const label = `Failed Attempts (x${attemptsOnHole})`;
       details.appendChild(makeRow('-'+attemptsOnHole+'p', label));
     } else {
-      details.appendChild(makeRow('0p','Attempts (x0)'));
+      details.appendChild(makeRow('0p','Failed Attempts (x0)'));
     }
   }
   // hide legacy notices
@@ -1915,16 +1915,16 @@ function finalizeRunCoinsAndShowSummary() {
     if(details){
       details.innerHTML='';
       const makeRow=(a,l)=>{ const r=document.createElement('div'); r.className='coin-detail-row'; r.textContent=a+' - '+l; return r; };
-      // Detailed breakdown: cleared holes, modifiers (approx), first try bonuses, attempts
+      // Detailed breakdown: Cleared holes, modifiers (approx), Hole-in-One bonuses, Failed Attempts
       const holesPts = runHolesCleared * 10;
-      details.appendChild(makeRow(holesPts+'p','cleared hole'+(runHolesCleared!==1?'s':'')));
-      // Attempts
+      details.appendChild(makeRow(holesPts+'p','Cleared hole'+(runHolesCleared!==1?'s':'')));
+      // Failed Attempts
       const att = Math.max(0, Math.floor(totalAttempts));
       if(att>0){
-        const label = att===3 ? 'three attempts' : att===1 ? 'one attempt' : `Attempts (x${att})`;
+        const label = `Failed Attempts (x${att})`;
         details.appendChild(makeRow('-'+att+'p', label));
       } else {
-        details.appendChild(makeRow('0p','Attempts (x0)'));
+        details.appendChild(makeRow('0p','Failed Attempts (x0)'));
       }
       // If there were modifiers, show approx (totalPoints - holesPts + att) as modifier+first bonus
       const remaining = totalPoints - holesPts + att;
