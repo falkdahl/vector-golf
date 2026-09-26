@@ -2676,7 +2676,6 @@ function renderCourseList() {
         lockedBtn.title = `Locked — clear ${STAGES[STAGES.indexOf(holeCount)-1]} Holes`;
         row.appendChild(lockedBtn);
       } else if (course) {
-        const record = course.bestTotal == null ? '—' : String(course.bestTotal);
         const playBtn = document.createElement('button');
         playBtn.className = 'course-play-button';
         const nameSpan = document.createElement('span');
@@ -2684,7 +2683,14 @@ function renderCourseList() {
         nameSpan.textContent = course.name;
         const metaSpan = document.createElement('span');
         metaSpan.className = 'course-meta';
-        metaSpan.textContent = `${course.holeCount} holes \u2003 Record: ${record}`;
+        // The Proving Grounds never shows a record in the main menu (kept internally for unlocking).
+        const isProvingGrounds = isTutorialCourse(course) || course.holeCount === 4 || holeCount === 4;
+        if (isProvingGrounds) {
+          metaSpan.textContent = `${course.holeCount} holes`;
+        } else {
+          const record = course.bestTotal == null ? '—' : String(course.bestTotal);
+          metaSpan.textContent = `${course.holeCount} holes \u2003 Record: ${record}`;
+        }
         playBtn.appendChild(nameSpan);
         playBtn.appendChild(metaSpan);
         playBtn.title = `Play ${course.name} (${course.holeCount} holes)`;

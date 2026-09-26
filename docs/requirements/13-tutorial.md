@@ -101,6 +101,7 @@
 - `CUTSCENE_SEEN_KEY` gating applies to `first-restock`. Once seen, subsequent `handleCoursePlay` for `The Proving Grounds` does not play it; banner/banter still plays. `localStorage.clear()` / `regenerateCampaign()` clears seen, so next fresh run shows cutscene again.
 - No `isTutorialRun` flag required beyond detecting `activeCourse.name==="The Proving Grounds"`; tutorial banters are not subject to the generic `BANTER_STATE_KEY` shuffle — they are fixed ids per step. `isTutorialActive()` helper shall be `course.name==="The Proving Grounds"` regardless of holeCount.
 - Infinite attempts flag is tied to `isTutorialActive()` and hides `#hud-attempts`/`#hud-total` and suppresses `#coin-summary-overlay`. `getLevelTreasures(level)` helper supports 3 chests on hole3.
+- **Main menu shows no record for The Proving Grounds.** Its row in `#staged-course-list` (`span.course-meta`) shows only `"<holeCount> holes"` with no `Record` text (`textContent` does not contain `Record`), even after clears. `bestTotal` is still stored/updated internally on tutorial clears (same `maybeUpdateHighScore` path) so `isStageUnlocked(6)` / `ensureNextStageUnlocked` progression works as normal.
 
 ## 5. Acceptance
 
