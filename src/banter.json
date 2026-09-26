@@ -106,6 +106,14 @@
         {
           "speaker": "caddy",
           "text": "And remember: field modifiers can be placed on top of each other to combine their effects. Stack them wisely."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Drop one modifier right on top of another and they snap together into a stack — you will see the rim split into each gadget's color."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Changed your mind? Right-click a stack to split it back apart, or right-click a lone gadget to pick it back up."
         }
       ]
     },
