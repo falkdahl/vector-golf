@@ -132,8 +132,8 @@ export function drawTerrainZones(ctx, level, width, height) {
 export function drawBackgroundTiled(ctx, width, height) { return drawBackground(ctx, width, height, 'terrain'); }
 export function drawSplashCover(ctx, width, height) { return drawBackground(ctx, width, height, 'splash'); }
 
-export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH) {
-  if (!modifiers || !modifiers.length) return;
+export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, preview = null) {
+  if ((!modifiers || !modifiers.length) && !preview) return;
   if (typeof getWindAt !== 'function') return;
   ctx.save();
   ctx.lineCap = "round";
@@ -144,12 +144,19 @@ export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cel
     for (let col = 0; col < cols; col++) {
       const cx = col * cellW + cellW / 2;
       const cy = row * cellH + cellH / 2;
-      // Only draw inside any modifier per new requirement — find which modifier to color accordingly
+      // Only draw inside any modifier per new requirement — find which modifier to color accordingly.
+      // A bag-placement preview circle also shows arrows (current field wind),
+      // so the player sees the wind they are about to modify.
       let insideMod = null;
-      for (const m of modifiers) {
+      for (const m of (modifiers || [])) {
         if (Math.hypot(cx - m.x, cy - m.y) < (m.radius ?? 54)) { insideMod = m; break; }
       }
-      if (!insideMod) continue;
+      let insidePreview = false;
+      if (!insideMod && preview && typeof preview.x === 'number') {
+        const pr = preview.radius ?? 54;
+        if (Math.hypot(cx - preview.x, cy - preview.y) < pr) insidePreview = true;
+      }
+      if (!insideMod && !insidePreview) continue;
       const vec = getWindAt(cx, cy);
       const mag = Math.hypot(vec.x, vec.y);
       const angle = Math.atan2(vec.y, vec.x);
@@ -157,8 +164,8 @@ export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cel
       const len = 10 + normalizedMag * 4;
       const alpha = 0.55 + normalizedMag * 0.40;
       const headSize = 4.5 + normalizedMag * 2;
-      // Do not draw any arrows for nullify per new requirement
-      if (insideMod.type === 'liquifier') continue;
+      // Do not draw any arrows for nullify per new requirement (placed or preview)
+      if (insideMod ? insideMod.type === 'liquifier' : preview && preview.type === 'liquifier') continue;
       // White arrows for amplify/flip per latest request (good contrast on tinted modifier)
       const arrowColor = `rgba(255,255,245,${alpha})`;
       const outlineColor = `rgba(0,0,0,0.55)`;
@@ -692,51 +699,146 @@ export function drawForceBar(ctx, ball, charge) {
   ctx.restore();
 }
 
+const MOD_TYPE_STYLE = {
+  magnifier: { fill: "rgba(230,126,34,0.20)", stroke: "rgba(230,126,34,0.9)", icon: "»", iconColor: "white" },
+  liquifier: { fill: "rgba(52,152,219,0.18)", stroke: "rgba(52,152,219,0.9)", icon: "∅", iconColor: "white", dashed: true },
+  deflector: { fill: "rgba(155,89,182,0.20)", stroke: "rgba(155,89,182,0.9)", icon: "⇄", iconColor: "white" },
+  rotator: { fill: "rgba(231,76,60,0.20)", stroke: "rgba(231,76,60,0.9)", icon: "↻", iconColor: "#e74c3c" },
+};
+function modStyleFor(type) {
+  return MOD_TYPE_STYLE[type] || { fill: "rgba(200,200,200,0.20)", stroke: "rgba(200,200,200,0.9)", icon: "•", iconColor: "white" };
+}
 export function drawModifiers(ctx, modifiers) {
+  if (!modifiers || !modifiers.length) return;
+  // Group stacked modifiers sharing the same center (snap tolerance 2px)
+  const groups = [];
   for (const mod of modifiers) {
-    ctx.save();
-    if (mod.type === 'magnifier') {
-      ctx.fillStyle = "rgba(230,126,34,0.20)";
-      ctx.strokeStyle = "rgba(230,126,34,0.9)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
-    } else if (mod.type === 'liquifier') {
-      ctx.fillStyle = "rgba(52,152,219,0.18)";
-      ctx.strokeStyle = "rgba(52,152,219,0.9)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
-    } else if (mod.type === 'deflector') {
-      ctx.fillStyle = "rgba(155,89,182,0.20)";
-      ctx.strokeStyle = "rgba(155,89,182,0.9)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
-    } else if (mod.type === 'rotator') {
-      ctx.fillStyle = "rgba(231,76,60,0.20)";
-      ctx.strokeStyle = "rgba(231,76,60,0.9)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
+    let g = null;
+    for (const gg of groups) {
+      if (Math.hypot(gg.x - mod.x, gg.y - mod.y) <= 2) { g = gg; break; }
     }
-    ctx.beginPath();
-    ctx.arc(mod.x, mod.y, mod.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.setLineDash([]);
-    // icon - rotate red, others white (per updated requirement)
-    const icon = mod.type === 'magnifier' ? "»" : mod.type === 'liquifier' ? "∅" : mod.type === 'deflector' ? "⇄" : mod.type === 'rotator' ? "↻" : "•";
-    const isRotate = mod.type === 'rotator';
-    ctx.fillStyle = isRotate ? "#e74c3c" : "white";
-    ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    ctx.lineWidth = 3;
-    ctx.font = "600 14px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.strokeText(icon, mod.x, mod.y);
-    ctx.fillText(icon, mod.x, mod.y);
-    ctx.restore();
+    if (g) g.members.push(mod);
+    else groups.push({ x: mod.x, y: mod.y, radius: mod.radius, members: [mod] });
+  }
+  for (const g of groups) {
+    if (g.members.length === 1) {
+      drawSingleModifierCircle(ctx, g.members[0]);
+    } else {
+      drawStackedModifierCircle(ctx, g);
+    }
   }
 }
+function drawSingleModifierCircle(ctx, mod) {
+  const st = modStyleFor(mod.type);
+  ctx.save();
+  ctx.fillStyle = st.fill;
+  ctx.strokeStyle = st.stroke;
+  ctx.lineWidth = 2;
+  ctx.setLineDash(st.dashed ? [6, 4] : []);
+  ctx.beginPath();
+  ctx.arc(mod.x, mod.y, mod.radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // No center icon: type reads from the edge color; the center stays clear
+  // for wind arrows.
+  ctx.restore();
+}
+function drawStackedModifierCircle(ctx, group) {
+  const members = group.members;
+  const radius = group.radius;
+  ctx.save();
+  // Base fill from first member (slightly stronger so stack reads solid)
+  const base = modStyleFor(members[0].type);
+  ctx.fillStyle = base.fill;
+  ctx.beginPath();
+  ctx.arc(group.x, group.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  // Segmented edge: one arc per stacked item in its own color
+  const n = members.length;
+  ctx.lineWidth = 4;
+  for (let i = 0; i < n; i++) {
+    const st = modStyleFor(members[i].type);
+    const a0 = -Math.PI / 2 + (i / n) * Math.PI * 2;
+    const a1 = -Math.PI / 2 + ((i + 1) / n) * Math.PI * 2;
+    ctx.strokeStyle = st.stroke;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(group.x, group.y, radius, a0, a1);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // No center icons and no xN badge: the multicolor segmented edge already
+  // shows the stack, and centers stay clear for wind arrows.
+  ctx.restore();
+}
+// Electromagnetic snap link between a dragged/preview center and its snap target.
+// Looks like an EM pull: cyan glow + white-hot zigzag core + traveling pulses.
+export function drawSnapLink(ctx, x1, y1, x2, y2, timeMs) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+  if (!Number.isFinite(dist) || dist < 1) return;
+  const t = (typeof timeMs === "number" ? timeMs : 0) / 1000;
+  const ux = dx / dist;
+  const uy = dy / dist;
+  const px = -uy;
+  const py = ux;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // Outer glow
+  ctx.shadowColor = "rgba(120,220,255,0.9)";
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = "rgba(120,220,255,0.35)";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // Zigzag EM core (white-cyan), animated wobble
+  const segs = Math.max(6, Math.min(18, Math.floor(dist / 14)));
+  ctx.strokeStyle = "rgba(220,250,255,0.95)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (let i = 0; i <= segs; i++) {
+    const f = i / segs;
+    const wob = Math.sin(f * Math.PI * 4 + t * 10) * Math.min(7, dist * 0.06) * Math.sin(f * Math.PI);
+    const xx = x1 + dx * f + px * wob;
+    const yy = y1 + dy * f + py * wob;
+    if (i === 0) ctx.moveTo(xx, yy);
+    else ctx.lineTo(xx, yy);
+  }
+  ctx.stroke();
+  // Traveling pulses from dragged/preview center toward the target
+  for (let k = 0; k < 2; k++) {
+    const f = ((t * 1.6 + k * 0.5) % 1);
+    const wob = Math.sin(f * Math.PI * 4 + t * 10) * Math.min(7, dist * 0.06) * Math.sin(f * Math.PI);
+    const xx = x1 + dx * f + px * wob;
+    const yy = y1 + dy * f + py * wob;
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.shadowColor = "rgba(150,230,255,1)";
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(xx, yy, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  // Endpoint rings
+  const pulse = 1 + 0.12 * Math.sin(t * 6);
+  ctx.strokeStyle = "rgba(160,235,255,0.9)";
+  ctx.lineWidth = 1.5;
+  for (const [ex, ey, r] of [[x1, y1, 6 * pulse], [x2, y2, 9 * pulse]]) {
+    ctx.beginPath();
+    ctx.arc(ex, ey, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
-export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
+export function drawModifierPreview(ctx, x, y, type, radius, blocked = false, blockedLabel = null) {
   if (!type) return;
   ctx.save();
   ctx.globalAlpha = blocked ? 0.35 : 0.5;
@@ -763,24 +865,15 @@ export function drawModifierPreview(ctx, x, y, type, radius, blocked = false) {
   ctx.fill();
   ctx.stroke();
   ctx.setLineDash([]);
-  const isRotatePreview = !blocked && type === 'rotator';
-  ctx.fillStyle = blocked ? "rgba(255,80,80,0.95)" : isRotatePreview ? "#e74c3c" : "white";
-  // Add subtle stroke for red icon to ensure contrast on light fill
-  if (isRotatePreview) {
-    ctx.strokeStyle = "rgba(0,0,0,0.5)";
-    ctx.lineWidth = 2.5;
-    ctx.strokeText(type === 'rotator' ? "↻" : "•", x, y);
-  }
-  ctx.font = "600 14px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const icon = blocked ? "✕" : type === 'magnifier' ? "»" : type === 'liquifier' ? "∅" : type === 'deflector' ? "⇄" : type === 'rotator' ? "↻" : "•";
-  ctx.fillText(icon, x, y);
-  // blocked label
+  // No center icon: the preview reads via its edge color and the wind arrows
+  // inside it; the center stays clear.
+  // blocked label names the reason ('no supply' default, e.g. 'out of bounds')
   if (blocked) {
     ctx.font = "600 10px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(255,80,80,0.9)";
-    ctx.fillText("no supply", x, y + 16);
+    ctx.fillText(blockedLabel || "no supply", x, y + 16);
   }
   ctx.restore();
 }

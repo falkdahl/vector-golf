@@ -13,6 +13,7 @@ import {
   drawForceBar,
   drawModifiers,
   drawModifierPreview,
+  drawSnapLink,
   drawRewardMenu,
   getRewardButtonsLayout,
   getRewardRerollButtonLayout,
@@ -402,6 +403,29 @@ let golfbagIconEl = null;
 let bottomBarEl = null;
 let draggingIdx = -1;
 let isDragging = false;
+// Snapshot of the dragged stack taken at grab time (mousedown). Passing over
+// another modifier mid-drag must never absorb it: the stack only merges on
+// mouseup snap. Recomputed membership each move would merge as soon as the
+// dragged center coincides with another center, i.e. snap without release.
+let draggingMates = [];
+// Board position of the grabbed modifier at grab time (pre-drag origin),
+// used by canvas→bag swap (bag item takes this exact spot) and stacked-drop
+// restore-then-split.
+let dragOrigin = null;
+// Bag drag-and-drop (golfbag slot → canvas placement / canvas → bag pickup).
+// pending until the pointer moves past BAG_DRAG_THRESHOLD_PX, then active.
+// While active the item counts as armed (selectedBagIndex/selectedModifier).
+let bagDrag = null; // {slotIdx, type, startX, startY, active}
+let suppressSlotClick = false; // set when an active bag-drag ends over a slot
+const BAG_DRAG_THRESHOLD_PX = 6;
+function cancelBagDrag() {
+  bagDrag = null;
+}
+// Spatial (placeable) bag types for drag-and-drop. freeShot/passives never drag.
+function isSpatialBagType(t) {
+  t = normalizeSupplyType(t);
+  return t === 'magnifier' || t === 'liquifier' || t === 'deflector' || t === 'rotator';
+}
 // 14-cheat-mode (Hashimoto Protocol, testing only): Konami code arms ball drag & drop.
 // Session-scoped, never persisted.
 let cheatMode = false;
@@ -4530,6 +4554,7 @@ function updateHotbarUI() {
             slot.style.cursor = (t === 'fieldExtender' || t === 'powerCell' || t === 'freeShot') ? 'default' : 'pointer';
           }
           slot.addEventListener('click', () => {
+            if (suppressSlotClick) { suppressSlotClick = false; return; }
             if (rewardMenuVisible && pendingRewardType) {
               discardBagSlotAndClaimReward(i);
               return;
@@ -4544,6 +4569,24 @@ function updateHotbarUI() {
             if (pauseMenuVisible || mainMenuVisible) return;
             if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
             selectBagSlot(i);
+          });
+          slot.addEventListener('mousedown', (e) => {
+            // Bag drag-and-drop: press-drag from an occupied spatial slot arms
+            // on move (ghost follows) and drops on canvas to place. Plain
+            // clicks (no move) fall through to the click handler untouched.
+            try {
+              if (e.button !== 0 || !t || !isSpatialBagType(t)) return;
+              if (bagDrag || isDragging) return;
+              if (rewardMenuVisible || pendingRewardType || pendingPickup) return;
+              if (banterIsActive()) return;
+              if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
+              if (pauseMenuVisible || mainMenuVisible) return;
+              if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
+              bagDrag = {
+                slotIdx: i, type: normalizeSupplyType(t),
+                startX: e.clientX, startY: e.clientY, active: false,
+              };
+            } catch {}
           });
         } else {
           slot.style.background = 'rgba(128,128,128,0.28)';
@@ -4737,33 +4780,158 @@ function getCanvasMousePos(e) {
   return { x, y };
 }
 
+// --- Modifier stacking (snap, move together, split on pickup) ---
+const STACK_SNAP_EPS = 2;
+function stackIndicesAtPos(x, y, eps = STACK_SNAP_EPS) {
+  const out = [];
+  for (let i = 0; i < modifiers.length; i++) {
+    const m = modifiers[i];
+    if (Math.hypot(m.x - x, m.y - y) <= eps) out.push(i);
+  }
+  return out;
+}
+function getStackIndicesFor(modIdx) {
+  if (modIdx < 0 || modIdx >= modifiers.length) return [];
+  const m = modifiers[modIdx];
+  return stackIndicesAtPos(m.x, m.y);
+}
+// Snap trigger: candidate center inside another modifier's radius.
+// exclude is a Set of indices to ignore (e.g. the dragged stack itself).
+function findSnapTarget(x, y, exclude = null) {
+  let best = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < modifiers.length; i++) {
+    if (exclude && exclude.has(i)) continue;
+    const m = modifiers[i];
+    const r = m.radius ?? getEffectiveModifierRadius();
+    const d = Math.hypot(x - m.x, y - m.y);
+    if (d < r && d < bestDist) { bestDist = d; best = { index: i, mod: m, dist: d }; }
+  }
+  return best;
+}
+// Split a stack into individual items whose areas still overlap each other
+// while no center sits inside any other area (R < pairwise dist < 2R), so each
+// item can be picked/moved solo. The original bottom modifier (lowest board
+// index = earliest placed) stays exactly where the stack was; every other item
+// pops out along the direction of its own color on the multicolor border —
+// i.e. the midpoint of its border arc (same angles as drawStackedModifierCircle:
+// member p of N spans -90° + p/N*360° .. -90° + (p+1)/N*360°).
+function splitStackAtIndex(modIdx) {
+  const mates = getStackIndicesFor(modIdx);
+  if (mates.length <= 1) return false;
+  const N = mates.length;
+  const anchorIdx = mates[0]; // lowest board index = bottom of stack
+  const cx = modifiers[anchorIdx].x;
+  const cy = modifiers[anchorIdx].y;
+  const R = getEffectiveModifierRadius();
+  const placed = [{ x: cx, y: cy }];
+  mates.forEach((mi, p) => {
+    if (mi === anchorIdx) return;
+    // Border-arc midpoint for member p: pops out through its own color
+    const a = -Math.PI / 2 + ((p + 0.5) / N) * Math.PI * 2;
+    let spot = null;
+    for (const ring of [1.3 * R, 1.6 * R, 1.9 * R]) {
+      const px = Math.max(0, Math.min(LOGICAL_W, cx + Math.cos(a) * ring));
+      const py = Math.max(0, Math.min(LOGICAL_H, cy + Math.sin(a) * ring));
+      let ok = true;
+      for (const q of placed) {
+        if (Math.hypot(px - q.x, py - q.y) <= R + 1) { ok = false; break; }
+      }
+      if (ok) { spot = { x: px, y: py }; break; }
+    }
+    if (!spot) {
+      spot = {
+        x: Math.max(0, Math.min(LOGICAL_W, cx + Math.cos(a) * 1.3 * R)),
+        y: Math.max(0, Math.min(LOGICAL_H, cy + Math.sin(a) * 1.3 * R)),
+      };
+    }
+    modifiers[mi].x = spot.x;
+    modifiers[mi].y = spot.y;
+    placed.push(spot);
+  });
+  syncModifiersToField();
+  saveProgress();
+  return true;
+}
+function getSnapPreviewTarget() {
+  // Placement preview: selected bag item following the mouse
+  if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier) && !rewardMenuVisible && !coinSummaryVisible && !pendingPickup) {
+    const t = findSnapTarget(mousePos.x, mousePos.y, null);
+    if (t) return { fromX: mousePos.x, fromY: mousePos.y, toX: t.mod.x, toY: t.mod.y };
+  }
+  // Dragging an already-placed item (or stack): candidate is its live position.
+  // Exclude the grab-time snapshot so flyover targets are never absorbed.
+  if (isDragging && draggingIdx >= 0 && draggingIdx < modifiers.length) {
+    let mates = null;
+    try {
+      mates = new Set((draggingMates.length ? draggingMates : getStackIndicesFor(draggingIdx))
+        .filter(mi => mi >= 0 && mi < modifiers.length));
+    } catch { mates = new Set(getStackIndicesFor(draggingIdx)); }
+    const m = modifiers[draggingIdx];
+    const t = findSnapTarget(m.x, m.y, mates);
+    if (t) return { fromX: m.x, fromY: m.y, toX: t.mod.x, toY: t.mod.y };
+  }
+  return null;
+}
+
 function placeModifier(x, y) {
-  if (loadoutVisible || coinSummaryVisible) return;
-  if (banterIsActive()) return;
-  if (pendingPickup) return;
-  if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
-  if (gameState !== "AIMING" && gameState !== "CHARGING") return;
-  if (selectedBagIndex < 0 || !golfbag[selectedBagIndex]) return;
+  if (loadoutVisible || coinSummaryVisible) return false;
+  if (banterIsActive()) return false;
+  if (pendingPickup) return false;
+  if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
+  if (selectedBagIndex < 0 || !golfbag[selectedBagIndex]) return false;
   const entry = golfbag[selectedBagIndex];
   const type = bagEntryType(entry);
   if (!type || !canPlace(type)) {
     updateHotbarUI();
-    return;
+    return false;
   }
+  // Stacking: center inside another modifier snaps to its exact coordinate
+  let px = x, py = y;
+  try {
+    const snap = findSnapTarget(x, y, null);
+    if (snap && snap.mod) { px = snap.mod.x; py = snap.mod.y; }
+  } catch {}
+  // Out of bounds (canvas edge or OB terrain) is never placeable: no-op that
+  // consumes nothing and keeps the item armed (click-placement retries
+  // elsewhere; bag-drop callers disarm after the attempt).
+  if (isPlacementOutOfBounds(px, py)) return false;
   // Tactical: item is removed from bag when placed (slot empties)
   golfbag[selectedBagIndex] = null;
   selectedBagIndex = -1; selectedModifier = null;
   syncDerivedFromBag();
-  modifiers.push({ id: Date.now() + Math.random(), type, x, y, radius: getEffectiveModifierRadius() });
+  modifiers.push({ id: Date.now() + Math.random(), type, x: px, y: py, radius: getEffectiveModifierRadius() });
   syncModifiersToField();
   updateHotbarUI();
   mousePos = null;
   saveProgress();
+  return true;
+}
+// Armed placement bounds: outside the logical canvas or inside OB terrain
+// (gray out-of-bounds zone) can never take a new modifier. Snap targets were
+// legally placed, so only the final (possibly snapped) center is checked.
+function isPlacementOutOfBounds(x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return true;
+  if (x < 0 || y < 0 || x > LOGICAL_W || y > LOGICAL_H) return true;
+  try {
+    if (level && level.terrain && terrainZoneAt(x, y, level) === 'ob') return true;
+  } catch {}
+  return false;
 }
 
 function removeModifierAt(x, y) {
   const idx = modifiers.findIndex(m => Math.hypot(m.x - x, m.y - y) < m.radius);
   if (idx !== -1) {
+    // Stacked pickup splits back into individual items just outside each
+    // other's AoE (no bag space needed); the player then picks/moves them solo.
+    try {
+      if (getStackIndicesFor(idx).length > 1) {
+        splitStackAtIndex(idx);
+        updateHotbarUI();
+        return true;
+      }
+    } catch {}
     // Tactical: can only be picked up again if there is bag space;
     // when full, enter pickup-discard mode instead of just toasting.
     if (!golfbagHasEmpty()) {
@@ -5455,8 +5623,42 @@ function render() {
   // Wind is rendered on separate transparent Three.js overlay (#wind-canvas) via fragment shader + particles, not here
   // Background is on BOTTOM canvas (zoned terrain via redrawBottom), not drawn here
   drawModifiers(ctx, modifiers);
-  // Per new requirement: show field direction and strength as arrows inside modifiers, no particles inside
-  try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH); } catch {};
+  // Per new requirement: show field direction and strength as arrows inside modifiers, no particles inside.
+  // Stacking end-result preview: while the EM snap line shows, the arrows inside
+  // the already-placed (target) modifier show the wind as if the candidate were
+  // stacked onto it — for bag placement and drag alike. Computed by temporarily
+  // swapping in the hypothetical modifier set (restored in `finally`).
+  let snapForArrows = null;
+  try {
+    let _cut = false, _ban = false;
+    try { _cut = cutsceneIsActive(); } catch {}
+    try { _ban = banterIsActive(); } catch {}
+    if (!rewardMenuVisible && !coinSummaryVisible && !_cut && !_ban && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
+      snapForArrows = getSnapPreviewTarget();
+    }
+  } catch { snapForArrows = null; }
+  if (snapForArrows) {
+    let hypo = null;
+    try {
+      if (isDragging && draggingIdx >= 0 && draggingIdx < modifiers.length) {
+        const mateSet = new Set((draggingMates.length ? draggingMates : [draggingIdx]).filter(mi => mi >= 0 && mi < modifiers.length));
+        hypo = modifiers.map((m, i) => (mateSet.has(i) ? { ...m, x: snapForArrows.toX, y: snapForArrows.toY } : m));
+      } else if (mousePos && selectedModifier && canPlace(selectedModifier)) {
+        hypo = [...modifiers, { id: 'snap-preview', type: selectedModifier, x: snapForArrows.toX, y: snapForArrows.toY, radius: getEffectiveModifierRadius() }];
+      }
+    } catch { hypo = null; }
+    if (hypo) {
+      try {
+        setModifiers(hypo);
+        try { drawArrowsInModifiers(ctx, getWindAt, hypo, cols, rows, cellW, cellH, null); }
+        finally { setModifiers(modifiers); }
+      } catch { try { setModifiers(modifiers); } catch {} }
+    } else {
+      try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch {};
+    }
+  } else {
+    try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch {};
+  }
   drawObstacles(ctx, level.obstacles);
   drawHole(ctx, level.hole);
   for (const tr of getLevelTreasures(level)) {
@@ -5473,12 +5675,44 @@ function render() {
     drawAim(ctx, ball, getAimAngle(), charge, gameState);
   }
   // Preview circle follows mouse when selecting modifier before shooting
-  // REQ-020: only show preview if supply allows placement; REQ-021/023: not during reward menu
-  if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
+  // REQ-020: only show preview if supply allows placement; REQ-021/023: not during reward menu.
+  // Out-of-bounds centers (canvas edge / OB terrain) show the blocked preview.
+  let oobPreview = false;
+  try { oobPreview = !!(mousePos && selectedModifier && isPlacementOutOfBounds(mousePos.x, mousePos.y)); } catch {}
+  if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier) && !oobPreview) {
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius());
-  } else if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
-    // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
-    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true);
+  } else if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && (!canPlace(selectedModifier) || oobPreview)) {
+    // Insufficient supply or out of bounds: blocked preview (gray/red).
+    // Caption names the reason ('out of bounds' vs default 'no supply').
+    let placeableNow = false;
+    try { placeableNow = canPlace(selectedModifier); } catch {}
+    drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true, placeableNow ? 'out of bounds' : null);
+  }
+  // Bag-placement preview shows wind arrows inside its area as they would be
+  // if the item were placed there (candidate applied via hypothetical swap,
+  // restored in `finally`) — drawn after the preview fill so they stay crisp.
+  // Except while snapping (stacked end-result in the target, see above) or
+  // out of bounds (not placeable there at all).
+  if (!snapForArrows && !oobPreview && !rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
+    try {
+      const hypoPlace = [...modifiers, { id: 'placement-preview', type: selectedModifier, x: mousePos.x, y: mousePos.y, radius: getEffectiveModifierRadius() }];
+      setModifiers(hypoPlace);
+      try {
+        drawArrowsInModifiers(ctx, getWindAt, [], cols, rows, cellW, cellH,
+          { x: mousePos.x, y: mousePos.y, radius: getEffectiveModifierRadius(), type: selectedModifier });
+      } finally { setModifiers(modifiers); }
+    } catch { try { setModifiers(modifiers); } catch {} };
+  }
+  // Stacking EM-pull link: preview/dragged center inside another modifier
+  if (snapForArrows && !rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
+    try {
+      const snap = snapForArrows;
+      {
+        let nowMs = 0;
+        try { nowMs = performance.now(); } catch { try { nowMs = Date.now(); } catch {} }
+        drawSnapLink(ctx, snap.fromX, snap.fromY, snap.toX, snap.toY, nowMs);
+      }
+    } catch {}
   }
   // HUD is now HTML #hud on top of canvas (see 03-rendering.md §4) — no canvas drawHUD
   // Power bar under ball when charging per REQ-007
@@ -6474,6 +6708,7 @@ function init() {
       // In AIMING/CHARGING handle deselection first per 07 spec (Escape clears selection/active) before opening pause
       if ((gameState === "AIMING" || gameState === "CHARGING") && (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive)) {
         selectedModifier = null; selectedBagIndex = -1;
+        try { cancelBagDrag(); } catch {}
         if (isFreeShotActive) clearFreeShotGlow();
         updateHotbarUI();
         e.preventDefault();
@@ -6490,6 +6725,7 @@ function init() {
       // Not in level (entry menu hidden?): handle deselection fallback
       if (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive) {
         selectedModifier = null; selectedBagIndex = -1;
+        try { cancelBagDrag(); } catch {}
         if (isFreeShotActive) clearFreeShotGlow();
         updateHotbarUI();
         e.preventDefault();
@@ -6549,7 +6785,16 @@ function init() {
     } else if (e.code === "Delete" || e.code === "Backspace") {
       // Remove last modifier and return to bag if space (tactical model);
       // when full, arm pickup-discard for the last modifier instead of only toasting.
+      // A stacked last modifier splits into individuals instead of being picked up.
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
+        try {
+          if (getStackIndicesFor(modifiers.length - 1).length > 1) {
+            splitStackAtIndex(modifiers.length - 1);
+            updateHotbarUI();
+            e.preventDefault();
+            return;
+          }
+        } catch {}
         if (!golfbagHasEmpty()) {
           const last = modifiers[modifiers.length - 1];
           enterPickupDiscard({ type: last.type, id: last.id, index: modifiers.length - 1 });
@@ -6699,8 +6944,17 @@ function init() {
       return;
     }
     if (isDragging && draggingIdx !== -1) {
-      modifiers[draggingIdx].x = pos.x;
-      modifiers[draggingIdx].y = pos.y;
+      // Stacked items move together using the grab-time snapshot: never
+      // recompute membership mid-drag, or passing over another modifier
+      // would absorb it into the stack without any mouse release.
+      try {
+        const mates = (draggingMates.length ? draggingMates : [draggingIdx])
+          .filter(mi => mi >= 0 && mi < modifiers.length);
+        for (const mi of mates) { modifiers[mi].x = pos.x; modifiers[mi].y = pos.y; }
+      } catch {
+        modifiers[draggingIdx].x = pos.x;
+        modifiers[draggingIdx].y = pos.y;
+      }
       syncModifiersToField();
       canvas.style.cursor = "grabbing";
     } else {
@@ -6710,9 +6964,11 @@ function init() {
         canvas.style.cursor = "grab";
         return;
       }
-      // Update cursor based on hover over modifier
+      // Update cursor based on hover over modifier (armed placement wins: crosshair)
       const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
-      if (overIdx !== -1) {
+      let hoverArmedPlaceable = false;
+      try { hoverArmedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+      if (overIdx !== -1 && !hoverArmedPlaceable) {
         canvas.style.cursor = "grab";
       } else if (selectedModifier) {
         // REQ-020: show not-allowed if cannot place due to supply
@@ -6762,10 +7018,22 @@ function init() {
       return;
     }
     const pos = getCanvasMousePos(e);
+    // Armed bag placement wins over dragging: a left-press inside an existing
+    // modifier while a placeable bag item is selected must place (snap-stack),
+    // not grab the existing modifier. The click handler performs the placement.
+    try {
+      if (selectedModifier && canPlace(selectedModifier)) return;
+    } catch {}
     const idx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     if (idx !== -1) {
-      // Start dragging existing modifier
+      // Start dragging existing modifier (or stack); snapshot membership now
+      // so mid-drag flyovers never merge before mouseup.
       draggingIdx = idx;
+      try {
+        draggingMates = getStackIndicesFor(idx);
+        if (!draggingMates.length) draggingMates = [idx];
+      } catch { draggingMates = [idx]; }
+      try { dragOrigin = { x: modifiers[idx].x, y: modifiers[idx].y }; } catch { dragOrigin = null; }
       isDragging = true;
       canvas.style.cursor = "grabbing";
       e.preventDefault();
@@ -6781,19 +7049,197 @@ function init() {
       canvas.style.cursor = "default";
     }
     if (isDragging && draggingIdx !== -1) {
+      // Canvas→bag drop: releasing a board drag over a spatial golfbag slot
+      // picks the item back up (empty slot) or swaps with the slot's item
+      // (occupied slot). A stacked drop restores its pre-drag spot and splits.
+      // Only in AIMING/CHARGING (pickup is blocked mid-flight like right-click).
+      if (gameState === "AIMING" || gameState === "CHARGING") {
+        let slotEl = null;
+        try {
+          const el = document.elementFromPoint(e.clientX, e.clientY);
+          const cand = el ? el.closest('.hotbar-slot:not(.passive)') : null;
+          slotEl = (cand && cand.closest('#hotbar-grid')) ? cand : null;
+        } catch { slotEl = null; }
+        if (slotEl) { handleBoardDropOnBag(slotEl); return; }
+      }
       const pos = getCanvasMousePos(e);
       // If mouse released outside canvas, pos may be out of bounds, but still update
       if (pos) {
-        modifiers[draggingIdx].x = Math.max(0, Math.min(LOGICAL_W, pos.x));
-        modifiers[draggingIdx].y = Math.max(0, Math.min(LOGICAL_H, pos.y));
+        const cx = Math.max(0, Math.min(LOGICAL_W, pos.x));
+        const cy = Math.max(0, Math.min(LOGICAL_H, pos.y));
+        let mates = [];
+        try {
+          mates = (draggingMates.length ? draggingMates : getStackIndicesFor(draggingIdx))
+            .filter(mi => mi >= 0 && mi < modifiers.length);
+        } catch { mates = [draggingIdx]; }
+        if (!mates.length) mates = [draggingIdx];
+        // Move the whole stack together first
+        for (const mi of mates) { modifiers[mi].x = cx; modifiers[mi].y = cy; }
+        // Then snap the moved stack onto any other modifier it was dropped inside.
+        // This is the ONLY commit point: nothing merges while the button is held.
+        try {
+          const exclude = new Set(mates);
+          const snap = findSnapTarget(cx, cy, exclude);
+          if (snap && snap.mod) {
+            for (const mi of mates) { modifiers[mi].x = snap.mod.x; modifiers[mi].y = snap.mod.y; }
+          }
+        } catch {}
         syncModifiersToField();
       }
       isDragging = false;
       draggingIdx = -1;
+      draggingMates = [];
+      dragOrigin = null;
       canvas.style.cursor = "default";
       saveProgress();
     }
   });
+  // Canvas→bag drop target: auto-pickup for stacks (fill empty spatial slots,
+  // drop slot first; extras split back onto the level at the pre-drag spot),
+  // exact-slot pickup for singles, and swap with occupied spatial slots (bag
+  // item takes the dragged item's pre-drag board spot, as usual).
+  function handleBoardDropOnBag(slotEl) {
+    const finish = () => {
+      isDragging = false; draggingIdx = -1; draggingMates = []; dragOrigin = null;
+      selectedBagIndex = -1; selectedModifier = null;
+      canvas.style.cursor = "default";
+    };
+    try {
+      const slotIdx = Number(slotEl.dataset.slotIndex);
+      if (!Number.isInteger(slotIdx) || slotIdx < 0 || slotIdx >= getEffectiveGolfbagSize()) { finish(); return; }
+      const mates = (draggingMates.length ? draggingMates : [draggingIdx])
+        .filter(mi => Number.isInteger(mi) && mi >= 0 && mi < modifiers.length);
+      if (!mates.length || !modifiers[mates[0]]) { finish(); updateHotbarUI(); return; }
+      const origin = dragOrigin || { x: modifiers[mates[0]].x, y: modifiers[mates[0]].y };
+      // Restore the dragged items to their pre-drag spot first
+      for (const mi of mates) { modifiers[mi].x = origin.x; modifiers[mi].y = origin.y; }
+      // Occupied slot: the bag item goes into play at the origin (usual swap);
+      // freeShot/passive occupants can never board → cancel the whole drop.
+      const occupant = golfbag[slotIdx];
+      if (occupant) {
+        const bt = bagEntryType(occupant);
+        if (!isSpatialBagType(bt)) { syncModifiersToField(); finish(); updateHotbarUI(); saveProgress(); return; }
+        golfbag[slotIdx] = null;
+        modifiers.push({ id: Date.now() + Math.random(), type: normalizeSupplyType(bt), x: origin.x, y: origin.y, radius: getEffectiveModifierRadius() });
+      }
+      // Auto-pickup: drop slot first, then other empty spatial slots in order
+      const emptySlots = [];
+      for (let i = 0; i < getEffectiveGolfbagSize(); i++) {
+        if (!golfbag[i]) emptySlots.push(i);
+      }
+      emptySlots.sort((a, b) => (a === slotIdx ? -1 : b === slotIdx ? 1 : a - b));
+      for (const mi of [...mates].sort((a, b) => b - a)) { // splice descending
+        if (!emptySlots.length) break;
+        if (!modifiers[mi]) continue;
+        const s = emptySlots.shift();
+        golfbag[s] = { type: normalizeSupplyType(modifiers[mi].type) };
+        modifiers.splice(mi, 1);
+      }
+      // Whatever still shares the origin (leftover members, plus a swapped-in
+      // bag item) splits like a stack; a lone item simply stays.
+      const atOrigin = [];
+      for (let i = 0; i < modifiers.length; i++) {
+        if (Math.hypot(modifiers[i].x - origin.x, modifiers[i].y - origin.y) <= 2) atOrigin.push(i);
+      }
+      if (atOrigin.length > 1) splitStackAtIndex(atOrigin[0]);
+      else syncModifiersToField();
+      syncDerivedFromBag();
+      updateHotbarUI();
+      finish(); saveProgress();
+    } catch { try { finish(); } catch {} }
+  }
+  // Bag drag-and-drop gesture tracking (slot mousedown starts pendingBagDrag).
+  window.addEventListener("mousemove", (e) => {
+    // Board drag: keep the dragged stack following the pointer even over HUD
+    // slots (the canvas mousemove listener doesn't fire there, which froze
+    // the dragged modifier mid-drag while drag mode stayed active).
+    // Idempotent with the canvas handler: same position, same sync.
+    if (isDragging && draggingIdx !== -1 && draggingIdx < modifiers.length) {
+      try {
+        const pos = getCanvasMousePos(e);
+        const mates = (draggingMates.length ? draggingMates : [draggingIdx])
+          .filter(mi => mi >= 0 && mi < modifiers.length);
+        if (mates.length) {
+          for (const mi of mates) { modifiers[mi].x = pos.x; modifiers[mi].y = pos.y; }
+          syncModifiersToField();
+          canvas.style.cursor = "grabbing";
+        }
+      } catch {}
+    }
+    if (!bagDrag) return;
+    try {
+      // External deselect mid-gesture (Escape/hotkey): abort the drag visuals
+      if (bagDrag.active && (selectedBagIndex !== bagDrag.slotIdx || !golfbag[bagDrag.slotIdx] || bagEntryType(golfbag[bagDrag.slotIdx]) !== bagDrag.type)) {
+        cancelBagDrag();
+        return;
+      }
+      const moved = Math.hypot(e.clientX - bagDrag.startX, e.clientY - bagDrag.startY);
+      if (!bagDrag.active && moved > BAG_DRAG_THRESHOLD_PX) {
+        // Real drag: arm the item (selection). No icon follows the cursor —
+        // the armed preview circle + snap line on the canvas show the drag.
+        selectedBagIndex = bagDrag.slotIdx;
+        selectedModifier = bagDrag.type;
+        updateHotbarUI();
+        bagDrag.active = true;
+      }
+      if (bagDrag.active) {
+        // Keep the placement preview tracking the pointer even over HUD slots
+        // (the canvas mousemove listener doesn't fire there, which used to
+        // freeze the preview area mid-drag while drag mode stayed active).
+        try { mousePos = getCanvasMousePos(e); } catch {}
+      }
+    } catch {}
+  });
+  window.addEventListener("mouseup", (e) => {
+    if (!bagDrag) return;
+    if (e.button !== undefined && e.button !== 0) return;
+    const bd = bagDrag;
+    cancelBagDrag();
+    if (!bd.active) return; // plain click — slot click handler selects normally
+    const disarm = () => { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); };
+    try {
+      // A modal flow (reward/pickup-discard) took over mid-drag: drop is dead
+      if (rewardMenuVisible || pendingPickup || pendingRewardType) { disarm(); return; }
+      const stillArmed = selectedBagIndex === bd.slotIdx && golfbag[bd.slotIdx] && bagEntryType(golfbag[bd.slotIdx]) === bd.type;
+      // Release over a spatial bag slot: swallow the upcoming slot click, then
+      // move into an empty slot or swap two occupied slots (same slot = no-op).
+      // Either way the item ends up deselected.
+      let dropSlot = -1;
+      try {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const cand = el ? el.closest('.hotbar-slot:not(.passive)') : null;
+        if (cand && cand.closest('#hotbar-grid')) dropSlot = Number(cand.dataset.slotIndex);
+      } catch { dropSlot = -1; }
+      if (Number.isInteger(dropSlot) && dropSlot >= 0 && dropSlot < getEffectiveGolfbagSize()) {
+        suppressSlotClick = true;
+        if (stillArmed && dropSlot !== bd.slotIdx) {
+          const moving = golfbag[bd.slotIdx];
+          golfbag[bd.slotIdx] = golfbag[dropSlot] || null;
+          golfbag[dropSlot] = moving;
+          syncDerivedFromBag();
+          saveProgress();
+        }
+        disarm();
+        return;
+      }
+      if (!stillArmed) return;
+      // Release over the canvas: place (snap/supply/save handled inside)
+      const rc = canvas.getBoundingClientRect();
+      if (e.clientX >= rc.left && e.clientX <= rc.right && e.clientY >= rc.top && e.clientY <= rc.bottom) {
+        if (gameState === "AIMING" || gameState === "CHARGING") {
+          selectedBagIndex = bd.slotIdx;
+          selectedModifier = bd.type;
+          const pos = getCanvasMousePos(e);
+          placeModifier(pos.x, pos.y);
+        }
+        disarm();
+        return;
+      }
+      // Release anywhere else: not placed — stays in its slot, deselected
+      disarm();
+    } catch {}
+  });
+  window.addEventListener("blur", () => { try { cancelBagDrag(); } catch {} });
   canvas.addEventListener("click", (e) => {
     // 11-cutscenes: Space/R/Click fast-forward while active
     try { if (cutsceneIsActive()) { cutsceneHandleInput(e); e.preventDefault(); return; } } catch {}
@@ -6848,9 +7294,13 @@ function init() {
       e.preventDefault();
       return;
     }
-    // If clicked on existing modifier and not dragging, do not place (drag handles move, click on existing previously removed - now we keep draggable, so click on existing should not place nor remove)
+    // Clicking an existing modifier places (snap-stack) when a placeable bag
+    // item is armed; otherwise (nothing armed) it is a no-op for left-click
+    // (drag to move, right-click to remove/split).
     const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
-    if (overIdx !== -1) {
+    let armedPlaceable = false;
+    try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+    if (overIdx !== -1 && !armedPlaceable) {
       // Click on existing without drag - no action (drag to move, right-click to remove)
       return;
     }
@@ -6865,11 +7315,24 @@ function init() {
     if (mainMenuVisible) return;
     if (banterIsActive()) return;
     if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+    // Bag drag in progress: right-click cancels it (and deselects when armed,
+    // same as hotkey/click arming) — never picks anything up.
+    if (bagDrag) {
+      const wasActive = !!bagDrag.active;
+      cancelBagDrag();
+      if (wasActive) {
+        selectedBagIndex = -1; selectedModifier = null;
+        updateHotbarUI();
+      }
+      return;
+    }
     const pos = getCanvasMousePos(e);
     // If dragging, cancel drag and remove?
     if (isDragging) {
       isDragging = false;
       draggingIdx = -1;
+      draggingMates = [];
+      dragOrigin = null;
     }
     const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     if (pendingPickup) {
@@ -6879,6 +7342,13 @@ function init() {
       } else {
         cancelPickupDiscard();
       }
+      return;
+    }
+    // Armed bag item: right-click deselects it and never picks anything up.
+    // (A second right-click with nothing armed picks up / splits as usual.)
+    if (selectedModifier) {
+      selectedBagIndex = -1; selectedModifier = null;
+      updateHotbarUI();
       return;
     }
     removeModifierAt(pos.x, pos.y);
@@ -7451,10 +7921,10 @@ function playCutsceneWrapped(idOrData, opts) {
   }
   return ok;
 }
-try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
+try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
- totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
