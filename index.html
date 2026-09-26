@@ -13,10 +13,14 @@
 <body>
   <div id="game-container">
     <div id="parallax-scene" class="hidden" aria-hidden="true">
-      <div class="parallax-layer" data-depth="background"><img src="./img/splash/background-gfg-splash.png" alt="" draggable="false"></div>
-      <div class="parallax-layer" data-depth="middleground"><img src="./img/splash/middleground-gfg-splash.png" alt="" draggable="false"></div>
-      <div class="parallax-layer" data-depth="foreground"><img src="./img/splash/foreground-gfg-splash.png" alt="" draggable="false"></div>
-      <div class="parallax-layer" data-depth="may"><img src="./img/splash/may-gfg-splash.png" alt="" draggable="false"></div>
+      <div class="parallax-layer" data-depth="background"><img src="./img/splash/background-gfg-splash.png" alt=""
+          draggable="false"></div>
+      <div class="parallax-layer" data-depth="middleground"><img src="./img/splash/middleground-gfg-splash.png" alt=""
+          draggable="false"></div>
+      <div class="parallax-layer" data-depth="foreground"><img src="./img/splash/foreground-gfg-splash.png" alt=""
+          draggable="false"></div>
+      <div class="parallax-layer" data-depth="may"><img src="./img/splash/may-gfg-splash.png" alt="" draggable="false">
+      </div>
     </div>
     <canvas id="bg-canvas" width="1280" height="720"></canvas>
     <canvas id="game" width="1280" height="720"></canvas>
@@ -28,22 +32,31 @@
     </div>
     <div id="bottom-bar">
       <div id="golfbag-wrapper">
-        <div id="golfbag-container" title="Golf bag — click to toggle inventory (I)" aria-label="Golf bag — click to toggle" role="button" tabindex="0">
+        <div id="golfbag-container" title="Golf bag — click to toggle inventory (I)"
+          aria-label="Golf bag — click to toggle" role="button" tabindex="0">
           <img id="golfbag-icon" src="./img/golfbag.png" alt="golfbag">
           <span class="golfbag-hotkey">I</span>
         </div>
       </div>
       <div id="hotbar">
         <div id="hotbar-grid">
-          <div class="hotbar-slot empty" data-slot-index="0" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">1</span></div>
-          <div class="hotbar-slot empty" data-slot-index="1" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">2</span></div>
-          <div class="hotbar-slot empty" data-slot-index="2" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">3</span></div>
-          <div class="hotbar-slot empty" data-slot-index="3" data-type=""><span class="hotbar-hotkey hotbar-hotkey-empty">4</span></div>
+          <div class="hotbar-slot empty" data-slot-index="0" data-type=""><span
+              class="hotbar-hotkey hotbar-hotkey-empty">1</span></div>
+          <div class="hotbar-slot empty" data-slot-index="1" data-type=""><span
+              class="hotbar-hotkey hotbar-hotkey-empty">2</span></div>
+          <div class="hotbar-slot empty" data-slot-index="2" data-type=""><span
+              class="hotbar-hotkey hotbar-hotkey-empty">3</span></div>
+          <div class="hotbar-slot empty" data-slot-index="3" data-type=""><span
+              class="hotbar-hotkey hotbar-hotkey-empty">4</span></div>
         </div>
         <div id="passive-hotbar-grid">
-          <div class="hotbar-slot passive" data-type="fieldExtender"><img class="hotbar-icon-img" src="./img/field-extender-icon.png" alt="fieldExtender"><span class="hotbar-count hidden">x0</span></div>
-          <div class="hotbar-slot passive" data-type="powerCell"><img class="hotbar-icon-img" src="./img/power-cell-icon.png" alt="powerCell"><span class="hotbar-count hidden">x0</span></div>
-          <div class="hotbar-slot passive" data-type="freeShot"><div class="hotbar-icon" style="color:#FFD700">★</div><span class="hotbar-count hidden">x0</span></div>
+          <div class="hotbar-slot passive" data-type="fieldExtender"><img class="hotbar-icon-img"
+              src="./img/field-extender-icon.png" alt="fieldExtender"><span class="hotbar-count hidden">x0</span></div>
+          <div class="hotbar-slot passive" data-type="powerCell"><img class="hotbar-icon-img"
+              src="./img/power-cell-icon.png" alt="powerCell"><span class="hotbar-count hidden">x0</span></div>
+          <div class="hotbar-slot passive" data-type="freeShot">
+            <div class="hotbar-icon" style="color:#FFD700">★</div><span class="hotbar-count hidden">x0</span>
+          </div>
         </div>
       </div>
     </div>
@@ -133,10 +146,12 @@
         <h3>Campaign Seed</h3>
         <p class="campaign-edit-help hidden">Current seed: <span id="campaign-edit-current-seed">-</span></p>
         <div id="campaign-edit-row">
-          <input id="campaign-seed-input" type="text" placeholder="Enter seed" maxlength="8" pattern="[0-9a-f]*" autocomplete="off" spellcheck="false" autocapitalize="off" />
+          <input id="campaign-seed-input" type="text" placeholder="Enter seed" maxlength="8" pattern="[0-9a-f]*"
+            autocomplete="off" spellcheck="false" autocapitalize="off" />
           <button id="campaign-seed-refresh" title="Refresh seed" aria-label="Refresh seed">↻</button>
           <!-- legacy alias hidden but functional for backward compat -->
-          <button id="campaign-regenerate-button" class="hidden" tabindex="-1" aria-hidden="true">Re-generate Seed</button>
+          <button id="campaign-regenerate-button" class="hidden" tabindex="-1" aria-hidden="true">Re-generate
+            Seed</button>
         </div>
         <div id="campaign-edit-error" class="hidden"></div>
         <div id="campaign-edit-actions">
@@ -151,7 +166,8 @@
     <div id="campaign-confirm-overlay" class="hidden">
       <div class="campaign-confirm-card">
         <h3>Regenerate campaign?</h3>
-        <p class="campaign-confirm-text">Refreshing the seed will re-generate all levels and all campaign progress will be lost. You will lose your progress. Continue?</p>
+        <p class="campaign-confirm-text">Refreshing the seed will re-generate all levels and all campaign progress will
+          be lost. You will lose your progress. Continue?</p>
         <div class="campaign-confirm-actions">
           <button id="campaign-confirm-ok">Confirm</button>
           <button id="campaign-confirm-cancel">Cancel</button>
@@ -194,18 +210,25 @@
     <div id="help-overlay" class="hidden">
       <div class="help-card">
         <h3>How to Play</h3>
-        <p class="help-rules">Welcome to the sacred links of Mt. Aeolus, the windiest peak on Earth, where the pompous Ancient Order of Golfing Purists holds its most ridiculous tradition.</p>
-        <p class="help-rules">Legend says the club’s founding blowhard declared on his deathbed that "putting is for cowards," decreeing that every hole must be aced straight from the tee in gale-force winds to prove true mastery. If you fail to land the shot in 10 attempts, the Grand Marshal revokes your membership, confiscates your pants, and hurls you into the stormy abyss via giant catapult.</p>
-        <p class="help-rules">To override the tempest, you rely on the Pocket-Atmosphere Overrider—a shady gadget you bought off a disgraced former caddie behind a dumpster.</p>
-        <p class="help-rules">By tossing down micro-sized zone emitters anywhere on the course, you can instantly magnify, completely liquify, violently deflect or rotate the wind direction inside a tiny bubble. The Purists scoff at these pocket-sized weather crimes, but as long as you disguise the devices as mundane turf repair tees, the Grand Marshal just assumes you're calling upon the mystical gods of aerodynamics.</p>
+        <p class="help-rules">Welcome to the sacred links of Mt. Aeolus, the windiest peak on Earth, where the pompous
+          Ancient Order of Golfing Purists holds its most ridiculous tradition.</p>
+        <p class="help-rules">Legend says the club’s founding blowhard declared on his deathbed that "putting is for
+          cowards," decreeing that every hole must be aced straight from the tee in gale-force winds to prove true
+          mastery. If you fail to land the shot in 10 attempts, the Grand Marshal revokes your membership, confiscates
+          your pants, and hurls you into the stormy abyss via giant catapult.</p>
+        <p class="help-rules">To override the tempest, you rely on the Pocket-Atmosphere Overrider—a shady gadget you
+          got from a mysterious old man on your way up the mountain.</p>
+        <p class="help-rules">By tossing down micro-sized zone emitters anywhere on the course, you can instantly
+          magnify, completely liquify, violently deflect or rotate the wind direction inside a tiny bubble. The Purists
+          scoff at these pocket-sized weather crimes, but as long as you disguise the devices as mundane turf repair
+          tees, the Grand Marshal just assumes you're calling upon the mystical gods of aerodynamics.</p>
         <h4>Controls</h4>
         <ul class="help-controls">
           <li>Arrow keys — Aim</li>
           <li>Space — Hold to charge power, release to shoot</li>
-          <li>Click — Place selected modifier</li>
-          <li>Right-click — Remove modifier</li>
-          <li>1 / 2 / 3 / 4 — Select bag slot (spatial places, passives stay in bag; Free Shot is display-only)</li>
-          <li>Attempts Left (+Y) — free shots shown after attempts left, auto-used on last attempt</li>
+          <li>Left-click — Place selected item</li>
+          <li>Right-click — Pick up item / Split stacked items</li>
+          <li>1 / 2 / 3 / 4 — Select item in golf bag</li>
           <li>H — Toggle wind visualization</li>
           <li>R — Reset ball</li>
           <li>Escape — Pause</li>
@@ -216,49 +239,57 @@
             <img class="help-item-icon" src="./img/liquifier-icon.png" alt="Liquifier">
             <div class="help-item-info">
               <span class="help-item-name">Liquifier</span>
-              <span class="help-item-desc">Nullifies wind to 0 inside the bubble and preserves your entry velocity. Dominates other modifiers; not affected by Power Cell.</span>
+              <span class="help-item-desc">Nullifies wind to 0 inside the bubble and preserves your entry velocity.
+                Dominates other modifiers; not affected by Power Cell.</span>
             </div>
           </div>
           <div class="help-item" data-type="deflector">
             <img class="help-item-icon" src="./img/deflector-icon.png" alt="Deflector">
             <div class="help-item-info">
               <span class="help-item-name">Deflector</span>
-              <span class="help-item-desc">Reverses wind direction 180° and magnifies wind 5× inside the bubble. Deduped with Rotator to one 5×, further amplified by Magnifier and Power Cell.</span>
+              <span class="help-item-desc">Reverses wind direction 180° and magnifies wind 5× inside the bubble. Deduped
+                with Rotator to one 5×, further amplified by Magnifier and Power Cell.</span>
             </div>
           </div>
           <div class="help-item" data-type="rotator">
             <img class="help-item-icon" src="./img/rotator-icon.png" alt="Rotator">
             <div class="help-item-info">
               <span class="help-item-name">Rotator</span>
-              <span class="help-item-desc">Rotates wind 90° CCW and magnifies wind 5× inside the bubble. Deduped with Deflector to one 5×.</span>
+              <span class="help-item-desc">Rotates wind 90° CCW and magnifies wind 5× inside the bubble. Deduped with
+                Deflector to one 5×.</span>
             </div>
           </div>
           <div class="help-item" data-type="magnifier">
             <img class="help-item-icon" src="./img/magnifier-icon.png" alt="Magnifier">
             <div class="help-item-info">
               <span class="help-item-name">Magnifier</span>
-              <span class="help-item-desc">Magnifies wind strength 5× inside the bubble. Stacks to 25×, scaled by Power Cell.</span>
+              <span class="help-item-desc">Magnifies wind strength 5× inside the bubble. Stacks to 25×, scaled by Power
+                Cell.</span>
             </div>
           </div>
           <div class="help-item" data-type="fieldExtender">
             <img class="help-item-icon" src="./img/field-extender-icon.png" alt="Field Extender">
             <div class="help-item-info">
               <span class="help-item-name">Field Extender</span>
-              <span class="help-item-desc">Passive: +20% radius for all spatial modifiers, retroactively grows existing bubbles (area).</span>
+              <span class="help-item-desc">Passive: +20% radius for all spatial modifiers, retroactively grows existing
+                bubbles (area).</span>
             </div>
           </div>
           <div class="help-item" data-type="powerCell">
             <img class="help-item-icon" src="./img/power-cell-icon.png" alt="Range Modifier">
             <div class="help-item-info">
               <span class="help-item-name">Range Modifier</span>
-              <span class="help-item-desc">Passive: +20% strength for Magnifier, Deflector and Rotator (base 5 → 6.0), retroactive power boost. Stackable xN in passive slot.</span>
+              <span class="help-item-desc">Passive: +20% strength for Magnifier, Deflector and Rotator (base 5 → 6.0),
+                retroactive power boost. Stackable xN in passive slot.</span>
             </div>
           </div>
           <div class="help-item" data-type="freeShot">
             <div class="help-item-icon help-item-icon--freeShot" aria-hidden="true">★</div>
             <div class="help-item-info">
               <span class="help-item-name">Free Shot</span>
-              <span class="help-item-desc">Bag item (one slot, 3 charges): free attempts not counted, shown as Attempts Left: X (+Y), auto-armed on last attempt with golden glow, no placement. Discarding loses remaining shots.</span>
+              <span class="help-item-desc">Bag item (one slot, 3 charges): free attempts not counted, shown as Attempts
+                Left: X (+Y), auto-armed on last attempt with golden glow, no placement. Discarding loses remaining
+                shots.</span>
             </div>
           </div>
         </div>
