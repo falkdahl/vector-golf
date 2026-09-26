@@ -4619,7 +4619,7 @@ function updateHotbarUI() {
     if(passiveGrid){
       const passTypes=['fieldExtender','powerCell','freeShot'];
       const passIcons={fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
-      const passNames={fieldExtender:'Field Extender',powerCell:'Range Modifier',freeShot:'Free Shots'};
+      const passNames={fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shots'};
       // Ensure 3 slots exist; recreate if needed
       if(passiveGrid.children.length!==3){
         passiveGrid.innerHTML='';
