@@ -708,8 +708,40 @@ const MOD_TYPE_STYLE = {
 function modStyleFor(type) {
   return MOD_TYPE_STYLE[type] || { fill: "rgba(200,200,200,0.20)", stroke: "rgba(200,200,200,0.9)", icon: "•", iconColor: "white" };
 }
-export function drawModifiers(ctx, modifiers) {
+export const MODIFIER_FLASH_MS = 350;
+function modifierFlashAge(mod, nowMs) {
+  try {
+    if (!mod || typeof mod.flashAt !== 'number') return Infinity;
+    const now = (typeof nowMs === 'number') ? nowMs : ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
+    return now - mod.flashAt;
+  } catch { return Infinity; }
+}
+function drawModifierFlash(ctx, x, y, radius, progress) {
+  // Quick white flash on ball entry: bright overlay fading out plus an
+  // expanding ring. progress 0 (just entered) -> 1 (flash done).
+  const alpha = Math.max(0, 1 - progress);
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.55;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.shadowColor = 'rgba(255,255,255,0.9)';
+  ctx.shadowBlur = 14;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(x, y, radius + progress * 10, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+export function drawModifiers(ctx, modifiers, nowMs) {
   if (!modifiers || !modifiers.length) return;
+  const now = (typeof nowMs === 'number') ? nowMs : ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
   // Group stacked modifiers sharing the same center (snap tolerance 2px)
   const groups = [];
   for (const mod of modifiers) {
@@ -722,13 +754,13 @@ export function drawModifiers(ctx, modifiers) {
   }
   for (const g of groups) {
     if (g.members.length === 1) {
-      drawSingleModifierCircle(ctx, g.members[0]);
+      drawSingleModifierCircle(ctx, g.members[0], now);
     } else {
-      drawStackedModifierCircle(ctx, g);
+      drawStackedModifierCircle(ctx, g, now);
     }
   }
 }
-function drawSingleModifierCircle(ctx, mod) {
+function drawSingleModifierCircle(ctx, mod, nowMs) {
   const st = modStyleFor(mod.type);
   ctx.save();
   ctx.fillStyle = st.fill;
@@ -743,10 +775,15 @@ function drawSingleModifierCircle(ctx, mod) {
   // No center icon: type reads from the edge color; the center stays clear
   // for wind arrows.
   ctx.restore();
+  const age = modifierFlashAge(mod, nowMs);
+  if (age < MODIFIER_FLASH_MS) {
+    drawModifierFlash(ctx, mod.x, mod.y, mod.radius, age / MODIFIER_FLASH_MS);
+  }
 }
-function drawStackedModifierCircle(ctx, group) {
+function drawStackedModifierCircle(ctx, group, nowMs) {
   const members = group.members;
   const radius = group.radius;
+  const now = (typeof nowMs === 'number') ? nowMs : ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
   ctx.save();
   // Base fill from first member (slightly stronger so stack reads solid)
   const base = modStyleFor(members[0].type);
@@ -771,6 +808,14 @@ function drawStackedModifierCircle(ctx, group) {
   // No center icons and no xN badge: the multicolor segmented edge already
   // shows the stack, and centers stay clear for wind arrows.
   ctx.restore();
+  let newestAge = Infinity;
+  for (const m of members) {
+    const age = modifierFlashAge(m, now);
+    if (age < newestAge) newestAge = age;
+  }
+  if (newestAge < MODIFIER_FLASH_MS) {
+    drawModifierFlash(ctx, group.x, group.y, radius, newestAge / MODIFIER_FLASH_MS);
+  }
 }
 // Electromagnetic snap link between a dragged/preview center and its snap target.
 // Looks like an EM pull: cyan glow + white-hot zigzag core + traveling pulses.

@@ -165,6 +165,11 @@ Defaults (counts omitted): `seed=42, nSources=1, nSinks=1, nDoublets=1, nVortexe
 
 Visualization on `game` canvas: `magnifier` orange `rgba(230,126,34,0.25)`, `liquifier` blue dashed, `deflector` purple `rgba(155,89,182,0.25)`, `rotator` red `rgba(231,76,60,0.25)` — solid or segmented (stacked) edge in type color, no center icons; centers stay clear for wind arrows. Dragged 60% opacity. Trails inside modifiers show `5×` speed (deflector reversed, rotator 90° CCW), liquifier stalls.
 
+### 7.3 Ball-Enter Flash (area-of-effect feedback)
+
+- When the ball freshly enters a spatial modifier's area (`dist < radius`, outside→inside transition during `FLYING`), that modifier's area flashes quickly: white fill overlay fading over `MODIFIER_FLASH_MS=350ms` plus an expanding white ring (`radius` → `radius+10`, glow `shadowBlur 14`). Stacked groups flash as one when any member is freshly entered (most recent entry drives the flash).
+- Entry detection lives in `src/main.js` (`ballInsideModifierIds` + `m.flashAt` timestamp set on outside→inside, reset on launch/`loadLevel`); rendering lives in `src/render.js` (`drawModifiers(ctx, modifiers, nowMs)`, `MODIFIER_FLASH_MS`, per-member `flashAt`). `nowMs` defaults to `performance.now()` so existing `drawModifiers(ctx, modifiers)` calls keep working.
+
 ### 7.2 Free Shot — Passive Consumable (see `05-input-and-states.md` §4 for launch branching)
 
 - **Effect:** When `isFreeShotActive===true` at launch, attempt does not decrease `Attempts Left`; `holeAttempts`/`totalAttempts` not incremented; ball launches normally; not a wind effect.
@@ -195,7 +200,8 @@ Visualization on `game` canvas: `magnifier` orange `rgba(230,126,34,0.25)`, `liq
 - [ ] Free Shot: ball glow only while armed before launch, edge glow while armed OR free flight; free launch does not increment attempts but decrements `freeShot` once and persists while supply remains; auto-arm at `<=1` when `supply.freeShot>0`.
 - [ ] Placement immediately consumes: placing `Magnifier` (or Liquifier/Deflector/Rotator) with `supply 1` → `supply 0` and `modifiers` length `1`; picking it up via right-click/`Delete` → `supply 0→1` and cleared; placing then winning → `modifiers` cleared without extra decrement (already `0`), removed-before-win refunded so not consumed; `freeShot` not consumed on win.
 - [ ] `createField` signature requires seed+four counts, coerced outside/inside placement verified for 100 seeds (sources `20-60` outside, sinks `60-100` middle-third top/bottom, vortexes/doublets `≥20` inside, ≥1 vortex|doublet except hole-1).
-- [ ] `getWindAt` bilinear correct, min force `≥60` effective, varying strength max≥1.1×min; DOM three layers stacked wind transparent; particles `60-80` modifier-aware; deterministic.
+ - [ ] `getWindAt` bilinear correct, min force `≥60` effective, varying strength max≥1.1×min; DOM three layers stacked wind transparent; particles `60-80` modifier-aware; deterministic.
+ - [ ] Ball-enter flash: ball freshly entering a modifier area sets `m.flashAt` (outside→inside, `ballInsideModifierIds` reset on launch/`loadLevel`); `drawModifiers(ctx, modifiers, nowMs)` renders a quick white flash + expanding ring while `nowMs - flashAt < MODIFIER_FLASH_MS=350ms` (stacked groups flash on any member entry).
 
 ## File Paths
 

@@ -588,6 +588,11 @@ function isNewCourseUnlockedThisRun(){ return !!runUnlockedNewCourse; }
 let passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
 let modifiersTraversedThisHole = new Set();
 let modifiersTraversedThisShot = new Set();
+// Ball-enter flash: tracks which modifier ids the ball is currently inside so a
+// fresh entry can trigger a quick area-of-effect flash (see drawModifiers).
+let ballInsideModifierIds = new Set();
+function modifierFlashKey(m) { try { return (m && m.id !== undefined) ? String(m.id) : (m.x + ',' + m.y); } catch { return String(Math.random()); } }
+function modifierNowMs() { try { return performance.now(); } catch { return Date.now(); } }
 let pendingHoleAdvance = false;
 let pendingCourseComplete = false; // ids of modifiers ball has been inside
 let holeStartAttempts = 0;
@@ -4356,6 +4361,7 @@ function loadLevel(index) {
   resetSoftlockDetection();
   modifiersTraversedThisHole = new Set();
   modifiersTraversedThisShot = new Set();
+  ballInsideModifierIds = new Set();
   holeStartAttempts = holeAttempts;
   updateHotbarUI();
   // Redraw terrain for new hole (zoned background per REQ-010/033)
@@ -5235,6 +5241,7 @@ function handleLaunch(angle, power) {
     updateAttemptsUI();
   }
   modifiersTraversedThisShot = new Set();
+  ballInsideModifierIds = new Set();
   gameState = "FLYING";
   try { lastLaunchTime = performance.now(); } catch { lastLaunchTime = Date.now(); }
   resetCharge();
@@ -5554,14 +5561,22 @@ function update(dt) {
     }
 
     // Track modifiers traversed for points bonus (+10 per unique modifier) – per hole and per shot (bonus only for clearing shot)
+    // Also triggers a quick area-of-effect flash on fresh ball entry (see 06-wind-system §7.3).
     try{
+      const nowMs = modifierNowMs();
+      const newInside = new Set();
       for(const m of modifiers){
         if(Math.hypot(ball.pos.x - m.x, ball.pos.y - m.y) < (m.radius||54)){
-          const key = m.id!==undefined ? String(m.id) : m.x+','+m.y;
+          const key = modifierFlashKey(m);
+          newInside.add(key);
           modifiersTraversedThisHole.add(key);
           modifiersTraversedThisShot.add(key);
+          if(!ballInsideModifierIds.has(key)){
+            try { m.flashAt = nowMs; } catch {}
+          }
         }
       }
+      ballInsideModifierIds = newInside;
     }catch{}
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
     // Water/OB terrain are fatal even with bouncy (hazard spec); trees always bounce
