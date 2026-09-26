@@ -1311,6 +1311,11 @@ function handleTutorialHole1To2Chain(){
     })();
   };
   if (needCutscene && !cutsceneIsActive()) {
+    // Keep aim hidden while the cutscene loads: ball is still sitting in
+    // hole 1 and gameState must not be AIMING yet (drawAim only renders in
+    // AIMING/CHARGING, so AIMING here would draw the orbit around the ball
+    // inside the hole). prepareHole2ThenBanter sets AIMING after loadLevel(1).
+    gameState = 'WIN';
     // Hide HUD etc for cutscene immediately
     try{
       const el=document.getElementById('main-menu-overlay');
@@ -1760,7 +1765,10 @@ function hideCoinSummary() {
         tutorialHole2GadgetsReminderShown = false;
         tutorialHole3RotatorShown = false;
         // Do NOT loadLevel yet — handleTutorialHole1To2Chain will load after cutscene (or immediately if skipped)
-        gameState='AIMING';
+        // Keep gameState as WIN (not AIMING) until hole 2 is loaded so the
+        // aim orbit is not drawn around the ball sitting in hole 1 while the
+        // first-restock cutscene starts.
+        gameState='WIN';
         if(winOverlay) winOverlay.classList.add('hidden');
         updateAttemptsUI(); updateHotbarUI();
         saveProgress();
@@ -5455,21 +5463,26 @@ function render() {
     if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
   }
   drawBall(ctx, ball);
-  // During the end screen (over the level) no aim/preview/force-bar/softlock chrome
-  if (!rewardMenuVisible && !coinSummaryVisible) {
+  // During the end screen (over the level) no aim/preview/force-bar/softlock chrome.
+  // Also suppress aim while a cutscene/banter is active or a hole transition is
+  // pending: the ball may still sit in the cleared hole (e.g. tutorial hole 1
+  // before the first-restock cutscene) and the orbit must never draw there.
+  let _cutActive = false; try { _cutActive = cutsceneIsActive(); } catch {}
+  let _banterActive = false; try { _banterActive = banterIsActive(); } catch {}
+  if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance) {
     drawAim(ctx, ball, getAimAngle(), charge, gameState);
   }
   // Preview circle follows mouse when selecting modifier before shooting
   // REQ-020: only show preview if supply allows placement; REQ-021/023: not during reward menu
-  if (!rewardMenuVisible && !coinSummaryVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
+  if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius());
-  } else if (!rewardMenuVisible && !coinSummaryVisible && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
+  } else if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && !canPlace(selectedModifier)) {
     // Insufficient supply: show blocked preview (gray/red) to signal insufficiency
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true);
   }
   // HUD is now HTML #hud on top of canvas (see 03-rendering.md §4) — no canvas drawHUD
   // Power bar under ball when charging per REQ-007
-  if (gameState === "CHARGING" && charging && !rewardMenuVisible && !coinSummaryVisible) {
+  if (gameState === "CHARGING" && charging && !rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance) {
     drawForceBar(ctx, ball, charge);
   }
   // Softlock banner (non-blocking) below HUD — informs player they can reset via R or pause menu
