@@ -464,7 +464,9 @@ export function createField(c = DEFAULT_COLS, r = DEFAULT_ROWS, strength = WIND_
   return field;
 }
 
-export function getWindAt(worldX, worldY) {
+// Bilinear sample of the raw field grid WITHOUT modifiers. Used by the wind
+// visualization so streaks show the base field (unaffected by placed bubbles).
+function sampleBaseField(worldX, worldY) {
   if (!field.length) return { x: 0, y: 0 };
   // Clamp to bounds
   const clampedX = Math.max(0, Math.min(canvasW - 0.001, worldX));
@@ -477,7 +479,7 @@ export function getWindAt(worldX, worldY) {
   const x0 = Math.max(0, Math.min(cols - 1, Math.floor(gx)));
   const y0 = Math.max(0, Math.min(rows - 1, Math.floor(gy)));
   const x1 = Math.max(0, Math.min(cols - 1, Math.ceil(gx)));
-  const y1 = Math.max(0, Math.min(rows - 1, Math.ceil(gy)));
+  const y1 = Math.max(0, Math.min(cols - 1, Math.ceil(gy)));
 
   const tx = gx - x0;
   const ty = gy - y0;
@@ -518,6 +520,15 @@ export function getWindAt(worldX, worldY) {
       y: topY + (botY - topY) * cy
     };
   }
+  return base;
+}
+
+export function getBaseWindAt(worldX, worldY) {
+  return sampleBaseField(worldX, worldY);
+}
+
+export function getWindAt(worldX, worldY) {
+  const base = sampleBaseField(worldX, worldY);
 
   // Apply modifiers - updated per new requirement: rotator includes one magnifier (5×), stacked rotate/flip deduped to one amplify, CCW, scaled by Power Cell
   // Normative: BASE_STRENGTH=5, powerMultiplier=1+0.20*powerCellCount, totalFactor = 5**(magnifierCount + (hasRotDef?1:0)) * (hasActive?powerMultiplier:1), rotation = (rotatorCount*90 CCW + deflectorCount*180) %360 CCW, liquifier dominates, radius = BASE_MODIFIER_RADIUS*(1+0.20*fieldExtenderCount)

@@ -1,27 +1,54 @@
 import * as THREE from 'three';
+import { getBaseWindAt } from './vectorField.js';
+
+// Wind visualization — Wind Waker style streaks.
+//
+// Long, bold, cartoony streaks covering the whole map, advected by the BASE
+// vector field (sources, sinks, vortices, doublets — placed modifier bubbles
+// never bend them, and no ribbon is drawn inside bubble areas).
+// Each streak is a camera-facing ribbon whose head is integrated through the
+// field every frame, so streaks bend and curve exactly with the wind. A custom
+// shader gives a bright core with soft hand-drawn edges and fades both ends.
+// CPU cost is tiny (90 streaks x 1 field sample each per frame); GPU cost is
+// ~4k triangles.
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
-const PARTICLE_COUNT = 68;
-const PARTICLE_LIFE = 6.5;
-const PARTICLE_SPEED = 48;
-const TRAIL_LENGTH = 14;
+
+// Streak tuning — calm readable drift: thin elegant lines, moderate density.
+const STREAK_COUNT = 48;
+const STREAK_NODES = 24; // head + history points per streak
+const STREAK_SPEED = 260; // px/s per unit of wind magnitude (|wind| ~0.44..1.5+ -> ~115..390 px/s)
+const STREAK_MIN_SPEED = 70; // never stall completely
+const STREAK_MAX_SPEED = 550; // bounded: gusts move, singularities don't teleport
+const STREAK_KNOT_DIST = 24; // respawn when the head nets less than this over its whole trail (kills sink-knots, keeps real orbits)
+const STREAK_KNOT_MIN_AGE = 1.2; // only after the trail had time to stretch
+const STREAK_MIN_AGE = 2.5;
+const STREAK_MAX_AGE = 4.5;
+const STREAK_MIN_WIDTH = 4;
+const STREAK_MAX_WIDTH = 7;
+const STREAK_ALPHA = 0.7;
+const STREAK_SPAWN_MARGIN = 40; // respawn when head leaves canvas + margin
 
 let renderer = null;
 let scene = null;
 let camera = null;
-let windMesh = null;
-let windMaterial = null;
-let fadeMesh = null;
-let particlePoints = null;
-let trailPoints = null;
-let particleGeometry = null;
-let trailGeometry = null;
+let streakMesh = null;
+let streakGeometry = null;
 let uniforms = null;
 
-let particleData = []; // {x,y,life,maxLife, trail:[{x,y}]}
+let streakData = []; // {hx,hy,dx,dy,nodes:Float32Array,age,maxAge,jitter,width}
+let gustTime = 0;
 let currentModifiers = [];
 let showWind = true;
+
+function isInsideAnyModifier(x, y) {
+  for (const m of currentModifiers) {
+    const r = m.radius ?? 54;
+    if (Math.hypot(x - m.x, y - m.y) < r) return true;
+  }
+  return false;
+}
 let containerEl = null;
 let canvasEl = null;
 let freeShotGlow = null;
@@ -31,330 +58,143 @@ let freeShotEdgeActive = false;
 let freeShotTime = 0;
 let freeShotEdgeEl = null;
 
-function isInsideAnyModifier(x, y) {
-  for (const m of currentModifiers) {
-    const r = m.radius ?? 54;
-    if (Math.hypot(x - m.x, y - m.y) < r) return true;
-  }
-  return false;
-}
-function isInsideLiquifier(x, y) {
-  for (const m of currentModifiers) {
-    if (m.type !== 'liquifier' && m.type !== 'nullify') continue;
-    const r = m.radius ?? 54;
-    if (Math.hypot(x - m.x, y - m.y) < r) return true;
-  }
-  return false;
-}
-function getNonLiquifierModifiers() {
-  return currentModifiers.filter(m => m.type !== 'liquifier' && m.type !== 'nullify');
-}
-function isInsideNonLiquifier(x, y) {
-  for (const m of getNonLiquifierModifiers()) {
-    const r = m.radius ?? 54;
-    if (Math.hypot(x - m.x, y - m.y) < r) return true;
-  }
-  return false;
-}
-function isInsideFlip(x, y) {
-  for (const m of currentModifiers) {
-    if (m.type !== 'deflector' && m.type !== 'flip') continue;
-    const r = m.radius ?? 54;
-    if (Math.hypot(x - m.x, y - m.y) < r) return true;
-  }
-  return false;
-}
-function isInsideAmplify(x, y) {
-  for (const m of currentModifiers) {
-    if (m.type !== 'magnifier' && m.type !== 'amplify') continue;
-    const r = m.radius ?? 54;
-    if (Math.hypot(x - m.x, y - m.y) < r) return true;
-  }
-  return false;
-}
-// legacy aliases
-const isInsideDeflector = isInsideFlip;
-const isInsideMagnifier = isInsideAmplify;
-function randomPointInUnion() {
-  const mods = getNonLiquifierModifiers();
-  if (!mods.length) return null;
-  // Compute bounding box of union of non-nullify modifiers only
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const m of mods) {
-    const r = m.radius ?? 54;
-    minX = Math.min(minX, m.x - r);
-    maxX = Math.max(maxX, m.x + r);
-    minY = Math.min(minY, m.y - r);
-    maxY = Math.max(maxY, m.y + r);
-  }
-  minX = Math.max(0, minX); maxX = Math.min(LOGICAL_W, maxX);
-  minY = Math.max(0, minY); maxY = Math.min(LOGICAL_H, maxY);
-  if (maxX <= minX || maxY <= minY) return null;
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const x = minX + Math.random() * (maxX - minX);
-    const y = minY + Math.random() * (maxY - minY);
-    // ensure inside non-nullify union and outside nullify
-    let inside = false;
-    for (const m of mods) {
-      const r = m.radius ?? 54;
-      if (Math.hypot(x - m.x, y - m.y) < r) { inside = true; break; }
-    }
-    if (inside && !isInsideLiquifier(x, y)) return { x, y };
-  }
-  // Fallback: pick random non-nullify modifier and random point inside it (outside nullify)
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const m = mods[Math.floor(Math.random() * mods.length)];
-    const r = Math.sqrt(Math.random()) * (m.radius ?? 54);
-    const ang = Math.random() * Math.PI * 2;
-    const x = m.x + r * Math.cos(ang);
-    const y = m.y + r * Math.sin(ang);
-    if (!isInsideLiquifier(x, y)) return { x, y };
-  }
-  return null;
-}
 function getRespawnPositionPreferInside() {
-  // Per new requirement: do not spawn particles inside modifiers at all — only outside
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const x = Math.random() * LOGICAL_W;
-    const y = Math.random() * LOGICAL_H;
-    if (!isInsideAnyModifier(x, y)) return { x, y };
+  // Spread control: respawn into the emptiest map region so streaks stay
+  // evenly distributed instead of flooding sinks / starving sources. The flow
+  // constantly re-clumps streaks (convergence), so every respawn re-balances.
+  // Never spawn inside a placed modifier bubble (no lines are drawn there).
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const p = posInCell(pickSpreadCell());
+    if (!isInsideAnyModifier(p.x, p.y)) return p;
   }
-  // Fallback if map heavily covered (rare) — return last attempt even if inside
-  return { x: Math.random() * LOGICAL_W, y: Math.random() * LOGICAL_H };
+  return posInCell(pickSpreadCell());
 }
 
-const MAX_SOURCES = 4;
-const MAX_SINKS = 4;
-const MAX_VORTICES = 4;
-const MAX_DOUBLETS = 4;
-const MAX_MODIFIERS = 12;
-
-function createWindShader() {
-  const vertexShader = `
-    varying vec2 vUv;
-    void main(){
-      vUv = uv;
-      gl_Position = vec4(position, 1.0);
-    }
-  `;
-  const fragmentShader = `
-    precision highp float;
-    precision highp int;
-    varying vec2 vUv;
-    uniform float uTime;
-    uniform vec2 uResolution;
-    uniform vec2 uLogicalSize;
-    uniform float uShowWind;
-    uniform float uWindStrength;
-    uniform float uSoftening;
-    uniform int uSourceCount;
-    uniform vec2 uSourcePos[4];
-    uniform float uSourceStr[4];
-    uniform int uSinkCount;
-    uniform vec2 uSinkPos[4];
-    uniform float uSinkStr[4];
-    uniform int uVortexCount;
-    uniform vec2 uVortexPos[4];
-    uniform float uVortexStr[4];
-    uniform int uDoubletCount;
-    uniform vec2 uDoubletPos[4];
-    uniform float uDoubletMu[4];
-    uniform float uDoubletTheta[4];
-    uniform int uModifierCount;
-    uniform vec2 uModifierPos[12];
-    uniform float uModifierRadius[12];
-    uniform float uModifierType[12];
-    vec2 sampleWind(vec2 world){
-      vec2 v = vec2(0.0);
-      float eps = uSoftening * uSoftening;
-      for(int i=0; i<4; ++i){
-        if(i >= uSourceCount) continue;
-        vec2 sPos = uSourcePos[i];
-        float sStr = uSourceStr[i];
-        vec2 d = world - sPos;
-        float r2 = dot(d,d) + eps;
-        if(r2 > 0.001) v += sStr * d / r2;
-      }
-      for(int i=0; i<4; ++i){
-        if(i >= uSinkCount) continue;
-        vec2 sPos = uSinkPos[i];
-        float sStr = uSinkStr[i];
-        vec2 d = world - sPos;
-        float r2 = dot(d,d) + eps;
-        if(r2 > 0.001) v += -sStr * d / r2;
-      }
-      for(int i=0; i<4; ++i){
-        if(i >= uVortexCount) continue;
-        vec2 vPos = uVortexPos[i];
-        float g = uVortexStr[i];
-        vec2 d = world - vPos;
-        float r2 = dot(d,d) + eps;
-        if(r2 > 0.001) v += g * vec2(-d.y, d.x) / r2;
-      }
-      for(int i=0; i<4; ++i){
-        if(i >= uDoubletCount) continue;
-        vec2 dPos = uDoubletPos[i];
-        float mu = uDoubletMu[i];
-        float th = uDoubletTheta[i];
-        if(abs(mu) < 0.001) continue;
-        vec2 d = world - dPos;
-        float ct = cos(th);
-        float st = sin(th);
-        float dpx = ct * d.x + st * d.y;
-        float dpy = -st * d.x + ct * d.y;
-        float r2 = dpx*dpx + dpy*dpy + eps;
-        float r4 = r2 * r2;
-        if(r4 < 0.001) continue;
-        vec2 local;
-        local.x = mu * (dpx*dpx - dpy*dpy) / r4;
-        local.y = mu * (2.0 * dpx * dpy) / r4;
-        vec2 contrib;
-        contrib.x = ct * local.x - st * local.y;
-        contrib.y = st * local.x + ct * local.y;
-        v += contrib;
-      }
-      // Updated per new requirement: rotate includes 5× CCW, stacked rotate/flip deduped to one 5×
-      int ampCnt = 0;
-      int flipCnt = 0;
-      int rotCnt = 0;
-      bool hasNull = false;
-      for(int i=0; i<12; ++i){
-        if(i >= uModifierCount) continue;
-        vec2 mPos = uModifierPos[i];
-        float mRad = uModifierRadius[i];
-        float mType = uModifierType[i];
-        vec2 md = world - mPos;
-        if(dot(md,md) < mRad * mRad){
-          if(mType < 0.5) ampCnt++;
-          else if(mType < 1.5) hasNull = true;
-          else if(mType < 2.5) flipCnt++;
-          else rotCnt++;
-        }
-      }
-      if(hasNull) v = vec2(0.0);
-      else {
-        bool hasRotFlip = (flipCnt + rotCnt) > 0;
-        int totalPow = ampCnt + (hasRotFlip ? 1 : 0);
-        float totalFactor = pow(5.0, float(totalPow));
-        v *= totalFactor;
-        int totalQuarter = (rotCnt + 2 * flipCnt) - ((rotCnt + 2 * flipCnt) / 4) * 4;
-        if(totalQuarter == 1) v = vec2(-v.y, v.x);
-        else if(totalQuarter == 2) v = -v;
-        else if(totalQuarter == 3) v = vec2(v.y, -v.x);
-      }
-      return v * (uWindStrength * 2.0 + 20.0);
-    }
-    void main(){
-      // Streaks removed per user request - keep transparent
-      gl_FragColor = vec4(0.0);
-    }
-  `;
-  uniforms = {
-    uTime: { value: 0 },
-    uResolution: { value: new THREE.Vector2(LOGICAL_W, LOGICAL_H) },
-    uLogicalSize: { value: new THREE.Vector2(LOGICAL_W, LOGICAL_H) },
-    uShowWind: { value: 1 },
-    uWindStrength: { value: 180 },
-    uSoftening: { value: 28 },
-    uSourceCount: { value: 0 },
-    uSourcePos: { value: Array(4).fill(0).map(() => new THREE.Vector2(0, 0)) },
-    uSourceStr: { value: [0, 0, 0, 0] },
-    uSinkCount: { value: 0 },
-    uSinkPos: { value: Array(4).fill(0).map(() => new THREE.Vector2(0, 0)) },
-    uSinkStr: { value: [0, 0, 0, 0] },
-    uVortexCount: { value: 0 },
-    uVortexPos: { value: Array(4).fill(0).map(() => new THREE.Vector2(0, 0)) },
-    uVortexStr: { value: [0, 0, 0, 0] },
-    uDoubletCount: { value: 0 },
-    uDoubletPos: { value: Array(4).fill(0).map(() => new THREE.Vector2(0, 0)) },
-    uDoubletMu: { value: [0, 0, 0, 0] },
-    uDoubletTheta: { value: [0, 0, 0, 0] },
-    uModifierCount: { value: 0 },
-    uModifierPos: { value: Array(12).fill(0).map(() => new THREE.Vector2(0, 0)) },
-    uModifierRadius: { value: Array(12).fill(0) },
-    uModifierType: { value: Array(12).fill(0) },
+// Coarse spread grid (160px cells): heads are counted per cell, respawns go
+// to the emptiest of several random candidates (randomized, cheap, no sync issues).
+const SPREAD_COLS = 8;
+const SPREAD_ROWS = 5;
+function cellOf(x, y) {
+  const cx = Math.max(0, Math.min(SPREAD_COLS - 1, Math.floor(x / LOGICAL_W * SPREAD_COLS)));
+  const cy = Math.max(0, Math.min(SPREAD_ROWS - 1, Math.floor(y / LOGICAL_H * SPREAD_ROWS)));
+  return cy * SPREAD_COLS + cx;
+}
+function pickSpreadCell() {
+  const counts = new Array(SPREAD_COLS * SPREAD_ROWS).fill(0);
+  for (const s of streakData) {
+    if (typeof s.hx !== 'number' || typeof s.hy !== 'number') continue;
+    counts[cellOf(s.hx, s.hy)]++;
+  }
+  let best = (Math.random() * counts.length) | 0;
+  let bestN = Infinity;
+  for (let k = 0; k < 6; k++) {
+    const c = (Math.random() * counts.length) | 0;
+    if (counts[c] < bestN) { bestN = counts[c]; best = c; }
+  }
+  return best;
+}
+function posInCell(c) {
+  const cx = c % SPREAD_COLS, cy = (c / SPREAD_COLS) | 0;
+  return {
+    x: (cx + Math.random()) / SPREAD_COLS * LOGICAL_W,
+    y: (cy + Math.random()) / SPREAD_ROWS * LOGICAL_H,
   };
-  const geo = new THREE.PlaneGeometry(2, 2);
-  const mat = new THREE.ShaderMaterial({
-    uniforms,
-    vertexShader,
-    fragmentShader,
-    transparent: true,
-    depthWrite: false,
-    depthTest: false,
-    blending: THREE.NormalBlending,
-  });
-  return { mat, uniforms, geo };
 }
 
-function createParticles() {
-  const totalTrailPoints = PARTICLE_COUNT * TRAIL_LENGTH;
-  const positions = new Float32Array(totalTrailPoints * 3);
-  const alphas = new Float32Array(totalTrailPoints);
-  const sizes = new Float32Array(totalTrailPoints);
-  particleData = [];
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    let x, y;
-    // Do not spawn inside modifiers at all per new requirement
-    for (let attempt = 0; attempt < 50; attempt++) {
-      x = Math.random() * LOGICAL_W;
-      y = Math.random() * LOGICAL_H;
-      if (!isInsideAnyModifier(x, y)) break;
+function smoothstep(a, b, x) {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+function spawnStreak(s, getWindAt) {
+  const p = getRespawnPositionPreferInside();
+  s.hx = p.x; s.hy = p.y;
+  s.age = 0;
+  s.maxAge = STREAK_MIN_AGE + Math.random() * (STREAK_MAX_AGE - STREAK_MIN_AGE);
+  s.jitter = 0.85 + Math.random() * 0.3;
+  s.width = STREAK_MIN_WIDTH + Math.random() * (STREAK_MAX_WIDTH - STREAK_MIN_WIDTH);
+  // Initial direction from the base field so fresh streaks un-collapse along the flow
+  let dx = 1, dy = 0;
+  try {
+    const sampler = (typeof getBaseWindAt === 'function') ? getBaseWindAt : getWindAt;
+    if (typeof sampler === 'function') {
+      const w = sampler(p.x, p.y);
+      const m = Math.hypot(w.x, w.y);
+      if (m > 1e-4) { dx = w.x / m; dy = w.y / m; }
     }
-    const life = Math.random() * PARTICLE_LIFE;
-    const trail = [];
-    for (let t = 0; t < TRAIL_LENGTH; t++) {
-      trail.push({ x, y });
-    }
-    particleData.push({ x, y, life, maxLife: PARTICLE_LIFE, trail });
+  } catch {}
+  s.dx = dx; s.dy = dy;
+  for (let i = 0; i < STREAK_NODES; i++) {
+    s.nodes[i * 2] = p.x;
+    s.nodes[i * 2 + 1] = p.y;
   }
-  // Fill initial buffers
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    const p = particleData[i];
-    for (let t = 0; t < TRAIL_LENGTH; t++) {
-      const idx = i * TRAIL_LENGTH + t;
-      const tp = p.trail[t];
-      const ndcX = (tp.x / LOGICAL_W) * 2 - 1;
-      const ndcY = 1 - (tp.y / LOGICAL_H) * 2;
-      positions[idx * 3 + 0] = ndcX;
-      positions[idx * 3 + 1] = ndcY;
-      positions[idx * 3 + 2] = 0;
-      const lifeAlpha = Math.max(0, p.life / p.maxLife);
-      const trailFade = 1.0 - (t / TRAIL_LENGTH) * 0.85;
-      alphas[idx] = lifeAlpha * trailFade * 0.9;
-      sizes[idx] = 9.0 * (1.0 - t / TRAIL_LENGTH * 0.5);
+}
+
+function createStreaks() {
+  streakData = [];
+  const totalCells = SPREAD_COLS * SPREAD_ROWS;
+  for (let i = 0; i < STREAK_COUNT; i++) {
+    const s = { hx: 0, hy: 0, dx: 1, dy: 0, nodes: new Float32Array(STREAK_NODES * 2), age: 0, maxAge: 3, jitter: 1, width: 9 };
+    // Even start: round-robin across spread cells (~1-2 streaks per cell), jittered
+    const p = posInCell(i % totalCells);
+    s.hx = p.x; s.hy = p.y;
+    // Stagger ages so the screen starts full of streaks at various lengths
+    s.age = Math.random() * 2;
+    s.maxAge = STREAK_MIN_AGE + Math.random() * (STREAK_MAX_AGE - STREAK_MIN_AGE);
+    s.jitter = 0.85 + Math.random() * 0.3;
+    s.width = STREAK_MIN_WIDTH + Math.random() * (STREAK_MAX_WIDTH - STREAK_MIN_WIDTH);
+    for (let n = 0; n < STREAK_NODES; n++) {
+      s.nodes[n * 2] = p.x;
+      s.nodes[n * 2 + 1] = p.y;
+    }
+    streakData.push(s);
+  }
+  const vertsPerStreak = STREAK_NODES * 2;
+  const totalVerts = STREAK_COUNT * vertsPerStreak;
+  const positions = new Float32Array(totalVerts * 3);
+  const uvs = new Float32Array(totalVerts * 2);
+  const alphas = new Float32Array(totalVerts);
+  const indices = [];
+  for (let s = 0; s < STREAK_COUNT; s++) {
+    const base = s * vertsPerStreak;
+    for (let n = 0; n < STREAK_NODES; n++) {
+      const vi = base + n * 2;
+      const t = 1 - n / (STREAK_NODES - 1); // 1 = head, 0 = tail tip
+      uvs[(vi) * 2] = 0; uvs[(vi) * 2 + 1] = t;
+      uvs[(vi + 1) * 2] = 1; uvs[(vi + 1) * 2 + 1] = t;
+      if (n < STREAK_NODES - 1) {
+        const a = vi, b = vi + 1, c = vi + 2, d = vi + 3;
+        indices.push(a, b, c, b, d, c);
+      }
     }
   }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
-  geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geo.setAttribute('aAlpha', new THREE.BufferAttribute(alphas, 1).setUsage(THREE.DynamicDrawUsage));
+  geo.setIndex(indices);
 
   const vert = `
-    attribute float alpha;
-    attribute float size;
+    attribute float aAlpha;
+    varying vec2 vUv;
     varying float vAlpha;
     void main(){
-      vAlpha = alpha;
+      vUv = uv;
+      vAlpha = aAlpha;
       gl_Position = vec4(position, 1.0);
-      gl_PointSize = size;
     }
   `;
   const frag = `
+    varying vec2 vUv;
     varying float vAlpha;
     void main(){
-      vec2 c = gl_PointCoord - vec2(0.5);
-      float d = length(c);
-      if(d > 0.5) discard;
-      // Broad soft dot - no hard black border, just soft white with gentle falloff
-      float soft = 1.0 - smoothstep(0.0, 0.5, d);
-      // Slight inner core bright
-      float core = 1.0 - smoothstep(0.0, 0.28, d);
-      float a = vAlpha * soft * 0.95;
-      // Blend core highlight
-      vec3 col = vec3(1.0);
-      // Add very subtle blue tint for wind feel
-      col = mix(col, vec3(0.85, 0.92, 1.0), 0.15);
+      // Bold cartoon stroke: bright solid core with soft hand-drawn edge falloff
+      float d = abs(vUv.x - 0.5) * 2.0;
+      float edge = pow(max(1.0 - d * d, 0.0), 0.6);
+      float core = pow(max(1.0 - d * d * 4.0, 0.0), 1.0);
+      float a = vAlpha * edge;
+      if (a < 0.004) discard;
+      vec3 col = mix(vec3(1.0), vec3(0.82, 0.90, 1.0), 0.3) + core * 0.55;
       gl_FragColor = vec4(col, a);
     }
   `;
@@ -365,9 +205,68 @@ function createParticles() {
     depthWrite: false,
     depthTest: false,
     blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide, // ribbons wind either way depending on flow direction; never cull
   });
-  const points = new THREE.Points(geo, mat);
-  return { geo, mat, points };
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  return { geo, mat, mesh };
+}
+
+function toNDC(x, y) {
+  return [(x / LOGICAL_W) * 2 - 1, 1 - (y / LOGICAL_H) * 2];
+}
+
+function updateStreakGeometry() {
+  const posAttr = streakGeometry.getAttribute('position');
+  const alphaAttr = streakGeometry.getAttribute('aAlpha');
+  const pos = posAttr.array;
+  const alp = alphaAttr.array;
+  const vertsPerStreak = STREAK_NODES * 2;
+  for (let s = 0; s < streakData.length; s++) {
+    const st = streakData[s];
+    // Polyline length for stretch fade (freshly spawned streaks fade in as they stretch out)
+    let length = 0;
+    for (let n = 0; n < STREAK_NODES - 1; n++) {
+      const dx = st.nodes[n * 2] - st.nodes[(n + 1) * 2];
+      const dy = st.nodes[n * 2 + 1] - st.nodes[(n + 1) * 2 + 1];
+      length += Math.hypot(dx, dy);
+    }
+    const stretchA = Math.min(1, length / 70);
+    const ageA = Math.min(1, st.age / 0.35) * Math.min(1, (st.maxAge - st.age) / 0.6);
+    const base = s * vertsPerStreak;
+    for (let n = 0; n < STREAK_NODES; n++) {
+      const t = 1 - n / (STREAK_NODES - 1); // 1 = head, 0 = tail
+      const cx = st.nodes[n * 2];
+      const cy = st.nodes[n * 2 + 1];
+      // Tangent from neighbors (logical px)
+      const pa = Math.max(0, n - 1), pb = Math.min(STREAK_NODES - 1, n + 1);
+      let tx = st.nodes[pa * 2] - st.nodes[pb * 2];
+      let ty = st.nodes[pa * 2 + 1] - st.nodes[pb * 2 + 1];
+      let tl = Math.hypot(tx, ty);
+      if (tl < 1e-4) { tx = st.dx; ty = st.dy; tl = Math.hypot(tx, ty) || 1; }
+      const nx = -ty / tl, ny = tx / tl;
+      // Tapering cartoon profile: pointed tail, full body, softly rounded head
+      const wBody = 0.15 + 0.85 * smoothstep(0, 0.45, t);
+      const wHead = 1 - 0.45 * smoothstep(0.9, 1, t);
+      const w = st.width * wBody * wHead;
+      const ox = nx * (w / 2) / (LOGICAL_W / 2);
+      const oy = ny * (w / 2) / (LOGICAL_H / 2);
+      const [ndcX, ndcY] = toNDC(cx, cy);
+      const vi = (base + n * 2) * 3;
+      pos[vi] = ndcX - ox; pos[vi + 1] = ndcY - oy; pos[vi + 2] = 0;
+      pos[vi + 3] = ndcX + ox; pos[vi + 4] = ndcY + oy; pos[vi + 5] = 0;
+      // Along-length fade: tail tip dissolves in, head stays strong with a slight cap fade
+      const bodyA = smoothstep(0, 0.16, t) * (1 - 0.35 * smoothstep(0.88, 1, t));
+      // No lines inside placed modifier bubbles (advection still uses the base
+      // field — bubbles never bend the streaks, the ribbon just hides there)
+      const modA = isInsideAnyModifier(cx, cy) ? 0 : 1;
+      const a = STREAK_ALPHA * bodyA * ageA * stretchA * modA;
+      const ai = base + n * 2;
+      alp[ai] = a; alp[ai + 1] = a;
+    }
+  }
+  posAttr.needsUpdate = true;
+  alphaAttr.needsUpdate = true;
 }
 
 export function initWindOverlay(container) {
@@ -399,23 +298,21 @@ export function initWindOverlay(container) {
   renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.autoClear = true;
-  console.log('Wind Three.js initialized (particles with ghost trails, no streaks)', canvasEl.id, 'renderer:', !!renderer);
+  console.log('Wind Three.js initialized (Wind Waker streaks x' + STREAK_COUNT + ')', canvasEl.id, 'renderer:', !!renderer);
   scene = new THREE.Scene();
   camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
-  const { mat, geo } = createWindShader();
-  windMaterial = mat;
-  uniforms = mat.uniforms;
-  windMesh = new THREE.Mesh(geo, mat);
-  windMesh.visible = false;
-  // Do not add streak mesh - streaks removed
-  // scene.add(windMesh);
-  const p = createParticles();
-  particleGeometry = p.geo;
-  particlePoints = p.points;
-  scene.add(particlePoints);
-  // Keep trailPoints alias for compatibility
-  trailPoints = particlePoints;
-  trailGeometry = particleGeometry;
+  // Lean uniforms stub (kept for compat: uTime drives gusts, uShowWind mirrors visibility)
+  uniforms = {
+    uTime: { value: 0 },
+    uResolution: { value: new THREE.Vector2(LOGICAL_W, LOGICAL_H) },
+    uLogicalSize: { value: new THREE.Vector2(LOGICAL_W, LOGICAL_H) },
+    uShowWind: { value: 1 },
+    uWindStrength: { value: 180 },
+  };
+  const st = createStreaks();
+  streakGeometry = st.geo;
+  streakMesh = st.mesh;
+  scene.add(streakMesh);
   // Free Shot golden glow (REQ 07 §5.2 / REQ 06) — centered on ball when isFreeShotActive
   try {
     const glowCanvas = document.createElement('canvas');
@@ -551,198 +448,70 @@ export function updateWindUniforms(dt, getWindAt) {
     else if (freeShotBallActive) { freeShotTime += dt; const pulse = 1.0 + 0.15 * Math.sin(freeShotTime * 3); if (freeShotGlow) { freeShotGlow.scale.set(0.09*pulse, 0.09*pulse*(LOGICAL_W/LOGICAL_H),1); } }
     // edge glow does not need per-frame ball update
   } catch {}
-  if (!uniforms) {
-    // Still need to update particles even if uniforms not ready? Particles don't need uniforms now
-  } else {
-    uniforms.uTime.value += dt;
+  const step = Math.max(0, Math.min(0.05, Number(dt) || 0));
+  gustTime += step;
+  if (uniforms) {
+    uniforms.uTime.value = gustTime;
     uniforms.uShowWind.value = showWind ? 1 : 0;
   }
-  if (!particleData.length || !particleGeometry) return;
-  const posAttr = particleGeometry.getAttribute('position');
-  const alphaAttr = particleGeometry.getAttribute('alpha');
-  const sizeAttr = particleGeometry.getAttribute('size');
-  for (let i = 0; i < particleData.length; i++) {
-    const p = particleData[i];
-    const prevX = p.x, prevY = p.y;
+  if (!streakData.length || !streakGeometry) return;
+  // Global gust swell: heavy gusts tear through, lulls breathe — always fast
+  const gust = Math.max(0.55, 0.9 + 0.28 * Math.sin(gustTime * 1.9) + 0.12 * Math.sin(gustTime * 4.7 + 1.3));
+  // Base field only: the visualization is unaffected by placed modifier bubbles.
+  // Prefer the dedicated base sampler; fall back to the passed getWindAt.
+  const sampler = (typeof getBaseWindAt === 'function') ? getBaseWindAt : getWindAt;
+  const hasField = typeof sampler === 'function';
+  let speedSum = 0;
+  for (let i = 0; i < streakData.length; i++) {
+    const s = streakData[i];
     let wind = { x: 0, y: 0 };
     try {
-      if (typeof getWindAt === 'function') wind = getWindAt(p.x, p.y);
+      if (hasField) wind = sampler(s.hx, s.hy);
     } catch {}
-    const windSpeed = Math.hypot(wind.x, wind.y);
-    const speedNorm = Math.max(0, Math.min(1, (windSpeed - 0.35) / 1.9));
-    p.x += wind.x * PARTICLE_SPEED * dt;
-    p.y += wind.y * PARTICLE_SPEED * dt;
-    // Keep tail alive longer when moving faster: life decays slower for fast wind
-    p.life -= dt * (1.0 - speedNorm * 0.50);
-    let respawned = false;
-    if (p.life <= 0) {
-      const np = getRespawnPositionPreferInside();
-      p.x = np.x; p.y = np.y;
-      p.life = PARTICLE_LIFE;
-      respawned = true;
-      for (let t = 0; t < TRAIL_LENGTH; t++) {
-        p.trail[t].x = p.x;
-        p.trail[t].y = p.y;
-      }
+    const mag = Math.hypot(wind.x, wind.y);
+    if (mag > 1e-4) { s.dx = wind.x / mag; s.dy = wind.y / mag; }
+    const speed = Math.min(STREAK_MAX_SPEED, Math.max(STREAK_MIN_SPEED, mag * STREAK_SPEED)) * gust * s.jitter;
+    speedSum += speed;
+    s.hx += s.dx * speed * step;
+    s.hy += s.dy * speed * step;
+    s.age += step;
+    const out = s.hx < -STREAK_SPAWN_MARGIN || s.hx > LOGICAL_W + STREAK_SPAWN_MARGIN ||
+      s.hy < -STREAK_SPAWN_MARGIN || s.hy > LOGICAL_H + STREAK_SPAWN_MARGIN;
+    if (s.age >= s.maxAge || out) {
+      spawnStreak(s, getWindAt);
+      continue;
     }
-    if (!respawned && (p.x < 0 || p.x > LOGICAL_W || p.y < 0 || p.y > LOGICAL_H)) {
-      const np = getRespawnPositionPreferInside();
-      p.x = np.x; p.y = np.y;
-      p.life = PARTICLE_LIFE;
-      for (let t = 0; t < TRAIL_LENGTH; t++) {
-        p.trail[t].x = p.x;
-        p.trail[t].y = p.y;
-      }
+    // Shift history back, head at nodes[0]
+    for (let n = STREAK_NODES - 1; n > 0; n--) {
+      s.nodes[n * 2] = s.nodes[(n - 1) * 2];
+      s.nodes[n * 2 + 1] = s.nodes[(n - 1) * 2 + 1];
     }
-    // For deflector: despawn on hitting and spawn behind flip per new requirement
-    if (!respawned) {
-      const wasInsideFlip = isInsideFlip(prevX, prevY);
-      const nowInsideFlip = isInsideFlip(p.x, p.y);
-      if (!wasInsideFlip && nowInsideFlip) {
-        let hitFlip = null;
-        for (const m of currentModifiers) {
-          if (m.type === 'deflector' && Math.hypot(p.x - m.x, p.y - m.y) < (m.radius ?? 54)) { hitFlip = m; break; }
-        }
-        if (hitFlip) {
-          const r = hitFlip.radius ?? 54;
-          const dx = p.x - hitFlip.x;
-          const dy = p.y - hitFlip.y;
-          const len = Math.hypot(dx, dy) || 1;
-          const nx = dx / len;
-          const ny = dy / len;
-          const behindDist = r + 16 + Math.random() * 12;
-          let np = { x: hitFlip.x - nx * behindDist, y: hitFlip.y - ny * behindDist };
-          np.x = Math.max(2, Math.min(LOGICAL_W - 2, np.x));
-          np.y = Math.max(2, Math.min(LOGICAL_H - 2, np.y));
-          if (isInsideAnyModifier(np.x, np.y)) {
-            const fallback = getRespawnPositionPreferInside();
-            np.x = fallback.x; np.y = fallback.y;
-          }
-          p.x = np.x; p.y = np.y;
-          p.life = PARTICLE_LIFE;
-          for (let t = 0; t < TRAIL_LENGTH; t++) {
-            p.trail[t].x = p.x;
-            p.trail[t].y = p.y;
-          }
-          respawned = true;
-        }
-      }
-    }
-    // For other modifiers (amplify/nullify): do not despawn — just not draw while inside, reappear when outside
-    // Shift trail: move history back, insert current head
-    if (!respawned) {
-      for (let t = TRAIL_LENGTH - 1; t > 0; t--) {
-        p.trail[t].x = p.trail[t-1].x;
-        p.trail[t].y = p.trail[t-1].y;
-      }
-      p.trail[0].x = p.x;
-      p.trail[0].y = p.y;
-    }
-    const lifeAlpha = Math.max(0, Math.min(1, p.life / p.maxLife));
-    // Speed-dependent tail: fast wind keeps tail alive longer and thicker
-    const windSpeedForTrail = Math.hypot(wind.x, wind.y);
-    const speedNormTrail = Math.max(0, Math.min(1, (windSpeedForTrail - 0.35) / 1.9));
-    const fadeFactor = 0.78 - speedNormTrail * 0.42; // fast -> 0.36 (long), slow ->0.78 (short)
-    const sizeFadeFactor = 0.38 - speedNormTrail * 0.12; // fast tails stay thicker
-    for (let t = 0; t < TRAIL_LENGTH; t++) {
-      const idx = i * TRAIL_LENGTH + t;
-      const tp = p.trail[t];
-      const ndcX = (tp.x / LOGICAL_W) * 2 - 1;
-      const ndcY = 1 - (tp.y / LOGICAL_H) * 2;
-      posAttr.array[idx * 3 + 0] = ndcX;
-      posAttr.array[idx * 3 + 1] = ndcY;
-      // Per new requirement: do not draw particle/trail points while inside any modifier — just hide, reappear when outside
-      if (isInsideAnyModifier(tp.x, tp.y)) {
-        alphaAttr.array[idx] = 0;
-        sizeAttr.array[idx] = 0;
+    s.nodes[0] = s.hx;
+    s.nodes[1] = s.hy;
+    // Anti-knot: a streak whose head nets almost no ground over its whole
+    // trail is writhing in a sink — respawn it elsewhere instead of flooding.
+    // Real orbits/swirls travel far more than this and are unaffected.
+    if (s.age > STREAK_KNOT_MIN_AGE) {
+      const tx = s.nodes[(STREAK_NODES - 1) * 2] - s.hx;
+      const ty = s.nodes[(STREAK_NODES - 1) * 2 + 1] - s.hy;
+      if (tx * tx + ty * ty < STREAK_KNOT_DIST * STREAK_KNOT_DIST) {
+        spawnStreak(s, getWindAt);
         continue;
       }
-      const trailFade = 1.0 - (t / TRAIL_LENGTH) * fadeFactor;
-      let a = lifeAlpha * trailFade * 0.92;
-      let s = 9.0 * (1.0 - t / TRAIL_LENGTH * sizeFadeFactor);
-      alphaAttr.array[idx] = a;
-      sizeAttr.array[idx] = s;
     }
   }
-  posAttr.needsUpdate = true;
-  alphaAttr.needsUpdate = true;
-  sizeAttr.needsUpdate = true;
+  updateStreakGeometry();
+  try { lastAvgSpeed = streakData.length ? speedSum / streakData.length : 0; } catch {}
 }
 
 export function setWindUniformsFromField(components, modifiers, windStrength) {
-  // Keep JS copy for particle edge despawn checks and inside spawning (union, no double for overlap)
-  const prevCount = currentModifiers.length;
+  // Streaks sample the base field directly (getBaseWindAt): bubbles never bend
+  // them. The copy below is only for hiding ribbon nodes inside bubble areas.
+  // Signature kept for compat.
   currentModifiers = (modifiers || []).map(m => ({ ...m }));
-  // Per new requirement: do not respawn particles that are now inside modifiers — they will be hidden while inside and reappear when outside
-  // No immediate clear/seed
   if (!uniforms) return;
   try {
     if (windStrength != null) uniforms.uWindStrength.value = windStrength;
-    const src = components?.sources || [];
-    uniforms.uSourceCount.value = Math.min(src.length, MAX_SOURCES);
-    for (let i = 0; i < MAX_SOURCES; i++) {
-      if (i < src.length) {
-        uniforms.uSourcePos.value[i].set(src[i].x, src[i].y);
-        uniforms.uSourceStr.value[i] = src[i].s ?? src[i].strength ?? 1;
-      } else {
-        uniforms.uSourcePos.value[i].set(0, 0);
-        uniforms.uSourceStr.value[i] = 0;
-      }
-    }
-    const sink = components?.sinks || [];
-    uniforms.uSinkCount.value = Math.min(sink.length, MAX_SINKS);
-    for (let i = 0; i < MAX_SINKS; i++) {
-      if (i < sink.length) {
-        uniforms.uSinkPos.value[i].set(sink[i].x, sink[i].y);
-        uniforms.uSinkStr.value[i] = sink[i].s ?? sink[i].strength ?? 1;
-      } else {
-        uniforms.uSinkPos.value[i].set(0, 0);
-        uniforms.uSinkStr.value[i] = 0;
-      }
-    }
-    const vort = components?.vortices || components?.vortexes || [];
-    uniforms.uVortexCount.value = Math.min(vort.length, MAX_VORTICES);
-    for (let i = 0; i < MAX_VORTICES; i++) {
-      if (i < vort.length) {
-        uniforms.uVortexPos.value[i].set(vort[i].x, vort[i].y);
-        uniforms.uVortexStr.value[i] = vort[i].g ?? vort[i].strength ?? 0;
-      } else {
-        uniforms.uVortexPos.value[i].set(0, 0);
-        uniforms.uVortexStr.value[i] = 0;
-      }
-    }
-    const doub = components?.doublets || [];
-    uniforms.uDoubletCount.value = Math.min(doub.length, MAX_DOUBLETS);
-    for (let i = 0; i < MAX_DOUBLETS; i++) {
-      if (i < doub.length) {
-        uniforms.uDoubletPos.value[i].set(doub[i].x, doub[i].y);
-        uniforms.uDoubletMu.value[i] = doub[i].mu ?? 1;
-        uniforms.uDoubletTheta.value[i] = doub[i].theta ?? 0;
-      } else {
-        uniforms.uDoubletPos.value[i].set(0, 0);
-        uniforms.uDoubletMu.value[i] = 0;
-        uniforms.uDoubletTheta.value[i] = 0;
-      }
-    }
-    const mods = modifiers || [];
-    uniforms.uModifierCount.value = Math.min(mods.length, MAX_MODIFIERS);
-    for (let i = 0; i < MAX_MODIFIERS; i++) {
-      if (i < mods.length) {
-        const m = mods[i];
-        uniforms.uModifierPos.value[i].set(m.x, m.y);
-        uniforms.uModifierRadius.value[i] = m.radius ?? 54;
-        let t = 0;
-        if (m.type === 'liquifier' || m.type === 'nullify') t = 1;
-        else if (m.type === 'deflector' || m.type === 'flip') t = 2;
-        else if (m.type === 'rotator' || m.type === 'rotate') t = 3;
-        else t = 0; // magnifier/amplify
-        uniforms.uModifierType.value[i] = t;
-      } else {
-        uniforms.uModifierPos.value[i].set(0, 0);
-        uniforms.uModifierRadius.value[i] = 0;
-        uniforms.uModifierType.value[i] = 0;
-      }
-    }
   } catch (e) {}
 }
 
@@ -751,8 +520,7 @@ export function setWindVisible(v) {
   if (uniforms) uniforms.uShowWind.value = showWind ? 1 : 0;
   // keep canvasEl displayed even when wind hidden if freeShot edge glow is active (edge must remain)
   if (canvasEl) canvasEl.style.display = (showWind || freeShotEdgeActive || freeShotBallActive) ? 'block' : 'none';
-  if (particlePoints) particlePoints.visible = showWind;
-  if (windMesh) windMesh.visible = false;
+  if (streakMesh) streakMesh.visible = showWind;
   if (freeShotGlow) freeShotGlow.visible = !!freeShotBallActive;
   if (freeShotEdgeEl) freeShotEdgeEl.style.opacity = freeShotEdgeActive ? '1' : '0';
 }
@@ -769,8 +537,25 @@ export function renderWind() {
 export function getWindUniforms() { return uniforms; }
 export function getWindRenderer() { return renderer; }
 export function getWindCanvas() { return canvasEl; }
+let lastAvgSpeed = 0;
+export function getWindStreakStats() {
+  if (!streakData.length || !streakGeometry) return null;
+  const alp = streakGeometry.getAttribute('aAlpha').array;
+  let vis = 0, sum = 0;
+  for (let i = 0; i < alp.length; i++) { sum += alp[i]; if (alp[i] > 0.05) vis++; }
+  let fieldProbe = null;
+  try {
+    const pts = [[640, 360], [200, 600], [1100, 100]];
+    fieldProbe = pts.map(([x, y]) => {
+      const w = getBaseWindAt(x, y);
+      return { x, y, wx: +w.x.toFixed(3), wy: +w.y.toFixed(3) };
+    });
+  } catch (e) { fieldProbe = 'probe-failed:' + String(e && e.message || e); }
+  return { streaks: streakData.length, verts: alp.length, visibleVerts: vis, avgAlpha: sum / alp.length, avgSpeed: lastAvgSpeed, gustTime, showWind, meshVisible: !!(streakMesh && streakMesh.visible), canvasDisplay: canvasEl ? canvasEl.style.display : 'no-canvas', fieldProbe };
+}
 
 if (typeof window !== 'undefined') {
   window.__windUniforms = () => uniforms;
   window.__windRenderer = () => renderer;
+  window.__windStreakStats = () => { try { return getWindStreakStats(); } catch { return null; } };
 }

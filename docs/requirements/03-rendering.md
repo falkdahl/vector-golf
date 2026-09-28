@@ -19,7 +19,7 @@
 
   Note: HUD was previously canvas-drawn `drawHUD` on `fgCtx`; it is now HTML. `drawHUD` is deprecated and shall not be called from `render()`.
 
-- **Top `windRenderer` (`#wind-canvas`, `z-index:3`, transparent, `pointer-events:none`)** — Three.js ghost trails + particles + **Free Shot golden glow** over ball (see `06-wind-system.md` §2 & §7.2), `renderer.setClearColor(0x000000,0)` and own per-frame clear, above game but below HTML overlays (`#hotbar` z5, `#reward-overlay` z10, other overlays z10-12).
+- **Top `windRenderer` (`#wind-canvas`, `z-index:3`, transparent, `pointer-events:none`)** — Three.js wind streaks + **Free Shot golden glow** over ball (see `06-wind-system.md` §2 & §7.2), `renderer.setClearColor(0x000000,0)` and own per-frame clear, above game but below HTML overlays (`#hotbar` z5, `#reward-overlay` z10, other overlays z10-12).
 
 - API: `render(bgCtx, fgCtx, W, H)` plus `windRenderer.render()`; `drawBackground(bgCtx,W,H,mode)` with `mode ∈ {'terrain','splash'}`.
 
@@ -77,7 +77,7 @@ This section defines **rendering** only; state is canonical in `05-input-and-sta
 
 - [ ] Bottom canvas zones use palette within ±8 per channel; order `OB→Rough→Fairway→Green→Water`; trees on top canvas; hole black circle.
 - [ ] Level mode draws zoned terrain; main-menu mode shows splash aspect-covered and per `08-rewards-and-progression.md` backdrop rules.
-- [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→softlock) → wind (particles/trails) → HTML HUD (`#hud` 28px strip) → HTML overlays` (`#reward-overlay` dim `rgba(0,0,0,0.55)` with HTML buttons above canvas, `#hud` `Hole:/Attempts Left:/Total` as HTML, treasure above trees, below ball, softlock in middle, a bit higher than center). Reward menu is **HTML** `#reward-overlay` layered above canvas, not canvas `drawRewardMenu`; no icon gradient background behind reward icons.
+- [ ] Draw order is `bg (zones/splash) → game (obstacles→hole→treasure→ball→aim→modifiers→forceBar→softlock) → wind (streaks) → HTML HUD (`#hud` 28px strip) → HTML overlays` (`#reward-overlay` dim `rgba(0,0,0,0.55)` with HTML buttons above canvas, `#hud` `Hole:/Attempts Left:/Total` as HTML, treasure above trees, below ball, softlock in middle, a bit higher than center). Reward menu is **HTML** `#reward-overlay` layered above canvas, not canvas `drawRewardMenu`; no icon gradient background behind reward icons.
 - [ ] HUD is **HTML** `#hud` with `#hud-hole`/`#hud-attempts`/`#hud-total` on top of canvas (not canvas `drawHUD`), `28px` `rgba(0,0,0,0.25)` strip, `14px` white stroke `3px`, visible without scroll, `Attempts Left: X` vs `Attempts Left: X (+Y)` correct; force bar remains canvas under ball when `CHARGING`.
 - [ ] Treasure: one per hole near a tree (`level.treasure`, radius `12±2`, gold `#D4AF37`/`#FFD700`), visible on `fgCtx` when `!isCollected`, hidden after hit, never at `0,0` or overlapping tree, on `fairway`/`rough`, and `drawTreasure` called each frame.
 - [ ] Softlock banner: when confined `<75px` over `6s` after `8s` flight, shows `Stuck? Press R…pause menu` non-blocking in middle of screen, a bit higher than center, keeps shot moving, removed on hole completed or reset; on last attempt shows exactly `Stuck on last attempt? End Run in pause menu (Escape)` variant (contains `last attempt`, `End Run`, `Escape`, no `Press R`), pause `Next Attempt` hidden.

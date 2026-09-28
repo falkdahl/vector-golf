@@ -78,16 +78,17 @@ Defaults (counts omitted): `seed=42, nSources=1, nSinks=1, nDoublets=1, nVortexe
 
 - Bit-identical for same `seed+counts+cols+rows+width+height`. Different seed/counts yield `>15%` vector diff. No third-party noise library; inline PRNG.
 
-## 2. Wind Visualization — Three.js Particles with Ghost Trails
+## 2. Wind Visualization — Three.js Wind Waker Streaks
 
 - **Overlay** `#wind-canvas` transparent `THREE.WebGLRenderer` with `alpha:true, antialias:true, premultipliedAlpha:false, setClearColor(0x000000,0)`, `position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3` below HTML overlays.
-- **Particles only:** `PARTICLE_COUNT=60-80` (default `70`), spawned uniformly `[0,W]×[0,H]`, advected by `getWindAt(pos)` including live modifiers, `particleSpeed ~40-60`. OOB or life expiration triggers uniform-random respawn (no wrap, no clumping).
-  - Lifetime `maxLife=3.5-5.0` (default `4.5`), `alpha=life/maxLife`.
-  - **Ghost trails:** fade quad `renderer.autoClear=false` + full-screen `MeshBasicMaterial(0x000000, opacity 0.06-0.12)` or trail geometry `Line` with last `6-10` positions per-vertex `head 0.9→tail 0.0`, ribbons `4-8px` `rgba(255,255,255,0.55-0.85)` additive; head `6-9px` white.
-  - **Modifier-aware:** inside `magnifier` ~5× faster/longer, inside `liquifier` stall, inside `deflector` reverse 5× faster, inside `rotator` 90° CCW 5× faster (stacked `rotator`/`deflector` deduped to one 5×, further amplified by `magnifier`; legacy names amplify/nullify/flip/rotate map accordingly).
+- **Streaks only (Wind Waker aesthetic):** `STREAK_COUNT=48` thin elegant curved streaks covering the whole map, heads advected by the **base** field via `getBaseWindAt` (`src/vectorField.js`, bilinear grid sample without modifiers — placed bubbles never bend the visualization, and no ribbon is drawn inside bubble areas) at `STREAK_SPEED=260 px/s` per unit wind magnitude (`~115-390 px/s` typical, clamped `70-550`) with a global gust swell (`~0.55-1.3×`) plus per-streak jitter — fast, heavy gusts tearing across the screen. OOB, age (`2.5-4.5s`), or sink-knot expiration triggers respawn (no wrap, no clumping).
+  - **Even spread:** initial streaks are dealt round-robin across an `8×5` spread grid; every respawn goes to the emptiest of 6 random candidate cells, so coverage re-balances instead of flooding sinks / starving sources. Streaks whose head nets `<24px` over its whole trail (`STREAK_KNOT_DIST`, after `1.2s`) are respawned — tight sink-knots die while real orbits and swirls (far more travel) survive.
+  - Each streak is a camera-facing ribbon of `STREAK_NODES=24` history points (`~2k` triangles total): thin tapering cartoon width profile (`4-7px`, pointed tail, full body, rounded head) with per-vertex alpha (tail dissolves in, head stays strong, age fade in/out, stretch fade while un-coiling).
+  - **Hand-drawn look:** custom `ShaderMaterial` (`AdditiveBlending`, near-white with bright core boost) with soft graphic edge falloff across the stroke plus end fades along its length — outstanding against any terrain, smooth continuous lines, no dots, no vector grid.
+  - **Modifier-independent:** streaks show the base field only (sources, sinks, vortices, doublets); `magnifier`/`liquifier`/`deflector`/`rotator` bubbles neither bend streaks nor get streaks drawn inside them (ribbon nodes inside bubbles are hidden, spawns avoid bubbles).
 - **Free Shot glow + edge glow** (see §5.2): ball glow only while `isFreeShotActive===true` (armed before launch) and removed immediately after launch; edge glow while `isFreeShotActive` OR `freeShotFlightActive`. Three.js golden glow `0xf1c40f`/`0xFFD700` `14-22px` `AdditiveBlending`, pulsation `1.0+0.15*sin(time*3)`, plus DOM `div#free-shot-edge-glow` border+shadow when edge active. Exports `setFreeShotActive`/`setFreeShotBallActive`/`setFreeShotEdgeActive`/`updateFreeShotGlow`.
 - **Feeding:** `getWindAt` is source of truth; `updateWind(dt, getWindAt)` before `render()`; `syncModifiersToField()` next-frame.
-- **Performance & toggle:** ≥55fps at `1280×720` with 70 particles. `H` toggles particles+trails visibility (no physics impact); glow should remain visible when wind hidden. Resize updates `setPixelRatio`/`uResolution`/camera.
+- **Performance & toggle:** ≥55fps at `1280×720` with 48 streaks (`~2k` triangles, 48 field samples/frame). `H` toggles streak visibility (no physics impact); glow should remain visible when wind hidden. Resize updates `setPixelRatio`/`uResolution`/camera.
 
 ## 3. Modifiers — Model & Constants
 
@@ -163,7 +164,7 @@ Defaults (counts omitted): `seed=42, nSources=1, nSinks=1, nDoublets=1, nVortexe
 - **Rotator (`90° CCW` + `5×`, formerly Rotate, scaled by Power Cell):** `wind = rotate90CCW(wind)* effectiveBase` where `rotate90CCW(x,y)=(-y,x)`. Deduped with `deflector`: any `rotator`+`deflector` together give one `effectiveBase`; angle stacks `rotatorCount*90° + deflectorCount*180°` modulo 360°, magnitude stays `effectiveBase` once. Explicit `magnifier` further amplifies: `magnifier+rotator→25×*powerMultiplier 90° CCW`, `2×magnifier+rotator+deflector→125×*powerMultiplier 270° CCW`. Liquifier still dominates.
 - **Normative formula:** `BASE_STRENGTH=5`, `powerMultiplier=1+0.15*powerCellCount`, `magnifierCount=|{m:inside∧magnifier}|`, `deflectorCount=|{m:inside∧deflector}|`, `rotatorCount=|{m:inside∧rotator}|`, `hasRotDef=(deflectorCount+rotatorCount)>0`, `totalFactor=(5**(magnifierCount+(hasRotDef?1:0))) * (hasRotDef||magnifierCount>0 ? powerMultiplier : 1)`, `totalQuarterTurns=(rotatorCount+2*deflectorCount)%4`, `wind=(base*totalFactor) rotated Q*90° CCW`. Liquifier first. Circular area `dist<effectiveRadius` (`effectiveRadius = BASE_MODIFIER_RADIUS * (1+0.15*fieldExtenderCount)`). With `powerCellCount=0` reduces to legacy `5**n`.
 
-Visualization on `game` canvas: `magnifier` orange `rgba(230,126,34,0.25)`, `liquifier` blue dashed, `deflector` purple `rgba(155,89,182,0.25)`, `rotator` red `rgba(231,76,60,0.25)` — solid or segmented (stacked) edge in type color, no center icons; centers stay clear for wind arrows. Dragged 60% opacity. Trails inside modifiers show `5×` speed (deflector reversed, rotator 90° CCW), liquifier stalls.
+Visualization on `game` canvas: `magnifier` orange `rgba(230,126,34,0.25)`, `liquifier` blue dashed, `deflector` purple `rgba(155,89,182,0.25)`, `rotator` red `rgba(231,76,60,0.25)` — solid or segmented (stacked) edge in type color, no center icons; centers stay clear for wind arrows. Dragged 60% opacity. Wind streaks show the base field and are unaffected by modifiers.
 
 ### 7.3 Ball-Enter Flash (area-of-effect feedback)
 
@@ -200,12 +201,12 @@ Visualization on `game` canvas: `magnifier` orange `rgba(230,126,34,0.25)`, `liq
 - [ ] Free Shot: ball glow only while armed before launch, edge glow while armed OR free flight; free launch does not increment attempts but decrements `freeShot` once and persists while supply remains; auto-arm at `<=1` when `supply.freeShot>0`.
 - [ ] Placement immediately consumes: placing `Magnifier` (or Liquifier/Deflector/Rotator) with `supply 1` → `supply 0` and `modifiers` length `1`; picking it up via right-click/`Delete` → `supply 0→1` and cleared; placing then winning → `modifiers` cleared without extra decrement (already `0`), removed-before-win refunded so not consumed; `freeShot` not consumed on win.
 - [ ] `createField` signature requires seed+four counts, coerced outside/inside placement verified for 100 seeds (sources `20-60` outside, sinks `60-100` middle-third top/bottom, vortexes/doublets `≥20` inside, ≥1 vortex|doublet except hole-1).
- - [ ] `getWindAt` bilinear correct, min force `≥60` effective, varying strength max≥1.1×min; DOM three layers stacked wind transparent; particles `60-80` modifier-aware; deterministic.
+ - [ ] `getWindAt` bilinear correct, min force `≥60` effective, varying strength max≥1.1×min; DOM three layers stacked wind transparent; streaks (`48`, thin tapered ribbons with bright core) cover the whole map advected by the **base** field (`getBaseWindAt`, unaffected by placed modifiers), sweeping calmly (`~115-390 px/s` typical); deterministic field.
  - [ ] Ball-enter flash: ball freshly entering a modifier area sets `m.flashAt` (outside→inside, `ballInsideModifierIds` reset on launch/`loadLevel`); `drawModifiers(ctx, modifiers, nowMs)` renders a quick white flash + expanding ring while `nowMs - flashAt < MODIFIER_FLASH_MS=350ms` (stacked groups flash on any member entry).
 
 ## File Paths
 
-- `src/vectorField.js:1` (`MODIFIER_RADIUS` base, `getWindAt`, `setModifiers`, `createField`, `WIND_STRENGTH`)
+- `src/vectorField.js:1` (`MODIFIER_RADIUS` base, `getWindAt`, `getBaseWindAt` (modifier-free sample for streaks), `setModifiers`, `createField`, `WIND_STRENGTH`)
 - `src/windThree.js:1` (`initWindOverlay`, `updateWind`, `renderWind`, `setWindVisible`, gold glow)
 - `src/main.js:1` (`supply`, `modifiers`, `selectedModifier`, `canPlace`, `placeModifier`, `handleLaunch` free-shot, `getEffectiveModifierRadius`, hotbar toggle)
 - `src/input.js:1` (keys `1`/`2`/`3`/`4` spatial)

@@ -5363,7 +5363,7 @@ function update(dt) {
   // sync so the skip button never leaks into gameplay).
   try { syncBanterSkipButton(); } catch {}
   // REQ-004: wind shader + particles advance even when menu is blocking ball physics
-  const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch {}; try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
+  const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch (e) { try { if (!window.__windLastError) window.__windLastError = String((e && e.stack) || e); } catch {} } try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
   // REQ-021: when reward menu visible, block aiming/charging but still animate wind
   if (rewardMenuVisible) {
     // Still allow wind animation, but block ball physics and charging transition
