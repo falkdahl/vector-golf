@@ -1,7 +1,7 @@
 import { LEVEL, LEVELS, generateLevels } from "./levels.js";
 import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, setPowerCellCount as setFieldPowerCellCount, getPowerCellCount as getFieldPowerCellCount, BASE_STRENGTH } from "./vectorField.js";
 import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING, isBallAirborne, drawnBallCircle, groundPosFromDrawn } from "./physics.js";
-import { checkObstacleCollision, checkDrawnObstacleCollision, isOutOfBounds, checkWaterCollision, checkTerrainCollision, checkTreasureHit, collectTreasure } from "./obstacles.js";
+import { checkObstacleCollision, checkDrawnObstacleCollision, checkDrawnTreasureHit, isOutOfBounds, checkWaterCollision, checkTerrainCollision, checkTreasureHit, collectTreasure } from "./obstacles.js";
 import { terrainZoneAt } from "./terrain.js";
 import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
 import {
@@ -5488,11 +5488,11 @@ function update(dt) {
   if (gameState === "AIMING" || gameState === "CHARGING") {
     updateForceBar();
     // Treasure hit check also in AIMING/CHARGING (for drift or if treasure somehow at tee) — supports 3 chests on hole3.
-    // Grounded only: an airborne ball flies over chests (z-gated like trees/water).
-    if (level && !rewardMenuVisible && !isBallAirborne(ball)) {
+    // Drawn-vs-drawn: low bounce arcs still pick up, high flight passes over.
+    if (level && !rewardMenuVisible) {
       try {
         for (const tr of getUncollectedTreasures(level)) {
-          if (checkTreasureHit(ball.pos, BALL_RADIUS, tr)) {
+          if (checkDrawnTreasureHit(ball, tr)) {
             collectTreasure(tr);
             // Keep single treasure pointer in sync for backward compat (repoint only,
             // never mutate isCollected — mutating via level.treasure would un-collect
@@ -5534,11 +5534,11 @@ function update(dt) {
     // Game Over will be checked only when starting the next attempt (handleLaunch entry) or on reroll
 
     // Treasure hit (supports 3 chests on hole3) - non-fatal, shows reward immediately (even mid-flight).
-    // Grounded only: an airborne ball flies over chests instead of collecting them.
-    if (level && !rewardMenuVisible && !isBallAirborne(ball)) {
+    // Drawn-vs-drawn: low bounce arcs still pick up, only high flight passes over.
+    if (level && !rewardMenuVisible) {
       try {
         for (const tr of getUncollectedTreasures(level)) {
-          if (checkTreasureHit(ball.pos, BALL_RADIUS, tr)) {
+          if (checkDrawnTreasureHit(ball, tr)) {
             collectTreasure(tr);
             // Keep single treasure pointer in sync for backward compat (repoint only,
             // never mutate isCollected — see AIMING branch above).
@@ -5573,8 +5573,8 @@ function update(dt) {
     }catch{}
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
     // Water/OB terrain are fatal even with bouncy (hazard spec). Trees bounce
-    // drawn-vs-drawn at any height; chests and water are flown over while airborne.
-    // Airborne (z > AIRBORNE_Z) skips water + chests so those match the drawn ball.
+    // drawn-vs-drawn at any height; chests pick up drawn-vs-drawn; water is
+    // flown over while airborne (z > AIRBORNE_Z).
     const isAirborneOverWater = isBallAirborne(ball);
     let terrainHit = checkTerrainCollision(ball.pos, BALL_RADIUS, level);
     let waterHit = checkWaterCollision(ball.pos, BALL_RADIUS, level.waterHazards);

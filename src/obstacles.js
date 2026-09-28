@@ -126,10 +126,25 @@ export function checkTerrainCollision(ballPos, ballRadius, level) {
 }
 
 export function checkTreasureHit(ballPos, ballRadius, treasure) {
+  // Legacy ground-projection test (shadow space). Kept for compat; gameplay
+  // pickup uses checkDrawnTreasureHit() below (drawn-vs-drawn).
   if (!treasure || treasure.isCollected) return false;
   const dx = ballPos.x - treasure.x;
   const dy = ballPos.y - treasure.y;
   const rad = (treasure.radius || 12) + ballRadius;
+  return dx*dx + dy*dy < rad*rad;
+}
+
+// Pickup test in drawn space: the ball AS DRAWN (lifted by z, grown radius)
+// against the chest AS DRAWN (circle at treasure.x/y with treasure.radius,
+// covering the chest body + lid). Low bounce arcs still pick up; only high
+// flight passes over.
+export function checkDrawnTreasureHit(ball, treasure) {
+  if (!treasure || treasure.isCollected) return false;
+  const c = drawnBallCircle(ball);
+  const dx = c.x - treasure.x;
+  const dy = c.y - treasure.y;
+  const rad = (treasure.radius || 12) + c.r;
   return dx*dx + dy*dy < rad*rad;
 }
 export function collectTreasure(treasure) {

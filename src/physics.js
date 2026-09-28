@@ -13,10 +13,9 @@ export const GRAVITY = 1100; // px/s^2 vertical
 export const VERTICAL_BOUNCE_DAMPING = 0.48; // ground bounce retains ~48% vertical speed
 export const AIRBOUNCE_MIN_VZ = 32; // below this, settle to ground
 
-// Height above which the ball is considered airborne: it flies over chests
-// and water (ground collisions use the shadow/ground projection, so the
-// drawn lift never triggers a visually-offset hit). Same threshold everywhere.
-// Trees are NOT gated: they collide drawn-vs-drawn at any height (see obstacles.js).
+// Height above which the ball is considered airborne: it flies over water.
+// Chests and trees are NOT height-gated: they collide drawn-vs-drawn at any
+// height (see obstacles.js), so low bounce arcs still pick up / bounce.
 export const AIRBORNE_Z = 5;
 export function isBallAirborne(ballOrZ) {
   const z = (ballOrZ !== null && typeof ballOrZ === 'object') ? (ballOrZ.z ?? 0) : ballOrZ;

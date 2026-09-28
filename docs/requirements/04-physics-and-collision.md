@@ -9,7 +9,7 @@
 
 - State `ball = { pos:{x,y}, vel:{x,y}, radius:6, mass:1, isMoving:boolean }` in `src/physics.js`; start at `tee` per `LEVELS[currentHoleIndex].tee`.
 - Constants at top of `src/physics.js:5`: `BALL_RADIUS=6`, `FRICTION=0.35` (low so wind dominates), `MAX_POWER=600`, `MIN_POWER=50`, `MAX_CHARGE_TIME=1.5` (see `05-input-and-states.md`), `BOUNCE_DAMPING=0.7` (or `0.8`; document), `GRAVITY=0`.
-- Airborne threshold `AIRBORNE_Z=5` with helper `isBallAirborne(ball)` (`(ball.z ?? 0) > AIRBORNE_Z`) in `src/physics.js`. While airborne the ball flies over chests and water. Trees are NOT height-gated: they bounce drawn-vs-drawn (see §5), so a bounce fires exactly where the visuals touch.
+- Airborne threshold `AIRBORNE_Z=5` with helper `isBallAirborne(ball)` (`(ball.z ?? 0) > AIRBORNE_Z`) in `src/physics.js`. While airborne the ball flies over water. Chests and trees are NOT height-gated: they hit drawn-vs-drawn (see §5), so low bounce arcs still pick up / bounce and only high flight passes over.
 - Drawn-ball geometry `drawnBallCircle(ball)` (`{x: pos.x, y: pos.y - z*BALL_LIFT_FACTOR, r: radius + z*BALL_GROWTH_FACTOR}`, `BALL_LIFT_FACTOR=0.55`, `BALL_GROWTH_FACTOR=0.025`) and `groundPosFromDrawn()` in `src/physics.js` are the single source of truth shared by `render.js:drawBall` and tree collision in `src/obstacles.js`.
 
 ## 2. Per-Tick Update `updateBall(dt)` (dt in seconds, fixed `1/60`)
@@ -32,9 +32,9 @@ Order per tick:
 - **Water hazards**: either `{x,y,w,h}` or `{x,y,r}`, blue per `03-rendering.md`, generated per `07-level-generation.md`; entering water is fatal like a tree.
 - **Terrain OB** (`terrainZoneAt(pos)==='ob'`) is fatal; hitting gray OB zone triggers same reset as canvas edge unless bounced via §5 (see `07-level-generation.md`).
 
-- Collision helpers in `src/obstacles.js` / `src/physics.js`: `checkObstacleCollision(ballPos, ballRadius, obstacles)` (legacy ground-projection test, kept for compat), `checkDrawnObstacleCollision(ball, obstacles)` (drawn ball vs drawn canopy/trunk, used for the bounce), `isInWater(ballPos, waterHazards)`, `isOutOfBoundsTerrain(terrainZoneAt)` (or `isOutOfBounds(pos,radius,W,H)` for canvas edge), `checkTreasureHit(ballPos, ballRadius, treasure)` and `collectTreasure(level)` (`hypot(ball-treasure) < BALL_RADIUS + treasure.radius && !treasure.isCollected`). Chest/water airborne gating (`isBallAirborne`) happens at the call site in `src/main.js`; trees are never height-gated.
+- Collision helpers in `src/obstacles.js` / `src/physics.js`: `checkObstacleCollision(ballPos, ballRadius, obstacles)` (legacy ground-projection test, kept for compat), `checkDrawnObstacleCollision(ball, obstacles)` (drawn ball vs drawn canopy/trunk, used for the bounce), `checkDrawnTreasureHit(ball, treasure)` (drawn ball vs chest circle, used for pickup; `checkTreasureHit` legacy kept for compat), `isInWater(ballPos, waterHazards)`, `isOutOfBoundsTerrain(terrainZoneAt)` (or `isOutOfBounds(pos,radius,W,H)` for canvas edge), and `collectTreasure(level)` (`hypot(ball-treasure) < BALL_RADIUS + treasure.radius && !treasure.isCollected`). Water airborne gating (`isBallAirborne`) happens at the call site in `src/main.js`; trees and chests are never height-gated.
 - Tunneling guard: max step `~10px` at `600 px/s`; ensure obstacles ≥16px thick; optional swept test.
-- **Treasure** (`level.treasure`, one per hole near tree, see `07-level-generation.md` §4 and `08-rewards-and-progression.md` §3): hit is **non-fatal, non-bouncing**; does not affect `vel`/`pos`; on hit set `isCollected=true`, hide, set `rewardPending=true` and call `maybeShowRewardMenu()`. Checked every tick like win, before bounce, after win check; does not count as attempt. **Grounded only**: while airborne (`isBallAirborne(ball)`, `z > AIRBORNE_Z`) the ball flies over chests — no collection.
+- **Treasure** (`level.treasure`, one per hole near tree, see `07-level-generation.md` §4 and `08-rewards-and-progression.md` §3): hit is **non-fatal, non-bouncing**; does not affect `vel`/`pos`; on hit set `isCollected=true`, hide, set `rewardPending=true` and call `maybeShowRewardMenu()`. Checked every tick like win, before bounce, after win check; does not count as attempt. **Drawn-vs-drawn** (`checkDrawnTreasureHit`: drawn ball circle vs chest circle at any height) — low bounce arcs still pick up, only high flight passes over.
 
 ## 4. Out-of-Bounds & Edge
 
@@ -62,7 +62,7 @@ Order per tick:
 ## 6. Treasure & Rendering
 
 - Ball as filled white circle `r=6`, black stroke, subtle shadow in `src/render.js:drawBall`.
-- Treasure as gold chest/star `r 10-14` (see `03-rendering.md` §5): `drawTreasure(ctx, treasure)` draws when `!isCollected`; hit test `checkTreasureHit` is circle-vs-circle, checked every tick (including slow drift) like win **while grounded only** (`!isBallAirborne`), does not bounce/kill, only collects.
+- Treasure as gold chest/star `r 10-14` (see `03-rendering.md` §5): `drawTreasure(ctx, treasure)` draws when `!isCollected`; hit test `checkDrawnTreasureHit` is drawn-circle-vs-chest-circle, checked every tick (including slow drift and low bounce arcs) like win, does not bounce/kill, only collects.
 
 ## Acceptance Criteria
 
@@ -71,8 +71,8 @@ Order per tick:
 - [ ] Edge grazing (`dist==radius+0.1`) no false positive; `+1px` overlap triggers bounce (tree) or reset (water/OB/edge); treasure edge `dist==BALL_RADIUS+treasure.radius+0.1` no hit, `+1px` collects.
 - [ ] `liquifier` (legacy `nullify`) preserves entry velocity (±5% over 0.5s inside, see `06-wind-system.md` §7).
 - [ ] Tree touch bounces at any height (drawn ball circle vs drawn canopy/trunk, position re-clamped in drawn space via `groundPosFromDrawn`, velocity reflected with `BOUNCE_DAMPING=0.7`, remains `FLYING`); no limit. Grounded edge grazing (`dist==radius+0.1` in drawn space) no false positive; `+1px` overlap bounces. Water hit while airborne (`z>AIRBORNE_Z`) does not trigger death; same spot with `z=0` does.
-- [ ] Treasure: one per hole near tree, `hypot(ball-treasure) < BALL_RADIUS+12` collects **only while grounded** (`z ≤ AIRBORNE_Z`; airborne overlap does not collect), sets `isCollected=true` and queues reward menu; second hit no-op; does not affect `holeAttempts`.
+- [ ] Treasure: one per hole near tree, drawn ball within `treasure.radius + drawnR` collects at any height (low bounce arcs pick up, only high flight passes over), sets `isCollected=true` and queues reward menu; second hit no-op; does not affect `holeAttempts`.
 
 ## File Paths
 
-- `src/physics.js:1` (`AIRBORNE_Z`, `isBallAirborne`, `drawnBallCircle`, `groundPosFromDrawn`), `src/obstacles.js:1` (`checkTreasureHit`, `collectTreasure`, `checkDrawnObstacleCollision`, `treeDrawnShapes`), `src/render.js:80` (`drawBall`/`drawObstacles`/`drawHole`/`drawTreasure`), `src/levels.js:1` (`treasure` per hole)
+- `src/physics.js:1` (`AIRBORNE_Z`, `isBallAirborne`, `drawnBallCircle`, `groundPosFromDrawn`), `src/obstacles.js:1` (`checkDrawnTreasureHit`, `collectTreasure`, `checkDrawnObstacleCollision`, `treeDrawnShapes`), `src/render.js:80` (`drawBall`/`drawObstacles`/`drawHole`/`drawTreasure`), `src/levels.js:1` (`treasure` per hole)
