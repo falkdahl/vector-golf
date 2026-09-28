@@ -13,6 +13,32 @@ export const GRAVITY = 1100; // px/s^2 vertical
 export const VERTICAL_BOUNCE_DAMPING = 0.48; // ground bounce retains ~48% vertical speed
 export const AIRBOUNCE_MIN_VZ = 32; // below this, settle to ground
 
+// Height above which the ball is considered airborne: it flies over chests
+// and water (ground collisions use the shadow/ground projection, so the
+// drawn lift never triggers a visually-offset hit). Same threshold everywhere.
+// Trees are NOT gated: they collide drawn-vs-drawn at any height (see obstacles.js).
+export const AIRBORNE_Z = 5;
+export function isBallAirborne(ballOrZ) {
+  const z = (ballOrZ !== null && typeof ballOrZ === 'object') ? (ballOrZ.z ?? 0) : ballOrZ;
+  return (z ?? 0) > AIRBORNE_Z;
+}
+
+// Drawn-ball geometry — single source of truth for where the ball appears on
+// the canvas (mirrored by render.js drawBall). Collision uses this so a bounce
+// happens exactly when the drawn ball touches the drawn tree.
+export const BALL_LIFT_FACTOR = 0.55; // drawn y offset per z
+export const BALL_GROWTH_FACTOR = 0.025; // drawn radius growth per z
+export function drawnBallCircle(b) {
+  const z = b?.z ?? 0;
+  const r = b?.radius ?? BALL_RADIUS;
+  const pos = b?.pos ?? { x: 0, y: 0 };
+  return { x: pos.x, y: pos.y - z * BALL_LIFT_FACTOR, r: r + z * BALL_GROWTH_FACTOR };
+}
+// Convert a drawn-space position back to the ground projection (shadow).
+export function groundPosFromDrawn(drawnX, drawnY, z) {
+  return { x: drawnX, y: drawnY + (z ?? 0) * BALL_LIFT_FACTOR };
+}
+
 export const MAX_CHARGE_TIME = 1.5; // seconds
 export const MAX_POWER = 600; // px/s
 export const MIN_POWER = 50;
@@ -88,7 +114,7 @@ export function updateBall(dt, getWindAt, windStrength, canvasW, canvasH) {
   if (isInsideLiquifier(ball.pos.x, ball.pos.y)) {
     ball.pos.x += ball.vel.x * dt;
     ball.pos.y += ball.vel.y * dt;
-    return { status: "moving", z: ball.z, vz: ball.vz, isAirborne: ball.z > 0.5 };
+    return { status: "moving", z: ball.z, vz: ball.vz, isAirborne: isBallAirborne(ball) };
   }
 
   // Apply wind - high acceleration per updated REQ-003/005, always drifts and re-accelerates quickly after turn
@@ -111,7 +137,7 @@ export function updateBall(dt, getWindAt, windStrength, canvasW, canvasH) {
   // No stop detection per REQ-005: ball never considered stopped, continues drifting
   // Keep isMoving true until death or win
 
-  return { status: "moving", z: ball.z, vz: ball.vz, isAirborne: ball.z > 0.5 };
+  return { status: "moving", z: ball.z, vz: ball.vz, isAirborne: isBallAirborne(ball) };
 }
 
 export function getSpeed() {

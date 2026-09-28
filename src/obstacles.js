@@ -1,6 +1,9 @@
 import { terrainZoneAt, isInWater } from "./terrain.js";
+import { drawnBallCircle } from "./physics.js";
 
 export function checkObstacleCollision(ballPos, ballRadius, obstacles) {
+  // Legacy ground-projection test (shadow space). Kept for compat; gameplay
+  // tree bounce uses checkDrawnObstacleCollision() below (drawn-vs-drawn).
   for (const obs of obstacles) {
     if (obs.type === "rect") {
       // Closest point on AABB to circle center
@@ -19,6 +22,68 @@ export function checkObstacleCollision(ballPos, ballRadius, obstacles) {
       const radSum = ballRadius + obs.r;
       if (distSq < radSum * radSum) {
         return obs;
+      }
+    }
+  }
+  return null;
+}
+
+// --- Drawn-vs-drawn tree collision (bounce when visuals touch, any height) ---
+// Shape math mirrors render.js drawObstacles: canopy circle + trunk rect.
+export function treeDrawnShapes(obs) {
+  if (obs.type === "rect") {
+    return { rect: { x: obs.x, y: obs.y, w: obs.w, h: obs.h } };
+  }
+  const x = obs.x, y = obs.y, r = obs.r;
+  const trunkW = Math.max(8, Math.min(14, r * 0.38));
+  const trunkH = Math.max(10, r * 0.55);
+  return {
+    canopy: { x, y: y - 1, r: Math.max(1, r - 1.5) },
+    trunk: { x: x - trunkW / 2, y: y + r - trunkH + 2, w: trunkW, h: trunkH },
+  };
+}
+
+function circleHitsRect(cx, cy, cr, rc) {
+  const qx = Math.max(rc.x, Math.min(cx, rc.x + rc.w));
+  const qy = Math.max(rc.y, Math.min(cy, rc.y + rc.h));
+  const dx = cx - qx, dy = cy - qy;
+  return dx * dx + dy * dy < cr * cr;
+}
+
+function rectContactNormal(cx, cy, rc) {
+  const qx = Math.max(rc.x, Math.min(cx, rc.x + rc.w));
+  const qy = Math.max(rc.y, Math.min(cy, rc.y + rc.h));
+  let nx = cx - qx, ny = cy - qy;
+  let len = Math.hypot(nx, ny);
+  if (len === 0) { nx = 0; ny = -1; len = 1; }
+  return { sx: qx, sy: qy, nx: nx / len, ny: ny / len };
+}
+
+// Bounce test in drawn space: the ball AS DRAWN (lifted by z, grown radius)
+// against each tree AS DRAWN (canopy circle + trunk rect). At any height —
+// no airborne gating, so the bounce always matches the visuals.
+// Returns { obs, nx, ny, sx, sy, sr } (contact normal + shape anchor in drawn
+// space; sr is the shape radius, 0 when the anchor is already the closest
+// surface point) or null.
+export function checkDrawnObstacleCollision(ball, obstacles) {
+  const c = drawnBallCircle(ball);
+  for (const obs of obstacles) {
+    if (obs.type === "rect") {
+      if (circleHitsRect(c.x, c.y, c.r, obs)) {
+        const n = rectContactNormal(c.x, c.y, obs);
+        return { obs, ...n, sr: 0, kind: "rect" };
+      }
+    } else if (obs.type === "circle") {
+      const s = treeDrawnShapes(obs);
+      const dx = c.x - s.canopy.x, dy = c.y - s.canopy.y;
+      const radSum = c.r + s.canopy.r;
+      if (dx * dx + dy * dy < radSum * radSum) {
+        const len = Math.hypot(dx, dy) || 1;
+        return { obs, nx: dx / len, ny: dy / len, sx: s.canopy.x, sy: s.canopy.y, sr: s.canopy.r, kind: "canopy" };
+      }
+      if (circleHitsRect(c.x, c.y, c.r, s.trunk)) {
+        const n = rectContactNormal(c.x, c.y, s.trunk);
+        return { obs, ...n, sr: 0, kind: "trunk" };
       }
     }
   }

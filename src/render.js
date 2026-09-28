@@ -1,5 +1,6 @@
 import { modifiers as vfModifiers, isInsideLiquifier as vfIsInsideNullify } from "./vectorField.js";
 import { terrainZoneAt, TERRAIN_COLORS, attachNoiseToTerrain } from "./terrain.js";
+import { drawnBallCircle } from "./physics.js";
 
 let canvasW = 1280;
 let canvasH = 720;
@@ -496,11 +497,13 @@ export function drawBall(ctx, ball) {
     ctx.fill();
   }
   // --- Ball in air ---
-  // Visual lift: ball appears above ground. Offset y by -z*0.55 for pseudo-3D.
-  const lift = z * 0.55;
-  const ballX = ball.pos.x;
-  const ballY = ball.pos.y - lift;
-  const visualR = ball.radius + z * 0.025; // grows when high
+  // Visual lift: ball appears above ground. Offset y by -z*BALL_LIFT_FACTOR for
+  // pseudo-3D. Geometry comes from drawnBallCircle() (single source of truth,
+  // shared with collision in obstacles.js).
+  const drawn = drawnBallCircle(ball);
+  const ballX = drawn.x;
+  const ballY = drawn.y;
+  const visualR = drawn.r;
   // squash/stretch on bounce: when just hit ground (z==0 && |vz| ~ bouncing), stretch
   let scaleY = 1, scaleX = 1;
   if (!isAirborne && ball.vz !== undefined) {
