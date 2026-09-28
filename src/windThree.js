@@ -18,9 +18,9 @@ const LOGICAL_H = 720;
 // Streak tuning — calm readable drift: thin elegant lines, moderate density.
 const STREAK_COUNT = 48;
 const STREAK_NODES = 24; // head + history points per streak
-const STREAK_SPEED = 260; // px/s per unit of wind magnitude (|wind| ~0.44..1.5+ -> ~115..390 px/s)
-const STREAK_MIN_SPEED = 70; // never stall completely
-const STREAK_MAX_SPEED = 550; // bounded: gusts move, singularities don't teleport
+const STREAK_SPEED = 200; // px/s per unit of wind magnitude (|wind| ~0.44..1.5+ -> ~90..300 px/s)
+const STREAK_MIN_SPEED = 60; // never stall completely
+const STREAK_MAX_SPEED = 450; // bounded: gusts move, singularities don't teleport
 const STREAK_KNOT_DIST = 24; // respawn when the head nets less than this over its whole trail (kills sink-knots, keeps real orbits)
 const STREAK_KNOT_MIN_AGE = 1.2; // only after the trail had time to stretch
 const STREAK_MIN_AGE = 2.5;
