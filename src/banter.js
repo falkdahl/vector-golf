@@ -8,6 +8,9 @@
 export const BANTER_CPS = 20;
 export const BANTER_LINGER_MS = 1000;
 export const BANTER_FILE = './src/banter.json';
+// Tutorial banters (fixed per-hole on The Proving Grounds) live in a separate
+// file so src/banter.json contains exactly the random rotation pool.
+export const TUTORIAL_BANTER_FILE = './src/tutorial-banter.json';
 export const BANTER_STATE_KEY = 'golfVectorField.banter.v1';
 
 export const SPEAKERS = {
@@ -56,22 +59,56 @@ export function validateBanter(data) {
   return { valid: errors.length === 0, errors };
 }
 
-// --- File loading (single JSON file) ---
+// --- File loading (two JSON files: rotation pool + tutorial) ---
 let banterCache = null;
 let banterPromise = null;
+// Ids of entries loaded from the rotation file (src/banter.json). The random
+// shuffle bag draws from these; tutorial ids are always excluded as a guard.
+let rotationIds = [];
+// Ids of entries loaded from the tutorial file (src/tutorial-banter.json).
+let tutorialIds = [];
+
+async function fetchBanterJson(path) {
+  const res = await fetch(path, { cache: 'no-store' });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const v = validateBanter(data);
+  if (!v.valid) { console.warn(`[banter] invalid ${path}`, v.errors); return null; }
+  return data;
+}
 
 export async function loadBanterFile() {
   if (banterCache) return banterCache;
   if (banterPromise) return banterPromise;
   banterPromise = (async () => {
     try {
-      const res = await fetch(BANTER_FILE, { cache: 'no-store' });
-      if (!res.ok) return null;
-      const data = await res.json();
-      const v = validateBanter(data);
-      if (!v.valid) { console.warn('[banter] invalid banter.json', v.errors); return null; }
-      banterCache = data;
-      return data;
+      const [rotation, tutorial] = await Promise.all([
+        fetchBanterJson(BANTER_FILE).catch(() => null),
+        fetchBanterJson(TUTORIAL_BANTER_FILE).catch(() => null),
+      ]);
+      const merged = [];
+      const seen = new Set();
+      rotationIds = [];
+      tutorialIds = [];
+      // Rotation file first so its ids define the random pool.
+      for (const b of (rotation && rotation.banters) || []) {
+        if (!b || seen.has(b.id)) continue;
+        seen.add(b.id);
+        merged.push(b);
+        rotationIds.push(b.id);
+      }
+      if (tutorial) {
+        for (const b of tutorial.banters || []) {
+          if (!b) continue;
+          if (seen.has(b.id)) { console.warn(`[banter] duplicate id across files: ${b.id}`); continue; }
+          seen.add(b.id);
+          merged.push(b);
+          tutorialIds.push(b.id);
+        }
+      }
+      if (!merged.length) return null;
+      banterCache = { version: 1, banters: merged };
+      return banterCache;
     } catch (e) {
       console.warn('[banter] load failed', e);
       return null;
@@ -89,15 +126,39 @@ export function getBanter(id) {
   return (banterCache.banters || []).find((b) => b.id === String(id)) || null;
 }
 
+// Random rotation pool = entries from src/banter.json. Falls back to the
+// merged cache minus tutorial ids when the rotation file failed to load
+// (e.g. legacy single-file deployments).
 export function listBanterIds() {
+  if (rotationIds.length) return [...rotationIds];
+  if (!banterCache) return [];
+  return (banterCache.banters || [])
+    .map((b) => b.id)
+    .filter((id) => !TUTORIAL_BANTER_IDS.includes(id));
+}
+
+// Tutorial banters = entries from src/tutorial-banter.json (fixed per-hole on
+// The Proving Grounds, never in the random rotation).
+export function listTutorialBanterIds() {
+  if (tutorialIds.length) return [...tutorialIds];
+  if (!banterCache) return [];
+  return (banterCache.banters || [])
+    .map((b) => b.id)
+    .filter((id) => TUTORIAL_BANTER_IDS.includes(id));
+}
+
+export function listAllBanterIds() {
   if (!banterCache) return [];
   return (banterCache.banters || []).map((b) => b.id);
 }
 
-// --- Tutorial vs non-tutorial banter (2026-09-25) ---
-// Tutorial banters only play on The Proving Grounds (per-hole fixed). They are excluded from the non-tutorial shuffle bag.
+// --- Tutorial vs non-tutorial banter (2026-09-25, split 2026-09-28) ---
+// Tutorial banters only play on The Proving Grounds (per-hole fixed) and live
+// in src/tutorial-banter.json. They are excluded from the non-tutorial shuffle
+// bag, which draws from src/banter.json (the random rotation pool).
 export const TUTORIAL_BANTER_IDS = [
   'controls-first',
+  'attempts-fourth',
   'tutorial-field-modifiers',
   'stacking-third',
   'tutorial-rewards',
@@ -340,9 +401,13 @@ export async function playRunStartBanter(options = {}) {
   const banters = data.banters;
   const byId = new Map(banters.map((b) => [b && b.id, b]));
   const { bag: storedBag } = loadBanterState();
-  // Tutorial banters are excluded from the non-tutorial shuffle bag; every non-tutorial run draws from that bag without repeats until cycle completes
-  const rest = banters.filter((b) => b && !TUTORIAL_BANTER_IDS.includes(b.id));
+  // Random rotation pool = entries from src/banter.json. Tutorial banters are
+  // excluded as a guard so a legacy single-file banter.json can never leak a
+  // tutorial scene into the shuffle bag.
+  const rotationSet = new Set(listBanterIds());
+  const rest = banters.filter((b) => b && rotationSet.has(b.id) && !TUTORIAL_BANTER_IDS.includes(b.id));
   const pool = rest.length ? rest : banters.filter((b) => b && !TUTORIAL_BANTER_IDS.includes(b.id));
+  if (!pool.length) return false;
   const restIds = pool.map((b) => b.id);
   let bag = normalizeBanterBag(storedBag, restIds);
   if (!bag.length) bag = shuffleBanterIds(restIds);
@@ -439,7 +504,10 @@ if (typeof window !== 'undefined') {
     preloadBanterFile,
     validateBanter,
     listBanterIds,
+    listTutorialBanterIds,
+    listAllBanterIds,
     getBanter,
+    TUTORIAL_BANTER_IDS,
     ONBOARDING_BANTER_IDS,
     shuffleBanterIds,
     normalizeBanterBag,

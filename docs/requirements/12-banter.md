@@ -10,10 +10,27 @@ Short in-place conversations between May and Caddy that play at the start of a
 run and between tutorial holes. Banter stays on the loaded hole (terrain, ball, wind visible behind); it never
 takes over the background canvas like a full cutscene.
 
-## 2. Data File — Single JSON (`src/banter.json`)
+## 2. Data Files — Rotation Pool + Tutorial File
 
-- **Single file only:** all banters live in `src/banter.json` (one file, not one
-  file per banter).
+- **Two files:** random run-start banters live in `src/banter.json`
+  (the random rotation pool), tutorial banters live in
+  `src/tutorial-banter.json` (fixed per-hole scenes on `The Proving Grounds`).
+  `src/banter.json` contains exactly the random rotation pool — no tutorial ids —
+  so it is clear what is included in the rotation. `src/tutorial-banter.json`
+  contains exactly the tutorial ids (`controls-first`, `attempts-fourth`,
+  `stacking-third`, `tutorial-field-modifiers`, `rewards-second`,
+  `tutorial-rewards`, `tutorial-passives`, `tutorial-liquifier-reminder`,
+  `tutorial-hole1-liquifier-3`, `tutorial-hole1-liquifier-10`,
+  `tutorial-hole3-rotator-reminder`, `tutorial-hole2-gadgets-reminder`,
+  `tutorial-hole4-complete`).
+- The loader (`src/banter.js:loadBanterFile`) fetches **both** files in parallel
+  and merges them for playback (`getBanter` searches the merged set).
+  `listBanterIds()` returns only the rotation pool (`src/banter.json` ids) and
+  the shuffle bag draws from it; `listTutorialBanterIds()` returns the tutorial
+  file ids; `listAllBanterIds()` returns the merged set. `TUTORIAL_BANTER_IDS`
+  is kept as a guard so a tutorial id can never leak into the shuffle bag even
+  from a legacy single-file deployment (missing tutorial file falls back to the
+  single-file behavior).
 - Schema:
   ```json
   {
@@ -38,7 +55,7 @@ takes over the background canvas like a full cutscene.
   - `speaker` (case-insensitive) is one of:
     - `may` → display name `May`, portrait `./img/cutscenes/portrait-may.png`
     - `caddy` → display name `Caddy`, portrait `./img/cutscenes/portrait-caddy.png`
-- Includes tutorial banters (see §4c) and non-tutorial pool (see §4d). IDs for tutorial: `controls-first` (hole1 controls), `tutorial-field-modifiers` (hole2 field modifiers, alias `stacking-third` for compat), `tutorial-rewards` (hole3 rewards, alias `rewards-second`), `tutorial-passives` (hole4 passives), `tutorial-hole2-gadgets-reminder` (hole2 5-attempt reminder), `tutorial-liquifier-reminder` legacy kept but not used on hole1. Validation: `validateBanter(data)` returns `{valid, errors}`; invalid files or entries are ignored (banter skipped, run continues to the Hole 1 banner).
+- Includes tutorial banters (see §4c, stored in `src/tutorial-banter.json`) and non-tutorial pool (see §4d, stored in `src/banter.json`). IDs for tutorial: `controls-first` (hole1 controls), `tutorial-field-modifiers` (hole2 field modifiers, alias `stacking-third` for compat), `tutorial-rewards` (hole3 rewards, alias `rewards-second`), `tutorial-passives` (hole4 passives), `tutorial-hole2-gadgets-reminder` (hole2 5-attempt reminder), `tutorial-liquifier-reminder` legacy kept but not used on hole1. Validation: `validateBanter(data)` returns `{valid, errors}`; invalid files or entries are ignored (banter skipped, run continues to the Hole 1 banner). Both files share the same schema; each id must be unique across both files.
 
 ## 3. Dialog Presentation — Cutscene Dialog Box
 
@@ -75,7 +92,7 @@ Tutorial banters are not persisted in `BANTER_STATE_KEY`; they do not consume th
 
 ### 4b. Non-Tutorial Courses — Random Shuffle-Bag (2026-09-25, supersedes previous onboarding fixed order)
 
-When playing **any course other than `The Proving Grounds`**, the first hole start shows a **random non-tutorial banter** from a **shuffle bag** over the remaining banters (all banters whose `id` is not one of the tutorial ids `controls-first`, `tutorial-field-modifiers`, `stacking-third`, `tutorial-rewards`, `rewards-second`, `tutorial-passives`, `tutorial-hole2-gadgets-reminder`, `tutorial-liquifier-reminder`). The bag holds each non-tutorial id exactly once in `Math.random` shuffled order, one id is popped per run start, and the bag is only rebuilt and reshuffled once fully empty — so every non-tutorial banter plays exactly once per cycle with no repeats until the whole cycle completes. A persisted state `BANTER_STATE_KEY = "golfVectorField.banter.v1"` `{version:1, count, lastId, bag:string[]}` tracks progress (count increments per played non-tutorial banter, lastId/bag persisted). Tutorial banters do not affect this state. `loadBanterFile` preload still happens, but tutorial course bypasses this bag entirely.
+When playing **any course other than `The Proving Grounds`**, the first hole start shows a **random non-tutorial banter** from a **shuffle bag** over the rotation pool (`src/banter.json` ids; equivalently all banters whose `id` is not in `TUTORIAL_BANTER_IDS` / `src/tutorial-banter.json`). The bag holds each non-tutorial id exactly once in `Math.random` shuffled order, one id is popped per run start, and the bag is only rebuilt and reshuffled once fully empty — so every non-tutorial banter plays exactly once per cycle with no repeats until the whole cycle completes. A persisted state `BANTER_STATE_KEY = "golfVectorField.banter.v1"` `{version:1, count, lastId, bag:string[]}` tracks progress (count increments per played non-tutorial banter, lastId/bag persisted). Tutorial banters do not affect this state. `loadBanterFile` preload still happens, but tutorial course bypasses this bag entirely.
 
 - `handleCoursePlay` for non-tutorial courses shall load hole 1 preview, then call `playRunStartBanter` (which now draws from the non-tutorial shuffle bag) → `Hole 1` banner.
 - Reloading mid-banter is not persisted: the run itself was already saved, so reload auto-resumes at hole 1 without replaying the banter.
@@ -86,8 +103,10 @@ When playing **any course other than `The Proving Grounds`**, the first hole sta
 
 ## 5. Blocking & Loop Integration (`src/main.js` + `src/banter.js`)
 
-- Runtime API (`src/banter.js`): `loadBanterFile()`, `preloadBanterFile()`,
-  `getBanter(id)`, `listBanterIds()`, `validateBanter(data)`,
+- Runtime API (`src/banter.js`): `loadBanterFile()` (loads both files, merged),
+  `preloadBanterFile()`,
+  `getBanter(id)` (merged set), `listBanterIds()` (rotation pool only),
+  `listTutorialBanterIds()`, `listAllBanterIds()`, `validateBanter(data)`,
   `isBanterActive()`, `getActiveBanterId()`, `playBanter(idOrEntry,
   {onComplete})`,   `playRunStartBanter({onComplete})` (now non-tutorial shuffle bag only, tutorial handled separately via `playBanter('controls-first')` etc.),
   `updateBanter(dtSeconds)`, `handleBanterInput(e): boolean`, `skipBanter()`.
@@ -111,7 +130,7 @@ When playing **any course other than `The Proving Grounds`**, the first hole sta
 
 ## Acceptance Criteria
 
-- [ ] `src/banter.json` is a single file with `version:1` and `banters[]`; each entry has a unique `id` and 1–12 `lines` of `{speaker: may|caddy, text: 1–500 chars}`; `validateBanter` accepts it. Must contain tutorial ids `controls-first`, `tutorial-field-modifiers` (or `stacking-third`), `tutorial-rewards` (or `rewards-second`), `tutorial-passives`, `tutorial-hole2-gadgets-reminder` and at least 8 `run-start-*` non-tutorial ids.
+- [ ] `src/banter.json` holds only the random rotation pool (`run-start-*` + flavor ids, no tutorial ids); `src/tutorial-banter.json` holds only tutorial ids (`controls-first`, `attempts-fourth`, `stacking-third`, `tutorial-field-modifiers`, `rewards-second`, `tutorial-rewards`, `tutorial-passives`, `tutorial-liquifier-reminder`, `tutorial-hole1-liquifier-3`, `tutorial-hole1-liquifier-10`, `tutorial-hole3-rotator-reminder`, `tutorial-hole2-gadgets-reminder`, `tutorial-hole4-complete`); both files have `version:1` with 1–12 `lines` of `{speaker: may|caddy, text: 1–500 chars}` per entry and no duplicate ids across files; `validateBanter` accepts each; `listBanterIds()` returns exactly the rotation pool.
 - [ ] `May` boxes show speaker `May` + `./img/cutscenes/portrait-may.png`, `Caddy` boxes show `Caddy` + `./img/cutscenes/portrait-caddy.png`, in the existing `#cutscene-dialog` `.cutscene-dialog-box` JRPG style.
 - [ ] Typewriter reveals at 20 cps; each box lingers 1000ms; next dialog starts at the end of the previous one (±150ms tolerance).
 - [ ] First press of `Space`/`R`/click while revealing fast-forwards to full text; next press advances; last box closes the banter.
@@ -122,8 +141,9 @@ When playing **any course other than `The Proving Grounds`**, the first hole sta
 
 ## File Paths
 
-- `src/banter.json:1` (single data file, banters with id + lines)
-- `src/banter.js:1` (loader, validator, player, `BANTER_CPS=20`, `BANTER_LINGER_MS=1000`, `TUTORIAL_BANTER_IDS` + non-tutorial shuffle bag)
+- `src/banter.json:1` (random rotation pool only)
+- `src/tutorial-banter.json:1` (tutorial scenes only)
+- `src/banter.js:1` (loader for both files, validator, player, `BANTER_CPS=20`, `BANTER_LINGER_MS=1000`, `TUTORIAL_BANTER_IDS` + non-tutorial shuffle bag)
 - `src/main.js:1` (tutorial per-hole banter sequencing via `isTutorialActive()`, non-tutorial `playRunStartBanter` via shuffle bag)
 - `index.html:1` (existing `#cutscene-dialog` overlay, reused as-is)
 - `style.css:1` (existing `.cutscene-dialog-box` JRPG styles, reused as-is)
