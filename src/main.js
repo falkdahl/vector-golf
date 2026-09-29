@@ -5851,12 +5851,25 @@ function init() {
       // To avoid accidental collapse on expanded click, we toggle only when collapsed, otherwise collapse as well for I/Tab symmetry
       // Spec: golfbag grows on hover and collapses via cross, opens via golfbag click. Allow both.
       toggleHotbar();
+      // Release focus so a subsequent Space (charge/shoot) goes to the game,
+      // not back into the focused bag (which would re-toggle on every key repeat).
+      try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch {}
     };
     golfbagContainerEl.addEventListener("click", handleGolfbagToggle);
     golfbagContainerEl.addEventListener("keydown", (e) => {
-      if (e.code === "Enter" || e.code === "Space") {
+      if (e.code === "Enter") {
+        // Ignore auto-repeat: holding the key must not toggle repeatedly.
+        if (e.repeat) { e.preventDefault(); return; }
         e.preventDefault();
         toggleHotbar();
+        try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch {}
+      } else if (e.code === "Space") {
+        // Space is shoot game-wide: never toggle the bag with it. Release
+        // focus (e.g. Tabbed to the bag) so holding Space charges instead of
+        // re-activating the focused bag on every key repeat. Do NOT stop
+        // propagation — the global input handler still starts charging.
+        e.preventDefault();
+        try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch {}
       }
     });
   }
