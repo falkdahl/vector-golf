@@ -4039,18 +4039,29 @@ const SOFTLOCK_MAX_SAMPLES = Math.ceil(SOFTLOCK_WINDOW / SOFTLOCK_SAMPLE_INTERVA
 
 function isLastAttemptForSoftlock() {
   if (isTutorialActive()) return false;
-  const left = getAttemptsLeft();
   const free = supply.freeShot ?? 0;
-  // Last attempt state is set when attempts left is one and no free shots (checked after counter decreased on reset)
-  return left === 1 && free === 0;
+  if (free > 0) return false;
+  // Free flights are always resettable, never "last".
+  if (freeShotFlightActive) return false;
+  // Attempts are consumed on launch and softlock is only evaluated while
+  // FLYING: the in-progress flight is the actual last attempt only when
+  // nothing remains after it (left===0). left===1 mid-flight means one shot
+  // remains after this one, so R is available and the normal text applies.
+  return getAttemptsLeft() === 0;
 }
 function isLastAttemptForReset() {
   if (isTutorialActive()) return false;
-  const left = getAttemptsLeft();
   const free = supply.freeShot ?? 0;
-  // Last attempt state: attempts left is one and no free shots -> cannot reset on last attempt (R disabled after launch, pause Reset hidden)
   if (free > 0) return false;
-  return left === 1;
+  // Free flights are always resettable, never "last" (even when they consume
+  // the final free charge, the failure reset itself is free).
+  if (freeShotFlightActive) return false;
+  // Attempts are consumed on launch: while FLYING the in-progress flight is
+  // the actual last attempt only when left===0 (R blocked, ball must play
+  // out); at the tee (AIMING/CHARGING) left===1 means the next launch is the
+  // last, preserving pause-menu hiding and banner behavior there.
+  if (gameState === "FLYING") return getAttemptsLeft() === 0;
+  return getAttemptsLeft() === 1;
 }
 function getSoftlockTextForCurrentState() {
   return isLastAttemptForSoftlock() ? SOFTLOCK_TEXT_LAST : SOFTLOCK_TEXT_NORMAL;
