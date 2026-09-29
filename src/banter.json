@@ -332,6 +332,31 @@
           "text": "See? Total party dude. Grab your club and let's ace this one."
         }
       ]
+    },
+    {
+      "id": "run-start-16",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "You missed a legendary party last night. It was inside the Techno Dome."
+        },
+        {
+          "speaker": "may",
+          "text": "The what now?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Giant rolling sphere of a building, covered in armor, rumbling around on tank treads. Picture a golf ball the size of a clubhouse, and someone threw a party inside it."
+        },
+        {
+          "speaker": "may",
+          "text": "So your party venue could roll away mid-dance. Sounds stable."
+        },
+        {
+          "speaker": "caddy",
+          "text": "It had everything: thumping music, flashing lights, and walls that could drive over the rough. Best party dome ever built."
+        }
+      ]
     }
   ]
 }
