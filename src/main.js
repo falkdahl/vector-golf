@@ -483,6 +483,23 @@ function tryCheatGrabBall(pos) {
   cheatSuppressClick = false;
   if (gameState === 'AIMING' || gameState === 'CHARGING') {
     // Counts as launched (see 14-cheat-mode §3): enter FLYING without initial velocity.
+    // Consumes a counted attempt exactly like handleLaunch (free-shot aware),
+    // so a cheat grab + R-reset cannot generate free attempts.
+    if (isFreeShotActive && golfbagTotalFreeShots() > 0) {
+      consumeFreeShotCharge();
+      isFreeShotActive = golfbagTotalFreeShots() > 0;
+      freeShotFlightActive = true;
+      syncFreeShotGlow();
+      updateHotbarUI();
+    } else {
+      if (isFreeShotActive) { isFreeShotActive = false; syncFreeShotGlow(); }
+      if (freeShotFlightActive) { freeShotFlightActive = false; syncFreeShotGlow(); }
+      holeAttempts++;
+      totalAttempts++;
+      attempts = totalAttempts;
+      updateHotbarUI();
+    }
+    updateAttemptsUI();
     ball.isMoving = true;
     ball.vel = { x: 0, y: 0 };
     ball.z = 0; ball.vz = 0;
@@ -4965,7 +4982,9 @@ function resetBall() {
   clearFreeShotFlightGlow();
   hideSoftlockBanner();
   resetSoftlockDetection();
-  // Handle attempt counter decrement on failure reset (not on launch)
+  // Attempt counter is consumed on launch (see handleLaunch), not on reset.
+  // Failure resets (R / Next Attempt / OB-water-edge death) are free and only
+  // evaluate Last Attempt / Free Shot / Game Over triggers post-reset.
   // Only count as attempt if we were flying (had launched). R in AIMING does not consume attempt.
   if (wasFlying) {
     if (wasFreeFlight) {
@@ -4991,10 +5010,9 @@ function resetBall() {
         }
       }
     } else {
-      // Normal attempt: decrement attempts left by incrementing holeAttempts; Points only updated when hole is cleared (not live)
-      holeAttempts++;
-      totalAttempts++;
-      attempts = totalAttempts;
+      // Normal failure reset: free (launch already consumed the attempt).
+      // Re-evaluate deferred triggers based on the launch-decremented counter.
+      // Points only updated when hole is cleared (not live)
       updateAttemptsUI();
       saveProgress();
       if (!isTutorialActive()) {
@@ -5037,7 +5055,7 @@ function resetBall() {
   try { maybeShowTutorialHole2GadgetsReminder(); } catch {}
 }
 
-function advanceHole() {
+function advanceHole(winWasFreeFlight = false) {
   if (currentHoleIndex < getTotalHoles() - 1) {
     if (isTutorialActive()) {
       // No points or summary on tutorial
@@ -5049,9 +5067,11 @@ function advanceHole() {
       setTimeout(()=>{ try{ hideCoinSummary(); }catch{} }, 50);
       return;
     }
-    // Points per hole: -1 per attempt, +10 per modifier traversed, +50 first attempt — only applied on hole clear
+    // Points per hole: -1 per failed attempt, +10 per modifier traversed, +50 first attempt — only applied on hole clear.
+    // Attempts are consumed on launch, so holeAttempts includes the winning shot;
+    // failures before this win exclude it (free winning flights excluded nothing).
     const traversed = modifiersTraversedThisShot ? modifiersTraversedThisShot.size : 0;
-    const attemptsOnHole = holeAttempts; // failures before this win (0 means first try)
+    const attemptsOnHole = Math.max(0, (holeAttempts - holeStartAttempts) - (winWasFreeFlight ? 0 : 1)); // failures before this win (0 means first try)
     const firstBonus = attemptsOnHole === 0 ? 50 : 0;
     const holePoints = 10 + traversed * 10 + firstBonus - attemptsOnHole;
     totalPoints += holePoints;
@@ -5219,7 +5239,11 @@ function handleLaunch(angle, power) {
     updateHotbarUI();
     updateAttemptsUI();
   } else {
-    // Normal launch — no counter decrement at launch (decrement happens on failure reset, see handleAttemptFailure)
+    // Normal launch — counted attempt is consumed on launch (Attempts Left
+    // decreases immediately). Failure resets (R / Next Attempt / OB-water-edge
+    // death) are free and must NOT increment again; Last Attempt / Free Shot /
+    // Game Over triggers stay post-reset in resetBall() so the last flight can
+    // still win (deferred Game Over).
     if (isFreeShotActive) {
       isFreeShotActive = false;
       syncFreeShotGlow();
@@ -5228,9 +5252,13 @@ function handleLaunch(angle, power) {
       freeShotFlightActive = false;
       syncFreeShotGlow();
     }
-    // Do NOT increment holeAttempts/totalAttempts here; handled on reset
+    // Consume one counted attempt on launch (never on reset).
+    holeAttempts++;
+    totalAttempts++;
+    attempts = totalAttempts;
     updateHotbarUI();
     updateAttemptsUI();
+    saveProgress();
   }
   modifiersTraversedThisShot = new Set();
   ballInsideModifierIds = new Set();
@@ -5247,6 +5275,9 @@ function checkWin() {
   // Victory when ball touches any part of black circle per new requirement (ground projection)
   if (dist < level.hole.radius + BALL_RADIUS) {
     const isFinalHole = currentHoleIndex === getTotalHoles() - 1;
+    // Attempts are consumed on launch: holeAttempts includes the winning shot.
+    // Capture whether the winning flight was free before any glow clearing below.
+    const winWasFreeFlight = freeShotFlightActive;
     if (!isFinalHole) {
       // Intermediate hole: do NOT show Victory screen — auto-advance to next hole
       ball.vel.x = 0;
@@ -5258,7 +5289,7 @@ function checkWin() {
       hideSoftlockBanner();
       resetSoftlockDetection();
       // Directly advance without entering WIN state
-      advanceHole();
+      advanceHole(winWasFreeFlight);
       return true;
     }
     // Final hole: points per hole + course completed bonus 50 — only added on clear, not live, subtract attempts — not on tutorial
@@ -5287,7 +5318,8 @@ function checkWin() {
       return true;
     }
     const traversedF = modifiersTraversedThisShot ? modifiersTraversedThisShot.size : 0;
-    const attemptsF = holeAttempts;
+    // Failures before this win: holeAttempts includes the winning shot unless it was a free flight.
+    const attemptsF = Math.max(0, (holeAttempts - holeStartAttempts) - (winWasFreeFlight ? 0 : 1));
     const firstBonusF = attemptsF === 0 ? 50 : 0;
     const courseBonusF = 50;
     const holePointsF = 10 + traversedF * 10 + firstBonusF + courseBonusF - attemptsF;

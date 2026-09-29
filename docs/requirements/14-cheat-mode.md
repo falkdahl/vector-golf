@@ -50,9 +50,10 @@ While `cheatMode === true`:
   as if the ball was launched — `ball.isMoving = true`, `ball.vel = {x:0,y:0}`,
   `ball.z = 0`, `gameState = "FLYING"`, `modifiersTraversedThisShot` reset,
   charge cancelled, softlock detection reset — except the ball does not fly:
-  it sticks to the cursor. Attempt accounting is unchanged (launches never
-  consume attempts; failure resets via `R`/hazards still do, per
-  `05-input-and-states.md` §4).
+  it sticks to the cursor. Attempt accounting matches normal launches (counted
+  attempt consumed on grab, free-shot aware, per
+  `05-input-and-states.md` §4); failure resets via `R`/hazards are free and
+  still evaluate `Last Attempt` / `Game Over` post-reset.
 - **Held:** every tick while held, `updateWindUniforms` still runs (particles
   keep animating) but the ball ignores wind, friction, win, treasure,
   collision, and softlock — `ball.pos` follows the clamped cursor,
