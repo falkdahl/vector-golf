@@ -937,23 +937,12 @@ function syncStartingItemsOverlay(){
     btn.addEventListener('click', ()=> handleStartingPick(type));
     grid.appendChild(btn);
   });
-  const okBtn=document.getElementById('starting-ok-button');
-  if(okBtn){
-    const canOk = selectedStartingItems.length===2;
-    okBtn.disabled = !canOk;
-    okBtn.style.opacity = canOk ? '1' : '0.5';
-    okBtn.style.cursor = canOk ? 'pointer' : 'not-allowed';
-    if(!okBtn._startingOkBound){
-      okBtn._startingOkBound=true;
-      okBtn.addEventListener('click', (e)=>{ e.preventDefault(); handleStartingOk(); });
-    }
-  }
 }
 function showStartingItems(courseId, opts){
   if(hasRestorableSave()) return false;
   const course=findCourseById(courseId);
   if(!course) return false;
-  // Start with empty bag – only the 2 picks should be present after OK
+  // Start with empty bag – only the 2 picks are present after auto-confirm
   golfbag = [null, null, null, null];
   passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
   try{ syncDerivedFromBag(); updateHotbarUI(); }catch{}
@@ -1011,12 +1000,19 @@ function handleStartingPick(type){
   const already = selectedStartingItems.indexOf(type);
   if(already!==-1){
     selectedStartingItems.splice(already,1);
+    startingRemaining = 2 - selectedStartingItems.length;
     syncStartingItemsOverlay();
     return true;
   }
   if(selectedStartingItems.length>=2) return false;
   if(!startingChoices.includes(type)) return false;
   selectedStartingItems.push(type);
+  startingRemaining = 2 - selectedStartingItems.length;
+  if(selectedStartingItems.length===2){
+    // Choice done: no OK button — second pick starts the run immediately.
+    handleStartingOk();
+    return true;
+  }
   syncStartingItemsOverlay();
   return true;
 }
