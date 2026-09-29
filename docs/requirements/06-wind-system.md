@@ -175,7 +175,7 @@ Visualization on `game` canvas: `magnifier` orange `rgba(230,126,34,0.25)`, `liq
 
 - **Effect:** When `isFreeShotActive===true` at launch, attempt does not decrease `Attempts Left`; `holeAttempts`/`totalAttempts` not incremented; ball launches normally; not a wind effect.
 - **Consumption & Persistence:** After free launch `supply.freeShot--`; keep `isFreeShotActive` while `supply.freeShot>0` else `false`; persisting auto-armed consecutive frees; normal launches still cost 1. Auto-arm when `!isFreeShotActive && supply.freeShot>0 && getAttemptsLeft()<=1`.
-- **Visual:** ball glow only while armed before launch, edge glow while armed OR `freeShotFlightActive` (through `FLYING` until stop/reset/win). Three.js golden glow `0xf1c40f` `14-22px` additive + edge `div#free-shot-edge-glow` border+shadow; canvas fallback gold ring if Three not ready. No glow when neither armed nor in free flight.
+- **Visual:** ball glow only while armed before launch (`gameState !== 'FLYING'` and not `freeShotFlightActive` — suppressed for the whole flight even when still armed for the next shot, so it never lingers on the tee), edge glow while armed OR `freeShotFlightActive` (through `FLYING` until stop/reset/win). Three.js golden glow `0xf1c40f` `14-22px` additive + edge `div#free-shot-edge-glow` border+shadow; canvas fallback gold ring if Three not ready. No glow when neither armed nor in free flight.
 - **Limits:** only one armed at a time; multiple `freeShot` supply allows sequential frees; no hotkey, no circle, no `canPlace`/area upgrade.
 
 ## 8. Supply & Consumption (inventory on place/pickup)

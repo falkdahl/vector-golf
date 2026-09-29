@@ -766,7 +766,10 @@ function isFreeShotFlightActiveState() { return freeShotFlightActive; }
 function canActivateFreeShot() { return golfbagTotalFreeShots() > 0; }
 function syncFreeShotGlow() {
   const edgeActive = isFreeShotActive || freeShotFlightActive;
-  const ballActive = isFreeShotActive;
+  // Ball sprite only while armed BEFORE launch: never during flight, even when
+  // still armed for the next shot (charges remain). Otherwise a re-sync would
+  // re-light the sprite at its last position (the tee) mid-flight.
+  const ballActive = isFreeShotActive && !freeShotFlightActive && gameState !== 'FLYING';
   try {
     setWindFreeShotActive(edgeActive);
     try { setWindFreeShotBallActive(ballActive); } catch {};
@@ -2454,8 +2457,8 @@ function handleContinue() {
     createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
     syncModifiersToField();
     createBall(level.tee);
-    // Restore freeShot glow after ball created
-    try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
+    // Restore freeShot glow after ball created (ball at tee, AIMING follows)
+    try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
     gameState = "AIMING";
     if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
     resetHotbarCollapsed();
@@ -5022,6 +5025,10 @@ function resetBall() {
     }
   }
   gameState = "AIMING";
+  // Re-sync glow now that we're back at the tee: syncs above ran while
+  // gameState was still FLYING (ball sprite suppressed); an armed free shot
+  // must glow on the ball at the tee again.
+  try { syncFreeShotGlow(); } catch {};
   winOverlay.classList.add("hidden");
   updateForceBar();
   // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
@@ -5201,19 +5208,18 @@ function handleLaunch(angle, power) {
   // If the item's charges reach 0 it is automatically removed from the bag.
   if (isFreeShotActive && golfbagTotalFreeShots() > 0) {
     consumeFreeShotCharge();
-    // Persist armed while charges remain, only clear when none left
+    // Persist armed while charges remain, only clear when none left.
+    // Ball sprite stays off for the whole flight (sync guard: FLYING /
+    // freeShotFlightActive); edge glow stays on. Re-arms at the tee on reset.
     if (golfbagTotalFreeShots() > 0) {
-      // keep isFreeShotActive true for next free, but hide ball glow during current flight
+      // keep isFreeShotActive true for next free
       isFreeShotActive = true;
       freeShotFlightActive = true;
-      try { setWindFreeShotBallActive(false); } catch {};
-      try { setWindFreeShotEdgeActive(true); } catch {};
-      try { setWindFreeShotActive(true); } catch {};
     } else {
       isFreeShotActive = false;
       freeShotFlightActive = true;
-      syncFreeShotGlow();
     }
+    syncFreeShotGlow();
     updateHotbarUI();
     updateAttemptsUI();
   } else {
@@ -6248,7 +6254,7 @@ function init() {
         createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
         syncModifiersToField();
         createBall(level.tee);
-        try { setWindFreeShotActive(isFreeShotActive); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
+        try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
         // Handle GAME_OVER save: show Game Over screen directly
         if (data.gameState === 'GAME_OVER') {
           gameState = 'GAME_OVER';
