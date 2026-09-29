@@ -1,7 +1,7 @@
 import { LEVEL, LEVELS, generateLevels } from "./levels.js";
 import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, setPowerCellCount as setFieldPowerCellCount, getPowerCellCount as getFieldPowerCellCount, BASE_STRENGTH } from "./vectorField.js";
-import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING, isBallAirborne, drawnBallCircle, groundPosFromDrawn } from "./physics.js";
-import { checkObstacleCollision, checkDrawnObstacleCollision, checkDrawnTreasureHit, isOutOfBounds, checkWaterCollision, checkTerrainCollision, checkTreasureHit, collectTreasure } from "./obstacles.js";
+import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING, isBallAirborne, isBallOverTree, isBallOverTreasure, TREE_CLEAR_Z, TREASURE_CLEAR_Z, drawnBallCircle, groundPosFromDrawn } from "./physics.js";
+import { checkObstacleCollision, checkDrawnObstacleCollision, checkGroundTreeCollision, checkDrawnTreasureHit, checkGroundTreasureHit, isOutOfBounds, checkWaterCollision, checkTerrainCollision, checkTreasureHit, collectTreasure } from "./obstacles.js";
 import { terrainZoneAt } from "./terrain.js";
 import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
 import {
@@ -3405,18 +3405,17 @@ function bounceBall(hit, isEdge) {
     }
     // Corner: both inverted above
   } else if (hit) {
-    // Drawn-space bounce: hit is { obs, nx, ny, sx, sy, sr } from
-    // checkDrawnObstacleCollision (drawn ball vs drawn tree). Reflect velocity
-    // about the drawn contact normal, then reposition so the DRAWN circles just
-    // touch — the bounce lands where the visuals touched, at any height.
+    // Ground-plane bounce: hit is { obs, nx, ny, sx, sy, sr } from
+    // checkGroundTreeCollision (shadow circle vs tree base circle). The arc
+    // (z) is visual-only; high balls (z > TREE_CLEAR_Z) skip the test at the
+    // call site and fly over the whole tree. Reflect velocity about the
+    // ground contact normal, then reposition so the ground circles just touch.
     const dot = ball.vel.x * hit.nx + ball.vel.y * hit.ny;
     ball.vel.x = (ball.vel.x - 2 * dot * hit.nx) * BOUNCE_DAMPING;
     ball.vel.y = (ball.vel.y - 2 * dot * hit.ny) * BOUNCE_DAMPING;
-    const c = drawnBallCircle(ball);
-    const dist = (hit.sr || 0) + c.r + 0.5;
-    const g = groundPosFromDrawn(hit.sx + hit.nx * dist, hit.sy + hit.ny * dist, ball.z ?? 0);
-    ball.pos.x = g.x;
-    ball.pos.y = g.y;
+    const dist = (hit.sr || 0) + BALL_RADIUS + 0.5;
+    ball.pos.x = hit.sx + hit.nx * dist;
+    ball.pos.y = hit.sy + hit.ny * dist;
   }
   ball.isMoving = true;
 }
@@ -5488,11 +5487,11 @@ function update(dt) {
   if (gameState === "AIMING" || gameState === "CHARGING") {
     updateForceBar();
     // Treasure hit check also in AIMING/CHARGING (for drift or if treasure somehow at tee) — supports 3 chests on hole3.
-    // Drawn-vs-drawn: low bounce arcs still pick up, high flight passes over.
-    if (level && !rewardMenuVisible) {
+    // Ground-plane: shadow circle vs chest; high balls (z > TREASURE_CLEAR_Z) pass over.
+    if (level && !rewardMenuVisible && !isBallOverTreasure(ball)) {
       try {
         for (const tr of getUncollectedTreasures(level)) {
-          if (checkDrawnTreasureHit(ball, tr)) {
+          if (checkGroundTreasureHit(ball.pos, BALL_RADIUS, tr)) {
             collectTreasure(tr);
             // Keep single treasure pointer in sync for backward compat (repoint only,
             // never mutate isCollected — mutating via level.treasure would un-collect
@@ -5534,11 +5533,11 @@ function update(dt) {
     // Game Over will be checked only when starting the next attempt (handleLaunch entry) or on reroll
 
     // Treasure hit (supports 3 chests on hole3) - non-fatal, shows reward immediately (even mid-flight).
-    // Drawn-vs-drawn: low bounce arcs still pick up, only high flight passes over.
-    if (level && !rewardMenuVisible) {
+    // Ground-plane: shadow circle vs chest; high balls (z > TREASURE_CLEAR_Z) pass over.
+    if (level && !rewardMenuVisible && !isBallOverTreasure(ball)) {
       try {
         for (const tr of getUncollectedTreasures(level)) {
-          if (checkDrawnTreasureHit(ball, tr)) {
+          if (checkGroundTreasureHit(ball.pos, BALL_RADIUS, tr)) {
             collectTreasure(tr);
             // Keep single treasure pointer in sync for backward compat (repoint only,
             // never mutate isCollected — see AIMING branch above).
@@ -5572,9 +5571,9 @@ function update(dt) {
       ballInsideModifierIds = newInside;
     }catch{}
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
-    // Water/OB terrain are fatal even with bouncy (hazard spec). Trees bounce
-    // drawn-vs-drawn at any height; chests pick up drawn-vs-drawn; water is
-    // flown over while airborne (z > AIRBORNE_Z).
+    // Physics is 2D on the ground shadow (ball.pos); z is visual arc only.
+    // Water flies over while airborne (z > AIRBORNE_Z); trees/chests fly over
+    // while high (z > TREE_CLEAR_Z / TREASURE_CLEAR_Z, whole-tree fly-over).
     const isAirborneOverWater = isBallAirborne(ball);
     let terrainHit = checkTerrainCollision(ball.pos, BALL_RADIUS, level);
     let waterHit = checkWaterCollision(ball.pos, BALL_RADIUS, level.waterHazards);
@@ -5591,12 +5590,11 @@ function update(dt) {
       resetBall();
       return;
     }
-    // Trees bounce when the ball AS DRAWN touches the tree AS DRAWN (canopy
-    // circle or trunk rect), at any height — no airborne gating, so the bounce
-    // always matches the visuals instead of firing at the shadow position.
-    const hit = checkDrawnObstacleCollision(ball, level.obstacles);
+    // Trees bounce on ground-plane contact (shadow vs tree base); high balls
+    // (z > TREE_CLEAR_Z) fly over the whole tree. No trunk/canopy split.
+    const hit = isBallOverTree(ball) ? null : checkGroundTreeCollision(ball.pos, BALL_RADIUS, level.obstacles);
     if (hit) {
-      // Grounded or airborne tree bounce (bouncyBall removed, no limit)
+      // Grounded/low tree bounce (bouncyBall removed, no limit)
       bounceBall(hit, false);
       // remain FLYING, do not reset
     }

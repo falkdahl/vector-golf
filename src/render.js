@@ -498,8 +498,8 @@ export function drawBall(ctx, ball) {
   }
   // --- Ball in air ---
   // Visual lift: ball appears above ground. Offset y by -z*BALL_LIFT_FACTOR for
-  // pseudo-3D. Geometry comes from drawnBallCircle() (single source of truth,
-  // shared with collision in obstacles.js).
+  // pseudo-3D. Geometry comes from drawnBallCircle() (render-only; physics
+  // collides on the ground shadow with height gates, see physics.js).
   const drawn = drawnBallCircle(ball);
   const ballX = drawn.x;
   const ballY = drawn.y;

@@ -1,9 +1,9 @@
 import { terrainZoneAt, isInWater } from "./terrain.js";
-import { drawnBallCircle } from "./physics.js";
+import { drawnBallCircle, TREASURE_CLEAR_Z, TREE_CLEAR_Z } from "./physics.js";
 
 export function checkObstacleCollision(ballPos, ballRadius, obstacles) {
-  // Legacy ground-projection test (shadow space). Kept for compat; gameplay
-  // tree bounce uses checkDrawnObstacleCollision() below (drawn-vs-drawn).
+  // Legacy ground-projection test (shadow space). Gameplay tree bounce uses
+  // checkGroundTreeCollision() below (ground-plane + TREE_CLEAR_Z gate).
   for (const obs of obstacles) {
     if (obs.type === "rect") {
       // Closest point on AABB to circle center
@@ -28,7 +28,46 @@ export function checkObstacleCollision(ballPos, ballRadius, obstacles) {
   return null;
 }
 
-// --- Drawn-vs-drawn tree collision (bounce when visuals touch, any height) ---
+// --- Ground-plane tree collision (gameplay truth) ---
+// Physics stays 2D: test the ground shadow (ball.pos) against the tree base
+// circle. Height gating happens at the call site (main.js skips this when
+// ball.z > TREE_CLEAR_Z) so high balls fly over the whole tree.
+// Returns { obs, nx, ny, sx, sy, sr } in GROUND space, or null.
+export function checkGroundTreeCollision(ballPos, ballRadius, obstacles) {
+  for (const obs of obstacles) {
+    if (obs.type === "rect") {
+      const qx = Math.max(obs.x, Math.min(ballPos.x, obs.x + obs.w));
+      const qy = Math.max(obs.y, Math.min(ballPos.y, obs.y + obs.h));
+      const dx = ballPos.x - qx, dy = ballPos.y - qy;
+      if (dx * dx + dy * dy < ballRadius * ballRadius) {
+        const n = rectContactNormal(ballPos.x, ballPos.y, obs);
+        return { obs, ...n, sr: 0, kind: "rect" };
+      }
+    } else if (obs.type === "circle") {
+      const dx = ballPos.x - obs.x, dy = ballPos.y - obs.y;
+      const radSum = ballRadius + obs.r;
+      if (dx * dx + dy * dy < radSum * radSum) {
+        const len = Math.hypot(dx, dy) || 1;
+        return { obs, nx: dx / len, ny: dy / len, sx: obs.x, sy: obs.y, sr: obs.r, kind: "canopy" };
+      }
+    }
+  }
+  return null;
+}
+
+// Ground-plane treasure pickup: shadow circle vs chest circle. Call site
+// skips when ball.z > TREASURE_CLEAR_Z so high flight passes over.
+export function checkGroundTreasureHit(ballPos, ballRadius, treasure) {
+  if (!treasure || treasure.isCollected) return false;
+  const dx = ballPos.x - treasure.x;
+  const dy = ballPos.y - treasure.y;
+  const rad = (treasure.radius || 12) + ballRadius;
+  return dx * dx + dy * dy < rad * rad;
+}
+
+// --- Drawn-vs-drawn tree collision (DEPRECATED for gameplay) ---
+// Kept for compat/tests only. Gameplay uses checkGroundTreeCollision() with
+// the TREE_CLEAR_Z gate so mechanics stay 2D while the arc is visual-only.
 // Shape math mirrors render.js drawObstacles: canopy circle + trunk rect.
 export function treeDrawnShapes(obs) {
   if (obs.type === "rect") {
@@ -66,6 +105,9 @@ function rectContactNormal(cx, cy, rc) {
 // space; sr is the shape radius, 0 when the anchor is already the closest
 // surface point) or null.
 export function checkDrawnObstacleCollision(ball, obstacles) {
+  // Deprecated gameplay path: high balls fly over (same gate as ground logic)
+  // so legacy callers stay consistent with the 2D + height-gate model.
+  try { if ((ball?.z ?? 0) > TREE_CLEAR_Z) return null; } catch {}
   const c = drawnBallCircle(ball);
   for (const obs of obstacles) {
     if (obs.type === "rect") {
@@ -126,8 +168,8 @@ export function checkTerrainCollision(ballPos, ballRadius, level) {
 }
 
 export function checkTreasureHit(ballPos, ballRadius, treasure) {
-  // Legacy ground-projection test (shadow space). Kept for compat; gameplay
-  // pickup uses checkDrawnTreasureHit() below (drawn-vs-drawn).
+  // Legacy ground-projection test (shadow space). Gameplay pickup uses
+  // checkGroundTreasureHit() (ground-plane + TREASURE_CLEAR_Z gate).
   if (!treasure || treasure.isCollected) return false;
   const dx = ballPos.x - treasure.x;
   const dy = ballPos.y - treasure.y;
@@ -141,6 +183,7 @@ export function checkTreasureHit(ballPos, ballRadius, treasure) {
 // flight passes over.
 export function checkDrawnTreasureHit(ball, treasure) {
   if (!treasure || treasure.isCollected) return false;
+  try { if ((ball?.z ?? 0) > TREASURE_CLEAR_Z) return false; } catch {}
   const c = drawnBallCircle(ball);
   const dx = c.x - treasure.x;
   const dy = c.y - treasure.y;

@@ -14,17 +14,32 @@ export const VERTICAL_BOUNCE_DAMPING = 0.48; // ground bounce retains ~48% verti
 export const AIRBOUNCE_MIN_VZ = 32; // below this, settle to ground
 
 // Height above which the ball is considered airborne: it flies over water.
-// Chests and trees are NOT height-gated: they collide drawn-vs-drawn at any
-// height (see obstacles.js), so low bounce arcs still pick up / bounce.
+// Trees and chests use higher gates (see below): the ball arc (z) is visual,
+// physics stays 2D on the ground shadow (ball.pos). High balls fly over.
 export const AIRBORNE_Z = 5;
 export function isBallAirborne(ballOrZ) {
   const z = (ballOrZ !== null && typeof ballOrZ === 'object') ? (ballOrZ.z ?? 0) : ballOrZ;
   return (z ?? 0) > AIRBORNE_Z;
 }
 
-// Drawn-ball geometry — single source of truth for where the ball appears on
-// the canvas (mirrored by render.js drawBall). Collision uses this so a bounce
-// happens exactly when the drawn ball touches the drawn tree.
+// Height above which the ball flies over the whole tree (canopy + trunk).
+// Tuned so ~60%+ power lobs clear (apex ~22px tap .. ~92px full at vz 220-450,
+// GRAVITY 1100) while taps/rolls bounce.
+export const TREE_CLEAR_Z = 32;
+// Height above which the ball passes over treasure chests without pickup.
+export const TREASURE_CLEAR_Z = 28;
+export function isBallOverTree(ballOrZ) {
+  const z = (ballOrZ !== null && typeof ballOrZ === 'object') ? (ballOrZ.z ?? 0) : ballOrZ;
+  return (z ?? 0) > TREE_CLEAR_Z;
+}
+export function isBallOverTreasure(ballOrZ) {
+  const z = (ballOrZ !== null && typeof ballOrZ === 'object') ? (ballOrZ.z ?? 0) : ballOrZ;
+  return (z ?? 0) > TREASURE_CLEAR_Z;
+}
+
+// Drawn-ball geometry — RENDER ONLY (fake arc visualization).
+// Physics collides on the ground shadow (ball.pos); see obstacles.js ground
+// helpers and TREE_CLEAR_Z / TREASURE_CLEAR_Z gates above.
 export const BALL_LIFT_FACTOR = 0.55; // drawn y offset per z
 export const BALL_GROWTH_FACTOR = 0.025; // drawn radius growth per z
 export function drawnBallCircle(b) {
