@@ -61,8 +61,9 @@ While `cheatMode === true`:
   stays at the clamped cursor position with `vel = {x:0,y:0}`, softlock
   detection resets, progress saves, and from the next tick the ball interacts
   with wind, hazards, treasure, and the hole normally (still `FLYING`).
-  Dropping onto the hole wins on the next tick; dropping onto water/OB/edge
-  resets on the next tick, per `04-physics-and-collision.md`.
+  Dropping onto the hole wins on the next tick; dropping onto water/OB
+  resets on the next tick when low, per `04-physics-and-collision.md`
+  (a high drop from a `FLYING` grab flies over like normal flight).
 - Positions are clamped to `[BALL_RADIUS, LOGICAL_W-BALL_RADIUS] ×
   [BALL_RADIUS, LOGICAL_H-BALL_RADIUS]`.
 - The `click` immediately following a drop is swallowed (no accidental

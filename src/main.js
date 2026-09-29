@@ -5572,18 +5572,21 @@ function update(dt) {
     }catch{}
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
     // Physics is 2D on the ground shadow (ball.pos); z is visual arc only.
-    // Water flies over while airborne (z > AIRBORNE_Z); trees/chests fly over
-    // while high (z > TREE_CLEAR_Z / TREASURE_CLEAR_Z, whole-tree fly-over).
-    const isAirborneOverWater = isBallAirborne(ball);
+    // While visually in the air (z > AIRBORNE_Z) the ball may travel over
+    // water, terrain OB and past the canvas edge; landing there is fatal.
+    // Trees/chests fly over while high (z > TREE_CLEAR_Z / TREASURE_CLEAR_Z).
+    const isAirborne = isBallAirborne(ball);
     let terrainHit = checkTerrainCollision(ball.pos, BALL_RADIUS, level);
     let waterHit = checkWaterCollision(ball.pos, BALL_RADIUS, level.waterHazards);
-    // Ignore water when airborne (ball flies over)
-    if (isAirborneOverWater) {
-      if (terrainHit && terrainHit.zone === 'water') terrainHit = null;
+    // Ignore water/OB terrain when airborne (ball flies over)
+    if (isAirborne) {
+      if (terrainHit && (terrainHit.zone === 'water' || terrainHit.zone === 'ob')) terrainHit = null;
       if (terrainHit && terrainHit.type === 'water') terrainHit = null;
       if (waterHit) waterHit = null;
     }
-    const edgeOut = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
+    // Canvas edge is fatal only while low; airborne balls may fly past the edge.
+    let edgeOut = isOutOfBounds(ball.pos, BALL_RADIUS, LOGICAL_W, LOGICAL_H);
+    if (isAirborne) edgeOut = false;
     if (terrainHit || waterHit || edgeOut) {
       // Fatal terrain/water/edge — handle attempt consumption on reset (not on launch)
       // resetBall will increment holeAttempts (unless free flight) and show Game Over if left becomes 0
