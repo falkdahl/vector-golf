@@ -311,6 +311,27 @@
           "text": "A full set of four, then. Pity they only make one golf club at a time."
         }
       ]
+    },
+    {
+      "id": "run-start-15",
+      "lines": [
+        {
+          "speaker": "may",
+          "text": "Stop hovering, Caddy. You're blocking my wind and ruining my mood."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Cool but rude, as always. Honestly? I still think you're cool."
+        },
+        {
+          "speaker": "may",
+          "text": "I'm not here to be nice. I'm here to ace it straight from the tee in a gale."
+        },
+        {
+          "speaker": "caddy",
+          "text": "See? Total party dude. Grab your club and let's ace this one."
+        }
+      ]
     }
   ]
 }
