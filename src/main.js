@@ -412,6 +412,10 @@ let draggingMates = [];
 // used by canvas→bag swap (bag item takes this exact spot) and stacked-drop
 // restore-then-split.
 let dragOrigin = null;
+// Grab offset (modifier center minus cursor) captured at mousedown so the
+// bubble follows the pointer holding the same spot instead of snapping its
+// center to the mouse. Single offset: stacked mates share a center (≤2px).
+let dragOffset = null;
 // Bag drag-and-drop (golfbag slot → canvas placement / canvas → bag pickup).
 // pending until the pointer moves past BAG_DRAG_THRESHOLD_PX, then active.
 // While active the item counts as armed (selectedBagIndex/selectedModifier).
@@ -7109,13 +7113,17 @@ function init() {
       // Stacked items move together using the grab-time snapshot: never
       // recompute membership mid-drag, or passing over another modifier
       // would absorb it into the stack without any mouse release.
+      // The grab offset is preserved so the bubble moves by the cursor
+      // delta instead of snapping its center to the pointer.
       try {
         const mates = (draggingMates.length ? draggingMates : [draggingIdx])
           .filter(mi => mi >= 0 && mi < modifiers.length);
-        for (const mi of mates) { modifiers[mi].x = pos.x; modifiers[mi].y = pos.y; }
+        const nx = pos.x + (dragOffset ? dragOffset.x : 0);
+        const ny = pos.y + (dragOffset ? dragOffset.y : 0);
+        for (const mi of mates) { modifiers[mi].x = nx; modifiers[mi].y = ny; }
       } catch {
-        modifiers[draggingIdx].x = pos.x;
-        modifiers[draggingIdx].y = pos.y;
+        modifiers[draggingIdx].x = pos.x + (dragOffset ? dragOffset.x : 0);
+        modifiers[draggingIdx].y = pos.y + (dragOffset ? dragOffset.y : 0);
       }
       syncModifiersToField();
       canvas.style.cursor = "grabbing";
@@ -7189,13 +7197,15 @@ function init() {
     const idx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     if (idx !== -1) {
       // Start dragging existing modifier (or stack); snapshot membership now
-      // so mid-drag flyovers never merge before mouseup.
+      // so mid-drag flyovers never merge before mouseup. Capture the grab
+      // offset so the bubble keeps holding the same spot while moving.
       draggingIdx = idx;
       try {
         draggingMates = getStackIndicesFor(idx);
         if (!draggingMates.length) draggingMates = [idx];
       } catch { draggingMates = [idx]; }
       try { dragOrigin = { x: modifiers[idx].x, y: modifiers[idx].y }; } catch { dragOrigin = null; }
+      try { dragOffset = { x: modifiers[idx].x - pos.x, y: modifiers[idx].y - pos.y }; } catch { dragOffset = null; }
       isDragging = true;
       canvas.style.cursor = "grabbing";
       e.preventDefault();
@@ -7225,10 +7235,14 @@ function init() {
         if (slotEl) { handleBoardDropOnBag(slotEl); return; }
       }
       const pos = getCanvasMousePos(e);
-      // If mouse released outside canvas, pos may be out of bounds, but still update
+      // If mouse released outside canvas, pos may be out of bounds, but still update.
+      // The grab offset is preserved: the bubble center lands at cursor + offset,
+      // clamped to the canvas (not the cursor itself).
       if (pos) {
-        const cx = Math.max(0, Math.min(LOGICAL_W, pos.x));
-        const cy = Math.max(0, Math.min(LOGICAL_H, pos.y));
+        const nx = pos.x + (dragOffset ? dragOffset.x : 0);
+        const ny = pos.y + (dragOffset ? dragOffset.y : 0);
+        const cx = Math.max(0, Math.min(LOGICAL_W, nx));
+        const cy = Math.max(0, Math.min(LOGICAL_H, ny));
         let mates = [];
         try {
           mates = (draggingMates.length ? draggingMates : getStackIndicesFor(draggingIdx))
@@ -7252,6 +7266,7 @@ function init() {
       draggingIdx = -1;
       draggingMates = [];
       dragOrigin = null;
+      dragOffset = null;
       canvas.style.cursor = "default";
       saveProgress();
     }
@@ -7262,7 +7277,7 @@ function init() {
   // item takes the dragged item's pre-drag board spot, as usual).
   function handleBoardDropOnBag(slotEl) {
     const finish = () => {
-      isDragging = false; draggingIdx = -1; draggingMates = []; dragOrigin = null;
+      isDragging = false; draggingIdx = -1; draggingMates = []; dragOrigin = null; dragOffset = null;
       selectedBagIndex = -1; selectedModifier = null;
       canvas.style.cursor = "default";
     };
@@ -7322,7 +7337,9 @@ function init() {
         const mates = (draggingMates.length ? draggingMates : [draggingIdx])
           .filter(mi => mi >= 0 && mi < modifiers.length);
         if (mates.length) {
-          for (const mi of mates) { modifiers[mi].x = pos.x; modifiers[mi].y = pos.y; }
+          const nx = pos.x + (dragOffset ? dragOffset.x : 0);
+          const ny = pos.y + (dragOffset ? dragOffset.y : 0);
+          for (const mi of mates) { modifiers[mi].x = nx; modifiers[mi].y = ny; }
           syncModifiersToField();
           canvas.style.cursor = "grabbing";
         }
@@ -7495,6 +7512,7 @@ function init() {
       draggingIdx = -1;
       draggingMates = [];
       dragOrigin = null;
+      dragOffset = null;
     }
     const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     if (pendingPickup) {
@@ -8090,7 +8108,7 @@ function playCutsceneWrapped(idOrData, opts) {
   }
   return ok;
 }
-try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
+try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__getDragOffset = () => (dragOffset ? { ...dragOffset } : null); window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
   totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
