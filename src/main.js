@@ -723,7 +723,12 @@ function selectBagSlot(idx) {
   updateHotbarUI();
   return true;
 }
-// --- Pickup-discard mode (bag full + right-click pickup) ---
+// --- Pickup-discard mode (DEPRECATED for pickup) ---
+// Pickup of a placed modifier while the bag is full no longer enters discard
+// mode: it toasts `Golfbag is already full` and leaves the board untouched.
+// Discard mode (`.discard-target` + `pendingRewardType`) is only for reward
+// claims while full. The helpers below are kept for backward compat (test
+// hooks) but are no longer entered from pickup paths.
 function isPickupDiscardActive() { return !!pendingPickup; }
 function getPendingPickup() { return pendingPickup ? { ...pendingPickup } : null; }
 function enterPickupDiscard(modifierRef) {
@@ -4962,9 +4967,10 @@ function removeModifierAt(x, y) {
       }
     } catch {}
     // Tactical: can only be picked up again if there is bag space;
-    // when full, enter pickup-discard mode instead of just toasting.
+    // when full, toast and leave the modifier on the board (no discard mode;
+    // discard mode is only for reward claims while full).
     if (!golfbagHasEmpty()) {
-      enterPickupDiscard({ type: modifiers[idx].type, id: modifiers[idx].id, index: idx });
+      try { showToast('Golfbag is already full'); } catch {}
       return false;
     }
     const [removed] = modifiers.splice(idx, 1);
@@ -6861,7 +6867,7 @@ function init() {
       }
     } else if (e.code === "Delete" || e.code === "Backspace") {
       // Remove last modifier and return to bag if space (tactical model);
-      // when full, arm pickup-discard for the last modifier instead of only toasting.
+      // when full, toast and leave it on the board (no discard mode).
       // A stacked last modifier splits into individuals instead of being picked up.
       if (modifiers.length > 0 && (gameState === "AIMING" || gameState === "CHARGING")) {
         try {
@@ -6873,8 +6879,7 @@ function init() {
           }
         } catch {}
         if (!golfbagHasEmpty()) {
-          const last = modifiers[modifiers.length - 1];
-          enterPickupDiscard({ type: last.type, id: last.id, index: modifiers.length - 1 });
+          try { showToast('Golfbag is already full'); } catch {}
         } else {
           const removed = modifiers.pop();
           if (removed && removed.type) {
