@@ -168,7 +168,11 @@
         },
         {
           "speaker": "caddy",
-          "text": "Field Extender gives you +20% area for your modifiers, Power Cell gives +20% strength, and Free Shot gives you a free attempt that does not count."
+          "text": "Field Extender gives you +20% area for your modifiers, Power Cell gives +20% strength, and Free Shot gives you 3 free attempts that does not count."
+        },
+        {
+          "speaker": "caddy",
+          "text": "You can toggle the effect of your passive items on and off by clicking them in your bag."
         }
       ]
     },
