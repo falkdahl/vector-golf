@@ -401,6 +401,12 @@ let hotbarGridEl = null;
 let golfbagContainerEl = null;
 let golfbagIconEl = null;
 let bottomBarEl = null;
+let journalWrapperEl = null;
+let journalContainerEl = null;
+let journalPanelEl = null;
+let journalTitleEl = null;
+let journalStartingEl = null;
+let journalRowsEl = null;
 let draggingIdx = -1;
 let isDragging = false;
 // Snapshot of the dragged stack taken at grab time (mousedown). Passing over
@@ -1088,6 +1094,8 @@ function handleStartingPick(type){
 function handleStartingOk(){
   if(!startingItemsVisible) return false;
   if(selectedStartingItems.length!==2) return false;
+  // Journal: a new run begins with these 2 picks
+  try { journalStartRun([...selectedStartingItems]); } catch {}
   // Add selected items to bag
   for(const t of selectedStartingItems) addItemToBag(t);
   updateHotbarUI();
@@ -1164,6 +1172,9 @@ function startCourseWithStartingItems(courseId){
   setActiveCourse(course);
   try { incrementRunsStarted(); } catch {}
   clearProgress();
+  // Journal: normally started in handleStartingOk (with the 2 picks); only
+  // start empty here for direct calls that bypass the starting overlay.
+  try { if (!runJournalActive) journalStartRun([]); } catch {}
   // Tutorial run = loadout shown directly after the intro-3-hole chain for the 3-hole
   // course (shop hidden). Whole run gets liquifier-only single-card rewards, no re-roll.
   try {
@@ -1221,6 +1232,8 @@ function startTutorialCourse(courseId){
   try { incrementRunsStarted(); } catch {}
   clearProgress();
   isTutorialRun = false;
+  // Journal: fresh tutorial run (no starting picks)
+  try { journalStartRun([]); } catch {}
   currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
   totalPoints=0; runPointsEarned=0; runCoinsEarned=0;
   holeStartAttempts=0;
@@ -1308,11 +1321,13 @@ function grantTutorialHole4Passives(){
 }
 function showTutorialHole4PassiveReward(){
   // Show reward menu with fieldExtender, powerCell, freeShot after hole4 banter
-  tutorialHole4StartRewardPending = true;
-  rewardOffered = ['fieldExtender','powerCell','freeShot'];
-  pendingRewardType = null;
-  pendingPickup = null;
-  rewardMenuVisible = true;
+tutorialHole4StartRewardPending = true;
+rewardOffered = ['fieldExtender','powerCell','freeShot'];
+pendingRewardType = null;
+pendingPickup = null;
+rewardSource = 'hole-start';
+journalChestPending = false;
+rewardMenuVisible = true;
   rewardMenuHover = null;
   rewardPending = false;
   rewardRerolled = false;
@@ -2080,6 +2095,8 @@ function getSavePayload() {
     rewardMenuVisible,
     rewardSeedCounter,
     campaignSeed: (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null),
+    runJournal: runJournal ? { startingItems: [...runJournal.startingItems], holes: { ...runJournal.holes }, maxHole: runJournal.maxHole } : null,
+    runJournalActive: !!runJournalActive,
     gameState,
     modifiers: modifiers.map(m => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })),
     aimAngle: getAimAngle(),
@@ -2297,6 +2314,36 @@ function loadProgress() {
       rewardChosenCounts.areaUp = v;
       rewardChosenCounts.fieldExtender = v;
     }
+    // Journal: resume recording the in-progress run after reload
+    try {
+      if (d.runJournal && typeof d.runJournal === 'object' && d.runJournalActive) {
+        const holes = {};
+        const src = d.runJournal.holes && typeof d.runJournal.holes === 'object' ? d.runJournal.holes : {};
+        for (const k of Object.keys(src)) {
+          const h = src[k];
+          if (!h || typeof h !== 'object') continue;
+          holes[k] = {
+            startReward: (typeof h.startReward === 'string' || h.startReward === null) ? h.startReward : null,
+            chest: (h.chest && typeof h.chest === 'object') ? { reward: (typeof h.chest.reward === 'string' || h.chest.reward === null) ? h.chest.reward : null } : null,
+            clearing: Array.isArray(h.clearing) ? h.clearing.filter(x => typeof x === 'string') : [],
+            points: Number.isFinite(h.points) ? Math.floor(h.points) : 0,
+            attempts: Math.max(0, Math.floor(h.attempts)) || 0,
+            cleared: !!h.cleared,
+          };
+        }
+        runJournal = {
+          startingItems: Array.isArray(d.runJournal.startingItems) ? d.runJournal.startingItems.filter(x => typeof x === 'string') : [],
+          holes,
+          maxHole: Number.isFinite(d.runJournal.maxHole) ? Math.floor(d.runJournal.maxHole) : currentHoleIndex,
+        };
+        runJournalActive = true;
+      } else {
+        runJournal = null;
+        runJournalActive = false;
+      }
+      journalChestPending = false;
+      rewardSource = null;
+    } catch { runJournal = null; runJournalActive = false; }
     // Do not restore paused state as visible on load — resume as AIMING
     pauseMenuVisible = false; pauseMenuHover = null;
     return d;
@@ -2360,6 +2407,8 @@ function resumeGame() {
 function startNewGame() {
   clearProgress();
   isTutorialRun = false;
+  // Journal: fresh legacy run (no starting picks)
+  try { journalStartRun([]); } catch {}
   // Generate fresh 18 levels with increasing difficulty per REQ-010
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
@@ -3358,6 +3407,8 @@ function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {
   clearProgress();
   isTutorialRun = false;
+  // Journal: fresh legacy run (no starting picks)
+  try { journalStartRun([]); } catch {}
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   setBagFromTypeList(['liquifier']); clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
@@ -3376,6 +3427,8 @@ function startNewGameFromMain() {
 function endRun() {
   // Allow End Run from either legacy pause or new in-level pause (main menu with backdrop)
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
+  // Journal: record this unfinished run as a best candidate before clearing
+  try { commitRunJournal(false); } catch {}
   // Coin economy: finalize coins before clearing run
   try { finalizeRunCoinsAndShowSummary(); } catch {}
   if (coinSummaryVisible) {
@@ -3399,6 +3452,7 @@ function endRun() {
 function finishReturnToMainMenu() {
   clearProgress();
   isTutorialRun = false;
+  try { journalStopRun(); } catch {}
   deferredMenuReturn = false;
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   setBagFromTypeList(['liquifier']);
@@ -3696,6 +3750,348 @@ function shuffleArray(a) {
   return a;
 }
 
+// --- Run Journal (best run per course) ---
+// Records what happened on each hole of the current run (starting picks,
+// hole-start rewards, chest rewards, modifiers activated on the clearing
+// shot) and keeps the best run per course in localStorage. Best = highest
+// score once cleared, else the run that reached the highest-numbered hole.
+const JOURNAL_KEY = "golfVectorField.journal.v1";
+let runJournal = null; // { startingItems:[], holes:{idx:{startReward,chest:{reward}|null,clearing:[],points,attempts,cleared}}, maxHole:-1 }
+let runJournalActive = false;
+let journalChestPending = false; // set when a chest collect triggers the next menu
+let rewardSource = null; // 'hole-start' | 'chest' | null — what opened the current reward menu
+let isJournalCollapsed = true; // icon slid out of the way until opened
+const JOURNAL_TYPE_NAMES = { magnifier:'Magnifier', liquifier:'Liquifier', deflector:'Deflector', rotator:'Rotator', fieldExtender:'Field Extender', powerCell:'Power Cell', rangeModifier:'Power Cell', freeShot:'Free Shots' };
+const JOURNAL_TYPE_ICONS = { magnifier:'./img/magnifier-icon.png', liquifier:'./img/liquifier-icon.png', deflector:'./img/deflector-icon.png', rotator:'./img/rotator-icon.png', fieldExtender:'./img/field-extender-icon.png', powerCell:'./img/power-cell-icon.png', freeShot:null };
+function journalTypeName(t) { return JOURNAL_TYPE_NAMES[normalizeSupplyType(t)] || JOURNAL_TYPE_NAMES[t] || String(t); }
+function journalCourseKey() { try { return activeCourse ? String(activeCourse.holeCount) : null; } catch { return null; } }
+function journalCourseName() { try { return (activeCourse && activeCourse.name) || ''; } catch { return ''; } }
+function loadJournalStore() {
+  try {
+    const raw = localStorage.getItem(JOURNAL_KEY);
+    if (!raw) return { version: 1, best: {} };
+    const d = JSON.parse(raw);
+    if (!d || d.version !== 1 || !d.best || typeof d.best !== 'object') return { version: 1, best: {} };
+    return d;
+  } catch { return { version: 1, best: {} }; }
+}
+function saveJournalStore(store) {
+  try { localStorage.setItem(JOURNAL_KEY, JSON.stringify(store)); } catch {}
+}
+function getJournalBest(key) {
+  try {
+    const k = key || journalCourseKey();
+    if (!k) return null;
+    const store = loadJournalStore();
+    return store.best[k] || null;
+  } catch { return null; }
+}
+function journalStartRun(startingItems) {
+  runJournal = {
+    startingItems: Array.isArray(startingItems) ? [...startingItems] : [],
+    holes: {},
+    maxHole: -1,
+  };
+  runJournalActive = true;
+  journalChestPending = false;
+  rewardSource = null;
+}
+function journalStopRun() {
+  runJournalActive = false;
+  journalChestPending = false;
+  rewardSource = null;
+}
+function journalEnsureHole(idx) {
+  if (!runJournal) return null;
+  if (!runJournal.holes[idx]) {
+    runJournal.holes[idx] = { startReward: null, chest: null, clearing: [], points: 0, attempts: 0, cleared: false };
+  }
+  if (idx > runJournal.maxHole) runJournal.maxHole = idx;
+  return runJournal.holes[idx];
+}
+// Record a claimed reward into the current hole entry, by menu source.
+// Called from claimReward and discardBagSlotAndClaimReward after a grant.
+function journalRecordReward(normalized) {
+  try {
+    if (!runJournalActive || !runJournal) return;
+    if (!rewardSource) return;
+    const entry = journalEnsureHole(currentHoleIndex);
+    if (!entry) return;
+    if (rewardSource === 'chest') {
+      entry.chest = { reward: normalized };
+    } else {
+      entry.startReward = normalized;
+    }
+  } catch {}
+}
+// Record a skipped reward menu (conscious skip, not a grant).
+function journalRecordSkip() {
+  try {
+    if (!runJournalActive || !runJournal) return;
+    if (!rewardSource) return;
+    const entry = journalEnsureHole(currentHoleIndex);
+    if (!entry) return;
+    if (rewardSource === 'chest') {
+      if (!entry.chest) entry.chest = { reward: 'skipped' };
+    } else {
+      if (!entry.startReward) entry.startReward = 'skipped';
+    }
+  } catch {}
+}
+// Types of modifiers the ball was inside on the clearing shot (activated to
+// clear the hole). Placed-but-never-entered modifiers are excluded.
+function journalClearingTypes() {
+  const out = [];
+  try {
+    const byId = new Map();
+    for (const m of modifiers) {
+      if (!m || !m.type) continue;
+      byId.set(modifierFlashKey(m), normalizeSupplyType(m.type));
+    }
+    const seen = modifiersTraversedThisShot || new Set();
+    for (const k of seen) {
+      const t = byId.get(String(k));
+      if (t && !out.includes(t)) out.push(t);
+    }
+  } catch {}
+  return out;
+}
+function journalRecordHoleClear(idx, points, attempts) {
+  try {
+    if (!runJournalActive || !runJournal) return;
+    const entry = journalEnsureHole(idx);
+    if (!entry) return;
+    entry.clearing = journalClearingTypes();
+    entry.points = Number.isFinite(points) ? Math.floor(points) : 0;
+    entry.attempts = Math.max(0, Math.floor(attempts)) || 0;
+    entry.cleared = true;
+  } catch {}
+}
+// Commit the finished run as the course best when it qualifies:
+// cleared run with a higher score wins; otherwise (never cleared) the run
+// that reached the highest-numbered hole wins (points break ties).
+function commitRunJournal(cleared) {
+  try {
+    const key = journalCourseKey();
+    if (!key || !runJournalActive || !runJournal) { try { journalStopRun(); } catch {} return false; }
+    const holesReached = Math.max(0, currentHoleIndex + 1);
+    const holes = [];
+    for (let i = 0; i < holesReached; i++) {
+      const h = runJournal.holes[i] || { startReward: null, chest: null, clearing: [], points: 0, attempts: 0, cleared: false };
+      holes.push({
+        n: i + 1,
+        cleared: !!h.cleared,
+        points: Math.floor(h.points) || 0,
+        attempts: Math.floor(h.attempts) || 0,
+        startReward: h.startReward || null,
+        chest: h.chest ? { reward: h.chest.reward || null } : null,
+        clearing: Array.isArray(h.clearing) ? [...h.clearing] : [],
+      });
+    }
+    const entry = {
+      version: 1,
+      holeCount: Number(activeCourse ? activeCourse.holeCount : holesReached) || holesReached,
+      courseName: journalCourseName(),
+      cleared: !!cleared,
+      holesReached,
+      totalPoints: Math.floor(totalPoints) || 0,
+      startingItems: [...runJournal.startingItems],
+      holes,
+      savedAt: Date.now(),
+    };
+    const store = loadJournalStore();
+    const prev = store.best[key];
+    let take = false;
+    if (!prev) take = true;
+    else if (!!cleared && !prev.cleared) take = true;
+    else if (!!cleared && !!prev.cleared) take = entry.totalPoints > (prev.totalPoints || 0);
+    else if (!cleared && !prev.cleared) {
+      take = (entry.holesReached > (prev.holesReached || 0)) ||
+        (entry.holesReached === (prev.holesReached || 0) && entry.totalPoints > (prev.totalPoints || 0));
+    }
+    // A cleared best is never overwritten by an uncleared run.
+    if (take) {
+      store.best[key] = entry;
+      saveJournalStore(store);
+    }
+    journalStopRun();
+    return take;
+  } catch { try { journalStopRun(); } catch {} return false; }
+}
+
+// --- Journal UI (book icon top-left, J hotkey, per-hole best-run rows) ---
+function canToggleJournal() {
+  try {
+    if (pauseMenuVisible || mainMenuVisible) return false;
+    if (startingItemsVisible || coinSummaryVisible) return false;
+    if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
+    if (gameState === "WIN" || gameState === "GAME_OVER") return false;
+    try { if (cutsceneIsActive()) return false; } catch {}
+    try { if (banterIsActive()) return false; } catch {}
+    return true;
+  } catch { return false; }
+}
+function isJournalOpen() { return !isJournalCollapsed; }
+function toggleJournal() {
+  if (!canToggleJournal()) return false;
+  isJournalCollapsed = !isJournalCollapsed;
+  try { syncJournalUI(); } catch {}
+  return true;
+}
+function syncJournalUI() {
+  try {
+    let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+    let isBanter = false; try { isBanter = banterIsActive(); } catch {}
+    const hidden = pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
+    if (journalWrapperEl) journalWrapperEl.classList.toggle("hidden", !!hidden);
+    if (journalContainerEl) {
+      journalContainerEl.classList.toggle("hidden", !!hidden);
+      journalContainerEl.classList.toggle("collapsed", !!isJournalCollapsed);
+      journalContainerEl.setAttribute("aria-expanded", String(!isJournalCollapsed));
+      journalContainerEl.title = isJournalCollapsed ? "Journal — click to open best-run journal (J)" : "Journal — click to close (J)";
+    }
+    if (journalPanelEl) {
+      const show = !hidden && !isJournalCollapsed;
+      journalPanelEl.classList.toggle("hidden", !show);
+      if (show) {
+        // updateHotbarUI runs every frame — only rebuild rows when best data changed
+        try {
+          const key = journalCourseKey();
+          const best = key ? getJournalBest(key) : null;
+          const sig = (key || '-') + '|' + (best ? (best.savedAt + '|' + best.totalPoints + '|' + best.holesReached + '|' + best.holes.length) : 'none');
+          if (journalPanelEl.dataset.journalSig !== sig) {
+            journalPanelEl.dataset.journalSig = sig;
+            renderJournalPanel();
+          }
+        } catch { try { renderJournalPanel(); } catch {} }
+      } else {
+        try { delete journalPanelEl.dataset.journalSig; } catch {}
+      }
+    }
+  } catch {}
+}
+function journalTypeChip(t) {
+  const name = journalTypeName(t);
+  const src = JOURNAL_TYPE_ICONS[normalizeSupplyType(t)] ?? JOURNAL_TYPE_ICONS[t];
+  if (src) {
+    const img = document.createElement('img');
+    img.className = 'journal-type-icon';
+    img.src = src;
+    img.alt = name;
+    img.title = name;
+    return img;
+  }
+  const star = document.createElement('span');
+  star.className = 'journal-type-star';
+  star.textContent = '★';
+  star.title = name;
+  return star;
+}
+// One icon+name unit that never breaks apart: the content row may wrap
+// between items but never between an icon and its own name. The icon lives
+// in a fixed-width slot so all names start at the same offset.
+function journalItem(t, suffix) {
+  const wrap = document.createElement('span');
+  wrap.className = 'journal-item';
+  const slot = document.createElement('span');
+  slot.className = 'journal-item-icon';
+  slot.appendChild(journalTypeChip(t));
+  wrap.appendChild(slot);
+  const nm = document.createElement('span');
+  nm.className = 'journal-item-name';
+  nm.textContent = journalTypeName(t) + (suffix || '');
+  wrap.appendChild(nm);
+  return wrap;
+}
+function renderJournalPanel() {
+  try {
+    if (!journalTitleEl || !journalRowsEl) return;
+    const key = journalCourseKey();
+    const best = key ? getJournalBest(key) : null;
+    if (!best || !Array.isArray(best.holes) || !best.holes.length) {
+      journalTitleEl.textContent = 'Journal' + (journalCourseName() ? ' — ' + journalCourseName() : '');
+      if (journalStartingEl) journalStartingEl.textContent = '';
+      journalRowsEl.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'journal-empty';
+      empty.textContent = 'No best run yet — finish a run to record it.';
+      journalRowsEl.appendChild(empty);
+      return;
+    }
+    journalTitleEl.textContent = 'Best Run — ' + (best.courseName || ('Hole ' + best.holeCount));
+    if (journalStartingEl) journalStartingEl.innerHTML = '';
+    journalRowsEl.innerHTML = '';
+    for (const h of best.holes) {
+      const row = document.createElement('div');
+      row.className = 'journal-hole';
+      const title = document.createElement('div');
+      title.className = 'journal-hole-title';
+      const head = document.createElement('span');
+      head.textContent = 'Hole ' + h.n + (h.cleared ? ' ✓' : ' — reached');
+      title.appendChild(head);
+      if (h.cleared) {
+        const pts = document.createElement('span');
+        pts.className = 'journal-points';
+        pts.textContent = '+' + h.points + ' pts';
+        title.appendChild(pts);
+      }
+      row.appendChild(title);
+      // Vertical breakdown: one horizontal label+content row per entry
+      const breakdown = document.createElement('div');
+      breakdown.className = 'journal-breakdown';
+      const mkField = (label, nodes) => {
+        const f = document.createElement('div');
+        f.className = 'journal-field';
+        const lab = document.createElement('span');
+        lab.className = 'journal-label';
+        lab.textContent = label;
+        f.appendChild(lab);
+        const content = document.createElement('div');
+        content.className = 'journal-content';
+        for (const n of nodes) content.appendChild(n);
+        f.appendChild(content);
+        return f;
+      };
+      const txt = (s) => { const el = document.createElement('span'); el.textContent = s; return el; };
+      // Start row: hole 1 shows the run's starting picks; other holes show
+      // the hole-start reward. Nothing is shown when there is neither.
+      if (h.n === 1 && Array.isArray(best.startingItems) && best.startingItems.length) {
+        const nodes = [];
+        best.startingItems.forEach((t, i) => {
+          nodes.push(journalItem(t, i < best.startingItems.length - 1 ? ',' : ''));
+        });
+        breakdown.appendChild(mkField('Start:', nodes));
+      } else if (h.startReward && h.startReward !== 'skipped') {
+        breakdown.appendChild(mkField('Start:', [journalItem(h.startReward)]));
+      } else if (h.startReward === 'skipped') {
+        breakdown.appendChild(mkField('Start:', [txt('Skipped')]));
+      }
+      // Chest row is always shown; empty content when no chest was taken.
+      if (h.chest && h.chest.reward && h.chest.reward !== 'skipped') {
+        breakdown.appendChild(mkField('Chest:', [journalItem(h.chest.reward)]));
+      } else if (h.chest) {
+        breakdown.appendChild(mkField('Chest:', [txt('Skipped')]));
+      } else {
+        breakdown.appendChild(mkField('Chest:', []));
+      }
+      // Modifiers activated on the clearing shot only
+      if (h.cleared) {
+        if (Array.isArray(h.clearing) && h.clearing.length) {
+          const nodes = [];
+          h.clearing.forEach((t, i) => {
+            nodes.push(journalItem(t, i < h.clearing.length - 1 ? ',' : ''));
+          });
+          breakdown.appendChild(mkField('Cleared with:', nodes));
+        } else {
+          breakdown.appendChild(mkField('Cleared with:', []));
+        }
+      }
+        row.appendChild(breakdown);
+      journalRowsEl.appendChild(row);
+    }
+  } catch {}
+}
+
 function maybeShowRewardMenu() {
   if (gameState === "WIN" || gameState === "GAME_OVER") return;
   if (pauseMenuVisible) return;
@@ -3723,6 +4119,8 @@ function maybeShowRewardMenu() {
         rewardOffered = ['deflector','rotator','magnifier'];
         pendingRewardType = null;
         pendingPickup = null;
+        rewardSource = journalChestPending ? 'chest' : 'hole-start';
+        journalChestPending = false;
         rewardMenuVisible = true;
         rewardMenuHover = null;
         rewardPending = false;
@@ -3738,6 +4136,8 @@ function maybeShowRewardMenu() {
         rewardOffered = ['fieldExtender','powerCell','freeShot'];
         pendingRewardType = null;
         pendingPickup = null;
+        rewardSource = journalChestPending ? 'chest' : 'hole-start';
+        journalChestPending = false;
         rewardMenuVisible = true;
         rewardMenuHover = null;
         rewardPending = false;
@@ -3754,6 +4154,8 @@ function maybeShowRewardMenu() {
     rewardOffered = getSeededRewardOffer();
     pendingRewardType = null;
     pendingPickup = null;
+    rewardSource = journalChestPending ? 'chest' : 'hole-start';
+    journalChestPending = false;
     rewardMenuVisible = true;
     rewardMenuHover = null;
     rewardPending = false;
@@ -4236,6 +4638,8 @@ function closeRewardMenuWithoutReward() {
   }
   pendingRewardType = null;
   rewardClaimedFor = totalAttempts;
+  try { journalRecordSkip(); } catch {}
+  rewardSource = null;
   rewardMenuVisible = false;
   rewardMenuHover = null;
   rewardRerollHover = false;
@@ -4261,6 +4665,8 @@ function discardBagSlotAndClaimReward(slotIdx) {
   syncDerivedFromBag();
   const ok = grantRewardToBag(wanted);
   if (!ok) { updateHotbarUI(); syncRewardOverlay(); return false; }
+  try { journalRecordReward(normalizeSupplyType(wanted)); } catch {}
+  rewardSource = null;
   pendingRewardType = null;
   rewardClaimedFor = totalAttempts;
   rewardMenuVisible = false;
@@ -4304,6 +4710,8 @@ function claimReward(type) {
   }
   // Mark first and general claimed for backward compat
   rewardClaimedFor = totalAttempts;
+  try { journalRecordReward(normalized); } catch {}
+  rewardSource = null;
   pendingRewardType = null;
   rewardMenuVisible = false;
   rewardMenuHover = null;
@@ -4374,6 +4782,8 @@ function setupCanvases() { return setupCanvas(); }
 
 function loadLevel(index) {
   currentHoleIndex = index;
+  // Journal: track the highest-numbered hole reached this run
+  try { if (runJournalActive && runJournal && index > runJournal.maxHole) runJournal.maxHole = index; } catch {}
   // 14-cheat-mode: new hole cancels any ball drag.
   cheatDraggingBall = false;
   cheatMousePos = null;
@@ -4779,6 +5189,8 @@ function updateHotbarUI() {
   }catch(e){ console.warn('passive hotbar update failed',e); }
   // Also update HUD attempts left display to show (+freeShot charges)
   try { updateAttemptsUI(); } catch {}
+  // Journal icon follows the same gameplay visibility; re-render rows when open
+  try { syncJournalUI(); } catch {}
 }
 
 function showGameOver() {
@@ -4824,6 +5236,8 @@ function hideGameOver() {
 
 function handleGameOverReturn() {
   hideGameOver();
+  // Journal: record this unfinished run as a best candidate before clearing
+  try { commitRunJournal(false); } catch {}
   try { finalizeRunCoinsAndShowSummary(); } catch {}
   if (coinSummaryVisible) {
     // End screen over the loaded level (10-progression.md §4); menu return deferred.
@@ -5159,7 +5573,8 @@ function resetBall() {
 function advanceHole(winWasFreeFlight = false) {
   if (currentHoleIndex < getTotalHoles() - 1) {
     if (isTutorialActive()) {
-      // No points or summary on tutorial
+      // No points or summary on tutorial — still journal the clearing modifiers
+      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts)); } catch {}
       const wasIdx = currentHoleIndex;
       // Defer via same pending mechanism but without showing overlay — hideCoinSummary will handle tutorial branching immediately
       // To avoid showing overlay, set pending and directly invoke hideCoinSummary path via timeout
@@ -5179,6 +5594,7 @@ function advanceHole(winWasFreeFlight = false) {
     runPointsEarned += holePoints;
     runCoinsEarned = runPointsEarned;
     runHolesCleared++;
+    try { journalRecordHoleClear(currentHoleIndex, holePoints, attemptsOnHole); } catch {}
     // show per-hole points summary before advancing
     try{ showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints); }catch{}
     // Defer actual level load until summary dismissed: pendingHoleAdvance handled in hideCoinSummary
@@ -5403,6 +5819,8 @@ function checkWin() {
       clearFreeShotFlightGlow();
       hideSoftlockBanner();
       resetSoftlockDetection();
+      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts)); } catch {}
+      try { commitRunJournal(true); } catch {}
       // No points, no summary on tutorial final hole — play congratulations banter before returning
       try{ maybeUpdateHighScore(); }catch{}
       gameState = "WIN";
@@ -5428,6 +5846,8 @@ function checkWin() {
     runPointsEarned += holePointsF;
     runCoinsEarned = runPointsEarned;
     runHolesCleared++;
+    try { journalRecordHoleClear(currentHoleIndex, holePointsF, attemptsF); } catch {}
+    try { commitRunJournal(true); } catch {}
     ball.vel.x = 0;
     ball.vel.y = 0;
     ball.isMoving = false;
@@ -5633,6 +6053,7 @@ function update(dt) {
             // the just-collected 2nd/3rd chest on tutorial hole 3).
             if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
             rewardPending = true;
+            journalChestPending = true;
             saveProgress();
             maybeShowRewardMenu();
             break;
@@ -5678,6 +6099,7 @@ function update(dt) {
             // never mutate isCollected — see AIMING branch above).
             if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
             rewardPending = true;
+            journalChestPending = true;
             saveProgress();
             maybeShowRewardMenu();
             if (rewardMenuVisible) return;
@@ -5967,6 +6389,12 @@ function init() {
   hotbarGridEl = document.getElementById("hotbar-grid");
   golfbagContainerEl = document.getElementById("golfbag-container");
   golfbagIconEl = document.getElementById("golfbag-icon");
+  journalWrapperEl = document.getElementById("journal-wrapper");
+  journalContainerEl = document.getElementById("journal-container");
+  journalPanelEl = document.getElementById("journal-panel");
+  journalTitleEl = document.getElementById("journal-title");
+  journalStartingEl = document.getElementById("journal-starting");
+  journalRowsEl = document.getElementById("journal-rows");
   bottomBarEl = document.getElementById("bottom-bar");
   hudEl = document.getElementById("hud");
   hudHoleEl = document.getElementById("hud-hole");
@@ -5999,6 +6427,27 @@ function init() {
         // propagation — the global input handler still starts charging.
         e.preventDefault();
         try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch {}
+      }
+    });
+  }
+  if (journalContainerEl) {
+    const handleJournalToggle = (e) => {
+      e.stopPropagation();
+      toggleJournal();
+      // Release focus so a subsequent Space (charge/shoot) goes to the game,
+      // not back into the focused icon (which would re-toggle on key repeat).
+      try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch {}
+    };
+    journalContainerEl.addEventListener("click", handleJournalToggle);
+    journalContainerEl.addEventListener("keydown", (e) => {
+      if (e.code === "Enter") {
+        if (e.repeat) { e.preventDefault(); return; }
+        e.preventDefault();
+        toggleJournal();
+        try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch {}
+      } else if (e.code === "Space") {
+        e.preventDefault();
+        try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch {}
       }
     });
   }
@@ -6810,6 +7259,14 @@ function init() {
         }
         return;
       }
+      if (e.code === "KeyJ" && !e.repeat) {
+        const ae = document.activeElement;
+        const isTyping = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
+        if (!isTyping && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          if (toggleJournal()) e.preventDefault();
+        }
+        return;
+      }
       // Discard mode: Digit1-4 destroys that bag slot to take the pending reward
       if (pendingRewardType && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4")) {
         const idx = Number(e.code.slice(5)) - 1;
@@ -6929,6 +7386,16 @@ function init() {
     // Tactical 4-slot bag: Digit1-4 selects the bag slot.
     // Spatial slots arm placement; passive slots (Field Extender/Power Cell) select but never place;
     // Free Shot is display-only and never selectable. In pickup-discard mode 1-4 discards that slot.
+    if (e.code === "KeyJ" && !e.repeat) {
+      const aeJ = document.activeElement;
+      const isTypingJ = aeJ && (aeJ.tagName === "INPUT" || aeJ.tagName === "TEXTAREA" || aeJ.isContentEditable);
+      if (!isTypingJ && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (toggleJournal()) {
+          e.preventDefault();
+          return;
+        }
+      }
+    }
     if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4") {
       const idx = Number(e.code.slice(5)) - 1;
       if (pendingPickup) {
@@ -7653,6 +8120,15 @@ if (typeof window !== 'undefined') {
   window.__getEffectiveFieldExtenderCount = getEffectiveFieldExtenderCount;
   window.__getEffectivePowerCellCount = getEffectivePowerCellCount;
   window.__applyPassiveEffects = applyPassiveEffects;
+  window.__toggleJournal = toggleJournal;
+  window.__isJournalOpen = isJournalOpen;
+  window.__canToggleJournal = canToggleJournal;
+  window.__syncJournalUI = syncJournalUI;
+  window.__renderJournalPanel = renderJournalPanel;
+  window.__getJournalBest = getJournalBest;
+  window.__commitRunJournal = commitRunJournal;
+  window.__journalStartRun = journalStartRun;
+  window.__JOURNAL_KEY = JOURNAL_KEY;
   window.__getRewardPending = () => rewardPending;
   window.__setRewardPending = (v) => { rewardPending = !!v; };
   window.__getRewardRerolled = getRewardRerolled;
@@ -8110,8 +8586,8 @@ function playCutsceneWrapped(idOrData, opts) {
 }
 try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__getDragOffset = () => (dragOffset ? { ...dragOffset } : null); window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {

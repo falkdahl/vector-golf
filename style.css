@@ -959,6 +959,189 @@ body {
 #golfbag-container:active #golfbag-icon {
   transform: scale(1.02);
 }
+/* Run journal — book icon, top-left, same theme as the golf bag */
+#journal-wrapper {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  width: 79px;
+  height: 79px;
+  flex-shrink: 0;
+  overflow: visible;
+  display: block;
+  z-index: 6;
+  pointer-events: none;
+}
+#journal-wrapper.hidden { display: none !important; }
+#journal-wrapper > * { pointer-events: auto; }
+#journal-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 79px;
+  height: 79px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  position: relative;
+  overflow: visible;
+  will-change: transform;
+}
+#journal-container.collapsed {
+  transform: translateX(-51px);
+}
+#journal-container:focus-visible {
+  outline: 2px solid rgba(255,255,255,0.9);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+#journal-container.hidden { display: none !important; }
+#journal-icon {
+  font-size: 44px;
+  line-height: 1;
+  display: block;
+  pointer-events: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.25));
+}
+#journal-container:hover #journal-icon {
+  transform: scale(1.08);
+  filter: drop-shadow(0 6px 8px rgba(0,0,0,0.45));
+}
+#journal-container:active #journal-icon {
+  transform: scale(1.02);
+}
+.journal-hotkey {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.78);
+  font: 600 10px system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: none;
+  z-index: 2;
+}
+#journal-panel {
+  position: absolute;
+  bottom: 100px;
+  left: 12px;
+  width: min(330px, 62%);
+  max-height: calc(100% - 130px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 9;
+  pointer-events: auto;
+}
+#journal-panel.hidden { display: none !important; }
+.journal-card {
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: 400 12px system-ui, sans-serif;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.journal-card h3 {
+  margin: 0 0 4px;
+  font: 700 14px system-ui, sans-serif;
+  color: #FFD700;
+}
+.journal-starting {
+  margin: 0 0 8px;
+  font: 600 11px system-ui, sans-serif;
+  color: rgba(255,255,255,0.85);
+}
+.journal-starting:empty { display: none; }
+.journal-empty {
+  color: rgba(255,255,255,0.7);
+  font: 400 12px system-ui, sans-serif;
+}
+.journal-hole {
+  border-top: 1px solid rgba(255,255,255,0.12);
+  padding: 6px 0;
+}
+.journal-hole-title {
+  font: 700 12px system-ui, sans-serif;
+  margin-bottom: 2px;
+}
+.journal-hole-title .journal-points {
+  float: right;
+  color: #FFD700;
+  font-weight: 600;
+}
+.journal-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+.journal-field {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 1px 0;
+  min-height: 24px;
+  color: rgba(255,255,255,0.85);
+}
+.journal-field .journal-label {
+  color: rgba(255,255,255,0.55);
+  width: 88px;
+  min-width: 88px;
+  flex-shrink: 0;
+}
+.journal-content {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  flex: 1;
+  min-width: 0;
+}
+.journal-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.journal-item-icon {
+  width: 24px;
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.journal-item-name {
+  white-space: nowrap;
+}
+.journal-type-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  vertical-align: -5px;
+}
+.journal-type-star {
+  color: #FFD700;
+  font-weight: 700;
+}
 #hotbar {
   display: flex;
   align-items: center;

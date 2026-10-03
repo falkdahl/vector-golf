@@ -60,6 +60,20 @@
         </div>
       </div>
     </div>
+    <div id="journal-wrapper" class="hidden">
+      <div id="journal-container" title="Journal — click to toggle best-run journal (J)"
+        aria-label="Journal — click to toggle" role="button" tabindex="0">
+        <div id="journal-icon" aria-hidden="true">📖</div>
+        <span class="journal-hotkey">J</span>
+      </div>
+    </div>
+    <div id="journal-panel" class="hidden">
+      <div class="journal-card">
+        <h3 id="journal-title">Journal</h3>
+        <div id="journal-starting" class="journal-starting"></div>
+        <div id="journal-rows"></div>
+      </div>
+    </div>
     <div id="starting-items-overlay" class="hidden">
       <div class="reward-card">
         <h2 class="reward-title">Choose 2 starting items</h2>
@@ -229,6 +243,7 @@
           <li>Right-click — Pick up item / Split stacked items</li>
           <li>1 / 2 / 3 / 4 — Select item in golf bag</li>
           <li>H — Toggle wind visualization</li>
+          <li>J — Toggle best-run journal</li>
           <li>R — Reset ball</li>
           <li>Escape — Pause</li>
         </ul>
