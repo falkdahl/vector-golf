@@ -1078,6 +1078,12 @@ body {
 .loadout-storage-section h3 { font: 700 13px system-ui, sans-serif; color: white; text-align: center; margin: 0 0 6px; }
 .hotbar-slot.passive { cursor: default; }
 .hotbar-slot.passive:hover { filter: brightness(1.05); }
+/* Passive on/off toggle states (click the icon in the bag) */
+.hotbar-slot.passive.passive-off { opacity: 0.55; }
+.hotbar-slot.passive.passive-off .hotbar-icon-img,
+.hotbar-slot.passive.passive-off .hotbar-icon { opacity: 0.35; filter: grayscale(1); }
+.hotbar-slot.passive.passive-off:hover { filter: brightness(1.12); }
+.hotbar-slot.passive.passive-active { outline: 2px solid rgba(241,196,15,0.95); outline-offset: 2px; box-shadow: 0 0 8px rgba(241,196,15,0.6); }
 .hotbar-slot.selected {
   border-color: rgba(255,255,255,0.95) !important;
   box-shadow: 0 0 0 1.5px rgba(255,255,255,0.45), 0 2px 6px rgba(0,0,0,0.30);

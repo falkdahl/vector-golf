@@ -12,7 +12,8 @@
   { version:1, courseId:string, currentHoleIndex:number, holeAttempts:number, totalAttempts:number,
     supply:{magnifier, liquifier, deflector, rotator, freeShot} (legacy `amplify,nullify,flip,rotate` migrated), maxAttempts:number,
     fieldExtenderCount:number, powerCellCount:number, // passive stackable counts (rangeModifier alias powerCell), totalPoints:number,
-    isFreeShotActive:boolean, // auto-armed when attemptsLeft<=1 && supply.freeShot>0, see 05 §4
+    isFreeShotActive:boolean, // auto-armed when attemptsLeft<=1 && supply.freeShot>0 (manual toggle via bag), see 05 §4
+    passiveEnabled:{fieldExtender:boolean, powerCell:boolean}, // passive on/off toggles, default true
     treasure:{x,y,radius,isCollected}|null, // current hole treasure state, see 07 §4 & 09 §3
     rewardPending:boolean, rewardOffered:string[]|null,
     rewardRerolled:boolean, rewardMenuVisible:boolean, rewardSeedCounter:number, // campaign deterministic, see §9

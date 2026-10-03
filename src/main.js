@@ -603,6 +603,10 @@ function isCourseFirstClearThisRun(){ return !!runFirstCourseClear; }
 function isNewCourseUnlockedThisRun(){ return !!runUnlockedNewCourse; }
 // Passive stackable counts (re-added bag slots for passives)
 let passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
+// Passive on/off toggles (click the passive icon in the bag). When off, the
+// effect is 0 for both already-placed and newly-placed modifiers. Free Shot
+// uses isFreeShotActive (armed) instead of this map; see toggleFreeShot.
+let passiveEnabled = { fieldExtender:true, powerCell:true };
 let modifiersTraversedThisHole = new Set();
 let modifiersTraversedThisShot = new Set();
 // Ball-enter flash: tracks which modifier ids the ball is currently inside so a
@@ -644,7 +648,7 @@ function syncDerivedFromBag() {
   supply = { magnifier: counts.magnifier, liquifier: counts.liquifier, deflector: counts.deflector, rotator: counts.rotator, freeShot: fs };
   fieldExtenderCount = fe; areaUpgradeCount = fe;
   powerCellCount = pc;
-  try { setFieldPowerCellCount(pc); } catch {}
+  try { setFieldPowerCellCount((passiveEnabled.powerCell !== false) ? pc : 0); } catch {}
   // Keep slot selection consistent (Free Shot is display-only, never a selection)
   if (selectedBagIndex < 0 || selectedBagIndex >= getEffectiveGolfbagSize() || !golfbag[selectedBagIndex]) {
     if (selectedModifier && !(supply[normalizeSupplyType(selectedModifier)] > 0)) { selectedModifier = null; selectedBagIndex = -1; }
@@ -658,6 +662,7 @@ function syncDerivedFromBag() {
 function setBagFromTypeList(types) {
   golfbag = [null, null, null, null];
   passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
+  passiveEnabled = { fieldExtender:true, powerCell:true };
   const list = Array.isArray(types) ? types : [];
   let idx = 0;
   for (const raw of list) {
@@ -917,6 +922,43 @@ function isCoinSummaryVisible(){ return coinSummaryVisible; }
 function getUnlockedLoadoutSlots(){ return 4; }
 function getTotalPoints(){ return totalPoints; }
 function getPassiveCounts(){ return {...passiveCounts}; }
+function getPassiveEnabled(){ return {...passiveEnabled}; }
+function isPassiveEnabled(type){
+  const t = normalizeSupplyType(type);
+  if (t === 'rangeModifier') return passiveEnabled.powerCell !== false;
+  if (t !== 'fieldExtender' && t !== 'powerCell') return false;
+  return passiveEnabled[t] !== false;
+}
+function setPassiveEnabled(type, on){
+  const t = normalizeSupplyType(type);
+  if (t !== 'fieldExtender' && t !== 'powerCell' && t !== 'rangeModifier') return false;
+  const key = (t === 'rangeModifier') ? 'powerCell' : t;
+  passiveEnabled[key] = !!on;
+  applyPassiveEffects();
+  return true;
+}
+function togglePassive(type){
+  const t = normalizeSupplyType(type);
+  if (t !== 'fieldExtender' && t !== 'powerCell' && t !== 'rangeModifier') return false;
+  const key = (t === 'rangeModifier') ? 'powerCell' : t;
+  passiveEnabled[key] = !(passiveEnabled[key] !== false);
+  applyPassiveEffects();
+  return passiveEnabled[key];
+}
+function getEffectiveFieldExtenderCount(){ return (passiveEnabled.fieldExtender !== false) ? fieldExtenderCount : 0; }
+function getEffectivePowerCellCount(){ return (passiveEnabled.powerCell !== false) ? powerCellCount : 0; }
+// Re-apply passive effects to already-placed modifiers (radius) and to the
+// wind field (strength), then refresh UI and persist. New placements use the
+// same effective getters, so the toggle affects both placed and future items.
+function applyPassiveEffects(){
+  try {
+    const newR = getEffectiveModifierRadius();
+    for (const m of modifiers) m.radius = newR;
+  } catch {}
+  try { syncModifiersToField(); } catch {}
+  try { updateHotbarUI(); } catch {}
+  try { saveProgress(); } catch {}
+}
 
 let startingItemsVisibleCache=false;
 let selectedStartingItems=[];
@@ -967,6 +1009,7 @@ function showStartingItems(courseId, opts){
   // Start with empty bag – only the 2 picks are present after auto-confirm
   golfbag = [null, null, null, null];
   passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
+  passiveEnabled = { fieldExtender:true, powerCell:true };
   try{ syncDerivedFromBag(); updateHotbarUI(); }catch{}
   startingCourseId=courseId;
   startingChoices=['magnifier','liquifier','deflector','rotator'];
@@ -1059,6 +1102,7 @@ function playBanterThenShowStartingOverlay(courseId, opts){
     if(course){
       golfbag = [null, null, null, null];
       passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
+      passiveEnabled = { fieldExtender:true, powerCell:true };
       try{ syncDerivedFromBag(); updateHotbarUI(); }catch{}
       setActiveCourse(course);
       currentHoleIndex=0;
@@ -1239,6 +1283,7 @@ function grantTutorialHole3EmptyBag(){
   setBagFromTypeList([]);
   // ensure passives cleared? Keep passives 0 for hole3 (empty bag, no passive)
   passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
+  passiveEnabled = { fieldExtender:true, powerCell:true };
   try{ syncDerivedFromBag(); }catch{}
   updateHotbarUI();
   saveProgress();
@@ -1984,24 +2029,20 @@ let powerCellCount = 0; // new — +10% wind strength per stack for magnifier/de
 function getAreaUpgradeCount() { return fieldExtenderCount; }
 function getFieldExtenderCount() { return fieldExtenderCount; }
 function getPowerCellCount() { return powerCellCount; }
-function getAreaMultiplier() { return 1 + 0.20 * fieldExtenderCount; } // 1 + 0.20*n
+function getAreaMultiplier() { return 1 + 0.20 * getEffectiveFieldExtenderCount(); } // 1 + 0.20*n (0 when toggled off)
 function getEffectiveModifierRadius() { return BASE_MODIFIER_RADIUS * getAreaMultiplier(); }
-function getPowerMultiplier() { return 1 + 0.20 * powerCellCount; } // 1 + 0.20*n
+function getPowerMultiplier() { return 1 + 0.20 * getEffectivePowerCellCount(); } // 1 + 0.20*n (1 when toggled off)
 function getEffectiveModifierStrength() { return BASE_MODIFIER_STRENGTH * getPowerMultiplier(); }
 function addAreaUpgrade(n = 1) { return addFieldExtender(n); }
 function addFieldExtender(n = 1) {
   const count = Math.max(1, Math.floor(n || 1));
   for (let i = 0; i < count; i++) { if (!addItemToBag('fieldExtender')) break; }
-  const newR = getEffectiveModifierRadius();
-  for (const m of modifiers) m.radius = newR;
-  syncModifiersToField();
-  updateHotbarUI();
+  applyPassiveEffects();
 }
 function addPowerCell(n = 1) {
   const count = Math.max(1, Math.floor(n || 1));
   for (let i = 0; i < count; i++) { if (!addItemToBag('powerCell')) break; }
-  syncModifiersToField();
-  updateHotbarUI();
+  applyPassiveEffects();
 }
 // keep legacy aliases for save compat
 function getFieldExtenderCountAlias() { return fieldExtenderCount; }
@@ -2019,6 +2060,7 @@ function getSavePayload() {
     supply: { ...supply },
     golfbag: golfbag.map(e => (e ? { ...e } : null)),
     passiveCounts: { ...passiveCounts },
+    passiveEnabled: { ...passiveEnabled },
     totalPoints,
     selectedBagIndex,
     isFreeShotActive,
@@ -2091,6 +2133,14 @@ function loadProgress() {
       passiveCounts.fieldExtender = Math.max(0, Math.floor(d.fieldExtenderCount ?? d.areaUpgradeCount ?? 0));
       passiveCounts.powerCell = Math.max(0, Math.floor(d.powerCellCount ?? 0));
       passiveCounts.freeShot = Math.max(0, Math.floor(d.supply?.freeShot ?? 0));
+    }
+    // Passive on/off toggles persist; default on for missing/legacy saves
+    if (d.passiveEnabled && typeof d.passiveEnabled === 'object') {
+      passiveEnabled.fieldExtender = d.passiveEnabled.fieldExtender !== false;
+      passiveEnabled.powerCell = d.passiveEnabled.powerCell !== false;
+    } else {
+      passiveEnabled.fieldExtender = true;
+      passiveEnabled.powerCell = true;
     }
     if(typeof d.totalPoints==='number' && Number.isFinite(d.totalPoints)) totalPoints = Math.floor(d.totalPoints);
     else totalPoints = 0;
@@ -2313,7 +2363,7 @@ function startNewGame() {
   clearFreeShotGlow();
   hideSoftlockBanner();
   resetSoftlockDetection();
-  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
@@ -3306,7 +3356,7 @@ function startNewGameFromMain() {
   isTutorialRun = false;
   try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  setBagFromTypeList(['liquifier']); clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  setBagFromTypeList(['liquifier']); clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
@@ -3351,7 +3401,7 @@ function finishReturnToMainMenu() {
   clearFreeShotGlow();
   hideSoftlockBanner(); resetSoftlockDetection();
   maxAttempts = 10;
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0;
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true };
   try { setFieldPowerCellCount(0); } catch {};
   rewardPending = false; rewardMenuVisible = false; rewardOffered = [];
   rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
@@ -4151,12 +4201,18 @@ function grantRewardToBag(normalized) {
     if (ok) {
       rewardChosenCounts.fieldExtender = Math.max(0, (rewardChosenCounts.fieldExtender || 0) + 1);
       rewardChosenCounts.areaUp = Math.max(0, (rewardChosenCounts.areaUp || 0) + 1);
+      // Retroactive: grow already-placed modifiers (same as addFieldExtender)
+      applyPassiveEffects();
     }
     return ok;
   }
   if (normalized === 'powerCell' || normalized === 'rangeModifier') {
     const ok = addItemToBag('powerCell');
-    if (ok) rewardChosenCounts.powerCell = Math.max(0, (rewardChosenCounts.powerCell || 0) + 1);
+    if (ok) {
+      rewardChosenCounts.powerCell = Math.max(0, (rewardChosenCounts.powerCell || 0) + 1);
+      // Retroactive: strengthen already-placed modifiers (same as addPowerCell)
+      applyPassiveEffects();
+    }
     return ok;
   }
   const t = normalized;
@@ -4399,7 +4455,7 @@ function initLevel() {
     if (golfbagUsedCount()===0) setBagFromTypeList([]);
     clearFreeShotGlow();
     maxAttempts = 10; 
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {};
     try { syncDerivedFromBag(); } catch {}
     rewardPending = false;
     rewardMenuVisible = false;
@@ -4647,7 +4703,9 @@ function updateHotbarUI() {
       });
     }
   }
-  // Passive slots (3 stackable, no hotkey, not placeable, xN badge)
+  // Passive slots (3 stackable, no hotkey, not placeable, xN badge).
+  // Click a filled passive slot to toggle its effect on/off (freeShot arms/disarms).
+  // Off state is visible via .passive-off (dimmed icon); freeShot armed via .passive-active.
   try{
     const passiveGrid = document.getElementById('passive-hotbar-grid');
     if(passiveGrid){
@@ -4668,28 +4726,50 @@ function updateHotbarUI() {
         const t=slot.dataset.type;
         const cnt = t==='fieldExtender' ? (passiveCounts.fieldExtender||0) : t==='powerCell' ? (passiveCounts.powerCell||0) : (passiveCounts.freeShot||0);
         slot.classList.remove('empty');
+        slot.classList.remove('passive-off');
+        slot.classList.remove('passive-active');
         // clear and rebuild content
         slot.innerHTML='';
         if(cnt>0){
+          const isOn = (t==='freeShot') ? !!isFreeShotActive : (passiveEnabled[t] !== false);
+          if (!isOn) slot.classList.add('passive-off');
+          if (t==='freeShot' && isFreeShotActive) slot.classList.add('passive-active');
           slot.style.display='';
           slot.style.background='transparent';
           slot.style.border='none';
           slot.style.borderColor='transparent';
+          slot.style.cursor='pointer';
           if(passIcons[t]){
             const im=document.createElement('img'); im.className='hotbar-icon-img'; im.src=passIcons[t]; im.alt=t; slot.appendChild(im);
           } else {
             const fb=document.createElement('div'); fb.className='hotbar-icon'; fb.textContent='★'; fb.style.color='#FFD700'; fb.style.font='700 22px system-ui'; slot.appendChild(fb);
           }
           const badge=document.createElement('span'); badge.className='hotbar-count'; badge.textContent='x'+cnt; badge.style.display=''; slot.appendChild(badge);
-          const tip=document.createElement('span'); tip.className='hotbar-tooltip'; tip.textContent=passNames[t]||t; slot.appendChild(tip);
+          const tip=document.createElement('span'); tip.className='hotbar-tooltip'; tip.textContent=(passNames[t]||t)+(t==='freeShot' ? (isFreeShotActive?' (ON)':' (OFF)') : (isOn?' (ON)':' (OFF)')); slot.appendChild(tip);
+          slot.title=(passNames[t]||t)+' x'+cnt+' ('+(isOn?'ON':'OFF')+' — click to turn '+(isOn?'off':'on')+')';
+          // idempotent handler (slot element persists across rebuilds)
+          slot.onclick = () => {
+            try {
+              if (mainMenuVisible || pauseMenuVisible) return;
+              if (rewardMenuVisible || coinSummaryVisible) return;
+              if (typeof banterIsActive === 'function' && banterIsActive()) return;
+              if (typeof cutsceneIsActive === 'function' && cutsceneIsActive()) return;
+              if (startingItemsVisible) return;
+              if (gameState === 'WIN' || gameState === 'GAME_OVER') return;
+              if (t === 'freeShot') { toggleFreeShot(); return; }
+              togglePassive(t);
+            } catch {}
+          };
         } else {
           slot.style.display='none';
           slot.style.background='transparent';
           slot.style.border='none';
           slot.style.borderColor='transparent';
+          slot.style.cursor='default';
+          slot.onclick = null;
           const badge=document.createElement('span'); badge.className='hotbar-count'; badge.textContent='x0'; badge.style.display='none'; badge.classList.add('hidden'); slot.appendChild(badge);
         }
-        slot.title=(passNames[t]||t)+' x'+cnt;
+        if(cnt<=0) slot.title=(passNames[t]||t)+' x'+cnt;
       }
     }
   }catch(e){ console.warn('passive hotbar update failed',e); }
@@ -4760,7 +4840,7 @@ function handleGameOverReturn() {
 
 function syncModifiersToField() {
   setModifiers(modifiers);
-  try { setFieldPowerCellCount(powerCellCount); } catch {};
+  try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch {};
   syncWindFieldToShader();
 }
 function syncWindFieldToShader() {
@@ -5180,7 +5260,7 @@ function resetGameAfterWin() {
   setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
   maxAttempts = 10; 
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {};
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {};
   // REQ-021 + REQ-025 + REQ-028: reset secret counter + reward state + reroll + pause stats
   rewardPending = false;
   rewardMenuVisible = false;
@@ -6403,7 +6483,7 @@ function init() {
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   holeAttempts = 0; totalAttempts = 0; attempts = 0;
   setBagFromTypeList(['liquifier']);
-  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; try { setFieldPowerCellCount(0); } catch {}; rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {}; rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
   rewardPending = false; rewardOffered = []; rewardRerolled = false;
   resetHotbarCollapsed();
   updateAttemptsUI(); updateHotbarUI(); updateForceBar();
@@ -7548,6 +7628,13 @@ if (typeof window !== 'undefined') {
   window.__addAreaUpgrade = addAreaUpgrade;
   window.__addFieldExtender = addFieldExtender;
   window.__addPowerCell = addPowerCell;
+  window.__isPassiveEnabled = isPassiveEnabled;
+  window.__setPassiveEnabled = setPassiveEnabled;
+  window.__togglePassive = togglePassive;
+  window.__getPassiveEnabled = getPassiveEnabled;
+  window.__getEffectiveFieldExtenderCount = getEffectiveFieldExtenderCount;
+  window.__getEffectivePowerCellCount = getEffectivePowerCellCount;
+  window.__applyPassiveEffects = applyPassiveEffects;
   window.__getRewardPending = () => rewardPending;
   window.__setRewardPending = (v) => { rewardPending = !!v; };
   window.__getRewardRerolled = getRewardRerolled;
@@ -7635,7 +7722,7 @@ if (typeof window !== 'undefined') {
     get: () => powerCellCount,
     set: (v) => {
       powerCellCount = Math.max(0, Math.floor(v));
-      try { setFieldPowerCellCount(powerCellCount); } catch {}
+      try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch {}
       updateHotbarUI();
     }
   });
@@ -7643,7 +7730,7 @@ if (typeof window !== 'undefined') {
     get: () => powerCellCount,
     set: (v) => {
       powerCellCount = Math.max(0, Math.floor(v));
-      try { setFieldPowerCellCount(powerCellCount); } catch {}
+      try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch {}
       updateHotbarUI();
     }
   });
@@ -8005,8 +8092,8 @@ function playCutsceneWrapped(idOrData, opts) {
 }
 try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
+export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
