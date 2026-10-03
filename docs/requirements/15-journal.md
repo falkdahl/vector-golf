@@ -99,7 +99,8 @@ and their rewards, and which modifiers were activated to clear the hole.
 - Icon visibility follows the same gameplay rule as `#bottom-bar` (visible
   in `AIMING`/`CHARGING`/`FLYING` including reward menus; hidden in
   menus/pause/banners/summaries/`WIN`/`GAME_OVER`/cutscene/banter/starting
-  overlay). The panel (`#journal-panel`, `z-index:9`, top-left below the
+  overlay), except the icon (and panel) are additionally always hidden on
+  the tutorial course (`The Proving Grounds`, `J` disabled there too). The panel (`#journal-panel`, `z-index:9`, top-left below the
   icon, scrollable) shows only while the icon is visible and open; rows
   rebuild only when best data changes (signature guard, no per-frame DOM
   churn). Help lists `J — Toggle best-run journal` under Controls.

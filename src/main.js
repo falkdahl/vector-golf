@@ -2801,8 +2801,16 @@ function renderCourseList() {
         const lockedBtn = document.createElement('button');
         lockedBtn.className = 'course-play-button';
         lockedBtn.disabled = true;
-        lockedBtn.innerHTML = `<span class="course-name">🔒 ${holeCount} Holes — Locked</span><span class="course-meta">Clear ${STAGES[STAGES.indexOf(holeCount)-1]} Holes to unlock</span>`;
-        lockedBtn.title = `Locked — clear ${STAGES[STAGES.indexOf(holeCount)-1]} Holes`;
+        // The 6-hole course unlocks by clearing the tutorial: hint names it.
+        const prevHoles = STAGES[STAGES.indexOf(holeCount)-1];
+        const prevCourse = courses.find(c => c.holeCount === prevHoles);
+        const unlockHint = (prevCourse && isTutorialCourse(prevCourse)) ? 'Finish tutorial to unlock' : `Clear ${prevHoles} Holes to unlock`;
+        lockedBtn.innerHTML = `<span class="course-name">🔒 ${holeCount} Holes — Locked</span><span class="course-meta"></span>`;
+        try {
+          const spans = lockedBtn.querySelectorAll('.course-meta');
+          spans.forEach(s => { s.textContent = unlockHint; });
+        } catch {}
+        lockedBtn.title = `Locked — ${unlockHint}`;
         row.appendChild(lockedBtn);
       } else if (course) {
         const playBtn = document.createElement('button');
@@ -2812,10 +2820,11 @@ function renderCourseList() {
         nameSpan.textContent = course.name;
         const metaSpan = document.createElement('span');
         metaSpan.className = 'course-meta';
-        // The Proving Grounds never shows a record in the main menu (kept internally for unlocking).
+        // The Proving Grounds shows no meta text in the main menu (kept internally for unlocking).
+        // A non-breaking space keeps the meta line (and button height) identical to other courses.
         const isProvingGrounds = isTutorialCourse(course) || course.holeCount === 4 || holeCount === 4;
         if (isProvingGrounds) {
-          metaSpan.textContent = `${course.holeCount} holes`;
+          metaSpan.textContent = '\u00A0';
         } else {
           const record = course.bestTotal == null ? '—' : String(course.bestTotal);
           metaSpan.textContent = `${course.holeCount} holes \u2003 Record: ${record}`;
@@ -3922,6 +3931,7 @@ function commitRunJournal(cleared) {
 // --- Journal UI (book icon top-left, J hotkey, per-hole best-run rows) ---
 function canToggleJournal() {
   try {
+    try { if (isTutorialActive()) return false; } catch {}
     if (pauseMenuVisible || mainMenuVisible) return false;
     if (startingItemsVisible || coinSummaryVisible) return false;
     if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
@@ -3942,7 +3952,8 @@ function syncJournalUI() {
   try {
     let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
     let isBanter = false; try { isBanter = banterIsActive(); } catch {}
-    const hidden = pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
+    let isTut = false; try { isTut = isTutorialActive(); } catch {}
+    const hidden = isTut || pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
     if (journalWrapperEl) journalWrapperEl.classList.toggle("hidden", !!hidden);
     if (journalContainerEl) {
       journalContainerEl.classList.toggle("hidden", !!hidden);
