@@ -24,6 +24,10 @@ import {
   drawHoleBanner,
   drawAttemptsBanner,
   drawSoftlockBanner,
+  spawnWaterRipple,
+  updateWaterRipples,
+  drawWaterRipples,
+  clearWaterRipples,
 } from "./render.js";
 import {
   initWindOverlay,
@@ -4750,6 +4754,7 @@ function loadLevel(index) {
   // REQ-020: supply persists across hole advances, do NOT reset supply here
   modifiers = [];
   syncModifiersToField();
+  try { clearWaterRipples(); } catch {}
   // Keep canvas size consistent per REQ-010 16:9 (1280×720); if varying, would re-setup canvas
   // Wind particles now handled by Three.js overlay (REQ-004), not canvas initParticles
   createBall(level.tee);
@@ -5863,6 +5868,8 @@ function handleNextHole() {
 }
 
 function update(dt) {
+  // Water splash ripples animate on their own clock (even while physics is frozen).
+  try { updateWaterRipples(dt); } catch {}
   // 11-cutscenes: when active, freeze game physics but advance cutscene & wind
   try { if (cutsceneIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch {} return; } } catch {}
   // 12-banter: in-place dialog freezes physics/input like the Hole 1 banner but keeps terrain+wind visible
@@ -6102,6 +6109,11 @@ function update(dt) {
     if (terrainHit || waterHit || edgeOut) {
       // Fatal terrain/water/edge — handle attempt consumption on reset (not on launch)
       // resetBall will increment holeAttempts (unless free flight) and show Game Over if left becomes 0
+      // Water death leaves a small ripple animation at the splash point (persists after the reset).
+      try {
+        const drowned = !!waterHit || !!(terrainHit && (terrainHit.zone === 'water' || terrainHit.type === 'water'));
+        if (drowned && ball && ball.pos) spawnWaterRipple(ball.pos.x, ball.pos.y);
+      } catch {}
       resetBall();
       return;
     }
@@ -6196,6 +6208,7 @@ function render() {
     if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
   }
   drawBall(ctx, ball);
+  try { drawWaterRipples(ctx, level && level.waterHazards); } catch {}
   // During the end screen (over the level) no aim/preview/force-bar/softlock chrome.
   // Also suppress aim while a cutscene/banter is active or a hole transition is
   // pending: the ball may still sit in the cleared hole (e.g. tutorial hole 1

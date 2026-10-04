@@ -534,6 +534,79 @@ export function drawBall(ctx, ball) {
   ctx.restore();
 }
 
+// --- Water splash ripples (spawned when the ball dies in water) ---
+// Small transient animation: expanding rings fading out at the splash point.
+// State lives here so main.js stays thin: spawn on water death, tick in
+// update(dt), draw in render() after the ball. Ripples persist across the
+// reset (ball teleports to tee) since they store their own position.
+const waterRipples = [];
+export const WATER_RIPPLE_MS = 1400;
+const WATER_RIPPLE_RINGS = 3;
+const WATER_RIPPLE_RING_DELAY_MS = 200;
+const WATER_RIPPLE_R0 = 8;
+const WATER_RIPPLE_GROW = 34;
+const WATER_RIPPLE_FADE_IN_MS = 100;
+
+export function spawnWaterRipple(x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  waterRipples.push({ x, y, ageMs: 0 });
+  // Cap in case of rapid repeated deaths (e.g. cheat drags)
+  if (waterRipples.length > 12) waterRipples.splice(0, waterRipples.length - 12);
+}
+export function clearWaterRipples() {
+  waterRipples.length = 0;
+}
+export function updateWaterRipples(dt) {
+  if (!waterRipples.length) return;
+  const step = (typeof dt === 'number' && dt > 0 ? dt : 0) * 1000;
+  const life = WATER_RIPPLE_MS + (WATER_RIPPLE_RINGS - 1) * WATER_RIPPLE_RING_DELAY_MS;
+  for (let i = waterRipples.length - 1; i >= 0; i--) {
+    waterRipples[i].ageMs += step;
+    if (waterRipples[i].ageMs >= life) waterRipples.splice(i, 1);
+  }
+}
+export function drawWaterRipples(ctx, waterHazards) {
+  if (!waterRipples.length) return;
+  if (!waterHazards || !waterHazards.length) return;
+  ctx.save();
+  // Clip ripples to the water surface so ring edges never spill onto fairway.
+  ctx.beginPath();
+  for (const w of waterHazards) {
+    if (w.r !== undefined) {
+      ctx.moveTo(w.x + w.r, w.y);
+      ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+    } else if (w.w !== undefined) {
+      ctx.rect(w.x, w.y, w.w, w.h);
+    } else if (w.x !== undefined) {
+      const rad = w.radius || 24;
+      ctx.moveTo(w.x + rad, w.y);
+      ctx.arc(w.x, w.y, rad, 0, Math.PI * 2);
+    }
+  }
+  ctx.clip();
+  ctx.lineCap = 'round';
+  for (const r of waterRipples) {
+    for (let k = 0; k < WATER_RIPPLE_RINGS; k++) {
+      const local = r.ageMs - k * WATER_RIPPLE_RING_DELAY_MS;
+      if (local < 0 || local > WATER_RIPPLE_MS) continue;
+      const p = local / WATER_RIPPLE_MS; // 0 -> 1
+      // Fast-start easing so the ring visibly grows from the first frame,
+      // plus a quick fade-in so staggered rings never pop in at full bright.
+      const eased = 1 - Math.pow(1 - p, 3);
+      const radius = WATER_RIPPLE_R0 + eased * WATER_RIPPLE_GROW;
+      const fadeIn = Math.min(1, local / WATER_RIPPLE_FADE_IN_MS);
+      const alpha = Math.max(0, 0.8 * fadeIn * Math.pow(1 - p, 1.5));
+      if (alpha <= 0.01) continue;
+      ctx.strokeStyle = `rgba(220,240,255,${alpha.toFixed(3)})`;
+      ctx.lineWidth = Math.max(0.6, 2.6 * (1 - p) + 0.6);
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawAim(ctx, ball, aimAngle, charge, gameState) {
   if (gameState !== "AIMING" && gameState !== "CHARGING") return;
   const orbitRadius = 30;
