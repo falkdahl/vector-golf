@@ -966,8 +966,10 @@ body {
 }
 #journal-container.hidden { display: none !important; }
 #journal-icon {
-  font-size: 44px;
-  line-height: 1;
+  width: auto;
+  height: 60px;
+  max-height: 79px;
+  object-fit: contain;
   display: block;
   pointer-events: none;
   transition: transform 0.15s ease, filter 0.15s ease;

@@ -7329,9 +7329,9 @@ function init() {
       e.preventDefault();
       return;
     }
-    // Hotbar collapsible: M / B legacy plus new I / Tab per updated spec; Escape stays deselect-only
+    // Hotbar collapsible: M legacy plus I / Tab per updated spec; Escape stays deselect-only
     // Bag+hotbar are always visible during gameplay including FLYING and reward (per updated spec)
-    const isHotbarToggleKey = (e.code === "KeyM" || e.code === "KeyB" || e.code === "KeyI" || e.code === "Tab");
+    const isHotbarToggleKey = (e.code === "KeyM" || e.code === "KeyI" || e.code === "Tab");
     if (isHotbarToggleKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
       // Ignore Tab/I while typing in input/textarea/contentEditable
       const ae = document.activeElement;
