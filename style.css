@@ -859,7 +859,10 @@ body {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
+  width: 505px;
+  max-width: 96%;
   z-index: 6;
   pointer-events: none;
 }
@@ -869,6 +872,7 @@ body {
 }
 #golfbag-wrapper {
   position: relative;
+  z-index: 2;
   width: 79px;
   height: 79px;
   flex-shrink: 0;
@@ -896,7 +900,8 @@ body {
   will-change: transform;
 }
 #golfbag-container.collapsed {
-  transform: translateY(51px);
+  transform: translateY(70px);
+  /* Starts together with the slots sliding into the bag. */
 }
 #golfbag-container:focus-visible {
   outline: 2px solid rgba(255,255,255,0.9);
@@ -1107,6 +1112,8 @@ body {
   font-weight: 700;
 }
 #hotbar {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1123,7 +1130,8 @@ body {
 #hotbar.hidden { display: none !important; }
 #hotbar.collapsed {
   opacity: 0;
-  transform: scaleX(0.85);
+  /* Slide left into the bag (bag sits left of the hotbar) while fading. */
+  transform: translateX(-36px);
   max-width: 0;
   overflow: hidden;
   pointer-events: none;
@@ -1140,10 +1148,13 @@ body {
   opacity: 1;
   transform: scaleX(1);
   max-width: 420px;
-  transition: opacity 0.22s ease 0.22s, transform 0.22s ease 0.22s, max-width 0.22s ease 0.22s, padding 0.22s ease 0.22s, background 0.18s ease, border 0.18s ease;
+  /* Slide starts together with the bag rising; fade-in waits until the
+     slots are home, so they only ever appear right of the bag. */
+  transition: opacity 0.15s ease 0.25s, transform 0.22s ease, max-width 0.22s ease, padding 0.22s ease, background 0.18s ease, border 0.18s ease;
 }
 #hotbar.collapsed {
-  transition: opacity 0.18s ease, transform 0.18s ease, max-width 0.22s ease, padding 0.18s ease;
+  /* Fade out fast while sliding left, so slots vanish before reaching the bag. */
+  transition: opacity 0.12s ease, transform 0.22s ease, max-width 0.22s ease, padding 0.18s ease;
 }
 #hotbar {
   display: flex;
