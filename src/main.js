@@ -1,7 +1,7 @@
 import { LEVEL, LEVELS, generateLevels } from "./levels.js";
 import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH, MODIFIER_RADIUS, modifiers as fieldModifiers, setModifiers, setPowerCellCount as setFieldPowerCellCount, getPowerCellCount as getFieldPowerCellCount, BASE_STRENGTH } from "./vectorField.js";
-import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING, isBallAirborne, isBallOverTree, isBallOverTreasure, TREE_CLEAR_Z, TREASURE_CLEAR_Z, drawnBallCircle, groundPosFromDrawn } from "./physics.js";
-import { checkObstacleCollision, checkDrawnObstacleCollision, checkGroundTreeCollision, checkDrawnTreasureHit, checkGroundTreasureHit, isOutOfBounds, checkWaterCollision, checkTerrainCollision, checkTreasureHit, collectTreasure } from "./obstacles.js";
+import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING, isBallAirborne, isBallOverTree, isBallOverTreasure, TREE_CLEAR_Z, TREASURE_CLEAR_Z, drawnBallCircle } from "./physics.js";
+import { checkGroundTreeCollision, checkGroundTreasureHit, isOutOfBounds, checkWaterCollision, checkTerrainCollision, collectTreasure } from "./obstacles.js";
 import { terrainZoneAt } from "./terrain.js";
 import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
 import {
@@ -9,12 +9,10 @@ import {
   drawHole,
   drawBall,
   drawAim,
-  drawHUD,
   drawForceBar,
   drawModifiers,
   drawModifierPreview,
   drawSnapLink,
-  drawRewardMenu,
   getRewardButtonsLayout,
   getRewardRerollButtonLayout,
   drawArrowsInModifiers,
@@ -3593,60 +3591,6 @@ function seededShuffle(a, seedStr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
-}
-// Owned-only rewards (08 §5c): number of distinct kinds in personal storage.
-function countOwnedKinds() {
-  try {
-    const p = getPersonalSupply();
-    let n = 0;
-    for (const k of Object.keys(p)) if ((p[k] ?? 0) > 0) n++;
-    return n;
-  } catch { return 0; }
-}
-// Reward card count: ceil(uniqueKinds / 2), max 3 (08 §5c).
-// 1 unique → 1 card, 2 uniques → 1 card, 3-4 → 2 cards, 5+ → 3 cards.
-function getRewardCardCount() {
-  const n = countOwnedKinds();
-  if (n <= 0) return 1;
-  return Math.min(3, Math.ceil(n / 2));
-}
-// Filter a seeded candidate order to owned kinds (preserving seeded order),
-// taking up to maxN distinct. Backfills from the full shuffled order, not just
-// the sliced head. Falls back to the unfiltered head when nothing is owned
-// (defensive; defaults guarantee liquifier:1 so this should not happen).
-function filterOfferToOwned(candidates, maxN) {
-  const list = Array.isArray(candidates) ? candidates : [];
-  const n = Math.max(1, maxN || 3);
-  const head = list.slice(0, n);
-  try {
-    const p = getPersonalSupply();
-    const owned = new Set(Object.keys(p).filter(k => (p[k] ?? 0) > 0));
-    if (!owned.size) return head;
-    const kept = [];
-    for (const t of list) {
-      if (kept.length >= n) break;
-      if (owned.has(normalizeSupplyType(t)) && !kept.includes(t)) kept.push(t);
-    }
-    if (kept.length) return kept;
-  } catch {}
-  return head;
-}
-// Owned-only rewards: build the candidate pool from owned kinds FIRST, then shuffle.
-// This fixes the bug where a 9-hole offer showed only 2 items while owning 3
-// (the old COMBINED-slot resolution could exclude the owned passive entirely).
-function ownedPoolForCourse() {
-  let full;
-  try {
-    const hc = activeCourse ? activeCourse.holeCount : null;
-    if (hc === 3 || hc === 6) full = ['magnifier', 'liquifier', 'deflector', 'rotator'];
-    else full = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'fieldExtender', 'powerCell'];
-  } catch { full = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'fieldExtender', 'powerCell']; }
-  try {
-    const p = getPersonalSupply();
-    const owned = full.filter(t => (p[normalizeSupplyType(t)] ?? 0) > 0);
-    if (owned.length) return owned;
-  } catch {}
-  return full.slice(0, 3);
 }
 function enforceNoFieldPowerTogether(picked, remainder) {
   // Field Extender and Power Cell never appear together in one offer
@@ -8513,8 +8457,6 @@ if (typeof window !== 'undefined') {
   window.__isCheatDraggingBall = isCheatDraggingBall;
   window.__tryCheatGrabBall = tryCheatGrabBall;
   window.__dropCheatBall = dropCheatBall;
-  window.__countOwnedKinds = countOwnedKinds;
-  window.__getRewardCardCount = getRewardCardCount;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<4) p.push(null); loadoutSlots=p.slice(0,4); } syncLoadoutOverlay();} });

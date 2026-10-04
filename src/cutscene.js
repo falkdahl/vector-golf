@@ -220,7 +220,6 @@ export function isOutroActiveForData(data, elapsed, contentDuration){
 
 // In-memory cache for loaded JSON
 const cutsceneCache = new Map();
-let cutsceneIndex = null; // for src/cutscenes.json array
 
 // Seen persistence for one-time cutscenes (e.g. prologue)
 export const CUTSCENE_SEEN_KEY = "golfVectorField.cutscenes.seen.v1";
@@ -426,8 +425,6 @@ export async function listCutscenes(){
   }catch{}
   if(ids.size>0){
     const arr=[...ids].filter(id=>ID_REGEX.test(id)).sort();
-    // populate cache index for potential use
-    cutsceneIndex = arr.map(id=>({id}));
     return arr;
   }
   // Fallback: probe known id 'prologue' (and any cached ids) via direct fetch
@@ -446,7 +443,6 @@ export async function listCutscenes(){
     }catch{}
   }
   const uniq=[...new Set(found)].sort();
-  cutsceneIndex = uniq.map(id=>({id}));
   return uniq;
 }
 export async function loadCutscenesFromFolder(){

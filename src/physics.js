@@ -48,10 +48,6 @@ export function drawnBallCircle(b) {
   const pos = b?.pos ?? { x: 0, y: 0 };
   return { x: pos.x, y: pos.y - z * BALL_LIFT_FACTOR, r: r + z * BALL_GROWTH_FACTOR };
 }
-// Convert a drawn-space position back to the ground projection (shadow).
-export function groundPosFromDrawn(drawnX, drawnY, z) {
-  return { x: drawnX, y: drawnY + (z ?? 0) * BALL_LIFT_FACTOR };
-}
 
 export const MAX_CHARGE_TIME = 1.5; // seconds
 export const MAX_POWER = 600; // px/s

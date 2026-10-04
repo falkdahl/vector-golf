@@ -1,4 +1,4 @@
-import { modifiers as vfModifiers, isInsideLiquifier as vfIsInsideNullify } from "./vectorField.js";
+import { modifiers as vfModifiers } from "./vectorField.js";
 import { terrainZoneAt, TERRAIN_COLORS, attachNoiseToTerrain } from "./terrain.js";
 import { drawnBallCircle } from "./physics.js";
 
@@ -42,9 +42,6 @@ export function toggleWind() {
   showWind = !showWind;
 }
 
-function isInsideLiquifier(x, y) {
-  try { return vfIsInsideNullify(x, y); } catch { return false; }
-}
 function isInsideAnyModifier(x, y) {
   try {
     for (const m of vfModifiers) {
@@ -53,17 +50,6 @@ function isInsideAnyModifier(x, y) {
   } catch {}
   return false;
 }
-function isInsideFlip(x, y) {
-  try {
-    for (const m of vfModifiers) {
-      if (m.type !== 'deflector' && m.type !== 'flip') continue;
-      if (Math.hypot(x - m.x, y - m.y) < (m.radius ?? 54)) return true;
-    }
-  } catch {}
-  return false;
-}
-// legacy alias
-const isInsideDeflector = isInsideFlip;
 
 export function drawBackground(ctx, width, height, mode = 'terrain', level = null) {
   // Bottom canvas — mode 'splash' gfg-splash.png cover, otherwise draws zoned terrain with fixed palette
@@ -129,10 +115,6 @@ export function drawTerrainZones(ctx, level, width, height) {
     }
   }
 }
-// Backward compat: old calls
-export function drawBackgroundTiled(ctx, width, height) { return drawBackground(ctx, width, height, 'terrain'); }
-export function drawSplashCover(ctx, width, height) { return drawBackground(ctx, width, height, 'splash'); }
-
 export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, preview = null) {
   if ((!modifiers || !modifiers.length) && !preview) return;
   if (typeof getWindAt !== 'function') return;
@@ -611,40 +593,6 @@ export function drawAim(ctx, ball, aimAngle, charge, gameState) {
   ctx.restore();
 }
 
-export function drawHUD(ctx, width, currentHoleIndex, totalHoles, holeAttempts, totalAttempts, maxAttempts = 10, freeShotSupply = 0) {
-  // Deprecated: HUD is now HTML #hud on top of canvas (see 03-rendering.md §4). Kept for backward compat, not called from render().
-  // Top bar inside canvas per legacy REQ-012/014/05 — Hole left, Attempts Left (+freeShot) center, Total right
-  ctx.save();
-  // semi-transparent strip
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
-  ctx.fillRect(0, 0, width, 28);
-  ctx.font = "14px system-ui, sans-serif";
-  ctx.fillStyle = "white";
-  ctx.strokeStyle = "rgba(0,0,0,0.7)";
-  ctx.lineWidth = 3;
-  ctx.lineJoin = "round";
-  const holeText = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
-  const attemptsLeft = Math.max(0, (maxAttempts ?? 10) - holeAttempts);
-  const freeShot = Math.max(0, Math.floor(freeShotSupply ?? 0));
-  const attemptsText = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft}`;
-  // Only show (+Y) when Y>0 per updated requirement; when 0 show just "Attempts Left: X"
-  const totalText = `Total: ${totalAttempts}`;
-  // Hole left
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.strokeText(holeText, 12, 16);
-  ctx.fillText(holeText, 12, 16);
-  // Attempts center
-  ctx.textAlign = "center";
-  ctx.strokeText(attemptsText, width / 2, 16);
-  ctx.fillText(attemptsText, width / 2, 16);
-  // Total right
-  ctx.textAlign = "right";
-  ctx.strokeText(totalText, width - 12, 16);
-  ctx.fillText(totalText, width - 12, 16);
-  ctx.restore();
-}
-
 export function drawForceBar(ctx, ball, charge) {
   // Under ball inside canvas when CHARGING per REQ-007
   if (charge <= 0) return;
@@ -981,183 +929,6 @@ export function getRewardRerollButtonLayout(width, height) {
   return { x, y, w: btnW, h: btnH };
 }
 
-export function drawRewardMenu(ctx, width, height, offeredOrTotal, hoveredType = null, rerolled = false, rerollHovered = false) {
-  // Backward compat: if third arg is number (old totalAttempts), use default offered
-  // New signature: (ctx, width, height, offeredArray, hovered)
-  let offered;
-  let hovered = hoveredType;
-  if (Array.isArray(offeredOrTotal)) {
-    offered = offeredOrTotal;
-  } else if (typeof offeredOrTotal === 'number' && hoveredType === null) {
-    // old call with totalAttempts number, no hovered
-    offered = ['magnifier', 'liquifier', 'deflector'];
-  } else if (Array.isArray(hoveredType)) {
-    // shouldn't happen
-    offered = offeredOrTotal;
-    hovered = null;
-  } else {
-    // offeredOrTotal is offered array, hoveredType is hover string
-    offered = Array.isArray(offeredOrTotal) ? offeredOrTotal : ['magnifier', 'liquifier', 'deflector'];
-    // hoveredType already set
-  }
-  // Ensure 3 distinct
-  if (!Array.isArray(offered) || offered.length !== 3) {
-    offered = ['magnifier', 'liquifier', 'deflector'];
-  }
-  ctx.save();
-  // Dim background full canvas - preserves green context but ensures contrast
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, 0, width, height);
-
-  // No white card background per updated requirement - text/buttons drawn directly
-  // with high-contrast colors for readability on green (#3a9d23) + dim
-  const cardW = 520;
-  const cardH = 360;
-  const cardX = (width - cardW) / 2;
-  const cardY = (height - cardH) / 2;
-
-  // Title - white with strong dark stroke for contrast on green/dim
-  ctx.font = "700 22px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)";
-  ctx.lineWidth = 5;
-  ctx.fillStyle = "white";
-  ctx.strokeText("Pick an Item", width / 2, cardY + 28);
-  ctx.fillText("Pick an Item", width / 2, cardY + 28);
-
-  // Buttons - 3 random offered
-  const buttons = getRewardButtonsLayout(width, height, offered);
-  for (let idx = 0; idx < buttons.length; idx++) {
-    const btn = buttons[idx];
-    const isHover = hovered === btn.type;
-    ctx.save();
-    if (isHover) {
-      // hover brighten
-      ctx.shadowColor = "rgba(0,0,0,0.18)";
-      ctx.shadowBlur = 8;
-    }
-    // Button background
-    ctx.fillStyle = isHover ? btn.fillHover : btn.fill;
-    ctx.strokeStyle = btn.border;
-    ctx.lineWidth = 2;
-    const br = 10;
-    ctx.beginPath();
-    ctx.moveTo(btn.x + br, btn.y);
-    ctx.lineTo(btn.x + btn.w - br, btn.y);
-    ctx.quadraticCurveTo(btn.x + btn.w, btn.y, btn.x + btn.w, btn.y + br);
-    ctx.lineTo(btn.x + btn.w, btn.y + btn.h - br);
-    ctx.quadraticCurveTo(btn.x + btn.w, btn.y + btn.h, btn.x + btn.w - br, btn.y + btn.h);
-    ctx.lineTo(btn.x + br, btn.y + btn.h);
-    ctx.quadraticCurveTo(btn.x, btn.y + btn.h, btn.x, btn.y + btn.h - br);
-    ctx.lineTo(btn.x, btn.y + br);
-    ctx.quadraticCurveTo(btn.x, btn.y, btn.x + br, btn.y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Icon - use ./img icons for reward/hotbar, keep color identity background; field circles keep text icons (reward icons even bigger with gap to text)
-    const iconImg = rewardIconImgs[btn.type];
-    if (iconImg && iconImg.complete && iconImg.naturalWidth) {
-      const size = 88;
-      const ix = btn.x + btn.w / 2 - size / 2;
-      const iy = btn.y + 18;
-      // Icon directly without background per new spec (removed gradient)
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = 4;
-      ctx.drawImage(iconImg, ix, iy, size, size);
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = "transparent";
-    } else {
-      // No background for fallback icon per new spec
-      ctx.font = "700 36px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.lineJoin = "round";
-      ctx.strokeStyle = "rgba(0,0,0,0.65)";
-      ctx.lineWidth = 4;
-      // Center fallback text where 88px icon would be (btn.y+20 +44) with gap to text
-      ctx.strokeText(btn.icon, btn.x + btn.w / 2, btn.y + 64);
-      ctx.fillStyle = btn.color;
-      ctx.shadowColor = "rgba(0,0,0,0.45)";
-      ctx.shadowBlur = 6;
-      ctx.fillText(btn.icon, btn.x + btn.w / 2, btn.y + 64);
-      ctx.shadowColor = "transparent";
-    }
-
-    // Label - white with dark stroke for good contrast against green/dim (buttons enlarged to 150×195, icons 88 with gap to text)
-    const labelFont = "700 13px system-ui, sans-serif";
-    ctx.font = labelFont;
-    ctx.strokeStyle = "rgba(0,0,0,0.75)";
-    ctx.lineWidth = 4;
-    ctx.lineJoin = "round";
-    // Gap between icon (iy+88) and text: icon bottom ~ btn.y+106, label at 128 leaves ~22px gap
-    ctx.strokeText(btn.label, btn.x + btn.w / 2, btn.y + 128);
-    ctx.fillStyle = "white";
-    ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + 128);
-
-    // Supply hint - uses per-type hint (+1 to supply or +3 free shots) with high contrast
-    ctx.font = "600 11px system-ui, sans-serif";
-    ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    ctx.lineWidth = 3;
-    ctx.strokeText(btn.hint, btn.x + btn.w / 2, btn.y + 146);
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.fillText(btn.hint, btn.x + btn.w / 2, btn.y + 146);
-
-    // Key hint - positional 1/2/3 for random offered order (buttons enlarged to 150×195)
-    const key = String(idx + 1);
-    ctx.font = "600 11px system-ui, sans-serif";
-    ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    ctx.lineWidth = 3;
-    ctx.strokeText(`[${key}]`, btn.x + btn.w / 2, btn.y + 166);
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.fillText(`[${key}]`, btn.x + btn.w / 2, btn.y + 166);
-
-    ctx.restore();
-  }
-
-  // Re-roll button per REQ-025 - below 3 cards, once per menu, costs 1 attempt
-  const rerollRect = getRewardRerollButtonLayout(width, height);
-  const isDisabled = !!rerolled;
-  const isRerollHover = !!rerollHovered && !isDisabled;
-  ctx.save();
-  if (isRerollHover) {
-    ctx.shadowColor = "rgba(0,0,0,0.18)";
-    ctx.shadowBlur = 6;
-  }
-  ctx.fillStyle = isDisabled ? "rgba(255,255,255,0.06)" : isRerollHover ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.12)";
-  ctx.strokeStyle = isDisabled ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.85)";
-  ctx.lineWidth = 1.5;
-  const rbr = 8;
-  ctx.beginPath();
-  ctx.moveTo(rerollRect.x + rbr, rerollRect.y);
-  ctx.lineTo(rerollRect.x + rerollRect.w - rbr, rerollRect.y);
-  ctx.quadraticCurveTo(rerollRect.x + rerollRect.w, rerollRect.y, rerollRect.x + rerollRect.w, rerollRect.y + rbr);
-  ctx.lineTo(rerollRect.x + rerollRect.w, rerollRect.y + rerollRect.h - rbr);
-  ctx.quadraticCurveTo(rerollRect.x + rerollRect.w, rerollRect.y + rerollRect.h, rerollRect.x + rerollRect.w - rbr, rerollRect.y + rerollRect.h);
-  ctx.lineTo(rerollRect.x + rbr, rerollRect.y + rerollRect.h);
-  ctx.quadraticCurveTo(rerollRect.x, rerollRect.y + rerollRect.h, rerollRect.x, rerollRect.y + rerollRect.h - rbr);
-  ctx.lineTo(rerollRect.x, rerollRect.y + rbr);
-  ctx.quadraticCurveTo(rerollRect.x, rerollRect.y, rerollRect.x + rbr, rerollRect.y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.font = "700 12px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = isDisabled ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.65)";
-  ctx.lineWidth = 3;
-  const rerollText = isDisabled ? "Re-rolled" : "↻ Re-roll (1 attempt) [R]";
-  ctx.strokeText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
-  ctx.fillStyle = isDisabled ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.95)";
-  ctx.fillText(rerollText, rerollRect.x + rerollRect.w / 2, rerollRect.y + rerollRect.h / 2);
-  ctx.restore();
-
-  ctx.restore();
-}
 
 export function drawCenterBanner(ctx, width, height, text) {
   ctx.save();
@@ -1203,54 +974,3 @@ export function drawSoftlockBanner(ctx, width, height, text) {
   ctx.restore();
 }
 
-export function getMainMenuButtonsLayout(width, height) {
-  const btnW = 160, btnH = 48;
-  return { newGame: { x: width / 2 - btnW / 2, y: height / 2 - 10, w: btnW, h: btnH } };
-}
-
-export function drawMainMenuBackground(ctx, width, height) {
-  // Removed per user request — no golf art on main menu
-}
-
-export function drawMainMenu(ctx, width, height, hovered = null, highScore = null) {
-  ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, 0, width, height);
-  // Title
-  ctx.font = "700 22px system-ui, sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = 5; ctx.fillStyle = "white";
-  ctx.strokeText("Golf Vector Field", width / 2, height / 2 - 60);
-  ctx.fillText("Golf Vector Field", width / 2, height / 2 - 60);
-  const layout = getMainMenuButtonsLayout(width, height);
-  const r = layout.newGame;
-  const isHover = hovered === "newGame";
-  ctx.save();
-  if (isHover) { ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 6; }
-  ctx.fillStyle = isHover ? "rgba(46,204,113,0.38)" : "rgba(46,204,113,0.28)";
-  ctx.strokeStyle = "rgba(46,204,113,0.9)"; ctx.lineWidth = 2;
-  const br = 8;
-  ctx.beginPath();
-  ctx.moveTo(r.x + br, r.y); ctx.lineTo(r.x + r.w - br, r.y);
-  ctx.quadraticCurveTo(r.x + r.w, r.y, r.x + r.w, r.y + br);
-  ctx.lineTo(r.x + r.w, r.y + r.h - br); ctx.quadraticCurveTo(r.x + r.w, r.y + r.h, r.x + r.w - br, r.y + r.h);
-  ctx.lineTo(r.x + br, r.y + r.h); ctx.quadraticCurveTo(r.x, r.y + r.h, r.x, r.y + r.h - br);
-  ctx.lineTo(r.x, r.y + br); ctx.quadraticCurveTo(r.x, r.y, r.x + br, r.y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.font = "700 14px system-ui, sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-  ctx.strokeText("▶ New Game", r.x + r.w / 2, r.y + r.h / 2);
-  ctx.fillStyle = "white"; ctx.fillText("▶ New Game", r.x + r.w / 2, r.y + r.h / 2);
-  ctx.restore();
-  // High score below button
-  ctx.font = "600 13px system-ui, sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,0.65)"; ctx.lineWidth = 3;
-  const hsText = highScore == null ? "Current high score: —" : `Current high score: ${highScore}`;
-  ctx.strokeText(hsText, width / 2, r.y + r.h + 18);
-  ctx.fillStyle = highScore == null ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.95)";
-  ctx.fillText(hsText, width / 2, r.y + r.h + 18);
-  ctx.restore();
-}

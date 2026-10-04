@@ -44,8 +44,6 @@ export function isInsideLiquifier(x, y) {
   }
   return false;
 }
-// legacy alias
-export const isInsideNullify = isInsideLiquifier;
 export let field = [];
 export let cols = DEFAULT_COLS;
 export let rows = DEFAULT_ROWS;
