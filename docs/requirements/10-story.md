@@ -24,7 +24,7 @@
 - `intro-3-hole`: only as the second half of the prologue chain above (never standalone on later clicks).
 - `first-restock` (`src/cutscenes/first-restock.json`): first Proving Grounds Hole-1→Hole-2 transition, before `loadLevel(1)` (no Hole-2 glimpse), once. Replay skips. Failure → continue to bag grant + banter.
 - `end-9-hole`: first 9-hole final `WIN` clear (`runFirstCourseClear`, not active): hide Victory → play → mark seen → points summary (see `07-rewards-and-economy.md`). Skipping lands at the summary. `End Run`/Game Over never trigger it. Failure → summary directly.
-- `end-18-hole` (`src/cutscenes/end-18-hole.json`): first 18-hole final `WIN` clear (same `runFirstCourseClear`/seen-gated pattern, checked before `end-9-hole`): hide Victory → play → mark seen → points summary. Skipping lands at the summary. `End Run`/Game Over never trigger it. Failure → summary directly.
+- `end-18-hole` (`src/cutscenes/end-18-hole.json`): any 18-hole final `WIN` clear while `end-18-hole` unseen (checked before `end-9-hole`; intentionally NOT gated on `runFirstCourseClear`, so players who cleared 18 holes before this cutscene existed still see it once): hide Victory → play → mark seen → points summary. Skipping lands at the summary and still marks seen. `End Run`/Game Over never trigger it. Load/validate failure → summary directly without marking seen (retries next clear).
 
 ## 3. Dialog visual (JRPG, shared by banter)
 

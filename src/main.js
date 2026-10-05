@@ -603,6 +603,13 @@ let coinSummaryAttempts = 0;
 let coinSummaryCoins = 0;
 let coinSummaryAnimDone = false;
 let coinSummaryAnimTimers = [];
+// Points-summary state (replaces coins): exact breakdown stored at show time so
+// fast-forward/sync re-render the same rows — never inferred, never coin art.
+let coinSummaryMode = 'points';
+let coinSummaryTraversed = 0;
+let coinSummaryFirstBonus = 0;
+let coinSummaryCourseBonus = 0;
+let coinSummaryHolePoints = 0;
 let coinSummaryPendingUnlock = false;
 let loadoutUnlockedAtRunStart = 4;
 let deferredMenuReturn = false;
@@ -1479,34 +1486,20 @@ function isCoinSummaryAnimating() {
 function fastForwardCoinSummary() {
   if (!coinSummaryVisible) return false;
   clearCoinSummaryAnimTimers();
-  // Per-hole points summary (pendingHoleAdvance) has priority - show p/points, not coins
-  if (pendingHoleAdvance || (coinSummaryHoles >=0 && coinSummaryAttempts >=0 && document.getElementById('coin-summary-amount')?.textContent.includes('points'))){
-    const amt=document.getElementById('coin-summary-amount');
-    const details=document.getElementById('coin-summary-details');
-    const traversed=coinSummaryHoles; const attemptsOnHole=coinSummaryAttempts; const holePoints=coinSummaryCoins;
-    const firstBonus = (attemptsOnHole===0 && traversed>=0) ? 50 : 0; // approximate; for already computed holePoints we can infer: holePoints = traversed*10+firstBonus
-    // But we stored holePoints without attempts, so firstBonus = holePoints - traversed*10
-    const inferredFirst = Math.max(0, holePoints - traversed*10);
-    const net = holePoints - attemptsOnHole;
-    if(amt) amt.textContent='+'+net+' points';
-    if(details){
-      details.innerHTML='';
-      const makeRow=(a,l)=>{ const r=document.createElement('div'); r.className='coin-detail-row'; r.textContent=a+' - '+l; return r; };
-      details.appendChild(makeRow('10p','Cleared hole'));
-      details.appendChild(makeRow((traversed*10)+'p','Modifier Bonus (x'+traversed+')'));
-      if(inferredFirst>0) details.appendChild(makeRow(inferredFirst+'p','Hole-in-One'));
-      // Course bonus if present (infer from holePoints vs traversed/first)
-      const inferredCourse = Math.max(0, holePoints - 10 - traversed*10 - inferredFirst);
-      if(inferredCourse>0) details.appendChild(makeRow(inferredCourse+'p','course completed'));
-      const attLabel = `Failed Attempts (x${attemptsOnHole})`;
-      details.appendChild(makeRow((attemptsOnHole>0? '-'+attemptsOnHole+'p':'0p'), attLabel));
+  // Points summary: render the stored breakdown instantly — same rows as the
+  // animated sequence (zero-value rows omitted), never coin art.
+  if (coinSummaryMode === 'points') {
+    const amt = document.getElementById('coin-summary-amount');
+    const details = document.getElementById('coin-summary-details');
+    if (amt) amt.textContent = '+' + coinSummaryHolePoints + ' points';
+    if (details) {
+      details.innerHTML = '';
+      for (const row of buildPointsBreakdownRows()) details.appendChild(row);
     }
-    const unlockEl=document.getElementById('coin-summary-unlock'); if(unlockEl){ unlockEl.classList.add('hidden'); unlockEl.textContent=''; unlockEl.style.display='none'; }
-    const shopEl=document.getElementById('coin-summary-shop'); if(shopEl){ shopEl.classList.add('hidden'); shopEl.textContent=''; shopEl.style.display='none'; }
-    const courseEl=document.getElementById('coin-summary-course'); if(courseEl){ courseEl.classList.add('hidden'); courseEl.textContent=''; courseEl.style.display='none'; }
-    coinSummaryAnimDone=true;
+    hideCoinSummaryNotices();
+    coinSummaryAnimDone = true;
     syncProgressionDisplay();
-    try{ syncMainMenu(); }catch{}
+    try { syncMainMenu(); } catch {}
     return true;
   }
   const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + coinSummaryAttempts * COINS_PER_ATTEMPT + COURSE_COMPLETE_BONUS;
@@ -1608,8 +1601,9 @@ function syncCoinSummaryOverlay() {
   if (!el) return;
   if (coinSummaryVisible) {
     el.classList.remove('hidden');
-    // Per-hole points overlay (pendingHoleAdvance) - keep existing DOM as built by showPerHoleSummary
-    if (pendingHoleAdvance) { return; }
+    // Points overlay — keep existing DOM as built by showPerHoleSummary (or its
+    // fast-forward final state). Never render legacy coin art here.
+    if (coinSummaryMode === 'points' || pendingHoleAdvance) { return; }
     const txt = document.getElementById('coin-summary-text');
     const br = document.getElementById('coin-summary-breakdown');
     const amt = document.getElementById('coin-summary-amount');
@@ -1679,50 +1673,87 @@ function syncCoinSummaryOverlay() {
     }
   } else el.classList.add('hidden');
 }
+function makePointsRow(amtStr, label) {
+  const r = document.createElement('div');
+  r.className = 'coin-detail-row';
+  r.style.opacity = '1';
+  r.textContent = amtStr + ' - ' + label;
+  return r;
+}
+// Applicable breakdown rows only — zero-value rows are omitted entirely.
+function buildPointsBreakdownRows() {
+  const rows = [makePointsRow('10p', 'Cleared hole')];
+  if (coinSummaryTraversed > 0) rows.push(makePointsRow((coinSummaryTraversed * 10) + 'p', 'Modifier Bonus (x' + coinSummaryTraversed + ')'));
+  if (coinSummaryFirstBonus > 0) rows.push(makePointsRow(coinSummaryFirstBonus + 'p', 'Hole-in-One'));
+  if (coinSummaryCourseBonus > 0) rows.push(makePointsRow(coinSummaryCourseBonus + 'p', 'Course completed'));
+  if (coinSummaryAttempts > 0) rows.push(makePointsRow('-' + coinSummaryAttempts + 'p', `Failed Attempts (x${coinSummaryAttempts})`));
+  return rows;
+}
+function hideCoinSummaryNotices() {
+  const unlockEl = document.getElementById('coin-summary-unlock'); if (unlockEl) { unlockEl.classList.add('hidden'); unlockEl.textContent = ''; unlockEl.style.display = 'none'; }
+  const shopEl = document.getElementById('coin-summary-shop'); if (shopEl) { shopEl.classList.add('hidden'); shopEl.textContent = ''; shopEl.style.display = 'none'; }
+  const courseEl = document.getElementById('coin-summary-course'); if (courseEl) { courseEl.classList.add('hidden'); courseEl.textContent = ''; courseEl.style.display = 'none'; }
+}
+function animatePointsSummaryAmount(from, to, duration = 600) {
+  const amt = document.getElementById('coin-summary-amount');
+  if (!amt) return;
+  if (from === to) { amt.textContent = `+${to} points`; return; }
+  const start = performance.now();
+  const step = (now) => {
+    const elapsed = now - start;
+    const p = Math.min(1, elapsed / duration);
+    // easeOut
+    const eased = 1 - Math.pow(1 - p, 3);
+    const cur = Math.round(from + (to - from) * eased);
+    amt.textContent = `+${cur} points`;
+    if (p < 1 && isCoinSummaryAnimating() && coinSummaryVisible) {
+      requestAnimationFrame(step);
+    } else {
+      amt.textContent = `+${to} points`;
+    }
+  };
+  requestAnimationFrame(step);
+}
 function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, courseBonus=0){
   if (isTutorialActive()) return;
-  // New per-hole points summary (10-progression 2026-09-21)
+  // Points summary (replaces coins): store the exact breakdown for fast-forward/sync.
+  coinSummaryMode = 'points';
   coinSummaryHoles = traversed;
   coinSummaryAttempts = attemptsOnHole;
   // reuse coinSummaryCoins to store holePoints for compat
   coinSummaryCoins = holePoints;
+  coinSummaryTraversed = traversed;
+  coinSummaryFirstBonus = firstBonus;
+  coinSummaryCourseBonus = courseBonus;
+  coinSummaryHolePoints = holePoints;
   coinSummaryVisible = true;
   coinSummaryAnimDone = false;
   clearCoinSummaryAnimTimers();
   const el=document.getElementById('coin-summary-overlay');
-  if(el){ el.classList.remove('hidden'); const h3=el.querySelector('h3'); if(h3) h3.textContent='Hole Complete'; }
-  const netHolePoints = holePoints;
+  if(el){ el.classList.remove('hidden'); const h3=el.querySelector('h3'); if(h3) h3.textContent = courseBonus>0 ? 'Run Complete' : 'Hole Complete'; }
   const amt=document.getElementById('coin-summary-amount');
   const details=document.getElementById('coin-summary-details');
-  if(amt) amt.textContent='+'+netHolePoints+' points';
-  if(details){
-    details.innerHTML='';
-    const makeRow=(amtStr,label)=>{
-      const r=document.createElement('div'); r.className='coin-detail-row'; r.style.opacity='1';
-      r.textContent=amtStr+' - '+label;
-      return r;
-    };
-    // Base Cleared hole bonus 10p
-    details.appendChild(makeRow('10p','Cleared hole'));
-    if(traversed>0) details.appendChild(makeRow((traversed*10)+'p','Modifier Bonus (x'+traversed+')'));
-    if(firstBonus>0) details.appendChild(makeRow(firstBonus+'p','Hole-in-One'));
-    if(courseBonus>0) details.appendChild(makeRow(courseBonus+'p','course completed'));
-    // Failed Attempts row with -N p
-    if(attemptsOnHole>0) {
-      const label = `Failed Attempts (x${attemptsOnHole})`;
-      details.appendChild(makeRow('-'+attemptsOnHole+'p', label));
-    } else {
-      details.appendChild(makeRow('0p','Failed Attempts (x0)'));
-    }
-  }
+  if(amt) amt.textContent='+0 points';
+  if(details) details.innerHTML='';
   // hide legacy notices
-  const unlockEl=document.getElementById('coin-summary-unlock'); if(unlockEl){ unlockEl.classList.add('hidden'); unlockEl.textContent=''; unlockEl.style.display='none'; }
-  const shopEl=document.getElementById('coin-summary-shop'); if(shopEl){ shopEl.classList.add('hidden'); shopEl.textContent=''; shopEl.style.display='none'; }
-  const courseEl=document.getElementById('coin-summary-course'); if(courseEl){ courseEl.classList.add('hidden'); courseEl.textContent=''; courseEl.style.display='none'; }
+  hideCoinSummaryNotices();
   syncProgressionDisplay();
   try{ syncMainMenu(); }catch{}
-  // auto fast-forward flag
-  setTimeout(()=>{ coinSummaryAnimDone=true; }, 600);
+  // Staged animation: amount counts up while breakdown rows appear one by one.
+  // First dismiss (click/Escape/Space/R) fast-forwards to the final state.
+  animatePointsSummaryAmount(0, holePoints, 600);
+  const rows = buildPointsBreakdownRows();
+  rows.forEach((row, i) => {
+    const t = setTimeout(() => {
+      if (!coinSummaryVisible || coinSummaryAnimDone) return;
+      const d = document.getElementById('coin-summary-details');
+      if (d) d.appendChild(row);
+      if (i === rows.length - 1) coinSummaryAnimDone = true;
+    }, 350 * (i + 1));
+    coinSummaryAnimTimers.push(t);
+  });
+  const tDone = setTimeout(() => { coinSummaryAnimDone = true; }, 350 * (rows.length + 1));
+  coinSummaryAnimTimers.push(tDone);
 }
 function showCoinSummary(holes, attemptsOrCoins, coins) {
   // Supports both showCoinSummary(holes, coins) legacy and showCoinSummary(holes, attempts, coins)
@@ -1744,6 +1775,7 @@ function showCoinSummary(holes, attemptsOrCoins, coins) {
   coinSummaryHoles = Math.max(0, Math.floor(holes||0));
   coinSummaryAttempts = attempts;
   coinSummaryCoins = totalCoins;
+  coinSummaryMode = 'coins'; // legacy coin path (window-exposed only)
   // Do not show overlay if no money was gained
   if (coinSummaryCoins <= 0) {
     coinSummaryVisible = false;
@@ -1857,6 +1889,7 @@ function hideCoinSummary() {
     // (This is the normal course-complete path — the Continue/R exits funnel
     // through returnToMainMenu(), but they are hidden on final holes, so the
     // cutscene check must also live here or it never fires.)
+    if (isEnd18HoleCutsceneDue()) { try { playEnd18HoleThenReturn(); } catch { try { finishReturnToMainMenu(); } catch {} } return; }
     if (isEnd9HoleCutsceneDue()) { try { playEnd9HoleThenReturn(); } catch { try { finishReturnToMainMenu(); } catch {} } return; }
     try{ finishReturnToMainMenu(); }catch{ try{ clearProgress(); mainMenuVisible=true; syncMainMenu(); }catch{} }
     return;
@@ -2452,8 +2485,12 @@ function hasRestorableSave() {
 let _lastCourseListSig = null;
 function _courseListSignature() {
   try {
-    // Cheap signature: length + each id/bestTotal
-    return courses.map(c => `${c.id}:${c.holeCount}:${c.bestTotal}`).join('|');
+    // Cheap signature: length + each id/bestTotal + Dimension-Y teaser state
+    // (teaser appears once end-18-hole has been seen; include it so the menu
+    // re-renders when the cutscene is first marked seen).
+    let teaser = false;
+    try { teaser = cutsceneHasSeen('end-18-hole'); } catch {}
+    return courses.map(c => `${c.id}:${c.holeCount}:${c.bestTotal}`).join('|') + `;dy:${teaser ? 1 : 0}`;
   } catch { return null; }
 }
 function renderMainMenuRootVisibility() {
@@ -2841,6 +2878,27 @@ function renderCourseList() {
         row.innerHTML = `<span class="course-name">${holeCount} Holes — Ready</span>`;
       }
       list.appendChild(row);
+    }
+    // Dimension-Y teaser: once the end-18-hole finale has played, show a locked
+    // teaser row below the staged courses. Non-playable (no courseId/holes,
+    // disabled button, no click handler) so it never affects unlocking or play.
+    let showDimensionY = false;
+    try { showDimensionY = cutsceneHasSeen('end-18-hole'); } catch {}
+    if (showDimensionY) {
+      const teaserRow = document.createElement('div');
+      teaserRow.className = 'course-row locked';
+      teaserRow.dataset.teaser = 'dimension-y';
+      const teaserBtn = document.createElement('button');
+      teaserBtn.className = 'course-play-button';
+      teaserBtn.disabled = true;
+      teaserBtn.innerHTML = `<span class="course-name">🔒 Dimension-Y</span><span class="course-meta"></span>`;
+      try {
+        const spans = teaserBtn.querySelectorAll('.course-meta');
+        spans.forEach(s => { s.textContent = 'Coming Soon'; });
+      } catch {}
+      teaserBtn.title = 'Locked — Coming Soon';
+      teaserRow.appendChild(teaserBtn);
+      list.appendChild(teaserRow);
     }
   }
   // Cache signature after render to avoid re-rendering on every help close / menu toggle
@@ -5580,7 +5638,10 @@ function isEnd18HoleCutsceneDue() {
     if (cutsceneIsActive()) return false;
     if (gameState !== "WIN") return false;
     if (!activeCourse || activeCourse.holeCount !== 18) return false;
-    if (!runFirstCourseClear) return false;
+    // NOTE: intentionally NOT gated on runFirstCourseClear. The finale is
+    // once-ever story content (seen-gated below); players who already cleared
+    // 18 holes before this cutscene existed would otherwise never see it,
+    // since replays always leave runFirstCourseClear false.
     if (cutsceneHasSeen('end-18-hole')) return false;
     return true;
   } catch { return false; }
@@ -5619,10 +5680,12 @@ function playEnd9HoleThenReturn() {
 function playEnd18HoleThenReturn() {
   // First 18-hole clear plays end-18-hole after victory, before summary.
   // Same hide-summary-then-proceed pattern as end-9-hole. Never blocks on failure.
+  // NOTE: fallback does NOT mark seen (unlike end-9-hole) so a failed load
+  // retries on the next 18-hole clear instead of suppressing the finale forever.
   try { if (winOverlay) winOverlay.classList.add("hidden"); } catch {}
   try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch {}
   const proceed = () => { try { cutsceneMarkSeen('end-18-hole'); } catch {} continueReturnToMainMenu(); };
-  const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); proceed(); };
+  const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); try { continueReturnToMainMenu(); } catch {} };
   try {
     cutsceneLoad('end-18-hole').then((loaded) => {
       if (!loaded) { fallback(); return; }
