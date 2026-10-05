@@ -18,7 +18,7 @@ let scene = {
   ],
   dialogs: [
     { t:500, speaker:"May", text:"Welcome to Mt. Aeolus...", cps:32, portrait:"./img/splash/may-gfg-splash.png", portraitSide:"left" },
-    { t:4500, speaker:"Grand Marshal", text:"Putting is for cowards!", cps:28, portrait:"./img/logo.png", portraitSide:"right" }
+    { t:4500, speaker:"Slicer", text:"Putting is for cowards!", cps:28, portrait:"./img/cutscenes/portrait-slicer.png", portraitSide:"right" }
   ]
 };
 
