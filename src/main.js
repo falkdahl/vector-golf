@@ -5575,10 +5575,25 @@ function isEnd9HoleCutsceneDue() {
     return true;
   } catch { return false; }
 }
+function isEnd18HoleCutsceneDue() {
+  try {
+    if (cutsceneIsActive()) return false;
+    if (gameState !== "WIN") return false;
+    if (!activeCourse || activeCourse.holeCount !== 18) return false;
+    if (!runFirstCourseClear) return false;
+    if (cutsceneHasSeen('end-18-hole')) return false;
+    return true;
+  } catch { return false; }
+}
 function returnToMainMenu() {
   // REQ-009/011 final-hole: clear run, keep COURSES_KEY/bestTotal, show splash
   // Ensure per-course bestTotal already saved via maybeUpdateHighScore before calling
   // 11-cutscenes §11d: first 9-hole clear plays end-9-hole after victory, before summary.
+  // First 18-hole clear plays end-18-hole the same way (once-ever, seen-gated).
+  if (isEnd18HoleCutsceneDue()) {
+    playEnd18HoleThenReturn();
+    return;
+  }
   if (isEnd9HoleCutsceneDue()) {
     playEnd9HoleThenReturn();
     return;
@@ -5594,6 +5609,22 @@ function playEnd9HoleThenReturn() {
   const fallback = () => { console.warn('[end-9-hole] failed to load, skipping to summary'); proceed(); };
   try {
     cutsceneLoad('end-9-hole').then((loaded) => {
+      if (!loaded) { fallback(); return; }
+      let ok = false;
+      try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
+      if (!ok) fallback();
+    }).catch(() => { fallback(); });
+  } catch (e) { fallback(); }
+}
+function playEnd18HoleThenReturn() {
+  // First 18-hole clear plays end-18-hole after victory, before summary.
+  // Same hide-summary-then-proceed pattern as end-9-hole. Never blocks on failure.
+  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch {}
+  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch {}
+  const proceed = () => { try { cutsceneMarkSeen('end-18-hole'); } catch {} continueReturnToMainMenu(); };
+  const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); proceed(); };
+  try {
+    cutsceneLoad('end-18-hole').then((loaded) => {
       if (!loaded) { fallback(); return; }
       let ok = false;
       try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }

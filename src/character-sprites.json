@@ -261,6 +261,78 @@
         "w": 111,
         "h": 84
       }
+    },
+    "demon-front": {
+      "src": "./img/cutscenes/demon.png",
+      "frame": {
+        "x": 0,
+        "y": 22,
+        "w": 200,
+        "h": 200
+      }
+    },
+    "demon-rear": {
+      "src": "./img/cutscenes/demon.png",
+      "frame": {
+        "x": 298,
+        "y": 28,
+        "w": 200,
+        "h": 200
+      }
+    },
+    "demon-right": {
+      "src": "./img/cutscenes/demon.png",
+      "frame": {
+        "x": 153,
+        "y": 25,
+        "w": 190,
+        "h": 190
+      }
+    },
+    "cortex-transform-1": {
+      "src": "./img/cutscenes/transform.png",
+      "frame": {
+        "x": 88,
+        "y": 43,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "cortex-transform-2": {
+      "src": "./img/cutscenes/transform.png",
+      "frame": {
+        "x": 396,
+        "y": 45,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "cortex-transform-3": {
+      "src": "./img/cutscenes/transform.png",
+      "frame": {
+        "x": 724,
+        "y": 47,
+        "w": 300,
+        "h": 300
+      }
+    },
+    "portal-front": {
+      "src": "./img/cutscenes/portals.png",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 1024,
+        "h": 400
+      }
+    },
+    "portal-open": {
+      "src": "./img/cutscenes/portals.png",
+      "frame": {
+        "x": 512,
+        "y": 0,
+        "w": 512,
+        "h": 400
+      }
     }
   },
   "characters": {
@@ -280,7 +352,10 @@
         "cortex-front",
         "cortex-right",
         "cortex-back",
-        "cortex-left"
+        "cortex-left",
+        "cortex-transform-1",
+        "cortex-transform-2",
+        "cortex-transform-3"
       ],
       "defaultSprite": "cortex-front"
     },
@@ -340,6 +415,23 @@
         "mod-rotator"
       ],
       "defaultSprite": "mod-liquifier"
+    },
+    "demon": {
+      "name": "demon",
+      "sprites": [
+        "demon-front",
+        "demon-rear",
+        "demon-right"
+      ],
+      "defaultSprite": ""
+    },
+    "portal": {
+      "name": "Portal",
+      "sprites": [
+        "portal-front",
+        "portal-open"
+      ],
+      "defaultSprite": "portal-front"
     }
   }
 }

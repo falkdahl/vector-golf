@@ -1,0 +1,795 @@
+{
+  "id": "end-18-hole",
+  "title": "Fall of the Grandmaster",
+  "background": {
+    "type": "image",
+    "src": "./img/cutscenes/bg-club-house-outside.jpg",
+    "color": "#1a1a1a"
+  },
+  "duration": 88000,
+  "camera": {
+    "keyframes": []
+  },
+  "characters": [
+    {
+      "id": "may",
+      "character": "may",
+      "x": 260,
+      "y": 543,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 1,
+      "sprite": "may-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 1600,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-front"
+        },
+        {
+          "t": 9200,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 22400,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-left"
+        },
+        {
+          "t": 29500,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 59800,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-left"
+        },
+        {
+          "t": 74500,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 78000,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        }
+      ]
+    },
+    {
+      "id": "caddy",
+      "character": "caddy",
+      "x": 292,
+      "y": 553,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 1,
+      "sprite": "caddy-front",
+      "keyframes": [
+        {
+          "t": 500,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-front"
+        },
+        {
+          "t": 9200,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-left"
+        },
+        {
+          "t": 16200,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-front"
+        },
+        {
+          "t": 22400,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-left"
+        },
+        {
+          "t": 29500,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        },
+        {
+          "t": 59800,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-left"
+        },
+        {
+          "t": 74500,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        }
+      ]
+    },
+    {
+      "id": "acolyte",
+      "character": "acolyte",
+      "x": 110,
+      "y": 610,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 1,
+      "sprite": "acolyte-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 110,
+          "y": 610,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "acolyte-right"
+        },
+        {
+          "t": 45000,
+          "x": 110,
+          "y": 610,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "acolyte-front"
+        }
+      ]
+    },
+    {
+      "id": "acolyte-2",
+      "character": "acolyte",
+      "x": 460,
+      "y": 630,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 1,
+      "sprite": "acolyte-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 460,
+          "y": 630,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "acolyte-right"
+        },
+        {
+          "t": 45000,
+          "x": 460,
+          "y": 630,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "acolyte-front"
+        }
+      ]
+    },
+    {
+      "id": "rat",
+      "character": "rat",
+      "x": -300,
+      "y": 520,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 4,
+      "sprite": "rat-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 90,
+          "y": 480,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "rat-right"
+        },
+        {
+          "t": 17000,
+          "x": 90,
+          "y": 480,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "rat-right"
+        },
+        {
+          "t": 22200,
+          "x": 90,
+          "y": 480,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "rat-front"
+        },
+        {
+          "t": 29500,
+          "x": 90,
+          "y": 480,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "rat-right"
+        },
+        {
+          "t": 74000,
+          "x": 90,
+          "y": 480,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "rat-front"
+        },
+        {
+          "t": 74500,
+          "x": 90,
+          "y": 480,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "rat-right"
+        }
+      ]
+    },
+    {
+      "id": "cortex",
+      "character": "cortex",
+      "x": 795,
+      "y": 521,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 2,
+      "sprite": "cortex-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 1427,
+          "y": 379,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 27999,
+          "x": 1427,
+          "y": 379,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 28000,
+          "x": 797,
+          "y": 401,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "cortex-front"
+        },
+        {
+          "t": 28499,
+          "x": 787,
+          "y": 526,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "cortex-front"
+        },
+        {
+          "t": 28500,
+          "x": 787,
+          "y": 526,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "cortex-left"
+        },
+        {
+          "t": 29300,
+          "x": 628,
+          "y": 516,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "cortex-left"
+        },
+        {
+          "t": 78199,
+          "x": 628,
+          "y": 516,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "cortex-left"
+        },
+        {
+          "t": 78200,
+          "x": 628,
+          "y": 516,
+          "scale": 0.3,
+          "easing": "linear",
+          "sprite": "cortex-transform-1"
+        },
+        {
+          "t": 78700,
+          "x": 628,
+          "y": 516,
+          "scale": 0.3,
+          "easing": "linear",
+          "sprite": "cortex-transform-2"
+        },
+        {
+          "t": 79300,
+          "x": 628,
+          "y": 516,
+          "scale": 0.3,
+          "easing": "linear",
+          "sprite": "cortex-transform-3"
+        },
+        {
+          "t": 79500,
+          "x": 628,
+          "y": 516,
+          "scale": 0.3,
+          "easing": "linear",
+          "sprite": "cortex-transform-3"
+        }
+      ]
+    },
+    {
+      "id": "slicer",
+      "character": "slicer",
+      "x": 536,
+      "y": 480,
+      "scale": 0.3,
+      "anchor": "center",
+      "zIndex": 1,
+      "sprite": "slicer-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": 1368,
+          "y": 400,
+          "scale": 0.25,
+          "easing": "linear"
+        },
+        {
+          "t": 28099,
+          "x": 1368,
+          "y": 400,
+          "scale": 0.25,
+          "easing": "linear"
+        },
+        {
+          "t": 28100,
+          "x": 802,
+          "y": 400,
+          "scale": 0.25,
+          "easing": "linear"
+        },
+        {
+          "t": 28400,
+          "x": 797,
+          "y": 479,
+          "scale": 0.25,
+          "easing": "linear"
+        },
+        {
+          "t": 28401,
+          "x": 797,
+          "y": 479,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-left"
+        },
+        {
+          "t": 30500,
+          "x": 259,
+          "y": 522,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-left"
+        },
+        {
+          "t": 48400,
+          "x": 259,
+          "y": 522,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-right"
+        },
+        {
+          "t": 59600,
+          "x": 259,
+          "y": 522,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-left"
+        },
+        {
+          "t": 74500,
+          "x": 259,
+          "y": 522,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-right"
+        }
+      ]
+    },
+    {
+      "id": "modifiers",
+      "character": "modifiers",
+      "x": -68,
+      "y": 467,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 5,
+      "sprite": "mod-deflector",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": -500,
+          "y": 470,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "mod-liquifier"
+        },
+        {
+          "t": 40999,
+          "x": -500,
+          "y": 470,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "mod-liquifier"
+        },
+        {
+          "t": 41000,
+          "x": 234,
+          "y": 525,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 48399,
+          "x": 234,
+          "y": 525,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 48400,
+          "x": 283,
+          "y": 530,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 59599,
+          "x": 283,
+          "y": 530,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 59600,
+          "x": 234,
+          "y": 530,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 74499,
+          "x": 234,
+          "y": 530,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 74500,
+          "x": 283,
+          "y": 533,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 84999,
+          "x": 283,
+          "y": 533,
+          "scale": 0.35,
+          "easing": "linear"
+        },
+        {
+          "t": 85000,
+          "x": -68,
+          "y": 467,
+          "scale": 0.35,
+          "easing": "linear"
+        }
+      ]
+    },
+    {
+      "id": "portal",
+      "character": "portal",
+      "x": -257,
+      "y": 409,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 0,
+      "sprite": "portal-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": -800,
+          "y": 470,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "portal-front"
+        },
+        {
+          "t": 81499,
+          "x": -257,
+          "y": 409,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "portal-open"
+        },
+        {
+          "t": 81500,
+          "x": 518,
+          "y": 478,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "portal-open"
+        }
+      ]
+    },
+    {
+      "id": "demon",
+      "character": "demon",
+      "x": 633,
+      "y": 507,
+      "scale": 0.35,
+      "anchor": "center",
+      "zIndex": 3,
+      "sprite": "demon-front",
+      "keyframes": [
+        {
+          "t": 0,
+          "x": -107,
+          "y": 483,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "demon-front"
+        },
+        {
+          "t": 79299,
+          "x": -107,
+          "y": 483,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "demon-front"
+        },
+        {
+          "t": 79300,
+          "x": 633,
+          "y": 507,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "demon-right"
+        },
+        {
+          "t": 79400,
+          "x": 633,
+          "y": 507,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "demon-front"
+        }
+      ]
+    }
+  ],
+  "dialogs": [
+    {
+      "t": 2000,
+      "speaker": "May",
+      "text": "Eighteen! EIGHTEEN HOLES! Did you see that last ace, Caddy? Straight through the gale, no fear, no mercy!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-may.png",
+      "portraitSide": "left",
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Caddy",
+      "text": "Saw it, kid. Forty years lugging bags and I never seen anything like it. You made that wind carry you home.",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-caddy.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Acolyte",
+      "text": "She really did it... all eighteen... no one ever has... is this... a new Grandmaster?!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-acolyte.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 1500
+    },
+    {
+      "t": null,
+      "speaker": "???",
+      "text": "Oh, they did it all right. Enjoy the applause while it lasts, heroes. The peak remembers everything.",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-rat.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Grandmaster Cortex",
+      "text": "SILENCE! This is impossible! No one conquers all eighteen! No one shames ME before the Order!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portraitSide": "right",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Slicer",
+      "text": "Outta my way, girlie. What's this? More pocket weather crimes? Hand 'em over, cheaters!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-slicer.png",
+      "portraitSide": "right",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "May",
+      "text": "Hey! Hands off! Do NOT call me a cheater. You want the gadgets, come take the shot yourself!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-may.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Slicer",
+      "text": "Funny. These look just like... wait. Boss, these are YOURS! Same serials as the lab stash! The underground techlab! Built for your so-called legendary 9-hole run!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-slicer.png",
+      "portraitSide": "right",
+      "auto": true,
+      "duration": 2500
+    },
+    {
+      "t": null,
+      "speaker": "Ratko",
+      "text": "And there it is. The Grandmaster's throne, wobbling at last. Tell them, Cortex. Tell them whose wind you really rode.",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-rat.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Acolyte",
+      "text": "You... you cheated? The sacred nine... was lab tech? We renounce you! You are no Grandmaster of ours!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-acolyte.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Grandmaster Cortex",
+      "text": "Fools! You dare shun ME? Then gaze upon what the wind truly serves. I am Cortex of Dimension-Y!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portraitSide": "right",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Grandmaster Cortex",
+      "text": "You destroyed my reputation! Now I drag you screaming to my home world! Slicer, girl, bagman... INTO THE PORTAL!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portraitSide": "right",
+      "auto": true,
+      "duration": 2500
+    },
+    {
+      "t": null,
+      "speaker": "Caddy",
+      "text": "May, hold on to me! Whatever that thing is, it ain't getting you without going through Caddy Jones first!",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-caddy.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "May",
+      "text": "Then we go down swinging! If the gale can carry your voice, it can carry you home! You hear me, demon?",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-may.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Ratko",
+      "text": "Heh. Told you the peak remembers. Pleasant trip, everyone. Give my regards to Dimension-Y.",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-rat.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    },
+    {
+      "t": null,
+      "speaker": "Acolyte",
+      "text": "They're... gone. May... Caddy... the Slicer... the fraud... all swallowed by the storm...",
+      "cps": 20,
+      "portrait": "./img/cutscenes/portrait-acolyte.png",
+      "portraitSide": "left",
+      "auto": true,
+      "duration": 2000
+    }
+  ],
+  "intro": {
+    "blackMs": 500,
+    "titleFadeMs": 500,
+    "holdMs": 1000,
+    "fadeInMs": 500,
+    "enabled": true
+  },
+  "outro": {
+    "fadeOutMs": 500
+  }
+}
