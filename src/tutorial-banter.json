@@ -22,7 +22,7 @@
         },
         {
           "speaker": "caddy",
-          "text": "Left-click places a field modifier where you point. Right-click picks one back up. Use hotkeys 1 to 4 to select an item in your bag. And if it all goes sideways, press R to reset to the tee, or press Escape to pause."
+          "text": "Left-click places a field modifier where you point. Right-click picks one back up. Use hotkeys 1 to 3 to select an item in your bag. And if it all goes sideways, press R to reset to the tee, or press Escape to pause."
         }
       ]
     },
@@ -147,7 +147,7 @@
       "lines": [
         {
           "speaker": "caddy",
-          "text": "You can only hold 4 items in your golf bag and if your bag is full you have to discard one to pick up another."
+          "text": "You can only hold 3 items in your golf bag and if your bag is full you have to discard one to pick up another."
         },
         {
           "speaker": "caddy",

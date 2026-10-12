@@ -563,14 +563,14 @@ function resetHotbarCollapsed() {
   syncHotbarCollapsedUI();
 }
 
-// Supply per tactical rework: 4-slot golfbag is source of truth (one item per slot, no stacking).
-// Run supply starts empty and is filled via loadout selection (4 slots) — default kept for backward compat tests that check resetSupply
+// Supply per tactical rework: 3-slot golfbag is source of truth (one item per slot, no stacking).
+// Run supply starts empty and is filled via loadout selection (3 slots) — default kept for backward compat tests that check resetSupply
 let supply = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0 };
-const GOLFBAG_SIZE = 4;
+const GOLFBAG_SIZE = 3;
 const FREE_SHOT_CHARGES_PER_ITEM = 3;
 // Each entry: null | {type:string, charges?:number} (freeShot carries charges, others single-use)
-let golfbag = [null, null, null, null];
-let selectedBagIndex = -1; // slot-based selection (hotkeys 1-4)
+let golfbag = [null, null, null];
+let selectedBagIndex = -1; // slot-based selection (hotkeys 1-3)
 let pendingRewardType = null; // reward chosen while bag full, awaiting discard/skip
 // Pickup-discard mode: right-clicking a field modifier while the bag is full arms
 // this instead of toasting. Clicking a bag slot discards it and completes the
@@ -583,7 +583,7 @@ let startingRemaining = 0;
 let startingChoices = []; // remaining types to pick from
 let loadoutVisible = false; // kept for compat, always false now
 let loadoutCourseId = null;
-let loadoutSlots = [null,null,null,null];
+let loadoutSlots = [null,null,null];
 let loadoutOpenedAt = 0;
 const LOADOUT_OPEN_GRACE_MS = 500;
 function isLoadoutDismissGraceActive(){ try{ if(!startingItemsVisible) return false; return (Date.now()-loadoutOpenedAt)<LOADOUT_OPEN_GRACE_MS;}catch{return false;}}
@@ -694,7 +694,7 @@ function normalizeSupplyType(type) {
   return type;
 }
 function denormalizeSupplyType(type) { return type; } // kept for alias checks
-// --- Tactical 4-slot golfbag (source of truth) ---
+// --- Tactical 3-slot golfbag (source of truth) ---
 function bagEntryType(entry) { return entry && entry.type ? normalizeSupplyType(entry.type) : null; }
 function getGolfbag() { return golfbag.map(e => (e ? { ...e } : null)); }
 function getEffectiveGolfbagSize() { return GOLFBAG_SIZE; }
@@ -728,7 +728,7 @@ function syncDerivedFromBag() {
   }
 }
 function setBagFromTypeList(types) {
-  golfbag = [null, null, null, null];
+  golfbag = [null, null, null];
   passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
   passiveEnabled = { fieldExtender:true, powerCell:true };
   const list = Array.isArray(types) ? types : [];
@@ -1075,7 +1075,7 @@ function showStartingItems(courseId, opts){
   const course=findCourseById(courseId);
   if(!course) return false;
   // Start with empty bag – only the 2 picks are present after auto-confirm
-  golfbag = [null, null, null, null];
+  golfbag = [null, null, null];
   passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
   passiveEnabled = { fieldExtender:true, powerCell:true };
   try{ syncDerivedFromBag(); updateHotbarUI(); }catch{}
@@ -1170,7 +1170,7 @@ function playBanterThenShowStartingOverlay(courseId, opts){
   try{
     const course=findCourseById(courseId);
     if(course){
-      golfbag = [null, null, null, null];
+      golfbag = [null, null, null];
       passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
       passiveEnabled = { fieldExtender:true, powerCell:true };
       try{ syncDerivedFromBag(); updateHotbarUI(); }catch{}
@@ -1263,7 +1263,7 @@ function startCourseWithStartingItems(courseId){
   runUnlockedNewCourse = false;
   deferredMenuReturn = false;
   startingItemsVisible=false; startingCourseId=null; startingRemaining=0; startingChoices=[];
-  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
+  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
   try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
@@ -1316,7 +1316,7 @@ function startTutorialCourse(courseId){
   runShopRestocked = false; runFirstCourseClear = false; runUnlockedNewCourse = false;
   deferredMenuReturn = false;
   startingItemsVisible=false; startingCourseId=null; startingRemaining=0; startingChoices=[];
-  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
+  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
   try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
@@ -1366,14 +1366,14 @@ function grantTutorialHole3EmptyBag(){
   saveProgress();
 }
 function grantTutorialHole4Spatial(){
-  // Start hole4 with one liquifier, one deflector, one rotator and one magnifier (4 spatial), no passives yet
-  setBagFromTypeList(['liquifier','deflector','rotator','magnifier']);
+  // Start hole4 with liquifier + deflector + rotator (3 spatial = full 3-slot bag), no passives yet
+  setBagFromTypeList(['liquifier','deflector','rotator']);
   updateHotbarUI();
   saveProgress();
 }
 function grantTutorialHole4Passives(){
   // Legacy: One field extender + one power cell, spatial empty — kept for compat but hole4 now starts spatial
-  golfbag = [null,null,null,null];
+  golfbag = [null,null,null];
   passiveCounts = { fieldExtender:1, powerCell:1, freeShot:0 };
   try{ syncDerivedFromBag(); }catch{}
   updateHotbarUI();
@@ -2253,7 +2253,7 @@ function loadProgress() {
     // Tactical golfbag restore (new) with legacy fallback from supply counts
     try {
       if (Array.isArray(d.golfbag) && d.golfbag.length) {
-        const gb = [null, null, null, null];
+        const gb = Array.from({length: GOLFBAG_SIZE}, () => null);
         for (let i = 0; i < GOLFBAG_SIZE; i++) {
           const raw = d.golfbag[i];
           if (!raw) { gb[i] = null; continue; }
@@ -2271,7 +2271,7 @@ function loadProgress() {
         selectedModifier = selectedBagIndex >= 0 ? bagEntryType(golfbag[selectedBagIndex]) : null;
         syncDerivedFromBag();
       } else {
-        // Legacy: expand supply + FE/PC counts into bag slots (truncate to 4)
+        // Legacy: expand supply + FE/PC counts into bag slots (truncate to 3)
         const feLegacy = Math.max(0, Math.floor(d.fieldExtenderCount ?? d.areaUpgradeCount ?? 0));
         const pcLegacy = Math.max(0, Math.floor(d.powerCellCount ?? 0));
         const order = [];
@@ -7454,8 +7454,8 @@ function init() {
         }
         return;
       }
-      // Discard mode: Digit1-4 destroys that bag slot to take the pending reward
-      if (pendingRewardType && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4")) {
+      // Discard mode: Digit1-3 destroys that bag slot to take the pending reward
+      if (pendingRewardType && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3")) {
         const idx = Number(e.code.slice(5)) - 1;
         discardBagSlotAndClaimReward(idx);
         e.preventDefault();
@@ -7489,7 +7489,7 @@ function init() {
         // Digit0 no longer rerolls; blocked
         e.preventDefault();
       } else if (e.code === "Escape" || e.code === "Space" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyA" || e.code === "KeyD" || e.code === "Digit4" || e.code === "Digit5") {
-        // Block aiming/charging while menu open (Digit4 reserved for bag discard when pending)
+        // Block aiming/charging while menu open (Digit4/5 have no slot: just swallow)
         e.preventDefault();
       }
       return;
@@ -7570,7 +7570,7 @@ function init() {
         }
       }
     }
-    // Tactical 4-slot bag: Digit1-4 selects the bag slot.
+    // Tactical 3-slot bag: Digit1-3 selects the bag slot.
     // Spatial slots arm placement; passive slots (Field Extender/Power Cell) select but never place;
     // Free Shot is display-only and never selectable. In pickup-discard mode 1-4 discards that slot.
     if (e.code === "KeyJ" && !e.repeat) {
@@ -7583,7 +7583,7 @@ function init() {
         }
       }
     }
-    if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4") {
+    if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3") {
       const idx = Number(e.code.slice(5)) - 1;
       if (pendingPickup) {
         discardBagSlotForPickup(idx);
@@ -7591,8 +7591,8 @@ function init() {
         selectBagSlot(idx);
       }
       e.preventDefault();
-    } else if (e.code === "Digit5" || e.code === "Numpad5") {
-      // No 5th slot — ignore (legacy 5-slot saves truncated to 4)
+    } else if (e.code === "Digit4" || e.code === "Digit5" || e.code === "Numpad4" || e.code === "Numpad5") {
+      // No 4th slot — ignore (legacy 4/5-slot saves truncated to 3)
       e.preventDefault();
     } else if ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH")) {
       // Secret: Ctrl+Shift+H / Ctrl+Shift+G / Alt+H → prompt for exact hole (hidden)
@@ -8209,7 +8209,7 @@ function init() {
 
 // Helpers for REQ-020 testing / external acquisition
 function setSupply(newSupply) {
-  // Compat: convert counts to bag slots (truncate to 4, freeShot total becomes one item when >0)
+  // Compat: convert counts to bag slots (truncate to 3, freeShot total becomes one item when >0)
   try {
     const order = [];
     const mag = Math.max(0, Math.floor(newSupply.magnifier ?? newSupply.amplify ?? 0));
