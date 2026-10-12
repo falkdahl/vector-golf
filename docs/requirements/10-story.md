@@ -23,8 +23,8 @@
 - `prologue` (`src/cutscenes/prologue.json`): first click on `The Proving Grounds` with no restorable save and no active cutscene → preload prologue + intro-3-hole, play prologue → mark seen → chain §2 `intro-3-hole` (back-to-back, no menu/splash/HUD between) → mark seen → hole-1 banter flow (see `09-tutorial.md` + §5). Seen → go straight to banter flow. Non-tutorial courses never trigger it. Load/validate failure → fall through to banter flow.
 - `intro-3-hole`: only as the second half of the prologue chain above (never standalone on later clicks).
 - `first-restock` (`src/cutscenes/first-restock.json`): first Proving Grounds Hole-1→Hole-2 transition, before `loadLevel(1)` (no Hole-2 glimpse), once. Replay skips. Failure → continue to bag grant + banter.
-- `end-9-hole`: first 9-hole final `WIN` clear (`runFirstCourseClear`, not active): hide Victory → play → mark seen → points summary (see `07-rewards-and-economy.md`). Skipping lands at the summary. `End Run`/Game Over never trigger it. Failure → summary directly.
-- `end-18-hole` (`src/cutscenes/end-18-hole.json`): any 18-hole final `WIN` clear while `end-18-hole` unseen (checked before `end-9-hole`; intentionally NOT gated on `runFirstCourseClear`, so players who cleared 18 holes before this cutscene existed still see it once): hide Victory → play → mark seen → points summary. Skipping lands at the summary and still marks seen. `End Run`/Game Over never trigger it. Load/validate failure → summary directly without marking seen (retries next clear).
+- `end-9-hole`: first 9-hole final `WIN` clear (`runFirstCourseClear`, not active): Hole Complete → Course Cleared → Continue → hide both → play → mark seen → main menu (see `07-rewards-and-economy.md` §5b). Skipping lands at the menu. `End Run`/Game Over never trigger it. Failure → menu directly.
+- `end-18-hole` (`src/cutscenes/end-18-hole.json`): any 18-hole final `WIN` clear while `end-18-hole` unseen (checked before `end-9-hole`; intentionally NOT gated on `runFirstCourseClear`, so players who cleared 18 holes before this cutscene existed still see it once): Hole Complete → Course Cleared → Continue → hide both → play → mark seen → main menu. Skipping lands at the menu and still marks seen. `End Run`/Game Over never trigger it. Load/validate failure → menu directly without marking seen (retries next clear).
 
 ## 3. Dialog visual (JRPG, shared by banter)
 
@@ -48,7 +48,7 @@
 
 - [ ] Per-file JSON validates; loader only fetches `src/cutscenes/<id>.json`; `frame`/`sprite` render cropped; camera easing pans/zooms both canvases; dialogs typewriter/auto/fast-forward; intro/outro timings + editor controls + negative-time scrub parity.
 - [ ] Editors served hidden with export-to-clipboard + toast; subfolder assets listed; load-existing lists folder files; new-scene blanks state.
-- [ ] Prologue → intro-3-hole chain once before hole-1 banter; first-restock once before Hole-2 draw; end-9-hole once victory→summary; skips chain correctly; failures never block.
+- [ ] Prologue → intro-3-hole chain once before hole-1 banter; first-restock once before Hole-2 draw; end-9-hole/end-18-hole once Course-Cleared-Continue→cutscene→menu; skips chain correctly; failures never block.
 - [ ] Banter files split pool/tutorial; portraits/names correct; 20cps + 1000ms linger; reveal→advance→close inputs; tutorial fixed banters with keywords; non-tutorial shuffle-bag no-repeat cycle persisted; full input blocking with wind animating; both skip buttons correct.
 
 ## File paths

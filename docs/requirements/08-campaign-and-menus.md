@@ -22,7 +22,7 @@
 
 ## 3. Stages & unlocking
 
-- Only the tutorial (`4`) unlocked at fresh start. `isStageUnlocked(n)` = `n===4` or previous stage `bestTotal!==null`. Clearing a stage auto-generates the next via `deriveCourseSeed` + `saveCourses()`. Stage delete forbidden. `bestTotal` updates only on full clear (lower keeps on tie; see `07-rewards-and-economy.md`).
+- Only the tutorial (`4`) unlocked at fresh start. `isStageUnlocked(n)` = `n===4` or previous stage `bestTotal!==null`. Clearing a stage auto-generates the next via `deriveCourseSeed` + `saveCourses()`. Stage delete forbidden. `bestTotal` updates only on full clear (higher points wins, lower keeps on tie; see `07-rewards-and-economy.md`); `End Run`/`Game Over` never touch it, but journal may still record a holes-reached best when no record exists.
 
 ## 4. Load & resume (auto-resume, no Continue)
 

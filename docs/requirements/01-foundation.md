@@ -36,6 +36,7 @@
     <div id="help-overlay" class="hidden">...</div>
     <div id="starting-items-overlay" class="hidden">...</div>
     <div id="coin-summary-overlay" class="hidden">...</div>     <!-- points summary, id kept for compat -->
+    <div id="course-cleared-overlay" class="hidden">...</div>   <!-- Course Cleared, after final Hole Complete -->
     <div id="cutscene-dialog" class="hidden">...</div>
     <button id="cutscene-skip-button" class="hidden">Skip »</button>
     <button id="banter-skip-button" class="hidden">Skip »</button>

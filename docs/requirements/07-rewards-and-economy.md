@@ -11,7 +11,7 @@
 
 - Hole `radius:14` (12–16 tunable). Win checked every tick (grazing counts).
 - Non-final win: `vel=0`, clear board without refund, `currentHoleIndex++`, `holeAttempts=0` (keep `totalAttempts`/`totalPoints` run totals), disarm free shot, fresh uncollected treasure, `loadLevel(next)` → `AIMING` + per-hole summary (below) + save. No `WIN` overlay, no `Next` button.
-- Final win: `vel=0`, `gameState='WIN'` + Victory overlay (see `02-rendering.md`) → `Continue`/`R` → points summary → `clearProgress()` → menu. Victory only for the last hole. Only full completion updates `bestTotal` (points, higher wins; see `08-campaign-and-menus.md`). `End Run`/`Game Over` never update best.
+- Final win: `vel=0`, `gameState='WIN'` (no Victory overlay) → per-hole `Hole Complete` summary (§5) → `Course Cleared` overlay (§5b) → cutscene if due (see `10-story.md`) else `clearProgress()` → menu. Only full completion updates `bestTotal` (points, higher wins; see `08-campaign-and-menus.md`). `End Run`/`Game Over` never update `bestTotal`, but `commitRunJournal(false)` still saves a journal best candidate when the course has no record yet (holes-reached based).
 
 ## 2. Reward triggers
 
@@ -33,9 +33,14 @@
 
 ## 5. Points (replace coins; HUD `Points: N`)
 
-- `POINTS_PER_HOLE=10`, `POINTS_PER_MODIFIER=10` (distinct bubbles entered **on the clearing shot** only), `POINTS_FIRST_ATTEMPT_BONUS=50` (0 failures before win), `POINTS_PER_ATTEMPT=-1` applied as `-failuresBeforeWin` at clear. No course-completion bonus.
-- Per cleared hole: `holePoints = 10 + traversedOnClearingShot*10 + (first?50:0) - failuresBeforeWin`. `totalPoints` changes only on clear (HUD `#hud-total = Points: N`, may be negative). Persisted for resume.
-- End-of-hole summary (`#coin-summary-overlay` id kept, points content): after every win (non-final before `loadLevel`, final before `WIN` return; also on `End Run`/`Game Over` with current totals): overlay `absolute inset:0 flex center rgba(0,0,0,0.55) z14` over the level; transparent card; title `Hole Complete` (final: `Run Complete`); big row `+X points`; breakdown rows with `p` suffix (`10p - Cleared hole`, `20p - Modifier Bonus (x2)`, `50p - Hole-in-One`, `-3p - Failed Attempts (x3)`), no `💰`; no unlock texts. `Continue (#coin-summary-ok)` advances or returns. Two-phase dismiss (fast-forward then close) allowed.
+- `POINTS_PER_HOLE=10`, `POINTS_PER_MODIFIER=10` (distinct bubbles entered **on the clearing shot** only), `POINTS_FIRST_ATTEMPT_BONUS=50` (0 failures before win), `POINTS_PER_ATTEMPT=-1` applied as `-failuresBeforeWin` at clear. No course-completion bonus (removed; final hole scores like any other hole).
+- Per cleared hole (including final): `holePoints = 10 + traversedOnClearingShot*10 + (first?50:0) - failuresBeforeWin`. `totalPoints` changes only on clear (HUD `#hud-total = Points: N`, may be negative). Persisted for resume.
+- End-of-hole summary (`#coin-summary-overlay` id kept, points content): after every win (non-final before `loadLevel`, final before `Course Cleared`; also on `End Run`/`Game Over` with current totals): overlay `absolute inset:0 flex center rgba(0,0,0,0.55) z14` over the level; transparent card; title always `Hole Complete`; big row `+X points`; breakdown rows with `p` suffix (`10p - Cleared hole`, `20p - Modifier Bonus (x2)`, `50p - Hole-in-One`, `-3p - Failed Attempts (x3)`), no `💰`; no unlock texts. `Continue (#coin-summary-ok)` advances or (final) opens `Course Cleared`. Two-phase dismiss (fast-forward then close) allowed.
+
+## 5b. Course Cleared overlay (after final Hole Complete, before cutscenes)
+
+- Overlay `#course-cleared-overlay` (`absolute inset:0 flex center rgba(0,0,0,0.55) z14`, card `≤380px`): title exactly `Course Cleared`; big row `+N points` (`#course-cleared-amount`, run `totalPoints`); record line `#course-cleared-record` only when this clear beats the course `bestTotal` (or first clear): text exactly `New Record` with dancing-letters animation (per-letter `recordDance` bounce in place); `Continue (#course-cleared-ok)` → end cutscene if due else main menu. Dismiss via click/Escape/Enter/Space/R. Blocks input/placement/launch like reward/summary; hidden on tutorial (banter + menu return instead).
+- Record rule: `bestTotal` updates only on full clear (higher points wins; see `08-campaign-and-menus.md`). Journal still commits partial runs via `commitRunJournal(false)` so a course with no record yet saves its best by holes reached.
 
 ## 6. Journal (best run per course)
 
@@ -49,7 +54,8 @@
 - [ ] Hole 1 no reward; holes 2+ show `Choose an Upgrade`; treasure collects mid-flight, once per chest.
 - [ ] Every non-tutorial offer is 3 distinct from the effective 6-pool (FE/PC never together); claim grants `+1` / `+3` / `+20%` stacks; bag-full discard via hotbar + Skip; no `#reward-bag-row`.
 - [ ] Re-roll once, costs 1 counted attempt, disabled on last attempt / rerolled / tutorial-fixed; `Total` 11 after one reroll off last attempt.
-- [ ] Points `10 + traversed*10 + 50 first − failures`; HUD `Points:` only on clear; per-hole summary `+X points` with `p` rows, no `💰`, no unlock text.
+- [ ] Points `10 + traversed*10 + 50 first − failures` (no course bonus, final hole same); HUD `Points:` only on clear; per-hole summary always `Hole Complete` with `p` rows, no `💰`, no unlock text.
+- [ ] Course Cleared after final Hole Complete, before cutscenes: title `Course Cleared`, total points, `New Record` dance only on record, Continue → cutscene/menu.
 - [ ] Journal records/commits/replaces per §6; panel rows correct; hidden on tutorial.
 
 ## File paths

@@ -478,7 +478,7 @@ function cheatGrabBlocked() {
   if (pauseMenuVisible) return true;
   if (rewardMenuVisible) return true;
   if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return true;
-  if (coinSummaryVisible) return true;
+  if (coinSummaryVisible || courseClearedVisible) return true;
   if (startingItemsVisible || loadoutVisible) return true;
   try { if (cutsceneIsActive()) return true; } catch {}
   try { if (banterIsActive()) return true; } catch {}
@@ -636,6 +636,55 @@ function modifierNowMs() { try { return performance.now(); } catch { return Date
 let pendingHoleAdvance = false;
 let pendingCourseComplete = false; // ids of modifiers ball has been inside
 let holeStartAttempts = 0;
+// Course Cleared overlay (after final Hole Complete, before end cutscenes)
+let courseClearedVisible = false;
+let courseClearedTotal = 0;
+let courseClearedIsRecord = false;
+let pendingCourseClearedIsRecord = false;
+function isCourseClearedVisible(){ return !!courseClearedVisible; }
+function syncCourseClearedOverlay(){
+  const el = document.getElementById('course-cleared-overlay');
+  if(!el) return;
+  if(courseClearedVisible) el.classList.remove('hidden');
+  else el.classList.add('hidden');
+}
+function showCourseClearedOverlay(total, isRecord){
+  courseClearedTotal = Math.floor(Number(total)||0);
+  courseClearedIsRecord = !!isRecord;
+  courseClearedVisible = true;
+  const amt = document.getElementById('course-cleared-amount');
+  if(amt) amt.textContent = '+' + courseClearedTotal + ' points';
+  const rec = document.getElementById('course-cleared-record');
+  if(rec){
+    rec.innerHTML = '';
+    if(courseClearedIsRecord){
+      const label = 'New Record';
+      for(let i=0;i<label.length;i++){
+        const ch = label[i];
+        if(ch === ' '){ const sp=document.createElement('span'); sp.className='record-space'; sp.textContent='\u00A0'; rec.appendChild(sp); continue; }
+        const s=document.createElement('span');
+        s.className='record-letter';
+        s.textContent=ch;
+        s.style.animationDelay = (i*0.08)+'s';
+        rec.appendChild(s);
+      }
+      rec.classList.remove('hidden');
+    } else {
+      rec.classList.add('hidden');
+    }
+  }
+  syncCourseClearedOverlay();
+  try{ syncMainMenu(); }catch{}
+}
+function hideCourseCleared(){
+  if(!courseClearedVisible) return;
+  courseClearedVisible = false;
+  syncCourseClearedOverlay();
+  // Continue takes you back to main menu OR starts the next cutscene if one is due.
+  if(isEnd18HoleCutsceneDue()){ try{ playEnd18HoleThenReturn(); }catch{ try{ finishReturnToMainMenu(); }catch{} } return; }
+  if(isEnd9HoleCutsceneDue()){ try{ playEnd9HoleThenReturn(); }catch{ try{ finishReturnToMainMenu(); }catch{} } return; }
+  try{ finishReturnToMainMenu(); }catch{ try{ clearProgress(); mainMenuVisible=true; syncMainMenu(); }catch{} }
+}
 function normalizeSupplyType(type) {
   if (type === 'amplify') return 'magnifier';
   if (type === 'nullify') return 'liquifier';
@@ -1217,6 +1266,7 @@ function startCourseWithStartingItems(courseId){
   loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
+  try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
   loadLevel(0); gameState='AIMING';
   holeStartAttempts = 0;
   modifiersTraversedThisHole = new Set();
@@ -1269,6 +1319,7 @@ function startTutorialCourse(courseId){
   loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null,null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible=false;
+  try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
   tutorialLiquifierReminderShown=false;
   tutorialHole1Liquifier3Shown=false;
   tutorialHole1Liquifier10Shown=false;
@@ -1359,7 +1410,7 @@ let tutorialHole4StartRewardPending = false;
 function maybeShowTutorialHole1LiquifierReminder(){
   if(!isTutorialActive()) return false;
   if(currentHoleIndex!==0) return false;
-  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible) return false;
+  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
   if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
   if(!tutorialHole1Liquifier3Shown && holeAttempts >=3){
     tutorialHole1Liquifier3Shown = true;
@@ -1384,7 +1435,7 @@ function maybeShowTutorialHole2RotatorReminder(){
   if(currentHoleIndex!==1) return false;
   if(holeAttempts <3) return false;
   if(tutorialHole2RotatorShown) return false;
-  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible) return false;
+  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
   if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
   tutorialHole2RotatorShown = true;
   try{ banterPlay('tutorial-hole3-rotator-reminder', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
@@ -1396,7 +1447,7 @@ function maybeShowTutorialHole2GadgetsReminder(){
   if(currentHoleIndex!==1) return false;
   if(holeAttempts <5) return false;
   if(tutorialHole2GadgetsReminderShown) return false;
-  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible) return false;
+  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
   if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
   tutorialHole2GadgetsReminderShown=true;
   try{ banterPlay('tutorial-hole2-gadgets-reminder', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
@@ -1681,11 +1732,11 @@ function makePointsRow(amtStr, label) {
   return r;
 }
 // Applicable breakdown rows only — zero-value rows are omitted entirely.
+// No course-completion bonus: per-hole points only.
 function buildPointsBreakdownRows() {
   const rows = [makePointsRow('10p', 'Cleared hole')];
   if (coinSummaryTraversed > 0) rows.push(makePointsRow((coinSummaryTraversed * 10) + 'p', 'Modifier Bonus (x' + coinSummaryTraversed + ')'));
   if (coinSummaryFirstBonus > 0) rows.push(makePointsRow(coinSummaryFirstBonus + 'p', 'Hole-in-One'));
-  if (coinSummaryCourseBonus > 0) rows.push(makePointsRow(coinSummaryCourseBonus + 'p', 'Course completed'));
   if (coinSummaryAttempts > 0) rows.push(makePointsRow('-' + coinSummaryAttempts + 'p', `Failed Attempts (x${coinSummaryAttempts})`));
   return rows;
 }
@@ -1717,6 +1768,7 @@ function animatePointsSummaryAmount(from, to, duration = 600) {
 function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, courseBonus=0){
   if (isTutorialActive()) return;
   // Points summary (replaces coins): store the exact breakdown for fast-forward/sync.
+  // courseBonus is ignored (no course-completion bonus); kept for compat.
   coinSummaryMode = 'points';
   coinSummaryHoles = traversed;
   coinSummaryAttempts = attemptsOnHole;
@@ -1724,13 +1776,13 @@ function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, c
   coinSummaryCoins = holePoints;
   coinSummaryTraversed = traversed;
   coinSummaryFirstBonus = firstBonus;
-  coinSummaryCourseBonus = courseBonus;
+  coinSummaryCourseBonus = 0;
   coinSummaryHolePoints = holePoints;
   coinSummaryVisible = true;
   coinSummaryAnimDone = false;
   clearCoinSummaryAnimTimers();
   const el=document.getElementById('coin-summary-overlay');
-  if(el){ el.classList.remove('hidden'); const h3=el.querySelector('h3'); if(h3) h3.textContent = courseBonus>0 ? 'Run Complete' : 'Hole Complete'; }
+  if(el){ el.classList.remove('hidden'); const h3=el.querySelector('h3'); if(h3) h3.textContent = 'Hole Complete'; }
   const amt=document.getElementById('coin-summary-amount');
   const details=document.getElementById('coin-summary-details');
   if(amt) amt.textContent='+0 points';
@@ -1883,15 +1935,10 @@ function hideCoinSummary() {
   if (pendingCourseComplete) {
     pendingCourseComplete=false;
     pendingHoleAdvance=false;
-    // Course completed – go to main menu (no Run Completed overlay, just Hole Completed already shown).
-    // 11-cutscenes §11d: first 9-hole clear plays end-9-hole here, after the
-    // Hole Complete summary is dismissed and before returning to the menu.
-    // (This is the normal course-complete path — the Continue/R exits funnel
-    // through returnToMainMenu(), but they are hidden on final holes, so the
-    // cutscene check must also live here or it never fires.)
-    if (isEnd18HoleCutsceneDue()) { try { playEnd18HoleThenReturn(); } catch { try { finishReturnToMainMenu(); } catch {} } return; }
-    if (isEnd9HoleCutsceneDue()) { try { playEnd9HoleThenReturn(); } catch { try { finishReturnToMainMenu(); } catch {} } return; }
-    try{ finishReturnToMainMenu(); }catch{ try{ clearProgress(); mainMenuVisible=true; syncMainMenu(); }catch{} }
+    // Final Hole Complete dismissed -> show Course Cleared overlay (total points,
+    // New Record). Its Continue then routes to cutscene/menu via hideCourseCleared().
+    try{ showCourseClearedOverlay(totalPoints, pendingCourseClearedIsRecord); }catch{ try{ finishReturnToMainMenu(); }catch{} }
+    try{ pendingCourseClearedIsRecord = false; }catch{}
     return;
   }
   if (pendingHoleAdvance) {
@@ -2401,6 +2448,7 @@ function clearAllStorageForSeedGeneration() {
   // Reset run-specific progress variables
   try { runHolesCleared = 0; runCoinsEarned = 0; } catch {}
   try { coinSummaryVisible = false; syncCoinSummaryOverlay(); } catch {}
+  try { courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); } catch {}
 }
 
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
@@ -2661,7 +2709,10 @@ function setHighScore(n) {
 function clearHighScore() { try { localStorage.removeItem(HIGH_SCORE_KEY); } catch {}; }
 function maybeUpdateHighScore() {
   if (!activeCourse) return;
-  // Record is highest points, regardless of clear or not (2026-09-21)
+  // Course record (bestTotal) only counts on full course clear — this function is
+  // only called from final-hole WIN (and tutorial). End Run / Game Over never call it.
+  // Journal partial-run saving (commitRunJournal(false)) still records best-run
+  // candidates when the course has no record yet.
   const prev = getHighScore();
   if (prev == null || totalPoints > prev) setHighScore(totalPoints);
   let updated = false;
@@ -3169,7 +3220,7 @@ function syncMainMenu() {
       const seedWrapper = document.getElementById('campaign-seed-wrapper');
       const menuTitle = document.getElementById('menu-title');
       // When loadout or coin summary is visible, hide main menu buttons but keep splash background (black transparent backdrop like loadout)
-      if (startingItemsVisible || loadoutVisible || coinSummaryVisible) {
+      if (startingItemsVisible || loadoutVisible || coinSummaryVisible || courseClearedVisible) {
         if (mmc) mmc.classList.add('hidden');
         if (root) root.classList.add('hidden');
         if (cm) cm.classList.add('hidden');
@@ -3202,7 +3253,7 @@ function syncMainMenu() {
         if (menuTitle) menuTitle.classList.remove('hidden');
       }
       // Always hide chrome when loadout or coin summary is active — keep only splash image
-      if (startingItemsVisible || loadoutVisible || coinSummaryVisible) {
+      if (startingItemsVisible || loadoutVisible || coinSummaryVisible || courseClearedVisible) {
         if (helpBtn) helpBtn.classList.add('hidden');
         if (seedWrapper) seedWrapper.classList.add('hidden');
         if (menuTitle) menuTitle.classList.add('hidden');
@@ -3367,7 +3418,7 @@ function syncCampaignSeedDisplay() {
     const cs = (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null) || '';
     el.textContent = 'Seed: ' + String(cs);
     let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
-    const show = !!mainMenuVisible && !startingItemsVisible && !loadoutVisible && !coinSummaryVisible && !isCut;
+    const show = !!mainMenuVisible && !startingItemsVisible && !loadoutVisible && !coinSummaryVisible && !courseClearedVisible && !isCut;
     if (wrapper) wrapper.classList.toggle('hidden', !show);
     else el.classList.toggle('hidden', !show);
     // also update popup current seed if visible
@@ -3523,6 +3574,7 @@ function finishReturnToMainMenu() {
   isTutorialRun = false;
   try { journalStopRun(); } catch {}
   deferredMenuReturn = false;
+  try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
@@ -3939,7 +3991,7 @@ function canToggleJournal() {
   try {
     try { if (isTutorialActive()) return false; } catch {}
     if (pauseMenuVisible || mainMenuVisible) return false;
-    if (startingItemsVisible || coinSummaryVisible) return false;
+    if (startingItemsVisible || coinSummaryVisible || courseClearedVisible) return false;
     if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
     if (gameState === "WIN" || gameState === "GAME_OVER") return false;
     try { if (cutsceneIsActive()) return false; } catch {}
@@ -3959,7 +4011,7 @@ function syncJournalUI() {
     let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
     let isBanter = false; try { isBanter = banterIsActive(); } catch {}
     let isTut = false; try { isTut = isTutorialActive(); } catch {}
-    const hidden = isTut || pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
+    const hidden = isTut || pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || courseClearedVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
     if (journalWrapperEl) journalWrapperEl.classList.toggle("hidden", !!hidden);
     if (journalContainerEl) {
       journalContainerEl.classList.toggle("hidden", !!hidden);
@@ -4980,7 +5032,7 @@ function updateAttemptsUI() {
     if (hudEl) {
       let isCut2=false; try{ isCut2=cutsceneIsActive(); }catch{}
       let isBanter=false; try{ isBanter=banterIsActive(); }catch{}
-      const shouldHide = !!mainMenuVisible || isCut2 || isBanter || coinSummaryVisible || startingItemsVisible;
+      const shouldHide = !!mainMenuVisible || isCut2 || isBanter || coinSummaryVisible || courseClearedVisible || startingItemsVisible;
       hudEl.classList.toggle("hidden", shouldHide);
       if (gameState === "WIN" || gameState === "GAME_OVER") hudEl.style.opacity = "0.55";
       else hudEl.style.opacity = "";
@@ -4994,7 +5046,7 @@ function updateHotbarUI() {
   // but hidden while the starting overlay is shown.
   let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
   let isBanter=false; try{ isBanter=banterIsActive(); }catch{}
-  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
+  const isOverlayHidden = pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || courseClearedVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
   const hideHotbar = isOverlayHidden;
   const hideBag = isOverlayHidden;
   if (bottomBarEl) bottomBarEl.classList.toggle("hidden", isOverlayHidden);
@@ -5183,7 +5235,7 @@ function updateHotbarUI() {
           slot.onclick = () => {
             try {
               if (mainMenuVisible || pauseMenuVisible) return;
-              if (rewardMenuVisible || coinSummaryVisible) return;
+              if (rewardMenuVisible || coinSummaryVisible || courseClearedVisible) return;
               if (typeof banterIsActive === 'function' && banterIsActive()) return;
               if (typeof cutsceneIsActive === 'function' && cutsceneIsActive()) return;
               if (startingItemsVisible) return;
@@ -5405,7 +5457,7 @@ function splitStackAtIndex(modIdx) {
 }
 function getSnapPreviewTarget() {
   // Placement preview: selected bag item following the mouse
-  if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier) && !rewardMenuVisible && !coinSummaryVisible && !pendingPickup) {
+  if ((gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier) && !rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !pendingPickup) {
     const t = findSnapTarget(mousePos.x, mousePos.y, null);
     if (t) return { fromX: mousePos.x, fromY: mousePos.y, toX: t.mod.x, toY: t.mod.y };
   }
@@ -5425,7 +5477,7 @@ function getSnapPreviewTarget() {
 }
 
 function placeModifier(x, y) {
-  if (loadoutVisible || coinSummaryVisible) return false;
+  if (loadoutVisible || coinSummaryVisible || courseClearedVisible) return false;
   if (banterIsActive()) return false;
   if (pendingPickup) return false;
   if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
@@ -5769,7 +5821,7 @@ function resetGameAfterWin() {
 
 function handleLaunch(angle, power) {
   // REQ-021: block launch while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners block
-  if (loadoutVisible || coinSummaryVisible) return;
+  if (loadoutVisible || coinSummaryVisible || courseClearedVisible) return;
   if (banterIsActive()) return;
   if (rewardMenuVisible) return;
   if (holeBannerVisible) return;
@@ -5894,8 +5946,8 @@ function checkWin() {
     // Failures before this win: holeAttempts includes the winning shot unless it was a free flight.
     const attemptsF = Math.max(0, (holeAttempts - holeStartAttempts) - (winWasFreeFlight ? 0 : 1));
     const firstBonusF = attemptsF === 0 ? 50 : 0;
-    const courseBonusF = 50;
-    const holePointsF = 10 + traversedF * 10 + firstBonusF + courseBonusF - attemptsF;
+    // No course-completion bonus: final hole scores like any other hole.
+    const holePointsF = 10 + traversedF * 10 + firstBonusF - attemptsF;
     totalPoints += holePointsF;
     runPointsEarned += holePointsF;
     runCoinsEarned = runPointsEarned;
@@ -5910,11 +5962,15 @@ function checkWin() {
     clearFreeShotFlightGlow();
     hideSoftlockBanner();
     resetSoftlockDetection();
-    // No Victory screen – just Hole Completed with course bonus (per 09-21 spec)
+    // Final hole: Hole Complete summary first, then Course Cleared overlay, then cutscene/menu.
     pendingCourseComplete = true;
-    try{ showPerHoleSummary(traversedF, attemptsF, firstBonusF, holePointsF, courseBonusF); }catch{}
-    // Update high score
-    try{ maybeUpdateHighScore(); }catch{}
+    try{ showPerHoleSummary(traversedF, attemptsF, firstBonusF, holePointsF, 0); }catch{}
+    // Update course record (only full clears count). Capture new-record flag for the overlay.
+    try{
+      const prevBest = (activeCourse && typeof activeCourse.bestTotal === 'number') ? activeCourse.bestTotal : null;
+      maybeUpdateHighScore();
+      pendingCourseClearedIsRecord = (prevBest == null || totalPoints > prevBest);
+    }catch{ try{ maybeUpdateHighScore(); }catch{} pendingCourseClearedIsRecord = !!runFirstCourseClear; }
     // Stay in WIN-like paused state but without winOverlay
     gameState = "WIN";
     updateAttemptsUI();
@@ -5998,7 +6054,7 @@ function update(dt) {
     return;
   }
   // Starting items or coin summary visible, pause like main menu
-  if (startingItemsVisible || loadoutVisible || coinSummaryVisible) {
+  if (startingItemsVisible || loadoutVisible || coinSummaryVisible || courseClearedVisible) {
     tickWind();
     updateHotbarUI();
     if (charging) { resetCharge(); gameState = "AIMING"; }
@@ -6270,7 +6326,7 @@ function render() {
     let _cut = false, _ban = false;
     try { _cut = cutsceneIsActive(); } catch {}
     try { _ban = banterIsActive(); } catch {}
-    if (!rewardMenuVisible && !coinSummaryVisible && !_cut && !_ban && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
+    if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cut && !_ban && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
       snapForArrows = getSnapPreviewTarget();
     }
   } catch { snapForArrows = null; }
@@ -6309,7 +6365,7 @@ function render() {
   // before the first-restock cutscene) and the orbit must never draw there.
   let _cutActive = false; try { _cutActive = cutsceneIsActive(); } catch {}
   let _banterActive = false; try { _banterActive = banterIsActive(); } catch {}
-  if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance) {
+  if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance) {
     drawAim(ctx, ball, getAimAngle(), charge, gameState);
   }
   // Preview circle follows mouse when selecting modifier before shooting
@@ -6317,9 +6373,9 @@ function render() {
   // Out-of-bounds centers (canvas edge / OB terrain) show the blocked preview.
   let oobPreview = false;
   try { oobPreview = !!(mousePos && selectedModifier && isPlacementOutOfBounds(mousePos.x, mousePos.y)); } catch {}
-  if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier) && !oobPreview) {
+  if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier) && !oobPreview) {
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius());
-  } else if (!rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && (!canPlace(selectedModifier) || oobPreview)) {
+  } else if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && (!canPlace(selectedModifier) || oobPreview)) {
     // Insufficient supply or out of bounds: blocked preview (gray/red).
     // Caption names the reason ('out of bounds' vs default 'no supply').
     let placeableNow = false;
@@ -6331,7 +6387,7 @@ function render() {
   // restored in `finally`) — drawn after the preview fill so they stay crisp.
   // Except while snapping (stacked end-result in the target, see above) or
   // out of bounds (not placeable there at all).
-  if (!snapForArrows && !oobPreview && !rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
+  if (!snapForArrows && !oobPreview && !rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier)) {
     try {
       const hypoPlace = [...modifiers, { id: 'placement-preview', type: selectedModifier, x: mousePos.x, y: mousePos.y, radius: getEffectiveModifierRadius() }];
       setModifiers(hypoPlace);
@@ -6342,7 +6398,7 @@ function render() {
     } catch { try { setModifiers(modifiers); } catch {} };
   }
   // Stacking EM-pull link: preview/dragged center inside another modifier
-  if (snapForArrows && !rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
+  if (snapForArrows && !rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
     try {
       const snap = snapForArrows;
       {
@@ -6354,11 +6410,11 @@ function render() {
   }
   // HUD is now HTML #hud on top of canvas (see 03-rendering.md §4) — no canvas drawHUD
   // Power bar under ball when charging per REQ-007
-  if (gameState === "CHARGING" && charging && !rewardMenuVisible && !coinSummaryVisible && !_cutActive && !_banterActive && !pendingHoleAdvance) {
+  if (gameState === "CHARGING" && charging && !rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance) {
     drawForceBar(ctx, ball, charge);
   }
   // Softlock banner (non-blocking) below HUD — informs player they can reset via R or pause menu
-  if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !coinSummaryVisible && !helpVisible && gameState === "FLYING") {
+  if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !coinSummaryVisible && !courseClearedVisible && !helpVisible && gameState === "FLYING") {
     try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch {};
   }
   // HTML reward overlay (sync handled on state change, not per-frame to avoid thrashing)
@@ -6812,6 +6868,16 @@ function init() {
       }
     });
   }
+  const courseClearedOk = document.getElementById('course-cleared-ok');
+  if (courseClearedOk) {
+    courseClearedOk.addEventListener('click', () => { hideCourseCleared(); });
+  }
+  const courseClearedOverlay = document.getElementById('course-cleared-overlay');
+  if (courseClearedOverlay) {
+    courseClearedOverlay.addEventListener('click', (e) => {
+      if (e.target === courseClearedOverlay) hideCourseCleared();
+    });
+  }
   // 11-cutscenes §10b: Skip button top-right — ends the active cutscene at once.
   const cutsceneSkipBtn = document.getElementById('cutscene-skip-button');
   if (cutsceneSkipBtn && !cutsceneSkipBtn._cutBound) {
@@ -7182,6 +7248,15 @@ function init() {
         } else {
           hideCoinSummary();
         }
+        e.preventDefault();
+      }
+      return;
+    }
+    // Course Cleared overlay (after final Hole Complete, before end cutscenes)
+    if (courseClearedVisible) {
+      const isDismissKey = e.code === "Escape" || e.code === "Enter" || e.code === "Space" || e.code === "KeyR" || e.key === "r" || e.key === "R";
+      if (isDismissKey) {
+        hideCourseCleared();
         e.preventDefault();
       }
       return;
@@ -8568,6 +8643,10 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<4) p.push(null); loadoutSlots=p.slice(0,4); } syncLoadoutOverlay();} });
   Object.defineProperty(window, 'coinSummaryVisible', { get: ()=>coinSummaryVisible, set:(v)=>{coinSummaryVisible=!!v; syncCoinSummaryOverlay();} });
+  Object.defineProperty(window, 'courseClearedVisible', { get: ()=>courseClearedVisible, set:(v)=>{courseClearedVisible=!!v; syncCourseClearedOverlay();} });
+  window.__isCourseClearedVisible = isCourseClearedVisible;
+  window.__showCourseClearedOverlay = showCourseClearedOverlay;
+  window.__hideCourseCleared = hideCourseCleared;
   Object.defineProperty(window, 'runHolesCleared', { get: ()=>runHolesCleared, set:(v)=>{runHolesCleared=Math.max(0,Math.floor(v));} });
   Object.defineProperty(window, 'runCoinsEarned', { get: ()=>runCoinsEarned, set:(v)=>{runCoinsEarned=Math.max(0,Math.floor(v));} });
   Object.defineProperty(window, 'loadoutUnlockedAtRunStart', { get: ()=>loadoutUnlockedAtRunStart, set:(v)=>{loadoutUnlockedAtRunStart=Math.max(1,Math.min(4,Math.floor(v)));} });
@@ -8647,7 +8726,7 @@ function playCutsceneWrapped(idOrData, opts) {
 try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__getDragOffset = () => (dragOffset ? { ...dragOffset } : null); window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {

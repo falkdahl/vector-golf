@@ -2117,3 +2117,84 @@ body {
 #banter-skip-button.hidden { display: none !important; }
 #cutscene-skip-button:hover { background: rgba(0,0,0,0.75); }
 #banter-skip-button:hover { background: rgba(0,0,0,0.75); }
+
+/* Course Cleared overlay (after final Hole Complete, before end cutscenes) */
+#course-cleared-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  border-radius: 8px;
+  z-index: 14;
+  padding: 16px;
+}
+#course-cleared-overlay.hidden { display: none !important; }
+.course-cleared-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 90%;
+  max-height: 90%;
+  text-align: center;
+  background: transparent;
+  padding: 20px 24px;
+  border-radius: 10px;
+  box-shadow: none;
+  width: min(380px, 90%);
+  box-sizing: border-box;
+}
+.course-cleared-card h3 {
+  margin: 0;
+  font: 700 22px system-ui, sans-serif;
+  color: white;
+  -webkit-text-stroke: 5px rgba(0,0,0,0.75);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+}
+.course-cleared-big {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+#course-cleared-amount {
+  font: 700 36px system-ui, sans-serif;
+  color: #FFD700;
+  -webkit-text-stroke: 4px rgba(0,0,0,0.65);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+}
+.course-cleared-record {
+  font: 800 22px system-ui, sans-serif;
+  color: #FFD700;
+  -webkit-text-stroke: 3px rgba(0,0,0,0.6);
+  paint-order: stroke fill;
+  text-shadow: 0 0 12px rgba(255,215,0,0.65), 0 2px 6px rgba(0,0,0,0.5);
+  letter-spacing: 0.04em;
+}
+.course-cleared-record.hidden { display: none !important; }
+.course-cleared-record .record-letter {
+  display: inline-block;
+  animation: recordDance 1s ease-in-out infinite;
+}
+.course-cleared-record .record-space { display: inline-block; width: 0.35em; }
+@keyframes recordDance {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-5px) rotate(-4deg); }
+  50% { transform: translateY(0) rotate(0deg); }
+  75% { transform: translateY(3px) rotate(3deg); }
+}
+#course-cleared-ok {
+  margin-top: 6px;
+  padding: 8px 20px;
+  font: 700 12px system-ui, sans-serif;
+  color: white;
+  background: #27ae60;
+  border: 1px solid #1e8449;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#course-cleared-ok:hover { background: #1e8449; }
