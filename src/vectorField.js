@@ -7,10 +7,19 @@ export const MIN_WIND_FORCE = 80; // increased from 60 for faster drift (13% of 
 
 export const MODIFIER_RADIUS = 54; // reduced 40% from 90 (90*0.6) per user request
 export const BASE_STRENGTH = 5;
+// Diminishing passive steps (mirrors main.js): 20/15/10/7/5 then 3% tail, uncapped.
+const PASSIVE_DIMINISH_STEPS = [0.20, 0.15, 0.10, 0.07, 0.05];
+const PASSIVE_DIMINISH_TAIL = 0.03;
+export function diminishingMultiplier(count) {
+  const n = Math.max(0, Math.floor(count || 0));
+  let s = 0;
+  for (let i = 0; i < n; i++) s += i < PASSIVE_DIMINISH_STEPS.length ? PASSIVE_DIMINISH_STEPS[i] : PASSIVE_DIMINISH_TAIL;
+  return 1 + s;
+}
 let powerCellCount = 0;
 export function setPowerCellCount(n) { powerCellCount = Math.max(0, Math.floor(n ?? 0)); }
 export function getPowerCellCount() { return powerCellCount; }
-export function getPowerMultiplier() { return 1 + 0.20 * powerCellCount; }
+export function getPowerMultiplier() { return diminishingMultiplier(powerCellCount); }
 export function getEffectiveBaseStrength() { return BASE_STRENGTH * getPowerMultiplier(); }
 
 // Defaults for superposition REQ-003 - no unary, edge sources/sinks, interior vortex/doublet
@@ -528,8 +537,8 @@ export function getBaseWindAt(worldX, worldY) {
 export function getWindAt(worldX, worldY) {
   const base = sampleBaseField(worldX, worldY);
 
-  // Apply modifiers - updated per new requirement: rotator includes one magnifier (5×), stacked rotate/flip deduped to one amplify, CCW, scaled by Power Cell
-  // Normative: BASE_STRENGTH=5, powerMultiplier=1+0.20*powerCellCount, totalFactor = 5**(magnifierCount + (hasRotDef?1:0)) * (hasActive?powerMultiplier:1), rotation = (rotatorCount*90 CCW + deflectorCount*180) %360 CCW, liquifier dominates, radius = BASE_MODIFIER_RADIUS*(1+0.20*fieldExtenderCount)
+  // Apply modifiers - updated per new requirement: rotator includes one magnifier (5×), stacked rotate/flip deduped to one amplify, CCW, scaled by Power Cell (diminishing)
+  // Normative: BASE_STRENGTH=5, powerMultiplier=diminishing(powerCellCount), totalFactor = 5**(magnifierCount + (hasRotDef?1:0)) * (hasActive?powerMultiplier:1), rotation = (rotatorCount*90 CCW + deflectorCount*180) %360 CCW, liquifier dominates, radius = diminishing(fieldExtenderCount)
   let magnifierCount = 0;
   let deflectorCount = 0;
   let rotatorCount = 0;
@@ -548,7 +557,7 @@ export function getWindAt(worldX, worldY) {
   if (hasLiquifier) return { x: 0, y: 0 };
   const hasRotDef = (deflectorCount + rotatorCount) > 0;
   const hasActive = magnifierCount > 0 || hasRotDef;
-  const powerMultiplier = hasActive ? (1 + 0.20 * powerCellCount) : 1;
+  const powerMultiplier = hasActive ? diminishingMultiplier(powerCellCount) : 1;
   const totalFactor = Math.pow(5, magnifierCount + (hasRotDef ? 1 : 0)) * powerMultiplier;
   let result = { x: base.x * totalFactor, y: base.y * totalFactor };
   // Apply combined rotation: rotateCount*90 CCW + flipCount*180 = totalQuarterTurns*90 CCW

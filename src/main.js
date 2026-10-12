@@ -2130,9 +2130,9 @@ let powerCellCount = 0; // new — +10% wind strength per stack for magnifier/de
 function getAreaUpgradeCount() { return fieldExtenderCount; }
 function getFieldExtenderCount() { return fieldExtenderCount; }
 function getPowerCellCount() { return powerCellCount; }
-function getAreaMultiplier() { return 1 + 0.20 * getEffectiveFieldExtenderCount(); } // 1 + 0.20*n (0 when toggled off)
+function getAreaMultiplier() { return diminishingMultiplier(getEffectiveFieldExtenderCount()); } // diminishing (was 1 + 0.20*n)
 function getEffectiveModifierRadius() { return BASE_MODIFIER_RADIUS * getAreaMultiplier(); }
-function getPowerMultiplier() { return 1 + 0.20 * getEffectivePowerCellCount(); } // 1 + 0.20*n (1 when toggled off)
+function getPowerMultiplier() { return diminishingMultiplier(getEffectivePowerCellCount()); } // diminishing (was 1 + 0.20*n)
 function getEffectiveModifierStrength() { return BASE_MODIFIER_STRENGTH * getPowerMultiplier(); }
 function addAreaUpgrade(n = 1) { return addFieldExtender(n); }
 function addFieldExtender(n = 1) {
@@ -3673,6 +3673,19 @@ function bounceBall(hit, isEdge) {
 // Reward menu per REQ-09 : hole-start (except hole 1) + treasure near tree - 3 random of 5 pool (bouncy removed, maxAttempts replaced by freeShot Supply +3, trees always bounce)
 // Campaign deterministic rewards (12-campaign): single campaignSeed controls all offers including rerolls via seeded shuffle + counter
 const REWARD_POOL = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'fieldExtender', 'powerCell'];
+// Effective offer pool per docs/requirements/07 §3: 6 slots, FE+PC share one
+// combined slot (never together). 'combined' resolves 50/50 seeded on offer.
+const REWARD_EFFECTIVE_POOL = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'combined'];
+// Diminishing passive steps: chest stays valuable but stacking softens.
+// n=1 +20%, n=2 +15%, n=3 +10%, n=4 +7%, n=5 +5%, 6+ +3% each (uncapped).
+const PASSIVE_DIMINISH_STEPS = [0.20, 0.15, 0.10, 0.07, 0.05];
+const PASSIVE_DIMINISH_TAIL = 0.03;
+function diminishingMultiplier(count) {
+  const n = Math.max(0, Math.floor(count || 0));
+  let s = 0;
+  for (let i = 0; i < n; i++) s += i < PASSIVE_DIMINISH_STEPS.length ? PASSIVE_DIMINISH_STEPS[i] : PASSIVE_DIMINISH_TAIL;
+  return 1 + s;
+}
 // keep legacy alias for backward compat tests
 const REWARD_POOL_LEGACY = ['magnifier', 'liquifier', 'deflector', 'rotator', 'freeShot', 'areaUp'];
 let rewardMenuVisible = false;
@@ -3716,19 +3729,56 @@ function enforceNoFieldPowerTogether(picked, remainder) {
   }
   return picked;
 }
+function resolveCombinedSlot(offer, seedStr) {
+  // 'combined' → 50/50 seeded fieldExtender | powerCell (deterministic, no counter bump)
+  return offer.map((t, i) => {
+    if (t !== 'combined') return t;
+    const r = mulberry32Reward(hashSeedString(seedStr + ':combined:' + i))();
+    return r < 0.5 ? 'fieldExtender' : 'powerCell';
+  });
+}
+const REWARD_SPATIALS = ['magnifier', 'liquifier', 'deflector', 'rotator'];
+const REWARD_PASSIVES = ['freeShot', 'fieldExtender', 'powerCell'];
+// Target: ~50% of menus contain exactly 1 passive (uniform among the 3),
+// other ~50% are all-spatial. Never 2+ passives in one menu.
+const PASSIVE_MENU_RATE = 0.5;
+function sampleRewardTriple(seedStr) {
+  const hasPassive = mulberry32Reward(hashSeedString(seedStr + ':haspassive'))() < PASSIVE_MENU_RATE;
+  if (!hasPassive) {
+    return seededShuffle([...REWARD_SPATIALS], seedStr + ':spatials').slice(0, 3);
+  }
+  const wp = mulberry32Reward(hashSeedString(seedStr + ':whichpassive'))();
+  const passive = REWARD_PASSIVES[Math.min(REWARD_PASSIVES.length - 1, Math.floor(wp * REWARD_PASSIVES.length))];
+  const spatials = seededShuffle([...REWARD_SPATIALS], seedStr + ':spatials').slice(0, 2);
+  return seededShuffle([passive, ...spatials], seedStr + ':order').slice(0, 3);
+}
+function enforceMaxOnePassive(offer, seedStr) {
+  // Max 1 passive per menu: 'freeShot' and 'combined' never co-occur.
+  // If both picked, replace 'combined' with a spatial not already offered (seeded).
+  const picked = [...offer];
+  if (picked.includes('freeShot') && picked.includes('combined')) {
+    const idx = picked.indexOf('combined');
+    const candidates = REWARD_SPATIALS.filter(t => !picked.includes(t));
+    if (candidates.length) {
+      const r = mulberry32Reward(hashSeedString(seedStr + ':onepassive'))();
+      picked[idx] = candidates[Math.floor(r * candidates.length)];
+    } else {
+      picked.splice(idx, 1);
+    }
+  }
+  return picked;
+}
 function getSeededRewardOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':' + rewardSeedCounter;
   rewardSeedCounter++;
-  const shuffled = seededShuffle([...REWARD_POOL], seedStr);
-  return shuffled.slice(0, 3);
+  return sampleRewardTriple(seedStr);
 }
 function getSeededRerollOffer() {
   const cs = (typeof getCampaignSeed === 'function' && getCampaignSeed()) ? String(getCampaignSeed()) : 'default';
   const seedStr = cs + ':reroll:' + rewardSeedCounter;
   rewardSeedCounter++;
-  const shuffled = seededShuffle([...REWARD_POOL], seedStr);
-  return shuffled.slice(0, 3);
+  return sampleRewardTriple(seedStr);
 }
 function maybeFilterAreaUp(offer, seedStr) {
   // Legacy: Field Extender + Power Cell now combined slot, never together. Keep guard for legacy saves.
@@ -8534,6 +8584,11 @@ if (typeof window !== 'undefined') {
   window.__setRewardSeedCounter = setRewardSeedCounter;
   window.__seededShuffle = seededShuffle;
   window.__getSeededRewardOffer = getSeededRewardOffer;
+  window.__getSeededRerollOffer = getSeededRerollOffer;
+  window.__diminishingMultiplier = diminishingMultiplier;
+  window.__resolveCombinedSlot = resolveCombinedSlot;
+  window.__enforceMaxOnePassive = enforceMaxOnePassive;
+  window.__sampleRewardTriple = sampleRewardTriple;
   window.__getGolfbag = getGolfbag;
   window.__golfbagUsedCount = golfbagUsedCount;
   window.__golfbagHasEmpty = golfbagHasEmpty;
