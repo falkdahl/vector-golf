@@ -636,6 +636,7 @@ function modifierNowMs() { try { return performance.now(); } catch { return Date
 let pendingHoleAdvance = false;
 let pendingCourseComplete = false; // ids of modifiers ball has been inside
 let holeStartAttempts = 0;
+let holeRerolls = 0; // re-roll costs counted here so Hole-in-One/points ignore them (attemptsLeft still pays)
 // Course Cleared overlay (after final Hole Complete, before end cutscenes)
 let courseClearedVisible = false;
 let courseClearedTotal = 0;
@@ -1240,7 +1241,7 @@ function startCourseWithStartingItems(courseId){
   } catch { isTutorialRun = !!loadoutHideShopDueToIntro; }
   currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
   totalPoints=0; runPointsEarned=0; runCoinsEarned=0;
-  holeStartAttempts=0;
+  holeStartAttempts=0; holeRerolls=0;
   modifiersTraversedThisHole = new Set();
   modifiersTraversedThisShot = new Set();
   // golfbag already set via handleStartingPick (2 spatial); keep it, just clear glow
@@ -1268,7 +1269,7 @@ function startCourseWithStartingItems(courseId){
   coinSummaryVisible=false;
   try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
   loadLevel(0); gameState='AIMING';
-  holeStartAttempts = 0;
+  holeStartAttempts = 0; holeRerolls=0;
   modifiersTraversedThisHole = new Set();
   // 12-banter: Hole 1 banner is deferred until the run-start banter has played.
   holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
@@ -1295,7 +1296,7 @@ function startTutorialCourse(courseId){
   try { journalStartRun([]); } catch {}
   currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
   totalPoints=0; runPointsEarned=0; runCoinsEarned=0;
-  holeStartAttempts=0;
+  holeStartAttempts=0; holeRerolls=0;
   modifiersTraversedThisHole = new Set();
   modifiersTraversedThisShot = new Set();
   // Start with exactly one liquifier
@@ -1328,7 +1329,7 @@ function startTutorialCourse(courseId){
   tutorialHole2GadgetsReminderShown=false;
   tutorialHole3RewardBanterShown=false;
   loadLevel(0); gameState='AIMING';
-  holeStartAttempts = 0;
+  holeStartAttempts = 0; holeRerolls=0;
   modifiersTraversedThisHole = new Set();
   holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
   if (winOverlay) winOverlay.classList.add('hidden'); if (gameoverOverlay) gameoverOverlay.classList.add('hidden');
@@ -1952,7 +1953,7 @@ function hideCoinSummary() {
         clearFreeShotGlow();
         currentHoleIndex = 1;
         holeAttempts=0;
-        holeStartAttempts=0;
+        holeStartAttempts=0; holeRerolls=0;
         modifiersTraversedThisHole = new Set();
         tutorialLiquifierReminderShown = true;
         tutorialHole1Liquifier3Shown = true;
@@ -1980,7 +1981,7 @@ function hideCoinSummary() {
         clearFreeShotGlow();
         currentHoleIndex = 2;
         holeAttempts=0;
-        holeStartAttempts=0;
+        holeStartAttempts=0; holeRerolls=0;
         modifiersTraversedThisHole = new Set();
         tutorialHole2RotatorShown = true;
         tutorialHole2GadgetsReminderShown = true;
@@ -2014,7 +2015,7 @@ function hideCoinSummary() {
         clearFreeShotGlow();
         currentHoleIndex = 3;
         holeAttempts=0;
-        holeStartAttempts=0;
+        holeStartAttempts=0; holeRerolls=0;
         modifiersTraversedThisHole = new Set();
         tutorialHole3RotatorShown = true;
         grantTutorialHole4Spatial();
@@ -2047,7 +2048,7 @@ function hideCoinSummary() {
       clearFreeShotGlow();
       currentHoleIndex++;
       holeAttempts=0;
-      holeStartAttempts=0;
+      holeStartAttempts=0; holeRerolls=0;
       modifiersTraversedThisHole = new Set();
       loadLevel(currentHoleIndex);
       gameState='AIMING';
@@ -2156,6 +2157,7 @@ function getSavePayload() {
     courseId: activeCourseId || (activeCourse ? activeCourse.id : null),
     currentHoleIndex,
     holeAttempts,
+    holeRerolls,
     totalAttempts,
     maxAttempts,
     supply: { ...supply },
@@ -2214,6 +2216,7 @@ function loadProgress() {
     currentHoleIndex = Math.max(0, Math.min(maxHole - 1, Math.floor(d.currentHoleIndex || 0)));
     activeCourseId = d.courseId || (activeCourse ? activeCourse.id : null);
     holeAttempts = Math.max(0, Math.floor(d.holeAttempts || 0));
+    holeRerolls = Math.max(0, Math.floor(d.holeRerolls || 0));
     totalAttempts = Math.max(0, Math.floor(d.totalAttempts || 0));
     attempts = totalAttempts;
     maxAttempts = d.maxAttempts !== undefined ? Math.max(10, Math.floor(d.maxAttempts)) : 10;
@@ -3834,8 +3837,11 @@ function isRerollDisabled() {
 function rerollReward() {
   if (isRerollDisabled()) return false;
   if (!rewardMenuVisible) return false;
-  // Cost is always 1 attempt, never free shot, never secret counter per REQ-025
+  // Cost is always 1 attempt, never free shot, never secret counter per REQ-025.
+  // The attempt counts for attemptsLeft/Game Over, but NOT for Hole-in-One/points:
+  // track it in holeRerolls so failuresBeforeWin excludes it.
   holeAttempts += 1;
+  holeRerolls += 1;
   totalAttempts += 1;
   attempts = totalAttempts;
   updateAttemptsUI();
@@ -4974,7 +4980,7 @@ function loadLevel(index) {
   modifiersTraversedThisHole = new Set();
   modifiersTraversedThisShot = new Set();
   ballInsideModifierIds = new Set();
-  holeStartAttempts = holeAttempts;
+  holeStartAttempts = holeAttempts; holeRerolls = 0;
   updateHotbarUI();
   // Redraw terrain for new hole (zoned background per REQ-010/033)
   try { redrawBottom(); } catch {};
@@ -5689,12 +5695,17 @@ function resetBall() {
   try { maybeShowTutorialHole2RotatorReminder(); } catch {}
   try { maybeShowTutorialHole2GadgetsReminder(); } catch {}
 }
+function getHoleFailuresBeforeWin(winWasFreeFlight = false) {
+  // Failures = counted attempts since hole start, minus the winning shot itself,
+  // minus re-roll costs (re-rolls spend attemptsLeft but never spoil Hole-in-One).
+  return Math.max(0, (holeAttempts - holeStartAttempts) - (winWasFreeFlight ? 0 : 1) - holeRerolls);
+}
 
 function advanceHole(winWasFreeFlight = false) {
   if (currentHoleIndex < getTotalHoles() - 1) {
     if (isTutorialActive()) {
       // No points or summary on tutorial — still journal the clearing modifiers
-      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts)); } catch {}
+      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts - holeRerolls)); } catch {}
       const wasIdx = currentHoleIndex;
       // Defer via same pending mechanism but without showing overlay — hideCoinSummary will handle tutorial branching immediately
       // To avoid showing overlay, set pending and directly invoke hideCoinSummary path via timeout
@@ -5705,9 +5716,9 @@ function advanceHole(winWasFreeFlight = false) {
     }
     // Points per hole: -1 per failed attempt, +10 per modifier traversed, +50 first attempt — only applied on hole clear.
     // Attempts are consumed on launch, so holeAttempts includes the winning shot;
-    // failures before this win exclude it (free winning flights excluded nothing).
+    // failures before this win exclude it (free winning flights excluded nothing) and exclude re-rolls.
     const traversed = modifiersTraversedThisShot ? modifiersTraversedThisShot.size : 0;
-    const attemptsOnHole = Math.max(0, (holeAttempts - holeStartAttempts) - (winWasFreeFlight ? 0 : 1)); // failures before this win (0 means first try)
+    const attemptsOnHole = getHoleFailuresBeforeWin(winWasFreeFlight); // failures before this win (0 means first try)
     const firstBonus = attemptsOnHole === 0 ? 50 : 0;
     const holePoints = 10 + traversed * 10 + firstBonus - attemptsOnHole;
     totalPoints += holePoints;
@@ -5975,7 +5986,7 @@ function checkWin() {
       clearFreeShotFlightGlow();
       hideSoftlockBanner();
       resetSoftlockDetection();
-      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts)); } catch {}
+      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts - holeRerolls)); } catch {}
       try { commitRunJournal(true); } catch {}
       // No points, no summary on tutorial final hole — play congratulations banter before returning
       try{ maybeUpdateHighScore(); }catch{}
@@ -5993,8 +6004,8 @@ function checkWin() {
       return true;
     }
     const traversedF = modifiersTraversedThisShot ? modifiersTraversedThisShot.size : 0;
-    // Failures before this win: holeAttempts includes the winning shot unless it was a free flight.
-    const attemptsF = Math.max(0, (holeAttempts - holeStartAttempts) - (winWasFreeFlight ? 0 : 1));
+    // Failures before this win: holeAttempts includes the winning shot unless it was a free flight; re-rolls excluded.
+    const attemptsF = getHoleFailuresBeforeWin(winWasFreeFlight);
     const firstBonusF = attemptsF === 0 ? 50 : 0;
     // No course-completion bonus: final hole scores like any other hole.
     const holePointsF = 10 + traversedF * 10 + firstBonusF - attemptsF;
@@ -8306,6 +8317,8 @@ if (typeof window !== 'undefined') {
   window.__getPassiveEnabled = getPassiveEnabled;
   window.__getEffectiveFieldExtenderCount = getEffectiveFieldExtenderCount;
   window.__getEffectivePowerCellCount = getEffectivePowerCellCount;
+  window.__getHoleFailuresBeforeWin = getHoleFailuresBeforeWin;
+  window.__getHoleRerolls = () => holeRerolls;
   window.__applyPassiveEffects = applyPassiveEffects;
   window.__toggleJournal = toggleJournal;
   window.__isJournalOpen = isJournalOpen;

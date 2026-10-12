@@ -25,7 +25,7 @@
 - Hole 1→2: no reward/summary. On first-ever play, `first-restock` cutscene plays **before** `loadLevel(1)` (no Hole-2 glimpse; `gameState` stays non-aiming so no orbit draws); on replay it is skipped. Then bag := `[deflector,rotator,magnifier]` (overwrite), `tutorial-field-modifiers` banter over hole 2 → `Hole 2` banner → play.
 - Hole-2 help: at `>=3` one-line caddy `tutorial-hole3-rotator-reminder` (rotator + upwards→forward wind); at `>=5` one-line `tutorial-hole2-gadgets-reminder` (gadget + old man). Once each.
 - Hole 2→3: no reward/summary. Bag emptied; load hole 3; `tutorial-rewards` banter → `Hole 3` banner → play. Each of the 3 chests → mandatory fixed reward `['deflector','rotator','magnifier']` (3 cards, no Skip: `closeRewardMenuWithoutReward` no-op, `Escape` ignored, `#reward-skip-button` hidden).
-- Hole 3→4: no summary. Bag := `[liquifier,deflector,rotator,magnifier]` (passives 0); no reward at load; `tutorial-passives` banter → then fixed start reward `['fieldExtender','powerCell','freeShot']` (3 cards, Skip allowed; `tutorialHole4StartRewardPending` distinguishes it) → `Hole 4` banner → play. Hole-4 chest → same passive triple, no `Hole 4` banner after.
+- Hole 3→4: no summary. Bag := `[liquifier,deflector,rotator]` (3 spatial = full 3-slot bag; passives 0); no reward at load; `tutorial-passives` banter → then fixed start reward `['fieldExtender','powerCell','freeShot']` (3 cards, Skip allowed; `tutorialHole4StartRewardPending` distinguishes it) → `Hole 4` banner → play. Hole-4 chest → same passive triple, no `Hole 4` banner after.
 - Hole 4 win: no summary/points/`WIN` overlay → `tutorial-hole4-complete` congratulations banter (caddy 3 lines: congratulations + `Mt. Aeoulus`/`ready` + `10 attempts per hole` + modifiers `lost` + `Item management`/`key`) → menu. All tutorial banters replay every run (cutscene gated by seen, banters not).
 
 ## Acceptance
@@ -35,5 +35,5 @@
 - [ ] Hole-1 win → (first-restock first time, before Hole-2 draw) → bag `[deflector,rotator,magnifier]` → field-modifiers banter → `Hole 2`; replay skips cutscene only.
 - [ ] Help banters at 3/10 (hole 1) and 3/5 (hole 2) with required keywords, once each.
 - [ ] Hole 3: empty bag start, rewards banter, 3 mandatory `deflector/rotator/magnifier` chest rewards, no Skip.
-- [ ] Hole 4: 4-spatial start, passives banter, then `fieldExtender/powerCell/freeShot` start reward; chest same triple without banner; win → congratulations banter → menu (no summary/points/`WIN`).
+- [ ] Hole 4: 3-spatial start (`liquifier/deflector/rotator`), passives banter, then `fieldExtender/powerCell/freeShot` start reward; chest same triple without banner; win → congratulations banter → menu (no summary/points/`WIN`).
 - [ ] Infinite attempts: no Game Over; `R` resets to tee `AIMING`; no visible attempt decrease.

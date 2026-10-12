@@ -21,20 +21,20 @@
 
 ## 3. Reward menu (always 3 cards)
 
-- Effective pool of 6 (7 types, Field Extender + Power Cell share one slot, never together): `['magnifier','liquifier','deflector','rotator','freeShot','combined(FE/PC)']`. Per trigger pick 3 distinct via seeded `mulberry32(campaignSeed:rewardSeedCounter)` (see `08-campaign-and-menus.md`); if the combined slot is picked, resolve 50/50 seeded to `fieldExtender` or `powerCell`. Same pool for re-rolls.
-- Overlay `#reward-overlay` (z10, dim `0.55`): title `Choose an Upgrade` (`700 22px` white stroke `5px`); three `150×195` buttons (`520×360` gap 18, icon `88×88` `img ./img/<type>-icon.png` with text fallback, `20px` icon-label gap, `0.28` tinted backgrounds, no icon gradient, white `4px`-stroke labels). Hints: spatial `+1 to bag`, `freeShot` `+3 Free Shots`, `fieldExtender` `+20% area`, `powerCell` `+20% strength`. Bag-full spatial claim: `pendingRewardType` + `Bag full — destroy one to take X`, no in-overlay bag cards (`#reward-bag-row` absent), spatial slots get `.discard-target`, `Skip (take nothing) [Esc]`; click/hotkey `1–4` discards then grants; passives never trigger bag-full.
+- Reward sampling (`sampleRewardTriple`, seeded `mulberry32(campaignSeed:rewardSeedCounter)`, see `08-campaign-and-menus.md`): with probability `PASSIVE_MENU_RATE=0.5` offer exactly 1 passive picked uniformly among `freeShot/fieldExtender/powerCell` + 2 distinct spatials (order shuffled); otherwise offer 3 distinct spatials. Never 2+ passives in one menu; every passive has the same drop rate (~1/6 of menus each). Same sampler for re-rolls. Tutorial fixed triples bypass sampling (see `09-tutorial.md`).
+- Overlay `#reward-overlay` (z10, dim `0.55`): title `Choose an Upgrade` (`700 22px` white stroke `5px`); three `150×195` buttons (`520×360` gap 18, icon `88×88` `img ./img/<type>-icon.png` with text fallback, `20px` icon-label gap, `0.28` tinted backgrounds, no icon gradient, white `4px`-stroke labels). Hints: spatial `+1 to bag`, `freeShot` `+3 Free Shots`, `fieldExtender` `+20% area`, `powerCell` `+20% strength`. Bag-full spatial claim: `pendingRewardType` + `Bag full — destroy one to take X`, no in-overlay bag cards (`#reward-bag-row` absent), spatial slots get `.discard-target`, `Skip (take nothing) [Esc]`; click/hotkey `1–3` discards then grants; passives never trigger bag-full.
 - Blocking: aim/charge/launch/placement ignored; `1`/`2`/`3` (offered order) or click claims; hotbar visible but disabled; gold glow hidden.
 - Claim (once): spatial → bag slot (`+1`); `freeShot` → `+3` charges; `fieldExtender` → `fieldExtenderCount+1`; `powerCell` → `powerCellCount+1` (both retroactive + toggle-aware); then `rewardPending=false`, `rewardMenuVisible=false`, `rewardOffered=[]`, UI+save. No `Max Attempts`, no bouncy.
 
 ## 4. Re-roll (once per menu, 1 counted attempt)
 
 - Button `190×30` below cards: `↻ Re-roll (1 attempt) [R]` when available; disabled (`disabled`, `opacity 0.06/0.35`, `not-allowed`) when rerolled, on last attempt (`attemptsLeft<=1`), or on tutorial fixed-triple menus. `R`/click then no-ops (no cost, no Game Over).
-- Otherwise `R`/click: `holeAttempts++`, `totalAttempts++`, UI+save; if `left<=0` → Game Over, else `rewardRerolled=true` + fresh seeded triple. Never free, never touches `maxAttempts`/free stock. Cleared on next fresh menu / run end. `Digit0` never rerolls.
+- Otherwise `R`/click: `holeAttempts++`, `holeRerolls++`, `totalAttempts++`, UI+save; if `left<=0` → Game Over, else `rewardRerolled=true` + fresh seeded triple. The attempt cost counts for `attemptsLeft`/Game Over/Last Attempt, but `holeRerolls` is excluded from `failuresBeforeWin` — re-rolling never spoils the Hole-in-One bonus. Never free, never touches `maxAttempts`/free stock. Cleared on next fresh menu / run end. `Digit0` never rerolls.
 
 ## 5. Points (replace coins; HUD `Points: N`)
 
-- `POINTS_PER_HOLE=10`, `POINTS_PER_MODIFIER=10` (distinct bubbles entered **on the clearing shot** only), `POINTS_FIRST_ATTEMPT_BONUS=50` (0 failures before win), `POINTS_PER_ATTEMPT=-1` applied as `-failuresBeforeWin` at clear. No course-completion bonus (removed; final hole scores like any other hole).
-- Per cleared hole (including final): `holePoints = 10 + traversedOnClearingShot*10 + (first?50:0) - failuresBeforeWin`. `totalPoints` changes only on clear (HUD `#hud-total = Points: N`, may be negative). Persisted for resume.
+- `POINTS_PER_HOLE=10`, `POINTS_PER_MODIFIER=10` (distinct bubbles entered **on the clearing shot** only), `POINTS_FIRST_ATTEMPT_BONUS=50` (0 failed **shots** before win — re-roll costs excluded via `holeRerolls`), `POINTS_PER_ATTEMPT=-1` applied as `-failuresBeforeWin` at clear (re-rolls excluded). No course-completion bonus (removed; final hole scores like any other hole).
+- Per cleared hole (including final): `holePoints = 10 + traversedOnClearingShot*10 + (first?50:0) - failuresBeforeWin` where `failuresBeforeWin = max(0, (holeAttempts - holeStartAttempts) - (winWasFreeFlight?0:1) - holeRerolls)`. A hole-in-one (first shot wins, however many re-rolls were bought) always pays the `50p` bonus. `totalPoints` changes only on clear (HUD `#hud-total = Points: N`, may be negative). Persisted for resume (`holeRerolls` in `STORAGE_KEY`).
 - End-of-hole summary (`#coin-summary-overlay` id kept, points content): after every win (non-final before `loadLevel`, final before `Course Cleared`; also on `End Run`/`Game Over` with current totals): overlay `absolute inset:0 flex center rgba(0,0,0,0.55) z14` over the level; transparent card; title always `Hole Complete`; big row `+X points`; breakdown rows with `p` suffix (`10p - Cleared hole`, `20p - Modifier Bonus (x2)`, `50p - Hole-in-One`, `-3p - Failed Attempts (x3)`), no `💰`; no unlock texts. `Continue (#coin-summary-ok)` advances or (final) opens `Course Cleared`. Two-phase dismiss (fast-forward then close) allowed.
 
 ## 5b. Course Cleared overlay (after final Hole Complete, before cutscenes)
@@ -52,9 +52,9 @@
 ## Acceptance
 
 - [ ] Hole 1 no reward; holes 2+ show `Choose an Upgrade`; treasure collects mid-flight, once per chest.
-- [ ] Every non-tutorial offer is 3 distinct from the effective 6-pool (FE/PC never together); claim grants `+1` / `+3` / `+20%` stacks; bag-full discard via hotbar + Skip; no `#reward-bag-row`.
-- [ ] Re-roll once, costs 1 counted attempt, disabled on last attempt / rerolled / tutorial-fixed; `Total` 11 after one reroll off last attempt.
-- [ ] Points `10 + traversed*10 + 50 first − failures` (no course bonus, final hole same); HUD `Points:` only on clear; per-hole summary always `Hole Complete` with `p` rows, no `💰`, no unlock text.
+- [ ] Every non-tutorial offer is 3 distinct: ~50% with exactly 1 passive (uniform among the 3) + 2 spatials, else 3 spatials; never 2 passives; claim grants `+1` / `+3` / diminishing stacks; bag-full discard via hotbar + Skip; no `#reward-bag-row`.
+- [ ] Re-roll once, costs 1 counted attempt (attemptsLeft/Game Over) but excluded from Hole-in-One/points, disabled on last attempt / rerolled / tutorial-fixed; `Total` 11 after one reroll off last attempt.
+- [ ] Points `10 + traversed*10 + 50 first-shot − failures` (re-rolls excluded; hole-in-one after any re-rolls still pays `50p`; no course bonus, final hole same); HUD `Points:` only on clear; per-hole summary always `Hole Complete` with `p` rows, no `💰`, no unlock text.
 - [ ] Course Cleared after final Hole Complete, before cutscenes: title `Course Cleared`, total points, `New Record` dance only on record, Continue → cutscene/menu.
 - [ ] Journal records/commits/replaces per §6; panel rows correct; hidden on tutorial.
 
