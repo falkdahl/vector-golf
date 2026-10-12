@@ -1,5 +1,6 @@
 // Cutscene engine — 11-cutscenes.md
 // Static bg on bg-canvas, characters on game canvas, dialog HTML overlay, synchronized pan/zoom, typewriter
+import { playTypeTick as audioTypeTick } from "./audio.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -1039,6 +1040,16 @@ function updateDialogDisplay() {
   }
   if (textEl) {
     textEl.textContent = visibleText + (isRevealing ? '▌' : '');
+    // Chiptune typewriter tick while text is animating.
+    if (isRevealing) {
+      try {
+        const k = active.currentDialogIndex + ':' + effectiveBoxIdx + ':' + revealed;
+        if (active._lastTickKey !== k) {
+          active._lastTickKey = k;
+          audioTypeTick();
+        }
+      } catch {}
+    }
   }
   if (hintEl) {
     hintEl.textContent = isRevealing ? '▸ fast-forward (Space/R/Click)' : '▼ next (Space/R/Click)';

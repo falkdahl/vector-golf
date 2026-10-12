@@ -49,10 +49,13 @@ import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCourses
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COINS_PER_ATTEMPT, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, LOADOUT_SLOT_COSTS, DEFAULT_UNLOCKED_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout, getUnlockedLoadoutSlots as getProgressionUnlockedSlots, getNextLoadoutSlotCost, canUnlockNextLoadoutSlot, unlockNextLoadoutSlot, setUnlockedLoadoutSlots, getRunsStarted, incrementRunsStarted } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip, playBanter as banterPlay, loadBanterFile as banterLoadFile } from "./banter.js";
+import { playLaunch as audioLaunch, playWater as audioWater, playHoleWin as audioHoleWin, playModifierActivated as audioModifier, playPointsCount as audioPointsCount, playNewRecord as audioNewRecord, setWindActive as audioSetWind, playChest as audioChest, playReward as audioReward, playOB as audioOB, playUIClick as audioUIClick, setMusicActive as audioSetMusic } from "./audio.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
 const FIXED_DT = 1 / 60;
+let lastWindAudioState = false;
+let lastMusicAudioState = false;
 
 let canvas;
 let ctx;
@@ -676,6 +679,7 @@ function showCourseClearedOverlay(total, isRecord){
   }
   syncCourseClearedOverlay();
   try{ syncMainMenu(); }catch{}
+  try { if (courseClearedIsRecord) audioNewRecord(); } catch {}
 }
 function hideCourseCleared(){
   if(!courseClearedVisible) return;
@@ -1796,6 +1800,8 @@ function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, c
   // First dismiss (click/Escape/Space/R) fast-forwards to the final state.
   animatePointsSummaryAmount(0, holePoints, 600);
   const rows = buildPointsBreakdownRows();
+  // Win jingle (~0.4s) plays first on hole entry; counting ticks start after it.
+  try { audioPointsCount(rows.length, 0.45); } catch {}
   rows.forEach((row, i) => {
     const t = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
@@ -2965,6 +2971,8 @@ function renderCourseList() {
 }
 
 function handleCoursePlay(courseId) {
+  // Click blip (gesture — also unlocks AudioContext).
+  try { audioUIClick(); } catch {}
   // New flow: show loadout before first hole (10-progression.md §2) — pre-load last saved or random
   if (hasRestorableSave()) return;
   const _tutCourse = findCourseById(courseId);
@@ -4774,7 +4782,6 @@ function closeRewardMenuWithoutReward() {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
-  // Tutorial hole4: after skipping start passive reward, still show hole banner (not for chest)
   if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
     tutorialHole4StartRewardPending = false;
     try{ showHoleBanner(3, getTotalHoles()); }catch{}
@@ -4803,6 +4810,7 @@ function discardBagSlotAndClaimReward(slotIdx) {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
+  try { audioReward(); } catch {}
   if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
     tutorialHole4StartRewardPending = false;
     try{ showHoleBanner(3, getTotalHoles()); }catch{}
@@ -4847,6 +4855,7 @@ function claimReward(type) {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
+  try { audioReward(); } catch {}
   // Tutorial hole4: after claiming start passive reward (not chest), show hole banner to start play
   if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
     tutorialHole4StartRewardPending = false;
@@ -5904,6 +5913,7 @@ function handleLaunch(angle, power) {
     return;
   }
   launchBall(angle, power);
+  try { audioLaunch(); } catch {}
   // Free Shot: if armed and charges available, this launch is free — consume one charge, mark flight as free
   // If the item's charges reach 0 it is automatically removed from the bag.
   if (isFreeShotActive && golfbagTotalFreeShots() > 0) {
@@ -5958,6 +5968,7 @@ function checkWin() {
   const dist = Math.hypot(ball.pos.x - level.hole.x, ball.pos.y - level.hole.y);
   // Victory when ball touches any part of black circle per new requirement (ground projection)
   if (dist < level.hole.radius + BALL_RADIUS) {
+    try { audioHoleWin(); } catch {}
     const isFinalHole = currentHoleIndex === getTotalHoles() - 1;
     // Attempts are consumed on launch: holeAttempts includes the winning shot.
     // Capture whether the winning flight was free before any glow clearing below.
@@ -6221,6 +6232,7 @@ function update(dt) {
         for (const tr of getUncollectedTreasures(level)) {
           if (checkGroundTreasureHit(ball.pos, BALL_RADIUS, tr)) {
             collectTreasure(tr);
+            try { audioChest(); } catch {}
             // Keep single treasure pointer in sync for backward compat (repoint only,
             // never mutate isCollected — mutating via level.treasure would un-collect
             // the just-collected 2nd/3rd chest on tutorial hole 3).
@@ -6268,8 +6280,9 @@ function update(dt) {
         for (const tr of getUncollectedTreasures(level)) {
           if (checkGroundTreasureHit(ball.pos, BALL_RADIUS, tr)) {
             collectTreasure(tr);
+            try { audioChest(); } catch {}
             // Keep single treasure pointer in sync for backward compat (repoint only,
-            // never mutate isCollected — see AIMING branch above).
+            // never mutate array elements via shared ref — see AIMING branch above).
             if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
             rewardPending = true;
             journalChestPending = true;
@@ -6295,6 +6308,7 @@ function update(dt) {
           modifiersTraversedThisShot.add(key);
           if(!ballInsideModifierIds.has(key)){
             try { m.flashAt = nowMs; } catch {}
+            try { audioModifier(m.type); } catch {}
           }
         }
       }
@@ -6324,6 +6338,8 @@ function update(dt) {
       try {
         const drowned = !!waterHit || !!(terrainHit && (terrainHit.zone === 'water' || terrainHit.type === 'water'));
         if (drowned && ball && ball.pos) spawnWaterRipple(ball.pos.x, ball.pos.y);
+        if (drowned) { try { audioWater(); } catch {} }
+        else { try { audioOB(); } catch {} }
       } catch {}
       resetBall();
       return;
@@ -6359,6 +6375,20 @@ function updateForceBar() {
 }
 
 function render() {
+  // Ambient wind loop + stage theme: play on levels, silent in menu/cutscene.
+  try {
+    let isCut = false;
+    try { isCut = cutsceneIsActive(); } catch {}
+    const shouldStageAudio = !mainMenuVisible && !isCut;
+    if (shouldStageAudio !== lastWindAudioState) {
+      lastWindAudioState = shouldStageAudio;
+      try { audioSetWind(shouldStageAudio); } catch {}
+    }
+    if (shouldStageAudio !== lastMusicAudioState) {
+      lastMusicAudioState = shouldStageAudio;
+      try { audioSetMusic(shouldStageAudio); } catch {}
+    }
+  } catch {}
   // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
   try { if (cutsceneIsActive()) { try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch {} return; } } catch {}
   // Top canvas is transparent; clear every frame with DPR transform

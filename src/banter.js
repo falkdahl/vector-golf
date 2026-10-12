@@ -4,6 +4,7 @@
 // Timing: typewriter at 20 cps, each box lingers 1000ms, next dialog starts at
 // the end of the previous one (auto chain). Space/KeyR/Click fast-forwards a
 // revealing box, pressing again advances immediately.
+import { playTypeTick as audioTypeTick } from "./audio.js";
 
 export const BANTER_CPS = 20;
 export const BANTER_LINGER_MS = 1000;
@@ -338,6 +339,15 @@ function renderActive() {
     els.speaker.style.display = d.speaker ? '' : 'none';
   }
   if (els.text) els.text.textContent = d.text.slice(0, clamped) + (isRevealing ? '▌' : '');
+  if (isRevealing) {
+    try {
+      const k = active.idx + ':' + clamped;
+      if (active._lastTickKey !== k) {
+        active._lastTickKey = k;
+        audioTypeTick();
+      }
+    } catch {}
+  }
   if (els.hint) {
     els.hint.textContent = isRevealing ? '▸ fast-forward (Space/R/Click)' : '▼ next (Space/R/Click)';
     els.hint.style.opacity = isRevealing ? '0.7' : '1';
