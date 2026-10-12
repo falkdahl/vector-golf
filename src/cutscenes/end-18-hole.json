@@ -8,14 +8,29 @@
   },
   "duration": 88000,
   "camera": {
-    "keyframes": []
+    "keyframes": [
+      {
+        "t": 74000,
+        "x": 0,
+        "y": 0,
+        "zoom": 1,
+        "easing": "linear"
+      },
+      {
+        "t": 77300,
+        "x": 300,
+        "y": 300,
+        "zoom": 1.5,
+        "easing": "linear"
+      }
+    ]
   },
   "characters": [
     {
       "id": "may",
       "character": "may",
-      "x": 260,
-      "y": 543,
+      "x": 1003,
+      "y": 375,
       "scale": 0.35,
       "anchor": "center",
       "zIndex": 1,
@@ -84,6 +99,102 @@
           "scale": 0.35,
           "easing": "linear",
           "sprite": "may-right"
+        },
+        {
+          "t": 85000,
+          "x": 214,
+          "y": 522,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 85200,
+          "x": 245,
+          "y": 518,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-front"
+        },
+        {
+          "t": 85400,
+          "x": 276,
+          "y": 514,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-left"
+        },
+        {
+          "t": 85600,
+          "x": 307,
+          "y": 510,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-back"
+        },
+        {
+          "t": 85800,
+          "x": 337,
+          "y": 506,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 86000,
+          "x": 368,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-front"
+        },
+        {
+          "t": 86200,
+          "x": 398,
+          "y": 498,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-left"
+        },
+        {
+          "t": 86400,
+          "x": 429,
+          "y": 494,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-back"
+        },
+        {
+          "t": 86600,
+          "x": 459,
+          "y": 489,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-right"
+        },
+        {
+          "t": 86800,
+          "x": 490,
+          "y": 485,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-front"
+        },
+        {
+          "t": 87000,
+          "x": 520,
+          "y": 480,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-left"
+        },
+        {
+          "t": 87001,
+          "x": 0,
+          "y": 0,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "may-left"
         }
       ]
     },
@@ -149,6 +260,94 @@
           "t": 74500,
           "x": 293,
           "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        },
+        {
+          "t": 85000,
+          "x": 293,
+          "y": 502,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        },
+        {
+          "t": 85200,
+          "x": 322,
+          "y": 500,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-front"
+        },
+        {
+          "t": 85400,
+          "x": 348,
+          "y": 498,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-left"
+        },
+        {
+          "t": 85600,
+          "x": 374,
+          "y": 496,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-back"
+        },
+        {
+          "t": 85800,
+          "x": 400,
+          "y": 494,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        },
+        {
+          "t": 86000,
+          "x": 426,
+          "y": 492,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-front"
+        },
+        {
+          "t": 86200,
+          "x": 451,
+          "y": 490,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-left"
+        },
+        {
+          "t": 86400,
+          "x": 477,
+          "y": 488,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-back"
+        },
+        {
+          "t": 86600,
+          "x": 502,
+          "y": 486,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-right"
+        },
+        {
+          "t": 86700,
+          "x": 515,
+          "y": 485,
+          "scale": 0.35,
+          "easing": "linear",
+          "sprite": "caddy-front"
+        },
+        {
+          "t": 86701,
+          "x": 0,
+          "y": 0,
           "scale": 0.35,
           "easing": "linear",
           "sprite": "caddy-right"
@@ -446,6 +645,94 @@
           "scale": 0.25,
           "easing": "linear",
           "sprite": "slicer-right"
+        },
+        {
+          "t": 85000,
+          "x": 259,
+          "y": 522,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-right"
+        },
+        {
+          "t": 85200,
+          "x": 288,
+          "y": 518,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-front"
+        },
+        {
+          "t": 85400,
+          "x": 317,
+          "y": 515,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-left"
+        },
+        {
+          "t": 85600,
+          "x": 346,
+          "y": 511,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-back"
+        },
+        {
+          "t": 85800,
+          "x": 376,
+          "y": 508,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-right"
+        },
+        {
+          "t": 86000,
+          "x": 405,
+          "y": 504,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-front"
+        },
+        {
+          "t": 86200,
+          "x": 435,
+          "y": 501,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-left"
+        },
+        {
+          "t": 86400,
+          "x": 464,
+          "y": 497,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-back"
+        },
+        {
+          "t": 86600,
+          "x": 494,
+          "y": 494,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-right"
+        },
+        {
+          "t": 86800,
+          "x": 523,
+          "y": 490,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-front"
+        },
+        {
+          "t": 86801,
+          "x": 0,
+          "y": 0,
+          "scale": 0.25,
+          "easing": "linear",
+          "sprite": "slicer-right"
         }
       ]
     },
@@ -740,46 +1027,6 @@
       "portraitSide": "right",
       "auto": true,
       "duration": 2500
-    },
-    {
-      "t": null,
-      "speaker": "Caddy",
-      "text": "May, hold on to me! Whatever that thing is, it ain't getting you without going through Caddy Jones first!",
-      "cps": 20,
-      "portrait": "./img/cutscenes/portrait-caddy.png",
-      "portraitSide": "left",
-      "auto": true,
-      "duration": 2000
-    },
-    {
-      "t": null,
-      "speaker": "May",
-      "text": "Then we go down swinging! If the gale can carry your voice, it can carry you home! You hear me, demon?",
-      "cps": 20,
-      "portrait": "./img/cutscenes/portrait-may.png",
-      "portraitSide": "left",
-      "auto": true,
-      "duration": 2000
-    },
-    {
-      "t": null,
-      "speaker": "Ratko",
-      "text": "Heh. Told you the peak remembers. Pleasant trip, everyone. Give my regards to Dimension-Y.",
-      "cps": 20,
-      "portrait": "./img/cutscenes/portrait-rat.png",
-      "portraitSide": "left",
-      "auto": true,
-      "duration": 2000
-    },
-    {
-      "t": null,
-      "speaker": "Acolyte",
-      "text": "They're... gone. May... Caddy... the Slicer... the fraud... all swallowed by the storm...",
-      "cps": 20,
-      "portrait": "./img/cutscenes/portrait-acolyte.png",
-      "portraitSide": "left",
-      "auto": true,
-      "duration": 2000
     }
   ],
   "intro": {
