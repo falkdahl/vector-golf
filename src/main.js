@@ -5235,7 +5235,21 @@ function updateHotbarUI() {
     const bgs = { liquifier: 'rgba(52,152,219,0.85)', deflector: 'rgba(155,89,182,0.85)', rotator: 'rgba(231,76,60,0.85)', magnifier: 'rgba(230,126,34,0.85)', fieldExtender: 'rgba(128,128,128,0.85)', powerCell: 'rgba(128,128,128,0.85)', freeShot: 'rgba(241,196,15,0.85)' };
     // Only rebuild when bag shape/selection/pending changes to avoid hover flicker
     const sig = eff + '|' + golfbag.slice(0, eff).map(e => (e ? bagEntryType(e) + ':' + (e.charges ?? 1) : '-')).join('|') + '#' + selectedBagIndex + '#' + (pendingRewardType || '') + '#' + (pendingPickup ? 'pickup:' + pendingPickup.type : '');
+    // 12-mobile touch: while a bag touch is in progress the touchstart target
+    // owns all later touchmove/touchend (retarget). Rebuilding innerHTML here
+    // would detach that target so the release never arrives and the drag is
+    // lost. Defer the rebuild: class-only update now, full rebuild on the next
+    // sync after touchend (dataset.bagSig left stale on purpose).
+    let bagTouchActive = false;
+    try { bagTouchActive = !!bagTouch; } catch { bagTouchActive = false; }
     if (grid.dataset.bagSig !== sig) {
+      if (bagTouchActive) {
+        const slots = grid.querySelectorAll('.hotbar-slot');
+        slots.forEach((slot, i) => {
+          slot.classList.toggle('selected', i === selectedBagIndex && !!golfbag[i] && bagEntryType(golfbag[i]) !== 'freeShot');
+          slot.classList.toggle('discard-target', !!((pendingRewardType && rewardMenuVisible && golfbag[i]) || (pendingPickup && golfbag[i])));
+        });
+      } else {
       grid.dataset.bagSig = sig;
       grid.innerHTML = '';
       for (let i = 0; i < eff; i++) {
@@ -5346,6 +5360,7 @@ function updateHotbarUI() {
         }
         grid.appendChild(slot);
       }
+      } // end deferred-rebuild guard (inner else)
     } else {
       // Update selection/discard classes without rebuild
       const slots = grid.querySelectorAll('.hotbar-slot');
@@ -5865,35 +5880,56 @@ function initMobileControls() {
     // button until it releases, with capture so slides/finger drift keep it
     // armed. (The old touchstart+mousedown/mouseleave mix double-fired and the
     // emulated-compat mouseleave released the hold mid-press on phones.)
+    // Unified hold tracking: pointer events are primary, touch events are a
+    // parallel trigger sharing ONE holder token (first contact wins, only the
+    // matching release clears it). Pointer-only missed holds on phones where
+    // pointerdown arrives late; touch-only would miss desktop mouse. down()/up()
+    // are idempotent (key flags / charge state), so a duplicate press/release
+    // from the parallel path is always harmless.
     const bindHold = (el, down, up) => {
       if (!el || el._mobileBound) return;
       el._mobileBound = true;
-      let activePointerId = null;
-      const release = (e) => {
+      let holder = null; // { kind: 'pointer'|'touch', id } | null
+      const press = (kind, id) => {
         try {
-          if (e && e.pointerId !== undefined && activePointerId !== null && e.pointerId !== activePointerId) return;
-          activePointerId = null;
+          if (holder) return; // first contact wins (multi-touch: one hold)
+          holder = { kind, id };
+          down();
+        } catch {}
+      };
+      const release = (kind, id) => {
+        try {
+          if (!holder || holder.kind !== kind || holder.id !== id) return;
+          holder = null;
           up();
           if (el.blur) el.blur();
         } catch {}
       };
       el.addEventListener('pointerdown', (e) => {
+        try { e.preventDefault(); } catch {}
+        try { el.setPointerCapture(e.pointerId); } catch {}
+        press('pointer', e.pointerId);
+      });
+      el.addEventListener('pointerup', (e) => release('pointer', e.pointerId));
+      el.addEventListener('pointercancel', (e) => release('pointer', e.pointerId));
+      el.addEventListener('lostpointercapture', (e) => release('pointer', e.pointerId));
+      el.addEventListener('touchstart', (e) => {
+        try { if (e.cancelable) e.preventDefault(); } catch {}
         try {
-          e.preventDefault();
-          try { el.setPointerCapture(e.pointerId); } catch {}
-          if (activePointerId !== null) return; // multi-touch: first press wins
-          activePointerId = e.pointerId;
-          down();
+          const t = e.changedTouches && e.changedTouches[0];
+          if (t) press('touch', t.identifier);
+        } catch {}
+      }, { passive: false });
+      el.addEventListener('touchend', (e) => {
+        try {
+          for (const t of Array.from((e && e.changedTouches) || [])) release('touch', t.identifier);
         } catch {}
       });
-      el.addEventListener('pointerup', release);
-      el.addEventListener('pointercancel', release);
-      el.addEventListener('lostpointercapture', (e) => {
-        // Safety net: capture loss without pointerup still ends the hold.
-        try { if (activePointerId !== null && e.pointerId === activePointerId) release(e); } catch {}
+      el.addEventListener('touchcancel', (e) => {
+        try {
+          for (const t of Array.from((e && e.changedTouches) || [])) release('touch', t.identifier);
+        } catch {}
       });
-      // Suppress compat mouse events + long-press menu from a held finger.
-      el.addEventListener('touchstart', (e) => { try { if (e.cancelable) e.preventDefault(); } catch {} }, { passive: false });
       el.addEventListener('contextmenu', (e) => { try { e.preventDefault(); } catch {} });
     };
     if (leftBtn) bindHold(leftBtn, () => touchAimStart('left'), () => touchAimEnd('left'));
@@ -6124,8 +6160,8 @@ function initMobileControls() {
           }
         } catch {}
       }, { passive: false });
-      // touchend for bag drag is handled on canvas endTouch via identifier match;
-      // release over slots (outside canvas) is handled here.
+      // All bag-touch releases land here (touch events retarget to the
+      // touchstart element): tap = arm/select, slot = move/swap, canvas = place.
       grid.addEventListener('touchend', (e) => {
         try {
           if (!bagTouch) return;
@@ -6165,14 +6201,44 @@ function initMobileControls() {
                 if (e.cancelable) e.preventDefault();
                 return;
               }
-              // Release over canvas is handled by canvas touchend; anything else deselects.
+              // Release over the canvas places (same as mouse bag-drop). NOTE:
+              // touch events retarget to the touchstart element, so a drag that
+              // began on a slot ENDS HERE even when the finger is over the
+              // canvas — the canvas touchend handler never sees it.
+              try { if (e.cancelable) e.preventDefault(); } catch {}
               try {
                 const rc = canvas.getBoundingClientRect();
                 const overCanvas = touch.clientX >= rc.left && touch.clientX <= rc.right && touch.clientY >= rc.top && touch.clientY <= rc.bottom;
-                if (!overCanvas) { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); }
+                if (overCanvas && (gameState === 'AIMING' || gameState === 'CHARGING')) {
+                  selectedBagIndex = bd.slotIdx;
+                  selectedModifier = bd.type;
+                  try {
+                    const pos = getCanvasTouchPos(touch);
+                    placeModifier(pos.x, pos.y);
+                  } catch {}
+                  selectedBagIndex = -1; selectedModifier = null; updateHotbarUI();
+                } else {
+                  selectedBagIndex = -1; selectedModifier = null; updateHotbarUI();
+                }
               } catch { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); }
             } catch {}
           }
+        } catch {}
+      });
+      grid.addEventListener('touchcancel', (e) => {
+        try {
+          if (!bagTouch) return;
+          let ours = false;
+          try {
+            for (const touch of Array.from((e && e.changedTouches) || [])) {
+              if (touch.identifier === bagTouch.identifier) { ours = true; break; }
+            }
+          } catch { ours = true; }
+          if (!ours) return;
+          const wasActive = !!bagTouch.active;
+          bagTouch = null;
+          if (wasActive) { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); }
+          try { mousePos = null; } catch {}
         } catch {}
       });
     }
@@ -7195,7 +7261,13 @@ function render() {
   // of path/gradient/text ops every frame.
   try {
     const treasures = getLevelTreasures(level);
-    const sig = currentHoleIndex + '|' + treasures.map(t => (t && t.isCollected) ? 1 : 0).join('') + '|' + dpr;
+    // Include level identity (hole/tee/terrain seed), not just the hole index:
+    // tutorial hole 1->2 sets currentHoleIndex=1 while level still points at
+    // hole 1 until the first-restock cutscene completes. An index-only sig
+    // caches hole-1 scenery under "1|..." and reuses it for hole 2 (hole drawn
+    // on the fairway while physics uses the green).
+    const lvlId = level ? [level.id, level.hole ? level.hole.x + ',' + level.hole.y + ',' + level.hole.radius : '', level.tee ? level.tee.x + ',' + level.tee.y : '', level.terrain ? (level.terrain.noiseSeed ?? '') : '', level.field ? (level.field.seed ?? '') : ''].join('|') : 'no-level';
+    const sig = currentHoleIndex + '|' + lvlId + '|' + treasures.map(t => (t && t.isCollected) ? 1 : 0).join('') + '|' + dpr;
     if (sig !== lastStaticSig) {
       lastStaticSig = sig;
       try { renderStaticScenery(level, treasures, dpr); } catch {}

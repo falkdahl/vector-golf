@@ -2323,6 +2323,7 @@ body {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   padding: 0;
   line-height: 1;
 }
