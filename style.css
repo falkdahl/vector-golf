@@ -1442,6 +1442,7 @@ body {
   border-radius: 8px;
   z-index: 5;
   padding: 16px;
+  padding-bottom: 100px;
 }
 #reward-overlay.hidden { display: none !important; }
 .reward-card {
@@ -1468,15 +1469,15 @@ body {
   flex-wrap: wrap;
 }
 .reward-button {
-  width: 150px;
-  height: 195px;
+  width: 125px;
+  height: 150px;
   border-radius: 10px;
   border: 2px solid rgba(255,255,255,0.85);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 12px 8px 8px;
+  padding: 8px 8px 8px;
   gap: 6px;
   cursor: pointer;
   position: relative;
@@ -1499,8 +1500,8 @@ body {
 .reward-button[data-type="fieldExtender"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
 .reward-button[data-type="powerCell"] { background: rgba(128,128,128,0.28); border-color: rgba(128,128,128,0.9); }
 .reward-button-icon {
-  width: 88px;
-  height: 88px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
   display: block;
   flex-shrink: 0;
@@ -1509,8 +1510,8 @@ body {
   pointer-events: none;
 }
 .reward-button-icon.fallback {
-  width: 88px;
-  height: 88px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1523,7 +1524,7 @@ body {
   pointer-events: none;
 }
 .reward-button-label {
-  margin-top: 14px;
+  margin-top: 4px;
   font: 700 13px system-ui, sans-serif;
   color: white;
   -webkit-text-stroke: 4px rgba(0,0,0,0.75);
