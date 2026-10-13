@@ -10,6 +10,63 @@ export function setCanvasSize(w, h) {
   canvasH = h;
 }
 
+// Mobile render quality: phones skip canvas shadow passes (software-rasterized,
+// very expensive on mobile GPUs) while keeping the same shapes/colors.
+function isMobileRender() {
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get('mobile') === '1') return true;
+  } catch {}
+  try {
+    const ua = (typeof navigator !== 'undefined' && (navigator.userAgent || navigator.vendor)) || '';
+    if (/Android.*Mobile|iPhone|iPod|Windows Phone|IEMobile|Opera Mini|Mobile/i.test(ua)) return true;
+  } catch {}
+  try {
+    if (navigator.maxTouchPoints > 0 && window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return true;
+  } catch {}
+  return false;
+}
+// Evaluated once at load; phones never pay canvas-shadow cost.
+const mobileShadowsOff = (function () { try { return isMobileRender(); } catch { return false; } })();
+
+// --- Static scenery cache (obstacles + hole + treasures) ---
+// These never move within a level (treasures only flip collected), yet cost
+// hundreds of path ops + gradients + text per frame. Pre-render once per
+// level/collect-state/DPR into an offscreen canvas; blit per frame.
+let staticCanvas = null;
+let staticSig = null;
+export function getStaticScenerySig() { return staticSig; }
+export function renderStaticScenery(level, treasures, dpr) {
+  const dd = Math.max(1, Number(dpr) || 1);
+  if (!staticCanvas) {
+    try { staticCanvas = document.createElement('canvas'); } catch { return false; }
+  }
+  staticCanvas.width = Math.round(canvasW * dd);
+  staticCanvas.height = Math.round(canvasH * dd);
+  const sctx = staticCanvas.getContext('2d');
+  sctx.setTransform(dd, 0, 0, dd, 0, 0);
+  sctx.clearRect(0, 0, canvasW, canvasH);
+  try { drawObstacles(sctx, (level && level.obstacles) || []); } catch {}
+  try { if (level && level.hole) drawHole(sctx, level.hole); } catch {}
+  try {
+    for (const tr of (treasures || [])) {
+      if (tr && !tr.isCollected) { try { drawTreasure(sctx, tr); } catch {} }
+    }
+  } catch {}
+  return true;
+}
+export function drawStaticScenery(ctx) {
+  if (!staticCanvas || !staticCanvas.width) return false;
+  try {
+    ctx.save();
+    try { ctx.setTransform(1, 0, 0, 1, 0, 0); } catch {}
+    ctx.drawImage(staticCanvas, 0, 0);
+    ctx.restore();
+    return true;
+  } catch { try { ctx.restore(); } catch {} return false; }
+}
+export function invalidateStaticScenery() { staticSig = null; }
+
 // Background image for splash (main menu)
 const splashImg = new Image();
 splashImg.src = './img/gfg-splash.webp';
@@ -161,13 +218,18 @@ export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cel
       const outlineColor = `rgba(0,0,0,0.55)`;
       ctx.strokeStyle = outlineColor;
       ctx.lineWidth = 3.2;
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = 3;
+      // Shadow pass is skipped on mobile (software raster cost); the dark
+      // outline underneath already gives the same readability.
+      const useShadow = !mobileShadowsOff;
+      if (useShadow) {
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 3;
+      }
       ctx.beginPath();
       ctx.moveTo(cx - Math.cos(angle) * len * 0.4, cy - Math.sin(angle) * len * 0.4);
       ctx.lineTo(cx + Math.cos(angle) * len * 0.6, cy + Math.sin(angle) * len * 0.6);
       ctx.stroke();
-      ctx.shadowBlur = 0;
+      if (useShadow) ctx.shadowBlur = 0;
       ctx.strokeStyle = arrowColor;
       ctx.lineWidth = 2.1;
       ctx.beginPath();

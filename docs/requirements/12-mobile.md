@@ -15,10 +15,13 @@
 
 ## 1b. Mobile performance budgets (phone only; desktop unchanged)
 
-- Backing-store DPR capped via `effectiveDPR()`: `min(devicePixelRatio, 1.5)` on mobile (uncapped desktop). Sustained `<45fps` over 120 frames auto-degrades once to cap `1.0` + `setupCanvas()`/`resizeWindOverlay()`. Physics stays logical; only backing resolution changes.
-- Wind overlay on mobile: 24 streaks × 12 nodes (desktop 48×24), `antialias:false`, pixel ratio capped 1.5 (all in `src/windThree.js`; quality chosen once at `initWindOverlay`).
+- Backing-store DPR capped via `effectiveDPR()` in `src/main.js`: `min(devicePixelRatio, 1.5)` on mobile (uncapped desktop). Sustained `<45fps` over 120 frames auto-degrades once to cap `1.0` + `setupCanvas()`/`resizeWindOverlay()` (cap published as `window.__mobileDPRCapValue` for cutscenes). Physics stays logical; only backing resolution changes.
+- DPR consistency (correctness, not just perf): EVERY 2D transform must use the capped value — `setupCanvas`, `redrawBottom`, `render()`, and `renderCutscene` (`src/cutscene.js` local `effDPR()`). A raw-`devicePixelRatio` transform on a capped buffer draws scenery ~2× oversized and clipped (regression seen on DPR-3 phones: giant top-left terrain, wrong cutscenes).
+- Static scenery cache (`src/render.js` `renderStaticScenery`/`drawStaticScenery`): trees/bricks + hole + chests pre-render offscreen per level/collect-state/DPR (key in `src/main.js` `lastStaticSig`); per frame is one `drawImage` blit with identity transform instead of hundreds of path/gradient/text ops. Re-rendered only on sig change. Fallback to direct draw if the blit is unavailable.
+- Wind overlay on mobile: 24 streaks × 12 nodes (desktop 48×24), `antialias:false`, `depth:false, stencil:false`, `powerPreference:'low-power'`, pixel ratio capped 1.0 (all in `src/windThree.js`; quality chosen once at `initWindOverlay`).
 - Wind visuals tick once per rAF (`tickWindVisual(frameDt)` in `loop()`); `update(dt)` fixed steps never tick wind or touch hotbar DOM (banner timers/physics unchanged). Blocked-state branches set `needHotbarSync`, flushed once per frame.
-- Modifier wind arrows (`src/render.js`): per-modifier bounding-box precheck skips most of the 32×18 cell scan without `hypot`; visuals identical.
+- Modifier wind arrows (`src/render.js`): per-modifier bounding-box precheck skips most of the 32×18 cell scan without `hypot`; canvas-shadow pass skipped on mobile (dark outline underneath keeps readability, shapes/colors identical).
+- DOM churn guards: passive hotbar slots rebuild only on counts/toggle/armed signature change (`dataset.passSig`); HUD hole/attempts/points text assigned only when changed.
 - Compositor: parallax splash is static on mobile (no per-frame `translate3d`, no touch-follow); `#golfbag-container`/`#journal-container` drop `backdrop-filter: blur` under `.mobile-mode` (flat `rgba(0,0,0,0.55)`).
 
 ## 2. Touch overlay controls (lower-right)

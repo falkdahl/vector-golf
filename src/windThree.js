@@ -37,7 +37,9 @@ function isWindMobileMode() {
 }
 function effectiveWindDPR() {
   const dpr = window.devicePixelRatio || 1;
-  try { if (isWindMobileMode()) return Math.min(dpr, 1.5); } catch {}
+  // Streaks are soft glowing lines: full-res backing buys nothing on phones,
+  // while fullscreen transparent overdraw is the dominant mobile GPU cost.
+  try { if (isWindMobileMode()) return Math.min(dpr, 1.0); } catch {}
   return dpr;
 }
 const STREAK_SPEED = 200; // px/s per unit of wind magnitude (|wind| ~0.44..1.5+ -> ~90..300 px/s)
@@ -316,7 +318,8 @@ export function initWindOverlay(container) {
   if (mobileQ) { activeStreakCount = 24; activeStreakNodes = 12; }
   else { activeStreakCount = STREAK_COUNT; activeStreakNodes = STREAK_NODES; }
   try {
-    renderer = new THREE.WebGLRenderer({ canvas: canvasEl, alpha: true, antialias: !mobileQ, premultipliedAlpha: false });
+    // No depth/stencil buffers (pure 2D overlay) + low-power GPU hint on phones.
+    renderer = new THREE.WebGLRenderer({ canvas: canvasEl, alpha: true, antialias: !mobileQ, depth: false, stencil: false, powerPreference: mobileQ ? 'low-power' : 'default', premultipliedAlpha: false });
   } catch(e){
     console.error('Wind Three.js WebGLRenderer failed', e);
     return;

@@ -1632,12 +1632,36 @@ function getContentElapsed(){
   if(contentElapsed > active.contentDuration) return active.contentDuration;
   return contentElapsed;
 }
+// Backing-store DPR, matching setupCanvas in main.js (capped on mobile).
+// Reads the live cap main.js publishes (1.5, or 1.0 after auto-degrade) so
+// cutscenes never draw oversized into a capped buffer on phones.
+function effDPR() {
+  const dpr = (typeof window !== 'undefined' ? (window.devicePixelRatio||1) : 1);
+  try {
+    let mobile = false;
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('mobile') === '1') mobile = true;
+    } catch {}
+    if (!mobile) {
+      const ua = (navigator.userAgent || navigator.vendor || '');
+      mobile = /Android.*Mobile|iPhone|iPod|Windows Phone|IEMobile|Opera Mini|Mobile/i.test(ua)
+        || (navigator.maxTouchPoints > 0 && window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
+    }
+    if (mobile) {
+      let cap = 1.5;
+      try { if (Number.isFinite(window.__mobileDPRCapValue)) cap = window.__mobileDPRCapValue; } catch {}
+      return Math.min(dpr, cap);
+    }
+  } catch {}
+  return dpr;
+}
 export function renderCutscene(bgCtx, fgCtx, W, H) {
   if (!active) return;
   const data = active.data;
   const contentElapsed = getContentElapsed();
   const cam = computeCamera(data, contentElapsed);
-  const dpr = (typeof window !== 'undefined' ? (window.devicePixelRatio||1) : 1);
+  const dpr = effDPR();
   // --- BG canvas ---
   if (bgCtx) {
     bgCtx.save();

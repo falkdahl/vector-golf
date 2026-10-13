@@ -28,6 +28,8 @@ import {
   updateWaterRipples,
   drawWaterRipples,
   clearWaterRipples,
+  renderStaticScenery,
+  drawStaticScenery,
 } from "./render.js";
 // Wind overlay (Three.js) loads lazily so the 1.3MB vendor bundle stays off
 // the boot path. These facades keep every call site unchanged: no-ops until
@@ -338,7 +340,9 @@ try {
 } catch {}
 function redrawBottom() {
   if (!bgCanvas || !bgCtx) return;
-  const dpr = window.devicePixelRatio || 1;
+  // Must match the backing store from setupCanvas (capped on mobile) — a raw
+  // devicePixelRatio here draws terrain 2x oversized/clipped on DPR-3 phones.
+  const dpr = effectiveDPR();
   // Use helper from render if available, else fallback
   try {
     // Sync parallax scene visibility for main menu
@@ -5164,9 +5168,11 @@ function updateAttemptsUI() {
       continueButton.classList.add("hidden");
     }
   }
-  // HTML HUD on top of canvas (replaces canvas drawHUD)
+  // HTML HUD on top of canvas (replaces canvas drawHUD).
+  // Change-guarded: this runs every frame, so skip DOM writes when text is identical.
   try {
-    if (hudHoleEl) hudHoleEl.textContent = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
+    const holeStr = `Hole: ${currentHoleIndex + 1}/${totalHoles}`;
+    if (hudHoleEl && hudHoleEl.textContent !== holeStr) hudHoleEl.textContent = holeStr;
     if (hudAttemptsEl) {
       if (isTutorialActive()) {
         hudAttemptsEl.classList.add('hidden');
@@ -5176,7 +5182,8 @@ function updateAttemptsUI() {
         hudAttemptsEl.style.display = '';
         const attemptsLeft = Math.max(0, maxAttempts - holeAttempts);
         const freeShot = Math.max(0, Math.floor(supply.freeShot ?? 0));
-        hudAttemptsEl.textContent = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft}`;
+        const attStr = freeShot > 0 ? `Attempts Left: ${attemptsLeft} (+${freeShot})` : `Attempts Left: ${attemptsLeft}`;
+        if (hudAttemptsEl.textContent !== attStr) hudAttemptsEl.textContent = attStr;
       }
     }
     if (hudTotalEl) {
@@ -5186,7 +5193,8 @@ function updateAttemptsUI() {
       } else {
         hudTotalEl.classList.remove('hidden');
         hudTotalEl.style.display = '';
-        hudTotalEl.textContent = `Points: ${totalPoints}`;
+        const ptsStr = `Points: ${totalPoints}`;
+        if (hudTotalEl.textContent !== ptsStr) hudTotalEl.textContent = ptsStr;
       }
     }
     if (hudEl) {
@@ -5366,6 +5374,21 @@ function updateHotbarUI() {
           passiveGrid.appendChild(slot);
         }
       }
+      // Signature-guard the rebuild: counts/toggles/armed state change rarely,
+      // but updateHotbarUI runs every frame — skip DOM churn when nothing changed.
+      const passSig = 'fe' + (passiveCounts.fieldExtender||0) + ((passiveEnabled.fieldExtender!==false)?1:0)
+        + '|pc' + (passiveCounts.powerCell||0) + ((passiveEnabled.powerCell!==false)?1:0)
+        + '|fs' + (passiveCounts.freeShot||0) + (isFreeShotActive?1:0);
+      if (passiveGrid.dataset.passSig === passSig) {
+        // Still refresh the freeShot armed outline cheaply (class-only, no rebuild).
+        try {
+          for (const slot of passiveGrid.children) {
+            if (slot.dataset.type === 'freeShot')
+              slot.classList.toggle('passive-active', !!(passiveCounts.freeShot > 0 && isFreeShotActive));
+          }
+        } catch {}
+      } else {
+        passiveGrid.dataset.passSig = passSig;
       for(const slot of passiveGrid.children){
         const t=slot.dataset.type;
         const cnt = t==='fieldExtender' ? (passiveCounts.fieldExtender||0) : t==='powerCell' ? (passiveCounts.powerCell||0) : (passiveCounts.freeShot||0);
@@ -5415,6 +5438,7 @@ function updateHotbarUI() {
         }
         if(cnt<=0) slot.title=(passNames[t]||t)+' x'+cnt;
       }
+      } // end signature-guarded rebuild
     }
   }catch(e){ console.warn('passive hotbar update failed',e); }
   // Also update HUD attempts left display to show (+freeShot charges)
@@ -5534,7 +5558,6 @@ function syncPauseOverlay() {
 
 function getCanvasMousePos(e) {
   const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
   // Use logical coordinates (1280×720 16:9)
   const scaleX = LOGICAL_W / rect.width;
   const scaleY = LOGICAL_H / rect.height;
@@ -5564,6 +5587,8 @@ let mobileDPRCap = 1.5;
 let mobileDegraded = false;
 let fpsAccumTime = 0;
 let fpsAccumFrames = 0;
+// Shared with cutscene.js (no import to avoid a cycle): the current cap value.
+try { window.__mobileDPRCapValue = mobileDPRCap; } catch {}
 function effectiveDPR() {
   const dpr = window.devicePixelRatio || 1;
   try { if (isMobileMode()) return Math.min(dpr, mobileDPRCap); } catch {}
@@ -6810,6 +6835,8 @@ function handleNextHole() {
 // 12-mobile perf: wind visuals tick once per rAF (see tickWindVisual), never per
 // fixed step; hotbar DOM sync is flagged here and flushed once per frame in loop().
 let needHotbarSync = false;
+// Static scenery cache key (level + chest states + DPR); see render().
+let lastStaticSig = null;
 function tickWindVisual(frameDt) {
   const step = Math.max(0, Math.min(0.05, Number(frameDt) || 0));
   if (step <= 0) return;
@@ -7163,10 +7190,32 @@ function render() {
   } else {
     try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch {};
   }
-  drawObstacles(ctx, level.obstacles);
-  drawHole(ctx, level.hole);
-  for (const tr of getLevelTreasures(level)) {
-    if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
+  // Static scenery (trees/bricks + hole + chests) is pre-rendered offscreen per
+  // level/collect-state/DPR and blitted here — one GPU blit instead of hundreds
+  // of path/gradient/text ops every frame.
+  try {
+    const treasures = getLevelTreasures(level);
+    const sig = currentHoleIndex + '|' + treasures.map(t => (t && t.isCollected) ? 1 : 0).join('') + '|' + dpr;
+    if (sig !== lastStaticSig) {
+      lastStaticSig = sig;
+      try { renderStaticScenery(level, treasures, dpr); } catch {}
+    }
+    if (!drawStaticScenery(ctx)) {
+      // Fallback: direct draw if the offscreen blit is unavailable.
+      drawObstacles(ctx, level.obstacles);
+      drawHole(ctx, level.hole);
+      for (const tr of treasures) {
+        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
+      }
+    }
+  } catch {
+    try {
+      drawObstacles(ctx, level.obstacles);
+      drawHole(ctx, level.hole);
+      for (const tr of getLevelTreasures(level)) {
+        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
+      }
+    } catch {}
   }
   drawBall(ctx, ball);
   try { drawWaterRipples(ctx, level && level.waterHazards); } catch {}
@@ -7302,6 +7351,7 @@ function loop(now) {
         if (avgFps < 45 && mobileDPRCap > 1) {
           mobileDegraded = true;
           mobileDPRCap = 1;
+          try { window.__mobileDPRCapValue = 1; } catch {}
           try { setupCanvas(); } catch {}
           try { resizeWindOverlay(); } catch {}
         }
