@@ -5,6 +5,16 @@ export let holdTime = 0;
 
 export const ROTATION_SPEED = 1.6; // rad/s (~91 deg/s)
 
+const TOTAL_DIRECTIONS = 64; // Number of steps per full circle
+const STEP_SIZE = (Math.PI * 2) / TOTAL_DIRECTIONS;
+let aimIndex = 0;
+
+// Auto-repeat timing configuration
+let holdTimer = 0;
+const INITIAL_DELAY = 0.15;    // Time (seconds) before auto-repeat kicks in after the first tap
+const REPEAT_INTERVAL = 0.005;  // Time (seconds) between each step while holding the key down
+let lastDir = 0;
+
 export const keys = {
   ArrowLeft: false,
   ArrowRight: false,
@@ -47,7 +57,7 @@ function beginChargeFromInput() {
       holdTime = 0;
       charge = 0;
     }
-  } catch {}
+  } catch { }
   keys.Space = true;
 }
 
@@ -160,11 +170,29 @@ export function updateInput(dt, gameState) {
   let dir = 0;
   if (keys.ArrowLeft || keys.KeyA) dir -= 1;
   if (keys.ArrowRight || keys.KeyD) dir += 1;
-  // If both held, cancel (dir 0)
+
   if (dir !== 0) {
-    aimAngle += dir * ROTATION_SPEED * dt;
-    aimAngle = ((aimAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    // If it's a fresh press OR the user switched directions, step immediately
+    if (dir !== lastDir || holdTimer === 0 && lastDir === 0) {
+      aimIndex = (aimIndex + dir + TOTAL_DIRECTIONS) % TOTAL_DIRECTIONS;
+      holdTimer = INITIAL_DELAY; // Start the delay timer for continuous holding
+      lastDir = dir;
+    } else {
+      // While holding, count down the timer using delta time (dt)
+      holdTimer -= dt;
+      if (holdTimer <= 0) {
+        aimIndex = (aimIndex + dir + TOTAL_DIRECTIONS) % TOTAL_DIRECTIONS;
+        holdTimer = REPEAT_INTERVAL; // Reset to a faster interval for subsequent steps
+      }
+    }
+  } else {
+    // Key released, reset everything
+    lastDir = 0;
+    holdTimer = 0;
   }
+
+  // Convert current index back to radians
+  aimAngle = aimIndex * STEP_SIZE;
 }
 
 export function resetCharge() {

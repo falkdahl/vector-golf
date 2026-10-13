@@ -35,19 +35,19 @@ import {
 // the boot path. These facades keep every call site unchanged: no-ops until
 // the module arrives, then delegate. Init + field sync re-run on arrival.
 let __windMod = null;
-function initWindOverlay(...args) { try { if (__windMod) return __windMod.initWindOverlay(...args); } catch {} }
-function updateWindUniforms(...args) { try { if (__windMod) return __windMod.updateWindUniforms(...args); } catch {} }
-function setWindUniformsFromField(...args) { try { if (__windMod) return __windMod.setWindUniformsFromField(...args); } catch {} }
-function setWindVisible(...args) { try { if (__windMod) return __windMod.setWindVisible(...args); } catch {} }
-function toggleWindThree(...args) { try { if (__windMod) return __windMod.toggleWind(...args); } catch {} }
-function isWindThreeVisible(...args) { try { if (__windMod) return __windMod.isWindVisible(...args); } catch {} return false; }
-function renderWind(...args) { try { if (__windMod) return __windMod.renderWind(...args); } catch {} }
-function resizeWindOverlay(...args) { try { if (__windMod) return __windMod.resizeWindOverlay(...args); } catch {} }
-function getWindUniforms(...args) { try { if (__windMod) return __windMod.getWindUniforms(...args); } catch {} return undefined; }
-function setWindFreeShotActive(...args) { try { if (__windMod) return __windMod.setFreeShotActive(...args); } catch {} }
-function setWindFreeShotBallActive(...args) { try { if (__windMod) return __windMod.setFreeShotBallActive(...args); } catch {} }
-function setWindFreeShotEdgeActive(...args) { try { if (__windMod) return __windMod.setFreeShotEdgeActive(...args); } catch {} }
-function updateFreeShotGlow(...args) { try { if (__windMod) return __windMod.updateFreeShotGlow(...args); } catch {} }
+function initWindOverlay(...args) { try { if (__windMod) return __windMod.initWindOverlay(...args); } catch { } }
+function updateWindUniforms(...args) { try { if (__windMod) return __windMod.updateWindUniforms(...args); } catch { } }
+function setWindUniformsFromField(...args) { try { if (__windMod) return __windMod.setWindUniformsFromField(...args); } catch { } }
+function setWindVisible(...args) { try { if (__windMod) return __windMod.setWindVisible(...args); } catch { } }
+function toggleWindThree(...args) { try { if (__windMod) return __windMod.toggleWind(...args); } catch { } }
+function isWindThreeVisible(...args) { try { if (__windMod) return __windMod.isWindVisible(...args); } catch { } return false; }
+function renderWind(...args) { try { if (__windMod) return __windMod.renderWind(...args); } catch { } }
+function resizeWindOverlay(...args) { try { if (__windMod) return __windMod.resizeWindOverlay(...args); } catch { } }
+function getWindUniforms(...args) { try { if (__windMod) return __windMod.getWindUniforms(...args); } catch { } return undefined; }
+function setWindFreeShotActive(...args) { try { if (__windMod) return __windMod.setFreeShotActive(...args); } catch { } }
+function setWindFreeShotBallActive(...args) { try { if (__windMod) return __windMod.setFreeShotBallActive(...args); } catch { } }
+function setWindFreeShotEdgeActive(...args) { try { if (__windMod) return __windMod.setFreeShotEdgeActive(...args); } catch { } }
+function updateFreeShotGlow(...args) { try { if (__windMod) return __windMod.updateFreeShotGlow(...args); } catch { } }
 if (typeof window !== 'undefined') {
   try {
     // Deferred (non-blocking): menu renders immediately; wind fades in when ready.
@@ -56,11 +56,11 @@ if (typeof window !== 'undefined') {
       try {
         const container = document.getElementById('game-container');
         m.initWindOverlay(container);
-        try { syncWindFieldToShader(); } catch {}
+        try { syncWindFieldToShader(); } catch { }
         m.resizeWindOverlay();
       } catch (e) { console.warn('wind overlay init failed', e); }
     }).catch((e) => { console.warn('wind overlay load failed', e); });
-  } catch {}
+  } catch { }
 }
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
@@ -125,7 +125,7 @@ function showLoadingScreen() {
   try {
     const ls = document.getElementById('loading-screen');
     if (ls) ls.classList.remove('hidden');
-  } catch {}
+  } catch { }
 }
 // Boot gate: splash + "click to continue". The click is the user gesture
 // that unlocks WebAudio, so menu music reliably starts. Blocks all game
@@ -138,11 +138,11 @@ function continueFromBootGate() {
   try {
     const gate = document.getElementById('continue-overlay');
     if (gate) gate.classList.add('hidden');
-  } catch {}
+  } catch { }
   // Unlock + (re)start whatever music the render loop currently wants. The
   // gate click itself also trips the audio.js gesture listeners; this makes
   // the menu theme start deterministically on continue.
-  try { audioUIClick(); } catch {}
+  try { audioUIClick(); } catch { }
 }
 // First-load preload (tiered for fast menu): Tier 0 blocks the loading
 // screen (splash + menu theme only); Tier 1 streams right after.
@@ -154,7 +154,7 @@ if (typeof window !== 'undefined') {
       assetsReady = true;
       if (loadingHideRequested) hideLoadingScreen();
       // Tier 1: menu chrome in the background, menu already visible.
-      try { preloadMenuIdleAssets(); } catch {}
+      try { preloadMenuIdleAssets(); } catch { }
     }).catch(() => {
       assetsReady = true;
       if (loadingHideRequested) hideLoadingScreen();
@@ -167,7 +167,7 @@ if (typeof window !== 'undefined') {
         if (loadingHideRequested) hideLoadingScreen();
       }
     }, 120000);
-  } catch {}
+  } catch { }
 }
 function maybeHideLoadingAfterSplash() {
   // Hide once parallax layers decoded/complete (or fallback splash)
@@ -181,7 +181,7 @@ function maybeHideLoadingAfterSplash() {
     // Try decode promises for parallax layers if available
     const imgs = document.querySelectorAll('#parallax-scene img');
     if (imgs.length) {
-      const decodes = Array.from(imgs).map(img => img.decode ? img.decode().catch(()=>{}) : Promise.resolve());
+      const decodes = Array.from(imgs).map(img => img.decode ? img.decode().catch(() => { }) : Promise.resolve());
       Promise.all(decodes).then(hideLoadingScreen).catch(hideLoadingScreen);
       return false;
     }
@@ -189,7 +189,7 @@ function maybeHideLoadingAfterSplash() {
       splashImg.decode().then(hideLoadingScreen).catch(hideLoadingScreen);
       return false;
     }
-  } catch {};
+  } catch { };
   return false;
 }
 if (typeof window !== 'undefined') {
@@ -203,11 +203,11 @@ if (typeof window !== 'undefined') {
   const attachParallaxLoad = () => {
     const imgs = document.querySelectorAll('#parallax-scene img');
     imgs.forEach(img => {
-      img.addEventListener('load', () => { try { redrawBottom(); } catch {}; maybeHideLoadingAfterSplash(); });
+      img.addEventListener('load', () => { try { redrawBottom(); } catch { }; maybeHideLoadingAfterSplash(); });
       img.addEventListener('error', () => { setTimeout(hideLoadingScreen, 300); });
     });
     // also try after a tick in case cached
-    setTimeout(() => { if (isParallaxReady()) { try { redrawBottom(); } catch {}; hideLoadingScreen(); } }, 600);
+    setTimeout(() => { if (isParallaxReady()) { try { redrawBottom(); } catch { }; hideLoadingScreen(); } }, 600);
   };
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', attachParallaxLoad);
@@ -229,7 +229,7 @@ function initParallax() {
     container.addEventListener('mouseleave', handleParallaxMouseLeave);
     // Touch support - subtle follow on touch move (disabled on mobile: static splash saves compositor work)
     container.addEventListener('touchmove', (e) => {
-      try { if (isMobileMode()) return; } catch {}
+      try { if (isMobileMode()) return; } catch { }
       if (!mainMenuVisible || isInLevelPause) return;
       const t = e.touches[0];
       if (!t) return;
@@ -241,7 +241,7 @@ function initParallax() {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       for (const k in PARALLAX_DEPTHS) PARALLAX_DEPTHS[k] = 0;
     }
-  } catch {}
+  } catch { }
   startParallaxLoop();
 }
 
@@ -267,7 +267,7 @@ function handleParallaxMouseLeave() {
 function applyParallaxTransforms() {
   if (!parallaxLayers.length) return;
   // Mobile: static splash (no per-frame transform writes).
-  try { if (isMobileMode()) return; } catch {}
+  try { if (isMobileMode()) return; } catch { }
   // Lerp current toward target for smooth subtle motion — X only (Y locked to 0)
   const lerp = 0.08;
   parallaxCurrentX += (parallaxTargetX - parallaxCurrentX) * lerp;
@@ -308,7 +308,7 @@ function startParallaxLoop() {
 function syncParallaxVisibility() {
   if (!parallaxSceneEl) parallaxSceneEl = document.getElementById('parallax-scene');
   if (!parallaxSceneEl) return;
-  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch { }
   const shouldShow = !!(mainMenuVisible && !isInLevelPause && !isCut);
   parallaxSceneEl.classList.toggle('hidden', !shouldShow);
   parallaxSceneEl.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
@@ -337,7 +337,7 @@ try {
     };
     window.__getParallaxDepths = () => ({ ...PARALLAX_DEPTHS });
   }
-} catch {}
+} catch { }
 function redrawBottom() {
   if (!bgCanvas || !bgCtx) return;
   // Must match the backing store from setupCanvas (capped on mobile) — a raw
@@ -346,12 +346,12 @@ function redrawBottom() {
   // Use helper from render if available, else fallback
   try {
     // Sync parallax scene visibility for main menu
-    try { syncParallaxVisibility(); } catch {}
+    try { syncParallaxVisibility(); } catch { }
     // drawBackground is imported from render.js — but to avoid circular deps we handle inline
     // Use logical W/H with DPR transform already set in setupCanvases
     bgCtx.save();
     bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    let isCut2 = false; try { isCut2 = cutsceneIsActive(); } catch {}
+    let isCut2 = false; try { isCut2 = cutsceneIsActive(); } catch { }
     // During cutscene, do not draw splash/parallax — cutsceneRender handles bgCanvas
     if (isCut2) {
       bgCtx.restore();
@@ -393,7 +393,7 @@ function redrawBottom() {
       bgCtx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
     }
     bgCtx.restore();
-  } catch {};
+  } catch { };
 }
 let gameState = "AIMING"; // AIMING, CHARGING, FLYING, WIN, GAME_OVER
 let accumulator = 0;
@@ -424,7 +424,7 @@ function setActiveCourse(course) {
         const clone = JSON.parse(JSON.stringify(h));
         // Ensure fresh run starts with all treasures uncollected; runtime collect will set true on clone only
         if (clone) {
-          if (Array.isArray(clone.treasures)) clone.treasures.forEach(t=>{ if(t) t.isCollected=false; });
+          if (Array.isArray(clone.treasures)) clone.treasures.forEach(t => { if (t) t.isCollected = false; });
           if (clone.treasure) clone.treasure.isCollected = false;
           // keep single treasure in sync with first of array for backward compat
           if (Array.isArray(clone.treasures) && clone.treasures.length && clone.treasure) {
@@ -445,7 +445,7 @@ function setActiveCourse(course) {
         LEVEL.terrain = LEVELS[0].terrain;
         LEVEL.difficulty = LEVELS[0].difficulty;
       }
-    } catch {};
+    } catch { };
   }
 }
 function loadCourses() {
@@ -458,19 +458,19 @@ function loadCourses() {
   return courses;
 }
 function saveCourses() {
-  try { saveCoursesToStorage(courses); } catch {};
+  try { saveCoursesToStorage(courses); } catch { };
 }
 function findCourseById(id) { return courses.find(c => c.id === id) || null; }
 function isTutorialCourse(course) { return !!(course && (course.name === "The Proving Grounds" || course.name === "The 3-Hole Trial" || course.name === "3-hole Trial")); }
 function isTutorialActive() { return isTutorialCourse(activeCourse); }
-function getLevelTreasures(lvl){
-  if(!lvl) return [];
-  if(Array.isArray(lvl.treasures) && lvl.treasures.length) return lvl.treasures;
-  if(lvl.treasure) return [lvl.treasure];
+function getLevelTreasures(lvl) {
+  if (!lvl) return [];
+  if (Array.isArray(lvl.treasures) && lvl.treasures.length) return lvl.treasures;
+  if (lvl.treasure) return [lvl.treasure];
   return [];
 }
-function getUncollectedTreasures(lvl){
-  return getLevelTreasures(lvl).filter(t=>t && !t.isCollected);
+function getUncollectedTreasures(lvl) {
+  return getLevelTreasures(lvl).filter(t => t && !t.isCollected);
 }
 // Tutorial reminder state
 let tutorialLiquifierReminderShown = false;
@@ -526,23 +526,23 @@ let cheatMode = false;
 let cheatDraggingBall = false;
 let cheatSuppressClick = false;
 let cheatMousePos = null;
-const KONAMI_SEQUENCE = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','KeyB','KeyA'];
+const KONAMI_SEQUENCE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
 const CHEAT_GRAB_RADIUS_PAD = 10;
 function isCheatMode() { return !!cheatMode; }
 function isCheatDraggingBall() { return !!cheatDraggingBall; }
 function activateCheatMode() {
   cheatMode = true;
-  try { showToast('Hashimoto Protocol Activated'); } catch {}
+  try { showToast('Hashimoto Protocol Activated'); } catch { }
   return true;
 }
 function deactivateCheatMode() {
   // Drop a held ball in place first so it never sticks to the cursor.
-  try { if (cheatDraggingBall) dropCheatBall(null); } catch {}
+  try { if (cheatDraggingBall) dropCheatBall(null); } catch { }
   cheatDraggingBall = false;
   cheatMousePos = null;
   cheatSuppressClick = false;
   cheatMode = false;
-  try { showToast('Hashimoto Protocol Disabled'); } catch {}
+  try { showToast('Hashimoto Protocol Disabled'); } catch { }
   return true;
 }
 function toggleCheatMode() {
@@ -562,8 +562,8 @@ function cheatGrabBlocked() {
   if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return true;
   if (coinSummaryVisible || courseClearedVisible) return true;
   if (startingItemsVisible || loadoutVisible) return true;
-  try { if (cutsceneIsActive()) return true; } catch {}
-  try { if (banterIsActive()) return true; } catch {}
+  try { if (cutsceneIsActive()) return true; } catch { }
+  try { if (banterIsActive()) return true; } catch { }
   if (gameState !== 'AIMING' && gameState !== 'CHARGING' && gameState !== 'FLYING') return true;
   return false;
 }
@@ -665,15 +665,15 @@ let startingRemaining = 0;
 let startingChoices = []; // remaining types to pick from
 let loadoutVisible = false; // kept for compat, always false now
 let loadoutCourseId = null;
-let loadoutSlots = [null,null,null];
+let loadoutSlots = [null, null, null];
 let loadoutOpenedAt = 0;
 const LOADOUT_OPEN_GRACE_MS = 500;
-function isLoadoutDismissGraceActive(){ try{ if(!startingItemsVisible) return false; return (Date.now()-loadoutOpenedAt)<LOADOUT_OPEN_GRACE_MS;}catch{return false;}}
+function isLoadoutDismissGraceActive() { try { if (!startingItemsVisible) return false; return (Date.now() - loadoutOpenedAt) < LOADOUT_OPEN_GRACE_MS; } catch { return false; } }
 let loadoutHideShopDueToIntro = false;
 let isTutorialRun = false;
-function isTutorialRunActive(){ return !!isTutorialRun; }
-function isStartingItemsVisible(){ return !!startingItemsVisible; }
-function getStartingRemaining(){ return startingRemaining; }
+function isTutorialRunActive() { return !!isTutorialRun; }
+function isStartingItemsVisible() { return !!startingItemsVisible; }
+function getStartingRemaining() { return startingRemaining; }
 // Points tracking (replaces coins): -1 per attempt, +10 per modifier traversed, +50 first attempt bonus
 let totalPoints = 0;
 let runHolesCleared = 0;
@@ -698,16 +698,16 @@ let deferredMenuReturn = false;
 let runShopRestocked = false;
 let runFirstCourseClear = false;
 let runUnlockedNewCourse = false;
-function isMenuReturnDeferred(){ return !!deferredMenuReturn; }
-function isShopRestockedThisRun(){ return !!runShopRestocked; }
-function isCourseFirstClearThisRun(){ return !!runFirstCourseClear; }
-function isNewCourseUnlockedThisRun(){ return !!runUnlockedNewCourse; }
+function isMenuReturnDeferred() { return !!deferredMenuReturn; }
+function isShopRestockedThisRun() { return !!runShopRestocked; }
+function isCourseFirstClearThisRun() { return !!runFirstCourseClear; }
+function isNewCourseUnlockedThisRun() { return !!runUnlockedNewCourse; }
 // Passive stackable counts (re-added bag slots for passives)
-let passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
+let passiveCounts = { fieldExtender: 0, powerCell: 0, freeShot: 0 };
 // Passive on/off toggles (click the passive icon in the bag). When off, the
 // effect is 0 for both already-placed and newly-placed modifiers. Free Shot
 // uses isFreeShotActive (armed) instead of this map; see toggleFreeShot.
-let passiveEnabled = { fieldExtender:true, powerCell:true };
+let passiveEnabled = { fieldExtender: true, powerCell: true };
 let modifiersTraversedThisHole = new Set();
 let modifiersTraversedThisShot = new Set();
 // Ball-enter flash: tracks which modifier ids the ball is currently inside so a
@@ -724,31 +724,31 @@ let courseClearedVisible = false;
 let courseClearedTotal = 0;
 let courseClearedIsRecord = false;
 let pendingCourseClearedIsRecord = false;
-function isCourseClearedVisible(){ return !!courseClearedVisible; }
-function syncCourseClearedOverlay(){
+function isCourseClearedVisible() { return !!courseClearedVisible; }
+function syncCourseClearedOverlay() {
   const el = document.getElementById('course-cleared-overlay');
-  if(!el) return;
-  if(courseClearedVisible) el.classList.remove('hidden');
+  if (!el) return;
+  if (courseClearedVisible) el.classList.remove('hidden');
   else el.classList.add('hidden');
 }
-function showCourseClearedOverlay(total, isRecord){
-  courseClearedTotal = Math.floor(Number(total)||0);
+function showCourseClearedOverlay(total, isRecord) {
+  courseClearedTotal = Math.floor(Number(total) || 0);
   courseClearedIsRecord = !!isRecord;
   courseClearedVisible = true;
   const amt = document.getElementById('course-cleared-amount');
-  if(amt) amt.textContent = courseClearedTotal + ' points';
+  if (amt) amt.textContent = courseClearedTotal + ' points';
   const rec = document.getElementById('course-cleared-record');
-  if(rec){
+  if (rec) {
     rec.innerHTML = '';
-    if(courseClearedIsRecord){
+    if (courseClearedIsRecord) {
       const label = 'New Record';
-      for(let i=0;i<label.length;i++){
+      for (let i = 0; i < label.length; i++) {
         const ch = label[i];
-        if(ch === ' '){ const sp=document.createElement('span'); sp.className='record-space'; sp.textContent='\u00A0'; rec.appendChild(sp); continue; }
-        const s=document.createElement('span');
-        s.className='record-letter';
-        s.textContent=ch;
-        s.style.animationDelay = (i*0.08)+'s';
+        if (ch === ' ') { const sp = document.createElement('span'); sp.className = 'record-space'; sp.textContent = '\u00A0'; rec.appendChild(sp); continue; }
+        const s = document.createElement('span');
+        s.className = 'record-letter';
+        s.textContent = ch;
+        s.style.animationDelay = (i * 0.08) + 's';
         rec.appendChild(s);
       }
       rec.classList.remove('hidden');
@@ -757,17 +757,17 @@ function showCourseClearedOverlay(total, isRecord){
     }
   }
   syncCourseClearedOverlay();
-  try{ syncMainMenu(); }catch{}
-  try { if (courseClearedIsRecord) audioNewRecord(); } catch {}
+  try { syncMainMenu(); } catch { }
+  try { if (courseClearedIsRecord) audioNewRecord(); } catch { }
 }
-function hideCourseCleared(){
-  if(!courseClearedVisible) return;
+function hideCourseCleared() {
+  if (!courseClearedVisible) return;
   courseClearedVisible = false;
   syncCourseClearedOverlay();
   // Continue takes you back to main menu OR starts the next cutscene if one is due.
-  if(isEnd18HoleCutsceneDue()){ try{ playEnd18HoleThenReturn(); }catch{ try{ finishReturnToMainMenu(); }catch{} } return; }
-  if(isEnd9HoleCutsceneDue()){ try{ playEnd9HoleThenReturn(); }catch{ try{ finishReturnToMainMenu(); }catch{} } return; }
-  try{ finishReturnToMainMenu(); }catch{ try{ clearProgress(); mainMenuVisible=true; syncMainMenu(); }catch{} }
+  if (isEnd18HoleCutsceneDue()) { try { playEnd18HoleThenReturn(); } catch { try { finishReturnToMainMenu(); } catch { } } return; }
+  if (isEnd9HoleCutsceneDue()) { try { playEnd9HoleThenReturn(); } catch { try { finishReturnToMainMenu(); } catch { } } return; }
+  try { finishReturnToMainMenu(); } catch { try { clearProgress(); mainMenuVisible = true; syncMainMenu(); } catch { } }
 }
 function normalizeSupplyType(type) {
   if (type === 'amplify') return 'magnifier';
@@ -785,7 +785,7 @@ function getEffectiveGolfbagSize() { return GOLFBAG_SIZE; }
 function golfbagUsedCount() { let n = 0; for (let i = 0; i < GOLFBAG_SIZE; i++) if (golfbag[i]) n++; return n; }
 function golfbagHasEmpty() { for (let i = 0; i < GOLFBAG_SIZE; i++) if (!golfbag[i]) return true; return false; }
 function golfbagFirstEmpty() { for (let i = 0; i < GOLFBAG_SIZE; i++) if (!golfbag[i]) return i; return -1; }
-function golfbagTotalFreeShots() { return Math.max(0, Math.floor(passiveCounts.freeShot||0)); }
+function golfbagTotalFreeShots() { return Math.max(0, Math.floor(passiveCounts.freeShot || 0)); }
 function golfbagCountOf(type) { const t = normalizeSupplyType(type); let n = 0; for (const e of golfbag) if (e && bagEntryType(e) === t && t !== 'freeShot') n++; return n; }
 function syncDerivedFromBag() {
   const counts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0 };
@@ -800,7 +800,7 @@ function syncDerivedFromBag() {
   supply = { magnifier: counts.magnifier, liquifier: counts.liquifier, deflector: counts.deflector, rotator: counts.rotator, freeShot: fs };
   fieldExtenderCount = fe; areaUpgradeCount = fe;
   powerCellCount = pc;
-  try { setFieldPowerCellCount((passiveEnabled.powerCell !== false) ? pc : 0); } catch {}
+  try { setFieldPowerCellCount((passiveEnabled.powerCell !== false) ? pc : 0); } catch { }
   // Keep slot selection consistent (Free Shot is display-only, never a selection)
   if (selectedBagIndex < 0 || selectedBagIndex >= getEffectiveGolfbagSize() || !golfbag[selectedBagIndex]) {
     if (selectedModifier && !(supply[normalizeSupplyType(selectedModifier)] > 0)) { selectedModifier = null; selectedBagIndex = -1; }
@@ -813,8 +813,8 @@ function syncDerivedFromBag() {
 }
 function setBagFromTypeList(types) {
   golfbag = [null, null, null];
-  passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
-  passiveEnabled = { fieldExtender:true, powerCell:true };
+  passiveCounts = { fieldExtender: 0, powerCell: 0, freeShot: 0 };
+  passiveEnabled = { fieldExtender: true, powerCell: true };
   const list = Array.isArray(types) ? types : [];
   let idx = 0;
   for (const raw of list) {
@@ -826,7 +826,7 @@ function setBagFromTypeList(types) {
       passiveCounts.freeShot += ch;
     } else if (t === 'fieldExtender') passiveCounts.fieldExtender++;
     else if (t === 'powerCell' || t === 'rangeModifier') passiveCounts.powerCell++;
-    else if (['magnifier','liquifier','deflector','rotator'].includes(t)) {
+    else if (['magnifier', 'liquifier', 'deflector', 'rotator'].includes(t)) {
       if (idx >= GOLFBAG_SIZE) continue;
       golfbag[idx++] = { type: t };
     }
@@ -847,7 +847,7 @@ function addItemToBag(type, charges) {
   if (t === 'powerCell' || t === 'rangeModifier') { passiveCounts.powerCell++; syncDerivedFromBag(); return true; }
   const empty = golfbagFirstEmpty();
   if (empty === -1) return false;
-  if (['magnifier','liquifier','deflector','rotator'].includes(t)) {
+  if (['magnifier', 'liquifier', 'deflector', 'rotator'].includes(t)) {
     golfbag[empty] = { type: t };
   } else return false;
   syncDerivedFromBag();
@@ -863,8 +863,8 @@ function removeBagSlot(idx) {
   return true;
 }
 function consumeFreeShotCharge() {
-  if ((passiveCounts.freeShot||0) <=0) { syncDerivedFromBag(); return false; }
-  passiveCounts.freeShot = Math.max(0, passiveCounts.freeShot -1);
+  if ((passiveCounts.freeShot || 0) <= 0) { syncDerivedFromBag(); return false; }
+  passiveCounts.freeShot = Math.max(0, passiveCounts.freeShot - 1);
   syncDerivedFromBag();
   return true;
 }
@@ -899,7 +899,7 @@ function enterPickupDiscard(modifierRef) {
   // Clear any armed placement while choosing what to discard
   selectedBagIndex = -1; selectedModifier = null;
   updateHotbarUI();
-  try { showToast('Bag full — click a bag item to discard, or click map / Esc to cancel'); } catch {}
+  try { showToast('Bag full — click a bag item to discard, or click map / Esc to cancel'); } catch { }
   return true;
 }
 function cancelPickupDiscard() {
@@ -951,14 +951,14 @@ function syncFreeShotGlow() {
   const ballActive = isFreeShotActive && !freeShotFlightActive && gameState !== 'FLYING';
   try {
     setWindFreeShotActive(edgeActive);
-    try { setWindFreeShotBallActive(ballActive); } catch {};
-    try { setWindFreeShotEdgeActive(edgeActive); } catch {};
+    try { setWindFreeShotBallActive(ballActive); } catch { };
+    try { setWindFreeShotEdgeActive(edgeActive); } catch { };
     if (ballActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0);
     else if (!ballActive) {
       // ensure ball glow hidden when not armed (edge may still be visible)
-      try { setWindFreeShotBallActive(false); } catch {};
+      try { setWindFreeShotBallActive(false); } catch { };
     }
-  } catch {};
+  } catch { };
 }
 function setFreeShotActive(v) {
   if (!v) {
@@ -999,9 +999,9 @@ function toggleFreeShot() {
 function clearFreeShotGlow() {
   isFreeShotActive = false;
   freeShotFlightActive = false;
-  try { setWindFreeShotActive(false); } catch {};
-  try { setWindFreeShotBallActive(false); } catch {};
-  try { setWindFreeShotEdgeActive(false); } catch {};
+  try { setWindFreeShotActive(false); } catch { };
+  try { setWindFreeShotBallActive(false); } catch { };
+  try { setWindFreeShotEdgeActive(false); } catch { };
 }
 function clearFreeShotFlightGlow() {
   freeShotFlightActive = false;
@@ -1060,28 +1060,28 @@ function consumePlacedModifiersFromSupply() {
 }
 
 // --- Starting Items & Points helpers (10-progression.md 2026-09-21) ---
-function syncProgressionDisplay(){
-  try{
-    const el=document.getElementById('progression-coins-display');
-    if(el) el.classList.add('hidden');
-  }catch{}
+function syncProgressionDisplay() {
+  try {
+    const el = document.getElementById('progression-coins-display');
+    if (el) el.classList.add('hidden');
+  } catch { }
 }
-function isLoadoutVisible(){ return false; }
-function getLoadoutSlots(){ return [...golfbag]; }
-function getRunCoinsEarned(){ return runPointsEarned; }
-function getRunHolesCleared(){ return runHolesCleared; }
-function isCoinSummaryVisible(){ return coinSummaryVisible; }
-function getUnlockedLoadoutSlots(){ return 4; }
-function getTotalPoints(){ return totalPoints; }
-function getPassiveCounts(){ return {...passiveCounts}; }
-function getPassiveEnabled(){ return {...passiveEnabled}; }
-function isPassiveEnabled(type){
+function isLoadoutVisible() { return false; }
+function getLoadoutSlots() { return [...golfbag]; }
+function getRunCoinsEarned() { return runPointsEarned; }
+function getRunHolesCleared() { return runHolesCleared; }
+function isCoinSummaryVisible() { return coinSummaryVisible; }
+function getUnlockedLoadoutSlots() { return 4; }
+function getTotalPoints() { return totalPoints; }
+function getPassiveCounts() { return { ...passiveCounts }; }
+function getPassiveEnabled() { return { ...passiveEnabled }; }
+function isPassiveEnabled(type) {
   const t = normalizeSupplyType(type);
   if (t === 'rangeModifier') return passiveEnabled.powerCell !== false;
   if (t !== 'fieldExtender' && t !== 'powerCell') return false;
   return passiveEnabled[t] !== false;
 }
-function setPassiveEnabled(type, on){
+function setPassiveEnabled(type, on) {
   const t = normalizeSupplyType(type);
   if (t !== 'fieldExtender' && t !== 'powerCell' && t !== 'rangeModifier') return false;
   const key = (t === 'rangeModifier') ? 'powerCell' : t;
@@ -1089,7 +1089,7 @@ function setPassiveEnabled(type, on){
   applyPassiveEffects();
   return true;
 }
-function togglePassive(type){
+function togglePassive(type) {
   const t = normalizeSupplyType(type);
   if (t !== 'fieldExtender' && t !== 'powerCell' && t !== 'rangeModifier') return false;
   const key = (t === 'rangeModifier') ? 'powerCell' : t;
@@ -1097,135 +1097,135 @@ function togglePassive(type){
   applyPassiveEffects();
   return passiveEnabled[key];
 }
-function getEffectiveFieldExtenderCount(){ return (passiveEnabled.fieldExtender !== false) ? fieldExtenderCount : 0; }
-function getEffectivePowerCellCount(){ return (passiveEnabled.powerCell !== false) ? powerCellCount : 0; }
+function getEffectiveFieldExtenderCount() { return (passiveEnabled.fieldExtender !== false) ? fieldExtenderCount : 0; }
+function getEffectivePowerCellCount() { return (passiveEnabled.powerCell !== false) ? powerCellCount : 0; }
 // Re-apply passive effects to already-placed modifiers (radius) and to the
 // wind field (strength), then refresh UI and persist. New placements use the
 // same effective getters, so the toggle affects both placed and future items.
-function applyPassiveEffects(){
+function applyPassiveEffects() {
   try {
     const newR = getEffectiveModifierRadius();
     for (const m of modifiers) m.radius = newR;
-  } catch {}
-  try { syncModifiersToField(); } catch {}
-  try { updateHotbarUI(); } catch {}
-  try { saveProgress(); } catch {}
+  } catch { }
+  try { syncModifiersToField(); } catch { }
+  try { updateHotbarUI(); } catch { }
+  try { saveProgress(); } catch { }
 }
 
-let startingItemsVisibleCache=false;
-let selectedStartingItems=[];
-function syncStartingItemsOverlay(){
-  const overlay=document.getElementById('starting-items-overlay');
-  if(!overlay) return;
-  if(startingItemsVisible) overlay.classList.remove('hidden');
+let startingItemsVisibleCache = false;
+let selectedStartingItems = [];
+function syncStartingItemsOverlay() {
+  const overlay = document.getElementById('starting-items-overlay');
+  if (!overlay) return;
+  if (startingItemsVisible) overlay.classList.remove('hidden');
   else overlay.classList.add('hidden');
-  if(!startingItemsVisible) return;
-  const grid=document.getElementById('starting-items-grid');
-  if(!grid) return;
-  grid.innerHTML='';
-  const defs={magnifier:{label:'Magnifier',color:'#e67e22',icon:'./img/magnifier-icon.png',hint:'+1 to bag'},liquifier:{label:'Liquifier',color:'#3498db',icon:'./img/liquifier-icon.png',hint:'+1 to bag'},deflector:{label:'Deflector',color:'#9b59b6',icon:'./img/deflector-icon.png',hint:'+1 to bag'},rotator:{label:'Rotator',color:'#e74c3c',icon:'./img/rotator-icon.png',hint:'+1 to bag'}};
-  startingChoices.forEach((type, idx)=>{
-    const def=defs[type];
-    if(!def) return;
-    const btn=document.createElement('button');
+  if (!startingItemsVisible) return;
+  const grid = document.getElementById('starting-items-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const defs = { magnifier: { label: 'Magnifier', color: '#e67e22', icon: './img/magnifier-icon.png', hint: '+1 to bag' }, liquifier: { label: 'Liquifier', color: '#3498db', icon: './img/liquifier-icon.png', hint: '+1 to bag' }, deflector: { label: 'Deflector', color: '#9b59b6', icon: './img/deflector-icon.png', hint: '+1 to bag' }, rotator: { label: 'Rotator', color: '#e74c3c', icon: './img/rotator-icon.png', hint: '+1 to bag' } };
+  startingChoices.forEach((type, idx) => {
+    const def = defs[type];
+    if (!def) return;
+    const btn = document.createElement('button');
     const isSelected = selectedStartingItems.includes(type);
-    btn.className='reward-button' + (isSelected ? ' selected' : '');
-    btn.dataset.type=type;
-    btn.style.background=def.color===''+def.color ? `rgba(${def.color},0.28)` : def.color;
-    if(def.icon){
-      const img=document.createElement('img');
-      img.className='reward-button-icon';
-      img.src=def.icon; img.alt=type;
+    btn.className = 'reward-button' + (isSelected ? ' selected' : '');
+    btn.dataset.type = type;
+    btn.style.background = def.color === '' + def.color ? `rgba(${def.color},0.28)` : def.color;
+    if (def.icon) {
+      const img = document.createElement('img');
+      img.className = 'reward-button-icon';
+      img.src = def.icon; img.alt = type;
       btn.appendChild(img);
     }
-    const lab=document.createElement('div'); lab.className='reward-button-label'; lab.textContent=def.label; btn.appendChild(lab);
-    const hint=document.createElement('div'); hint.className='reward-button-hint'; hint.textContent=def.hint; btn.appendChild(hint);
-    const key=document.createElement('div'); key.className='reward-button-key'; key.textContent='['+(idx+1)+']'; btn.appendChild(key);
-    if(type==='magnifier') {btn.style.background='rgba(230,126,34,0.28)'; btn.style.borderColor='rgba(230,126,34,0.9)';}
-    else if(type==='liquifier') {btn.style.background='rgba(52,152,219,0.28)'; btn.style.borderColor='rgba(52,152,219,0.9)';}
-    else if(type==='deflector') {btn.style.background='rgba(155,89,182,0.28)'; btn.style.borderColor='rgba(155,89,182,0.9)';}
-    else if(type==='rotator') {btn.style.background='rgba(231,76,60,0.28)'; btn.style.borderColor='rgba(231,76,60,0.9)';}
-    if(isSelected){
-      btn.style.outline='3px solid #fff';
-      btn.style.outlineOffset='2px';
-      btn.style.transform='scale(1.03)';
+    const lab = document.createElement('div'); lab.className = 'reward-button-label'; lab.textContent = def.label; btn.appendChild(lab);
+    const hint = document.createElement('div'); hint.className = 'reward-button-hint'; hint.textContent = def.hint; btn.appendChild(hint);
+    const key = document.createElement('div'); key.className = 'reward-button-key'; key.textContent = '[' + (idx + 1) + ']'; btn.appendChild(key);
+    if (type === 'magnifier') { btn.style.background = 'rgba(230,126,34,0.28)'; btn.style.borderColor = 'rgba(230,126,34,0.9)'; }
+    else if (type === 'liquifier') { btn.style.background = 'rgba(52,152,219,0.28)'; btn.style.borderColor = 'rgba(52,152,219,0.9)'; }
+    else if (type === 'deflector') { btn.style.background = 'rgba(155,89,182,0.28)'; btn.style.borderColor = 'rgba(155,89,182,0.9)'; }
+    else if (type === 'rotator') { btn.style.background = 'rgba(231,76,60,0.28)'; btn.style.borderColor = 'rgba(231,76,60,0.9)'; }
+    if (isSelected) {
+      btn.style.outline = '3px solid #fff';
+      btn.style.outlineOffset = '2px';
+      btn.style.transform = 'scale(1.03)';
     }
-    btn.addEventListener('click', ()=> handleStartingPick(type));
+    btn.addEventListener('click', () => handleStartingPick(type));
     grid.appendChild(btn);
   });
 }
-function showStartingItems(courseId, opts){
-  if(hasRestorableSave()) return false;
-  const course=findCourseById(courseId);
-  if(!course) return false;
+function showStartingItems(courseId, opts) {
+  if (hasRestorableSave()) return false;
+  const course = findCourseById(courseId);
+  if (!course) return false;
   // Start with empty bag – only the 2 picks are present after auto-confirm
   golfbag = [null, null, null];
-  passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
-  passiveEnabled = { fieldExtender:true, powerCell:true };
-  try{ syncDerivedFromBag(); updateHotbarUI(); }catch{}
-  startingCourseId=courseId;
-  startingChoices=['magnifier','liquifier','deflector','rotator'];
-  selectedStartingItems=[];
-  startingRemaining=2;
-  startingItemsVisible=true;
+  passiveCounts = { fieldExtender: 0, powerCell: 0, freeShot: 0 };
+  passiveEnabled = { fieldExtender: true, powerCell: true };
+  try { syncDerivedFromBag(); updateHotbarUI(); } catch { }
+  startingCourseId = courseId;
+  startingChoices = ['magnifier', 'liquifier', 'deflector', 'rotator'];
+  selectedStartingItems = [];
+  startingRemaining = 2;
+  startingItemsVisible = true;
   // Load hole preview behind overlay
-  try{
+  try {
     setActiveCourse(course);
-    currentHoleIndex=0;
-    mainMenuVisible=false;
-    mainMenuHover=null; courseMenuVisible=false; helpVisible=false; isInLevelPause=false;
-    pauseMenuVisible=false; pauseMenuHover=null;
-    gameState='AIMING';
+    currentHoleIndex = 0;
+    mainMenuVisible = false;
+    mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+    pauseMenuVisible = false; pauseMenuHover = null;
+    gameState = 'AIMING';
     loadLevel(0);
-    holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
-    attemptsBannerVisible=false; attemptsBannerTimer=0;
-    freeShotBannerVisible=false; freeShotBannerTimer=0;
-    rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
-    try{ syncRewardOverlay(); }catch{}
-    try{ redrawBottom(); }catch{}
-  }catch(e){ console.warn('showStartingItems preview failed',e); }
+    holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
+    attemptsBannerVisible = false; attemptsBannerTimer = 0;
+    freeShotBannerVisible = false; freeShotBannerTimer = 0;
+    rewardPending = false; rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false;
+    try { syncRewardOverlay(); } catch { }
+    try { redrawBottom(); } catch { }
+  } catch (e) { console.warn('showStartingItems preview failed', e); }
   syncStartingItemsOverlay();
   syncMainMenu();
-  try{ loadoutOpenedAt=Date.now(); }catch{}
-  try{ banterPreload(); }catch{}
+  try { loadoutOpenedAt = Date.now(); } catch { }
+  try { banterPreload(); } catch { }
   return true;
 }
-function hideStartingItems(){
-  startingItemsVisible=false;
-  startingCourseId=null;
-  startingRemaining=0;
-  startingChoices=[];
-  selectedStartingItems=[];
+function hideStartingItems() {
+  startingItemsVisible = false;
+  startingCourseId = null;
+  startingRemaining = 0;
+  startingChoices = [];
+  selectedStartingItems = [];
   syncStartingItemsOverlay();
   // return to main menu without starting run
-  try{
-    mainMenuVisible=true;
-    courseMenuVisible=false; helpVisible=false; isInLevelPause=false;
-    pauseMenuVisible=false; pauseMenuHover=null;
-    gameState='AIMING';
-    holeBannerVisible=false; holeBannerTimer=0;
-    attemptsBannerVisible=false; attemptsBannerTimer=0;
-    freeShotBannerVisible=false; freeShotBannerTimer=0;
-    rewardPending=false; rewardMenuVisible=false; rewardOffered=[];
-    try{ syncRewardOverlay(); }catch{}
-  }catch{}
+  try {
+    mainMenuVisible = true;
+    courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+    pauseMenuVisible = false; pauseMenuHover = null;
+    gameState = 'AIMING';
+    holeBannerVisible = false; holeBannerTimer = 0;
+    attemptsBannerVisible = false; attemptsBannerTimer = 0;
+    freeShotBannerVisible = false; freeShotBannerTimer = 0;
+    rewardPending = false; rewardMenuVisible = false; rewardOffered = [];
+    try { syncRewardOverlay(); } catch { }
+  } catch { }
   syncMainMenu();
-  try{ redrawBottom(); }catch{}
+  try { redrawBottom(); } catch { }
 }
-function handleStartingPick(type){
-  if(!startingItemsVisible) return false;
+function handleStartingPick(type) {
+  if (!startingItemsVisible) return false;
   const already = selectedStartingItems.indexOf(type);
-  if(already!==-1){
-    selectedStartingItems.splice(already,1);
+  if (already !== -1) {
+    selectedStartingItems.splice(already, 1);
     startingRemaining = 2 - selectedStartingItems.length;
     syncStartingItemsOverlay();
     return true;
   }
-  if(selectedStartingItems.length>=2) return false;
-  if(!startingChoices.includes(type)) return false;
+  if (selectedStartingItems.length >= 2) return false;
+  if (!startingChoices.includes(type)) return false;
   selectedStartingItems.push(type);
   startingRemaining = 2 - selectedStartingItems.length;
-  if(selectedStartingItems.length===2){
+  if (selectedStartingItems.length === 2) {
     // Choice done: no OK button — second pick starts the run immediately.
     handleStartingOk();
     return true;
@@ -1233,245 +1233,247 @@ function handleStartingPick(type){
   syncStartingItemsOverlay();
   return true;
 }
-function handleStartingOk(){
-  if(!startingItemsVisible) return false;
-  if(selectedStartingItems.length!==2) return false;
+function handleStartingOk() {
+  if (!startingItemsVisible) return false;
+  if (selectedStartingItems.length !== 2) return false;
   // Journal: a new run begins with these 2 picks
-  try { journalStartRun([...selectedStartingItems]); } catch {}
+  try { journalStartRun([...selectedStartingItems]); } catch { }
   // Add selected items to bag
-  for(const t of selectedStartingItems) addItemToBag(t);
+  for (const t of selectedStartingItems) addItemToBag(t);
   updateHotbarUI();
-  const cid=startingCourseId;
-  startingItemsVisible=false;
-  selectedStartingItems=[];
+  const cid = startingCourseId;
+  startingItemsVisible = false;
+  selectedStartingItems = [];
   syncStartingItemsOverlay();
   startCourseWithStartingItems(cid);
   return true;
 }
 
-function playBanterThenShowStartingOverlay(courseId, opts){
+function playBanterThenShowStartingOverlay(courseId, opts) {
   // Load level preview behind the scenes so banter plays over level (no HUD/menus)
-  try{
-    const course=findCourseById(courseId);
-    if(course){
+  try {
+    const course = findCourseById(courseId);
+    if (course) {
       golfbag = [null, null, null];
-      passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
-      passiveEnabled = { fieldExtender:true, powerCell:true };
-      try{ syncDerivedFromBag(); updateHotbarUI(); }catch{}
+      passiveCounts = { fieldExtender: 0, powerCell: 0, freeShot: 0 };
+      passiveEnabled = { fieldExtender: true, powerCell: true };
+      try { syncDerivedFromBag(); updateHotbarUI(); } catch { }
       setActiveCourse(course);
-      currentHoleIndex=0;
-      mainMenuVisible=false;
-      mainMenuHover=null; courseMenuVisible=false; helpVisible=false; isInLevelPause=false;
-      pauseMenuVisible=false; pauseMenuHover=null;
-      gameState='AIMING';
+      currentHoleIndex = 0;
+      mainMenuVisible = false;
+      mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+      pauseMenuVisible = false; pauseMenuHover = null;
+      gameState = 'AIMING';
       loadLevel(0);
-      holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
-      attemptsBannerVisible=false; attemptsBannerTimer=0;
-      freeShotBannerVisible=false; freeShotBannerTimer=0;
-      rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false;
-      try{ syncRewardOverlay(); }catch{}
-      try{ redrawBottom(); }catch{}
+      holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
+      attemptsBannerVisible = false; attemptsBannerTimer = 0;
+      freeShotBannerVisible = false; freeShotBannerTimer = 0;
+      rewardPending = false; rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false;
+      try { syncRewardOverlay(); } catch { }
+      try { redrawBottom(); } catch { }
       syncMainMenu();
-      try{ syncBanterSkipButton(); }catch{}
+      try { syncBanterSkipButton(); } catch { }
     }
-  }catch(e){ console.warn('preview load before banter failed',e); }
+  } catch (e) { console.warn('preview load before banter failed', e); }
   // Now play banter over the loaded level (HUD/hotbar hidden during banter)
-  try{
-    try{ banterPreload(); }catch{}
-    banterPlayRunStart({ onComplete: () => { try{ syncBanterSkipButton(); }catch{} showStartingItems(courseId, opts); } }).then((ok)=>{
-      try{ syncBanterSkipButton(); }catch{}
-      if(!ok) showStartingItems(courseId, opts);
-    }).catch(()=>{
-      try{ syncBanterSkipButton(); }catch{}
+  try {
+    try { banterPreload(); } catch { }
+    banterPlayRunStart({ onComplete: () => { try { syncBanterSkipButton(); } catch { } showStartingItems(courseId, opts); } }).then((ok) => {
+      try { syncBanterSkipButton(); } catch { }
+      if (!ok) showStartingItems(courseId, opts);
+    }).catch(() => {
+      try { syncBanterSkipButton(); } catch { }
       showStartingItems(courseId, opts);
     });
-  }catch{
+  } catch {
     showStartingItems(courseId, opts);
   }
 }
 
-function isStartingOverlayVisible(){ return !!startingItemsVisible; }
+function isStartingOverlayVisible() { return !!startingItemsVisible; }
 // Compat shims for old loadout names
 let loadoutPickerVisible = false;
 let loadoutPickerSlotIndex = -1;
-function isLoadoutPickerVisible(){ return false; }
-function getLoadoutPickerSlotIndex(){ return -1; }
-function syncLoadoutPickerOverlay(){}
-function showLoadoutPicker(){ return false; }
-function hideLoadoutPicker(){}
-function syncLoadoutOverlay(){ syncStartingItemsOverlay(); }
-function addToLoadout(){}
-function removeFromLoadout(){}
-const VALID_LOADOUT_TYPES = ['magnifier','liquifier','deflector','rotator','fieldExtender','powerCell','freeShot'];
-function showLoadout(courseId, opts){ return showStartingItems(courseId); }
-function hideLoadout(){ return hideStartingItems(); }
+function isLoadoutPickerVisible() { return false; }
+function getLoadoutPickerSlotIndex() { return -1; }
+function syncLoadoutPickerOverlay() { }
+function showLoadoutPicker() { return false; }
+function hideLoadoutPicker() { }
+function syncLoadoutOverlay() { syncStartingItemsOverlay(); }
+function addToLoadout() { }
+function removeFromLoadout() { }
+const VALID_LOADOUT_TYPES = ['magnifier', 'liquifier', 'deflector', 'rotator', 'fieldExtender', 'powerCell', 'freeShot'];
+function showLoadout(courseId, opts) { return showStartingItems(courseId); }
+function hideLoadout() { return hideStartingItems(); }
 
-function startCourseWithStartingItems(courseId){
+function startCourseWithStartingItems(courseId) {
   const course = findCourseById(courseId || startingCourseId);
   if (!course) return false;
   // golfbag already contains the 2 starting picks via handleStartingPick; keep it, just ensure at least those 2
   // If somehow empty (direct call), ensure at least 2 random? For now keep as is.
   setActiveCourse(course);
-  try { incrementRunsStarted(); } catch {}
+  try { incrementRunsStarted(); } catch { }
   clearProgress();
   // Journal: normally started in handleStartingOk (with the 2 picks); only
   // start empty here for direct calls that bypass the starting overlay.
-  try { if (!runJournalActive) journalStartRun([]); } catch {}
+  try { if (!runJournalActive) journalStartRun([]); } catch { }
   // Tutorial run = loadout shown directly after the intro-3-hole chain for the 3-hole
   // course (shop hidden). Whole run gets liquifier-only single-card rewards, no re-roll.
   try {
     isTutorialRun = !!(loadoutHideShopDueToIntro && course && isTutorialCourse(course));
   } catch { isTutorialRun = !!loadoutHideShopDueToIntro; }
-  currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-  totalPoints=0; runPointsEarned=0; runCoinsEarned=0;
-  holeStartAttempts=0; holeRerolls=0;
+  currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
+  totalPoints = 0; runPointsEarned = 0; runCoinsEarned = 0;
+  holeStartAttempts = 0; holeRerolls = 0;
   modifiersTraversedThisHole = new Set();
   modifiersTraversedThisShot = new Set();
   // golfbag already set via handleStartingPick (2 spatial); keep it, just clear glow
   clearFreeShotGlow();
-  maxAttempts=10;
-  pendingRewardType=null;
-  pendingPickup=null;
-  rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false; rewardMenuHover=null; rewardRerollHover=false; rewardClaimedFor=null;
-  rewardSeedCounter=0;
-  holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
-  attemptsBannerVisible=false; attemptsBannerTimer=0; attemptsBannerText=''; lastAttemptsBannerValue=null;
-  freeShotBannerVisible=false; freeShotBannerTimer=0; freeShotBannerText='Free Shot!'; lastFreeShotBannerValue=null;
-  pauseMenuVisible=false; pauseMenuHover=null; mainMenuVisible=false; mainMenuHover=null; courseMenuVisible=false; helpVisible=false; isInLevelPause=false;
-  rewardChosenCounts={ magnifier:0, liquifier:0, deflector:0, rotator:0, freeShot:0, areaUp:0, fieldExtender:0, powerCell:0 };
-  modifiers=[]; syncModifiersToField(); selectedModifier=null; selectedBagIndex=-1;
-  runHolesCleared=0;
+  maxAttempts = 10;
+  pendingRewardType = null;
+  pendingPickup = null;
+  rewardPending = false; rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardMenuHover = null; rewardRerollHover = false; rewardClaimedFor = null;
+  rewardSeedCounter = 0;
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
+  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ''; lastAttemptsBannerValue = null;
+  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = 'Free Shot!'; lastFreeShotBannerValue = null;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  modifiers = []; syncModifiersToField(); selectedModifier = null; selectedBagIndex = -1;
+  runHolesCleared = 0;
   try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 4; }
   runShopRestocked = false;
   runFirstCourseClear = false;
   runUnlockedNewCourse = false;
   deferredMenuReturn = false;
-  startingItemsVisible=false; startingCourseId=null; startingRemaining=0; startingChoices=[];
-  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null];
+  startingItemsVisible = false; startingCourseId = null; startingRemaining = 0; startingChoices = [];
+  loadoutVisible = false; loadoutCourseId = null; loadoutSlots = [null, null, null];
   loadoutHideShopDueToIntro = false;
-  coinSummaryVisible=false;
-  try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
-  loadLevel(0); gameState='AIMING';
-  holeStartAttempts = 0; holeRerolls=0;
+  coinSummaryVisible = false;
+  try { courseClearedVisible = false; pendingCourseComplete = false; pendingCourseClearedIsRecord = false; syncCourseClearedOverlay(); } catch { }
+  loadLevel(0); gameState = 'AIMING';
+  holeStartAttempts = 0; holeRerolls = 0;
   modifiersTraversedThisHole = new Set();
   // 12-banter: Hole 1 banner is deferred until the run-start banter has played.
-  holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
   if (winOverlay) winOverlay.classList.add('hidden'); if (gameoverOverlay) gameoverOverlay.classList.add('hidden');
   syncPauseOverlay(); syncMainMenu(); syncLoadoutOverlay();
   updateAttemptsUI(); updateHotbarUI(); syncProgressionDisplay();
   saveProgress();
   // Start directly with Hole 1 banner (banter now plays before starting overlay, not here)
-  try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {}
+  try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { }
   return true;
 }
-function startCourseWithLoadout(courseId, slots){ return startCourseWithStartingItems(courseId); }
+function startCourseWithLoadout(courseId, slots) { return startCourseWithStartingItems(courseId); }
 
-function isTutorialCourseId(cid){ const c=findCourseById(cid); return isTutorialCourse(c); }
+function isTutorialCourseId(cid) { const c = findCourseById(cid); return isTutorialCourse(c); }
 
-function startTutorialCourse(courseId){
+function startTutorialCourse(courseId) {
   const course = findCourseById(courseId);
   if (!course || !isTutorialCourse(course)) return false;
   setActiveCourse(course);
-  try { incrementRunsStarted(); } catch {}
+  try { incrementRunsStarted(); } catch { }
   clearProgress();
   isTutorialRun = false;
   // Journal: fresh tutorial run (no starting picks)
-  try { journalStartRun([]); } catch {}
-  currentHoleIndex=0; holeAttempts=0; totalAttempts=0; attempts=0;
-  totalPoints=0; runPointsEarned=0; runCoinsEarned=0;
-  holeStartAttempts=0; holeRerolls=0;
+  try { journalStartRun([]); } catch { }
+  currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
+  totalPoints = 0; runPointsEarned = 0; runCoinsEarned = 0;
+  holeStartAttempts = 0; holeRerolls = 0;
   modifiersTraversedThisHole = new Set();
   modifiersTraversedThisShot = new Set();
   // Start with exactly one liquifier
   setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
-  maxAttempts=10;
-  pendingRewardType=null; pendingPickup=null;
-  rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; rewardRerolled=false; rewardMenuHover=null; rewardRerollHover=false; rewardClaimedFor=null;
-  rewardSeedCounter=0;
-  holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
-  attemptsBannerVisible=false; attemptsBannerTimer=0; attemptsBannerText=''; lastAttemptsBannerValue=null;
-  freeShotBannerVisible=false; freeShotBannerTimer=0; freeShotBannerText='Free Shot!'; lastFreeShotBannerValue=null;
-  pauseMenuVisible=false; pauseMenuHover=null; mainMenuVisible=false; mainMenuHover=null; courseMenuVisible=false; helpVisible=false; isInLevelPause=false;
-  rewardChosenCounts={ magnifier:0, liquifier:0, deflector:0, rotator:0, freeShot:0, areaUp:0, fieldExtender:0, powerCell:0 };
-  modifiers=[]; syncModifiersToField(); selectedModifier=null; selectedBagIndex=-1;
-  runHolesCleared=0;
+  maxAttempts = 10;
+  pendingRewardType = null; pendingPickup = null;
+  rewardPending = false; rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardMenuHover = null; rewardRerollHover = false; rewardClaimedFor = null;
+  rewardSeedCounter = 0;
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
+  attemptsBannerVisible = false; attemptsBannerTimer = 0; attemptsBannerText = ''; lastAttemptsBannerValue = null;
+  freeShotBannerVisible = false; freeShotBannerTimer = 0; freeShotBannerText = 'Free Shot!'; lastFreeShotBannerValue = null;
+  pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+  rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+  modifiers = []; syncModifiersToField(); selectedModifier = null; selectedBagIndex = -1;
+  runHolesCleared = 0;
   try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 4; }
   runShopRestocked = false; runFirstCourseClear = false; runUnlockedNewCourse = false;
   deferredMenuReturn = false;
-  startingItemsVisible=false; startingCourseId=null; startingRemaining=0; startingChoices=[];
-  loadoutVisible=false; loadoutCourseId=null; loadoutSlots=[null,null,null];
+  startingItemsVisible = false; startingCourseId = null; startingRemaining = 0; startingChoices = [];
+  loadoutVisible = false; loadoutCourseId = null; loadoutSlots = [null, null, null];
   loadoutHideShopDueToIntro = false;
-  coinSummaryVisible=false;
-  try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
-  tutorialLiquifierReminderShown=false;
-  tutorialHole1Liquifier3Shown=false;
-  tutorialHole1Liquifier10Shown=false;
-  tutorialHole3RotatorShown=false;
-  tutorialHole2RotatorShown=false;
-  tutorialHole2GadgetsReminderShown=false;
-  tutorialHole3RewardBanterShown=false;
-  loadLevel(0); gameState='AIMING';
-  holeStartAttempts = 0; holeRerolls=0;
+  coinSummaryVisible = false;
+  try { courseClearedVisible = false; pendingCourseComplete = false; pendingCourseClearedIsRecord = false; syncCourseClearedOverlay(); } catch { }
+  tutorialLiquifierReminderShown = false;
+  tutorialHole1Liquifier3Shown = false;
+  tutorialHole1Liquifier10Shown = false;
+  tutorialHole3RotatorShown = false;
+  tutorialHole2RotatorShown = false;
+  tutorialHole2GadgetsReminderShown = false;
+  tutorialHole3RewardBanterShown = false;
+  loadLevel(0); gameState = 'AIMING';
+  holeStartAttempts = 0; holeRerolls = 0;
   modifiersTraversedThisHole = new Set();
-  holeBannerVisible=false; holeBannerTimer=0; holeBannerText='';
+  holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
   if (winOverlay) winOverlay.classList.add('hidden'); if (gameoverOverlay) gameoverOverlay.classList.add('hidden');
   syncPauseOverlay(); syncMainMenu(); syncLoadoutOverlay();
   updateAttemptsUI(); updateHotbarUI(); syncProgressionDisplay();
   saveProgress();
   // Now play controls-first banter over the loaded hole, then show Hole 1 banner
-  (async ()=>{
-    try { await banterLoadFile(); } catch {}
-    const ok = banterPlay('controls-first', { onComplete: ()=>{
-      try{ syncBanterSkipButton(); }catch{}
-      try{ showHoleBanner(currentHoleIndex, getTotalHoles()); }catch{}
-    }});
-    if(!ok){
-      try{ showHoleBanner(currentHoleIndex, getTotalHoles()); }catch{}
+  (async () => {
+    try { await banterLoadFile(); } catch { }
+    const ok = banterPlay('controls-first', {
+      onComplete: () => {
+        try { syncBanterSkipButton(); } catch { }
+        try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { }
+      }
+    });
+    if (!ok) {
+      try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { }
     }
-    try{ syncBanterSkipButton(); }catch{}
+    try { syncBanterSkipButton(); } catch { }
   })();
   return true;
 }
 
-function grantTutorialHole2Modifiers(){
+function grantTutorialHole2Modifiers() {
   // Exactly deflector, rotator, magnifier regardless of previous bag
-  setBagFromTypeList(['deflector','rotator','magnifier']);
+  setBagFromTypeList(['deflector', 'rotator', 'magnifier']);
   updateHotbarUI();
   saveProgress();
 }
-function grantTutorialHole3EmptyBag(){
+function grantTutorialHole3EmptyBag() {
   setBagFromTypeList([]);
   // ensure passives cleared? Keep passives 0 for hole3 (empty bag, no passive)
-  passiveCounts = { fieldExtender:0, powerCell:0, freeShot:0 };
-  passiveEnabled = { fieldExtender:true, powerCell:true };
-  try{ syncDerivedFromBag(); }catch{}
+  passiveCounts = { fieldExtender: 0, powerCell: 0, freeShot: 0 };
+  passiveEnabled = { fieldExtender: true, powerCell: true };
+  try { syncDerivedFromBag(); } catch { }
   updateHotbarUI();
   saveProgress();
 }
-function grantTutorialHole4Spatial(){
+function grantTutorialHole4Spatial() {
   // Start hole4 with liquifier + deflector + rotator (3 spatial = full 3-slot bag), no passives yet
-  setBagFromTypeList(['liquifier','deflector','rotator']);
+  setBagFromTypeList(['liquifier', 'deflector', 'rotator']);
   updateHotbarUI();
   saveProgress();
 }
-function grantTutorialHole4Passives(){
+function grantTutorialHole4Passives() {
   // Legacy: One field extender + one power cell, spatial empty — kept for compat but hole4 now starts spatial
-  golfbag = [null,null,null];
-  passiveCounts = { fieldExtender:1, powerCell:1, freeShot:0 };
-  try{ syncDerivedFromBag(); }catch{}
+  golfbag = [null, null, null];
+  passiveCounts = { fieldExtender: 1, powerCell: 1, freeShot: 0 };
+  try { syncDerivedFromBag(); } catch { }
   updateHotbarUI();
   saveProgress();
 }
-function showTutorialHole4PassiveReward(){
+function showTutorialHole4PassiveReward() {
   // Show reward menu with fieldExtender, powerCell, freeShot after hole4 banter
-tutorialHole4StartRewardPending = true;
-rewardOffered = ['fieldExtender','powerCell','freeShot'];
-pendingRewardType = null;
-pendingPickup = null;
-rewardSource = 'hole-start';
-journalChestPending = false;
-rewardMenuVisible = true;
+  tutorialHole4StartRewardPending = true;
+  rewardOffered = ['fieldExtender', 'powerCell', 'freeShot'];
+  pendingRewardType = null;
+  pendingPickup = null;
+  rewardSource = 'hole-start';
+  journalChestPending = false;
+  rewardMenuVisible = true;
   rewardMenuHover = null;
   rewardPending = false;
   rewardRerolled = false;
@@ -1481,7 +1483,7 @@ rewardMenuVisible = true;
   saveProgress();
 }
 
-function maybeShowTutorialLiquifierReminder(){
+function maybeShowTutorialLiquifierReminder() {
   // Legacy single reminder deprecated — now split into 3 and 10 attempt triggers
   return false;
 }
@@ -1491,81 +1493,81 @@ let tutorialHole3RotatorShown = false;
 let tutorialHole2RotatorShown = false;
 let tutorialHole2GadgetsReminderShown = false;
 let tutorialHole4StartRewardPending = false;
-function maybeShowTutorialHole1LiquifierReminder(){
-  if(!isTutorialActive()) return false;
-  if(currentHoleIndex!==0) return false;
-  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
-  if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
-  if(!tutorialHole1Liquifier3Shown && holeAttempts >=3){
+function maybeShowTutorialHole1LiquifierReminder() {
+  if (!isTutorialActive()) return false;
+  if (currentHoleIndex !== 0) return false;
+  if (banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
+  if (!tutorialHole1Liquifier3Shown && holeAttempts >= 3) {
     tutorialHole1Liquifier3Shown = true;
-    try{ banterPlay('tutorial-hole1-liquifier-3', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
-    try{ syncBanterSkipButton(); }catch{}
+    try { banterPlay('tutorial-hole1-liquifier-3', { onComplete: () => { try { syncBanterSkipButton(); } catch { } saveProgress(); } }); } catch { return false; }
+    try { syncBanterSkipButton(); } catch { }
     return true;
   }
-  if(!tutorialHole1Liquifier10Shown && holeAttempts >=10){
+  if (!tutorialHole1Liquifier10Shown && holeAttempts >= 10) {
     tutorialHole1Liquifier10Shown = true;
-    try{ banterPlay('tutorial-hole1-liquifier-10', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
-    try{ syncBanterSkipButton(); }catch{}
+    try { banterPlay('tutorial-hole1-liquifier-10', { onComplete: () => { try { syncBanterSkipButton(); } catch { } saveProgress(); } }); } catch { return false; }
+    try { syncBanterSkipButton(); } catch { }
     return true;
   }
   return false;
 }
-function maybeShowTutorialHole3RotatorReminder(){
+function maybeShowTutorialHole3RotatorReminder() {
   // Legacy hole3 rotator reminder moved to hole2 — keep for compat but never trigger on hole3
   return false;
 }
-function maybeShowTutorialHole2RotatorReminder(){
-  if(!isTutorialActive()) return false;
-  if(currentHoleIndex!==1) return false;
-  if(holeAttempts <3) return false;
-  if(tutorialHole2RotatorShown) return false;
-  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
-  if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
+function maybeShowTutorialHole2RotatorReminder() {
+  if (!isTutorialActive()) return false;
+  if (currentHoleIndex !== 1) return false;
+  if (holeAttempts < 3) return false;
+  if (tutorialHole2RotatorShown) return false;
+  if (banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
   tutorialHole2RotatorShown = true;
-  try{ banterPlay('tutorial-hole3-rotator-reminder', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
-  try{ syncBanterSkipButton(); }catch{}
+  try { banterPlay('tutorial-hole3-rotator-reminder', { onComplete: () => { try { syncBanterSkipButton(); } catch { } saveProgress(); } }); } catch { return false; }
+  try { syncBanterSkipButton(); } catch { }
   return true;
 }
-function maybeShowTutorialHole2GadgetsReminder(){
-  if(!isTutorialActive()) return false;
-  if(currentHoleIndex!==1) return false;
-  if(holeAttempts <5) return false;
-  if(tutorialHole2GadgetsReminderShown) return false;
-  if(banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
-  if(gameState!=="AIMING" && gameState!=="CHARGING") return false;
-  tutorialHole2GadgetsReminderShown=true;
-  try{ banterPlay('tutorial-hole2-gadgets-reminder', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} saveProgress(); } }); }catch{ return false; }
-  try{ syncBanterSkipButton(); }catch{}
+function maybeShowTutorialHole2GadgetsReminder() {
+  if (!isTutorialActive()) return false;
+  if (currentHoleIndex !== 1) return false;
+  if (holeAttempts < 5) return false;
+  if (tutorialHole2GadgetsReminderShown) return false;
+  if (banterIsActive() || cutsceneIsActive() || rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || pauseMenuVisible || mainMenuVisible || coinSummaryVisible || courseClearedVisible) return false;
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
+  tutorialHole2GadgetsReminderShown = true;
+  try { banterPlay('tutorial-hole2-gadgets-reminder', { onComplete: () => { try { syncBanterSkipButton(); } catch { } saveProgress(); } }); } catch { return false; }
+  try { syncBanterSkipButton(); } catch { }
   return true;
 }
 
-function handleTutorialHole1To2Chain(){
-  const needCutscene = (()=>{ try{ return !cutsceneHasSeen('first-restock'); }catch{ return true; }})();
-  const prepareHole2ThenBanter = ()=>{
-    try{
+function handleTutorialHole1To2Chain() {
+  const needCutscene = (() => { try { return !cutsceneHasSeen('first-restock'); } catch { return true; } })();
+  const prepareHole2ThenBanter = () => {
+    try {
       // Load Hole 2 now (after cutscene, before banter, so no glimpse before cutscene)
       loadLevel(1);
       // suppress auto Hole banner — will show after banter
-      holeBannerVisible=false; holeBannerTimer=0;
+      holeBannerVisible = false; holeBannerTimer = 0;
       // bag grant before banter (so banter sees correct bag)
       grantTutorialHole2Modifiers();
-      holeBannerVisible=false; holeBannerTimer=0;
-      gameState='AIMING';
-      if(typeof winOverlay!=='undefined' && winOverlay) winOverlay.classList.add('hidden');
+      holeBannerVisible = false; holeBannerTimer = 0;
+      gameState = 'AIMING';
+      if (typeof winOverlay !== 'undefined' && winOverlay) winOverlay.classList.add('hidden');
       updateAttemptsUI(); updateHotbarUI();
       saveProgress();
-      try{ syncMainMenu(); }catch{}
-      try{ redrawBottom(); }catch{}
-    }catch(e){ console.warn('prepareHole2 failed',e); }
+      try { syncMainMenu(); } catch { }
+      try { redrawBottom(); } catch { }
+    } catch (e) { console.warn('prepareHole2 failed', e); }
   };
-  const startStackingBanter = ()=>{
-    (async()=>{
-      try{ await banterLoadFile(); }catch{}
+  const startStackingBanter = () => {
+    (async () => {
+      try { await banterLoadFile(); } catch { }
       // Try new id first, fallback to legacy stacking-third
-      let ok = banterPlay('tutorial-field-modifiers', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(1, getTotalHoles()); }catch{} saveProgress(); }});
-      if(!ok) ok = banterPlay('stacking-third', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(1, getTotalHoles()); }catch{} saveProgress(); }});
-      if(!ok) try{ showHoleBanner(1, getTotalHoles()); }catch{}
-      try{ syncBanterSkipButton(); }catch{}
+      let ok = banterPlay('tutorial-field-modifiers', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { showHoleBanner(1, getTotalHoles()); } catch { } saveProgress(); } });
+      if (!ok) ok = banterPlay('stacking-third', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { showHoleBanner(1, getTotalHoles()); } catch { } saveProgress(); } });
+      if (!ok) try { showHoleBanner(1, getTotalHoles()); } catch { }
+      try { syncBanterSkipButton(); } catch { }
     })();
   };
   if (needCutscene && !cutsceneIsActive()) {
@@ -1575,42 +1577,44 @@ function handleTutorialHole1To2Chain(){
     // inside the hole). prepareHole2ThenBanter sets AIMING after loadLevel(1).
     gameState = 'WIN';
     // Hide HUD etc for cutscene immediately
-    try{
-      const el=document.getElementById('main-menu-overlay');
-      if(el) el.classList.add('hidden');
-      const hud=document.getElementById('hud');
-      if(hud) hud.classList.add('hidden');
-    }catch{}
-    try{ syncMainMenu(); }catch{}
-    try{ redrawBottom(); }catch{}
+    try {
+      const el = document.getElementById('main-menu-overlay');
+      if (el) el.classList.add('hidden');
+      const hud = document.getElementById('hud');
+      if (hud) hud.classList.add('hidden');
+    } catch { }
+    try { syncMainMenu(); } catch { }
+    try { redrawBottom(); } catch { }
     // Feedback: cutscene JSON + assets load async below.
-    try { showLoadingScreen(); } catch {}
-    cutsceneLoad('first-restock').then(async (data)=>{
-      if(!data){
-        try{ cutsceneMarkSeen('first-restock'); }catch{}
-        try { hideLoadingScreen(); } catch {}
+    try { showLoadingScreen(); } catch { }
+    cutsceneLoad('first-restock').then(async (data) => {
+      if (!data) {
+        try { cutsceneMarkSeen('first-restock'); } catch { }
+        try { hideLoadingScreen(); } catch { }
         prepareHole2ThenBanter();
         startStackingBanter();
         return;
       }
       // Tier 2: cutscene assets (incl. audio) ready before play.
-      try { await preloadCutsceneAssets(data); } catch {}
-      try { hideLoadingScreen(); } catch {}
-      const ok = playCutsceneWrapped(data, {onComplete:()=>{
-         try{ cutsceneMarkSeen('first-restock'); }catch{}
-         prepareHole2ThenBanter();
-         startStackingBanter();
-      }});
-      if(!ok){
-        try{ cutsceneMarkSeen('first-restock'); }catch{}
-        try { hideLoadingScreen(); } catch {}
+      try { await preloadCutsceneAssets(data); } catch { }
+      try { hideLoadingScreen(); } catch { }
+      const ok = playCutsceneWrapped(data, {
+        onComplete: () => {
+          try { cutsceneMarkSeen('first-restock'); } catch { }
+          prepareHole2ThenBanter();
+          startStackingBanter();
+        }
+      });
+      if (!ok) {
+        try { cutsceneMarkSeen('first-restock'); } catch { }
+        try { hideLoadingScreen(); } catch { }
         prepareHole2ThenBanter();
         startStackingBanter();
       }
-      try{ syncMainMenu(); }catch{}
-      try{ redrawBottom(); }catch{}
-    }).catch(()=>{
-      try { hideLoadingScreen(); } catch {}
+      try { syncMainMenu(); } catch { }
+      try { redrawBottom(); } catch { }
+    }).catch(() => {
+      try { hideLoadingScreen(); } catch { }
       prepareHole2ThenBanter();
       startStackingBanter();
     });
@@ -1620,7 +1624,7 @@ function handleTutorialHole1To2Chain(){
   }
 }
 function clearCoinSummaryAnimTimers() {
-  for (const id of coinSummaryAnimTimers) try { clearTimeout(id); } catch {}
+  for (const id of coinSummaryAnimTimers) try { clearTimeout(id); } catch { }
   coinSummaryAnimTimers = [];
 }
 function isCoinSummaryAnimating() {
@@ -1642,7 +1646,7 @@ function fastForwardCoinSummary() {
     hideCoinSummaryNotices();
     coinSummaryAnimDone = true;
     syncProgressionDisplay();
-    try { syncMainMenu(); } catch {}
+    try { syncMainMenu(); } catch { }
     return true;
   }
   const isCourseBonus = coinSummaryHoles > 0 && coinSummaryCoins === coinSummaryHoles * COINS_PER_HOLE + coinSummaryAttempts * COINS_PER_ATTEMPT + COURSE_COMPLETE_BONUS;
@@ -1683,7 +1687,7 @@ function fastForwardCoinSummary() {
   syncCoinSummaryNotices(unlockEl, shopEl, courseEl, false);
   coinSummaryAnimDone = true;
   syncProgressionDisplay();
-  try { syncMainMenu(); } catch {}
+  try { syncMainMenu(); } catch { }
   return true;
 }
 function animateCoinSummaryAmount(from, to, duration = 320) {
@@ -1756,7 +1760,7 @@ function syncCoinSummaryOverlay() {
     const courseEl = document.getElementById('coin-summary-course');
     // Keep legacy elements hidden — do not show You earned / cleared texts per new spec
     if (txt) { txt.textContent = `You earned ${coinSummaryCoins} coins: ${coinSummaryHoles} holes × ${COINS_PER_HOLE} coins per hole`; txt.classList.add('hidden'); }
-    if (br) { br.textContent = coinSummaryHoles>0 ? `${coinSummaryHoles} hole${coinSummaryHoles===1?'':'s'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
+    if (br) { br.textContent = coinSummaryHoles > 0 ? `${coinSummaryHoles} hole${coinSummaryHoles === 1 ? '' : 's'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
     // If animated, details/amount are managed by showCoinSummary animation; but if animDone or no animation, render final instantly
     if (coinSummaryAnimDone) {
       if (amt) amt.textContent = `+${coinSummaryCoins}`;
@@ -1857,7 +1861,7 @@ function animatePointsSummaryAmount(from, to, duration = 600) {
   };
   requestAnimationFrame(step);
 }
-function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, courseBonus=0){
+function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, courseBonus = 0) {
   if (isTutorialActive()) return;
   // Points summary (replaces coins): store the exact breakdown for fast-forward/sync.
   // courseBonus is ignored (no course-completion bonus); kept for compat.
@@ -1873,22 +1877,22 @@ function showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints, c
   coinSummaryVisible = true;
   coinSummaryAnimDone = false;
   clearCoinSummaryAnimTimers();
-  const el=document.getElementById('coin-summary-overlay');
-  if(el){ el.classList.remove('hidden'); const h3=el.querySelector('h3'); if(h3) h3.textContent = 'Hole Complete'; }
-  const amt=document.getElementById('coin-summary-amount');
-  const details=document.getElementById('coin-summary-details');
-  if(amt) amt.textContent='+0 points';
-  if(details) details.innerHTML='';
+  const el = document.getElementById('coin-summary-overlay');
+  if (el) { el.classList.remove('hidden'); const h3 = el.querySelector('h3'); if (h3) h3.textContent = 'Hole Complete'; }
+  const amt = document.getElementById('coin-summary-amount');
+  const details = document.getElementById('coin-summary-details');
+  if (amt) amt.textContent = '+0 points';
+  if (details) details.innerHTML = '';
   // hide legacy notices
   hideCoinSummaryNotices();
   syncProgressionDisplay();
-  try{ syncMainMenu(); }catch{}
+  try { syncMainMenu(); } catch { }
   // Staged animation: amount counts up while breakdown rows appear one by one.
   // First dismiss (click/Escape/Space/R) fast-forwards to the final state.
   animatePointsSummaryAmount(0, holePoints, 600);
   const rows = buildPointsBreakdownRows();
   // Win jingle (~0.4s) plays first on hole entry; counting ticks start after it.
-  try { audioPointsCount(rows.length, 0.45); } catch {}
+  try { audioPointsCount(rows.length, 0.45); } catch { }
   rows.forEach((row, i) => {
     const t = setTimeout(() => {
       if (!coinSummaryVisible || coinSummaryAnimDone) return;
@@ -1907,18 +1911,18 @@ function showCoinSummary(holes, attemptsOrCoins, coins) {
   let totalCoins = 0;
   if (coins !== undefined) {
     // 3-arg form: holes, attempts, coins
-    attempts = Math.max(0, Math.floor(attemptsOrCoins||0));
-    totalCoins = Math.max(0, Math.floor(coins||0));
+    attempts = Math.max(0, Math.floor(attemptsOrCoins || 0));
+    totalCoins = Math.max(0, Math.floor(coins || 0));
   } else {
     // legacy 2-arg: holes, coins — infer attempts from difference if possible
-    totalCoins = Math.max(0, Math.floor(attemptsOrCoins||0));
-    const inferred = totalCoins - Math.max(0, Math.floor(holes||0)) * COINS_PER_HOLE;
+    totalCoins = Math.max(0, Math.floor(attemptsOrCoins || 0));
+    const inferred = totalCoins - Math.max(0, Math.floor(holes || 0)) * COINS_PER_HOLE;
     // if inferred looks like course bonus, subtract it
     const hasBonus = holes > 0 && inferred >= COURSE_COMPLETE_BONUS && totalCoins === holes * COINS_PER_HOLE + COURSE_COMPLETE_BONUS;
-    attempts = hasBonus ? 0 : Math.max(0, inferred >0 && inferred < 100 ? inferred : 0);
+    attempts = hasBonus ? 0 : Math.max(0, inferred > 0 && inferred < 100 ? inferred : 0);
     if (hasBonus) attempts = 0;
   }
-  coinSummaryHoles = Math.max(0, Math.floor(holes||0));
+  coinSummaryHoles = Math.max(0, Math.floor(holes || 0));
   coinSummaryAttempts = attempts;
   coinSummaryCoins = totalCoins;
   coinSummaryMode = 'coins'; // legacy coin path (window-exposed only)
@@ -1929,7 +1933,7 @@ function showCoinSummary(holes, attemptsOrCoins, coins) {
     clearCoinSummaryAnimTimers();
     syncCoinSummaryOverlay();
     syncProgressionDisplay();
-    try { syncMainMenu(); } catch {}
+    try { syncMainMenu(); } catch { }
     return;
   }
   coinSummaryVisible = true;
@@ -1944,7 +1948,7 @@ function showCoinSummary(holes, attemptsOrCoins, coins) {
   const txt = document.getElementById('coin-summary-text');
   const br = document.getElementById('coin-summary-breakdown');
   if (txt) { txt.textContent = `You earned ${coinSummaryCoins} coins: ${coinSummaryHoles} holes × ${COINS_PER_HOLE} coins per hole`; txt.classList.add('hidden'); }
-  if (br) { br.textContent = coinSummaryHoles>0 ? `${coinSummaryHoles} hole${coinSummaryHoles===1?'':'s'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
+  if (br) { br.textContent = coinSummaryHoles > 0 ? `${coinSummaryHoles} hole${coinSummaryHoles === 1 ? '' : 's'} cleared — ${COINS_PER_HOLE} per hole` : 'No holes cleared — 0 coins'; br.classList.add('hidden'); }
   const amt = document.getElementById('coin-summary-amount');
   const details = document.getElementById('coin-summary-details');
   const unlockEl = document.getElementById('coin-summary-unlock');
@@ -1956,7 +1960,7 @@ function showCoinSummary(holes, attemptsOrCoins, coins) {
   if (shopEl) { shopEl.textContent = `New items in the shop`; shopEl.style.display = 'none'; shopEl.style.opacity = '0'; }
   if (courseEl) { courseEl.textContent = `New Course Unlocked`; courseEl.style.display = 'none'; courseEl.style.opacity = '0'; }
   syncProgressionDisplay();
-  try { syncMainMenu(); } catch {}
+  try { syncMainMenu(); } catch { }
 
   // Schedule animated steps: hole row -> course row -> unlock
   const makeRow = (amount, label) => {
@@ -2023,30 +2027,30 @@ function showCoinSummary(holes, attemptsOrCoins, coins) {
 function hideCoinSummary() {
   clearCoinSummaryAnimTimers();
   coinSummaryAnimDone = false;
-  coinSummaryVisible=false;
+  coinSummaryVisible = false;
   syncCoinSummaryOverlay();
   syncProgressionDisplay();
   if (pendingCourseComplete) {
-    pendingCourseComplete=false;
-    pendingHoleAdvance=false;
+    pendingCourseComplete = false;
+    pendingHoleAdvance = false;
     // Final Hole Complete dismissed -> show Course Cleared overlay (total points,
     // New Record). Its Continue then routes to cutscene/menu via hideCourseCleared().
-    try{ showCourseClearedOverlay(totalPoints, pendingCourseClearedIsRecord); }catch{ try{ finishReturnToMainMenu(); }catch{} }
-    try{ pendingCourseClearedIsRecord = false; }catch{}
+    try { showCourseClearedOverlay(totalPoints, pendingCourseClearedIsRecord); } catch { try { finishReturnToMainMenu(); } catch { } }
+    try { pendingCourseClearedIsRecord = false; } catch { }
     return;
   }
   if (pendingHoleAdvance) {
     const wasTut = isTutorialActive();
     const prevIdx = currentHoleIndex;
-    pendingHoleAdvance=false;
+    pendingHoleAdvance = false;
     if (wasTut && prevIdx === 0) {
       // 13-tutorial: hole1 -> hole2 — cutscene BEFORE Hole2 is drawn (no glimpse)
-      try{
-        try{ consumePlacedModifiersFromSupply(); }catch{}
+      try {
+        try { consumePlacedModifiersFromSupply(); } catch { }
         clearFreeShotGlow();
         currentHoleIndex = 1;
-        holeAttempts=0;
-        holeStartAttempts=0; holeRerolls=0;
+        holeAttempts = 0;
+        holeStartAttempts = 0; holeRerolls = 0;
         modifiersTraversedThisHole = new Set();
         tutorialLiquifierReminderShown = true;
         tutorialHole1Liquifier3Shown = true;
@@ -2058,23 +2062,23 @@ function hideCoinSummary() {
         // Keep gameState as WIN (not AIMING) until hole 2 is loaded so the
         // aim orbit is not drawn around the ball sitting in hole 1 while the
         // first-restock cutscene starts.
-        gameState='WIN';
-        if(winOverlay) winOverlay.classList.add('hidden');
+        gameState = 'WIN';
+        if (winOverlay) winOverlay.classList.add('hidden');
         updateAttemptsUI(); updateHotbarUI();
         saveProgress();
-        try{ syncMainMenu(); }catch{}
+        try { syncMainMenu(); } catch { }
         handleTutorialHole1To2Chain();
-      }catch(e){ console.warn('tutorial pending advance failed',e); try{ loadLevel(1); showHoleBanner(1, getTotalHoles()); }catch{} }
+      } catch (e) { console.warn('tutorial pending advance failed', e); try { loadLevel(1); showHoleBanner(1, getTotalHoles()); } catch { } }
       return;
     }
     if (wasTut && prevIdx === 1) {
       // hole2 -> hole3: empty bag, no reward at start, rewards banter before Hole3 banner
-      try{
-        try{ consumePlacedModifiersFromSupply(); }catch{}
+      try {
+        try { consumePlacedModifiersFromSupply(); } catch { }
         clearFreeShotGlow();
         currentHoleIndex = 2;
-        holeAttempts=0;
-        holeStartAttempts=0; holeRerolls=0;
+        holeAttempts = 0;
+        holeStartAttempts = 0; holeRerolls = 0;
         modifiersTraversedThisHole = new Set();
         tutorialHole2RotatorShown = true;
         tutorialHole2GadgetsReminderShown = true;
@@ -2082,84 +2086,86 @@ function hideCoinSummary() {
         grantTutorialHole3EmptyBag();
         loadLevel(2);
         // suppress reward menu — will be handled via treasure, not at hole start
-        rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; syncRewardOverlay();
+        rewardPending = false; rewardMenuVisible = false; rewardOffered = []; syncRewardOverlay();
         // banter before banner
-        holeBannerVisible=false; holeBannerTimer=0;
-        gameState='AIMING';
-        if(winOverlay) winOverlay.classList.add('hidden');
+        holeBannerVisible = false; holeBannerTimer = 0;
+        gameState = 'AIMING';
+        if (winOverlay) winOverlay.classList.add('hidden');
         updateAttemptsUI(); updateHotbarUI();
         saveProgress();
-        try{ syncMainMenu(); }catch{}
+        try { syncMainMenu(); } catch { }
         // Play rewards banter then Hole 3 banner
-        (async()=>{
-          try{ await banterLoadFile(); }catch{}
-          const ok = banterPlay('tutorial-rewards', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(2, getTotalHoles()); }catch{} saveProgress(); }});
+        (async () => {
+          try { await banterLoadFile(); } catch { }
+          const ok = banterPlay('tutorial-rewards', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { showHoleBanner(2, getTotalHoles()); } catch { } saveProgress(); } });
           // also alias rewards-second for compat
-          if(!ok) { try{ banterPlay('rewards-second', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ showHoleBanner(2, getTotalHoles()); }catch{} }}); }catch{} if(!banterIsActive()) try{ showHoleBanner(2, getTotalHoles()); }catch{} }
-          try{ syncBanterSkipButton(); }catch{}
+          if (!ok) { try { banterPlay('rewards-second', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { showHoleBanner(2, getTotalHoles()); } catch { } } }); } catch { } if (!banterIsActive()) try { showHoleBanner(2, getTotalHoles()); } catch { } }
+          try { syncBanterSkipButton(); } catch { }
         })();
-      }catch(e){ console.warn('tutorial hole2->3 failed',e); try{ showHoleBanner(2, getTotalHoles()); }catch{} }
+      } catch (e) { console.warn('tutorial hole2->3 failed', e); try { showHoleBanner(2, getTotalHoles()); } catch { } }
       return;
     }
     if (wasTut && prevIdx === 2) {
       // hole3 -> hole4: start with 4 spatial (liquifier/deflector/rotator/magnifier), banter, then reward with passives
-      try{
-        try{ consumePlacedModifiersFromSupply(); }catch{}
+      try {
+        try { consumePlacedModifiersFromSupply(); } catch { }
         clearFreeShotGlow();
         currentHoleIndex = 3;
-        holeAttempts=0;
-        holeStartAttempts=0; holeRerolls=0;
+        holeAttempts = 0;
+        holeStartAttempts = 0; holeRerolls = 0;
         modifiersTraversedThisHole = new Set();
         tutorialHole3RotatorShown = true;
         grantTutorialHole4Spatial();
         loadLevel(3);
         // Do not show reward yet — suppress at load, will show after banter
-        rewardPending=false; rewardMenuVisible=false; rewardOffered=[]; syncRewardOverlay();
-        holeBannerVisible=false; holeBannerTimer=0;
-        gameState='AIMING';
-        if(winOverlay) winOverlay.classList.add('hidden');
+        rewardPending = false; rewardMenuVisible = false; rewardOffered = []; syncRewardOverlay();
+        holeBannerVisible = false; holeBannerTimer = 0;
+        gameState = 'AIMING';
+        if (winOverlay) winOverlay.classList.add('hidden');
         updateAttemptsUI(); updateHotbarUI();
         saveProgress();
-        try{ syncMainMenu(); }catch{}
-        (async()=>{
-          try{ await banterLoadFile(); }catch{}
-          const ok = banterPlay('tutorial-passives', {onComplete: ()=>{
-            try{ syncBanterSkipButton(); }catch{}
-            // After banter, show hole4 passive reward (fieldExtender/powerCell/freeShot)
-            try{ showTutorialHole4PassiveReward(); }catch{}
-            saveProgress();
-          }});
-          if(!ok) try{ showTutorialHole4PassiveReward(); }catch{}
-          try{ syncBanterSkipButton(); }catch{}
+        try { syncMainMenu(); } catch { }
+        (async () => {
+          try { await banterLoadFile(); } catch { }
+          const ok = banterPlay('tutorial-passives', {
+            onComplete: () => {
+              try { syncBanterSkipButton(); } catch { }
+              // After banter, show hole4 passive reward (fieldExtender/powerCell/freeShot)
+              try { showTutorialHole4PassiveReward(); } catch { }
+              saveProgress();
+            }
+          });
+          if (!ok) try { showTutorialHole4PassiveReward(); } catch { }
+          try { syncBanterSkipButton(); } catch { }
         })();
-      }catch(e){ console.warn('tutorial hole3->4 failed',e); try{ showHoleBanner(3, getTotalHoles()); }catch{} }
+      } catch (e) { console.warn('tutorial hole3->4 failed', e); try { showHoleBanner(3, getTotalHoles()); } catch { } }
       return;
     }
     // generic advance (including tutorial hole2->hole3)
-    try{
-      try{ consumePlacedModifiersFromSupply(); }catch{}
+    try {
+      try { consumePlacedModifiersFromSupply(); } catch { }
       clearFreeShotGlow();
       currentHoleIndex++;
-      holeAttempts=0;
-      holeStartAttempts=0; holeRerolls=0;
+      holeAttempts = 0;
+      holeStartAttempts = 0; holeRerolls = 0;
       modifiersTraversedThisHole = new Set();
       loadLevel(currentHoleIndex);
-      gameState='AIMING';
-      if(winOverlay) winOverlay.classList.add('hidden');
+      gameState = 'AIMING';
+      if (winOverlay) winOverlay.classList.add('hidden');
       updateAttemptsUI(); updateHotbarUI();
       maybeShowRewardMenu();
       saveProgress();
       // show Hole banner for next hole
-      try{ showHoleBanner(currentHoleIndex, getTotalHoles()); }catch{}
-    }catch(e){ console.warn('pending advance failed',e); }
-    try{ syncMainMenu(); }catch{}
+      try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { }
+    } catch (e) { console.warn('pending advance failed', e); }
+    try { syncMainMenu(); } catch { }
     return;
   }
   if (deferredMenuReturn) {
     // End screen was over the level: now reset state and return to the menu.
     finishReturnToMainMenu();
   } else {
-    try { syncMainMenu(); } catch {}
+    try { syncMainMenu(); } catch { }
   }
 }
 function finalizeRunCoinsAndShowSummary() {
@@ -2173,38 +2179,38 @@ function finalizeRunCoinsAndShowSummary() {
     coinSummaryVisible = true;
     coinSummaryAnimDone = false;
     clearCoinSummaryAnimTimers();
-    const el=document.getElementById('coin-summary-overlay');
-    if(el){ el.classList.remove('hidden'); const h3=el.querySelector('h3'); if(h3) h3.textContent='Run Complete'; }
-    const amt=document.getElementById('coin-summary-amount');
-    if(amt) amt.textContent='+'+totalPoints+' points';
-    const details=document.getElementById('coin-summary-details');
-    if(details){
-      details.innerHTML='';
-      const makeRow=(a,l)=>{ const r=document.createElement('div'); r.className='coin-detail-row'; r.textContent=a+' - '+l; return r; };
+    const el = document.getElementById('coin-summary-overlay');
+    if (el) { el.classList.remove('hidden'); const h3 = el.querySelector('h3'); if (h3) h3.textContent = 'Run Complete'; }
+    const amt = document.getElementById('coin-summary-amount');
+    if (amt) amt.textContent = '+' + totalPoints + ' points';
+    const details = document.getElementById('coin-summary-details');
+    if (details) {
+      details.innerHTML = '';
+      const makeRow = (a, l) => { const r = document.createElement('div'); r.className = 'coin-detail-row'; r.textContent = a + ' - ' + l; return r; };
       // Detailed breakdown: Cleared holes, modifiers (approx), Hole-in-One bonuses, Failed Attempts
       const holesPts = runHolesCleared * 10;
-      details.appendChild(makeRow(holesPts+'p','Cleared hole'+(runHolesCleared!==1?'s':'')));
+      details.appendChild(makeRow(holesPts + 'p', 'Cleared hole' + (runHolesCleared !== 1 ? 's' : '')));
       // Failed Attempts
       const att = Math.max(0, Math.floor(totalAttempts));
-      if(att>0){
+      if (att > 0) {
         const label = `Failed Attempts (x${att})`;
-        details.appendChild(makeRow('-'+att+'p', label));
+        details.appendChild(makeRow('-' + att + 'p', label));
       } else {
-        details.appendChild(makeRow('0p','Failed Attempts (x0)'));
+        details.appendChild(makeRow('0p', 'Failed Attempts (x0)'));
       }
       // If there were modifiers, show approx (totalPoints - holesPts + att) as modifier+first bonus
       const remaining = totalPoints - holesPts + att;
-      if(remaining>0){
-        details.appendChild(makeRow(remaining+'p','Modifier Bonus'));
+      if (remaining > 0) {
+        details.appendChild(makeRow(remaining + 'p', 'Modifier Bonus'));
       }
     }
     syncProgressionDisplay();
-    try{ syncMainMenu(); }catch{}
+    try { syncMainMenu(); } catch { }
   } else {
-    coinSummaryVisible=false;
+    coinSummaryVisible = false;
     syncCoinSummaryOverlay();
   }
-  runHolesCleared=0; runCoinsEarned=0;
+  runHolesCleared = 0; runCoinsEarned = 0;
   syncProgressionDisplay();
 }
 
@@ -2262,7 +2268,7 @@ function getSavePayload() {
     isFreeShotActive,
     isTutorialRun,
     treasure: level && level.treasure ? { x: level.treasure.x, y: level.treasure.y, radius: level.treasure.radius, isCollected: !!level.treasure.isCollected } : null,
-    treasures: getLevelTreasures(level).map(t=>({ x:t.x, y:t.y, radius:t.radius, isCollected:!!t.isCollected })),
+    treasures: getLevelTreasures(level).map(t => ({ x: t.x, y: t.y, radius: t.radius, isCollected: !!t.isCollected })),
     areaUpgradeCount: fieldExtenderCount,
     fieldExtenderCount,
     powerCellCount,
@@ -2287,7 +2293,7 @@ function getSavePayload() {
 function saveProgress() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(getSavePayload()));
-  } catch (e) {}
+  } catch (e) { }
 }
 function loadProgress() {
   try {
@@ -2324,7 +2330,7 @@ function loadProgress() {
       rotator: Math.max(0, Math.floor(d.supply?.rotator ?? d.supply?.rotate ?? 0)),
       freeShot: Math.max(0, Math.floor(d.supply?.freeShot ?? d.passiveCounts?.freeShot ?? 0))
     };
-    if(d.passiveCounts && typeof d.passiveCounts==='object'){
+    if (d.passiveCounts && typeof d.passiveCounts === 'object') {
       passiveCounts.fieldExtender = Math.max(0, Math.floor(d.passiveCounts.fieldExtender ?? d.fieldExtenderCount ?? 0));
       passiveCounts.powerCell = Math.max(0, Math.floor(d.passiveCounts.powerCell ?? d.passiveCounts.rangeModifier ?? d.powerCellCount ?? 0));
       passiveCounts.freeShot = Math.max(0, Math.floor(d.passiveCounts.freeShot ?? d.supply?.freeShot ?? 0));
@@ -2341,7 +2347,7 @@ function loadProgress() {
       passiveEnabled.fieldExtender = true;
       passiveEnabled.powerCell = true;
     }
-    if(typeof d.totalPoints==='number' && Number.isFinite(d.totalPoints)) totalPoints = Math.floor(d.totalPoints);
+    if (typeof d.totalPoints === 'number' && Number.isFinite(d.totalPoints)) totalPoints = Math.floor(d.totalPoints);
     else totalPoints = 0;
     // migrated: if missing freeShot/rotate, default 0/1
     if (d.supply && d.supply.freeShot === undefined) supply.freeShot = 0;
@@ -2349,7 +2355,7 @@ function loadProgress() {
     // Tactical golfbag restore (new) with legacy fallback from supply counts
     try {
       if (Array.isArray(d.golfbag) && d.golfbag.length) {
-        const gb = Array.from({length: GOLFBAG_SIZE}, () => null);
+        const gb = Array.from({ length: GOLFBAG_SIZE }, () => null);
         for (let i = 0; i < GOLFBAG_SIZE; i++) {
           const raw = d.golfbag[i];
           if (!raw) { gb[i] = null; continue; }
@@ -2385,7 +2391,7 @@ function loadProgress() {
     } catch { setBagFromTypeList(['liquifier']); }
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
     isTutorialRun = !!d.isTutorialRun;
-    try { setWindFreeShotActive(isFreeShotActive); } catch {};
+    try { setWindFreeShotActive(isFreeShotActive); } catch { };
     // Field Extender / Power Cell: golfbag is source of truth when present; only use legacy
     // counts when no golfbag was stored (already handled above via setBagFromTypeList).
     if (!Array.isArray(d.golfbag) || !d.golfbag.length) {
@@ -2394,7 +2400,7 @@ function loadProgress() {
       else fieldExtenderCount = 0;
       areaUpgradeCount = fieldExtenderCount;
       powerCellCount = Math.max(0, Math.floor(d.powerCellCount ?? 0));
-      try { setFieldPowerCellCount(powerCellCount); } catch {};
+      try { setFieldPowerCellCount(powerCellCount); } catch { };
       syncDerivedFromBag();
     }
     rewardPending = !!d.rewardPending;
@@ -2408,7 +2414,7 @@ function loadProgress() {
     runFirstCourseClear = !!d.runFirstCourseClear;
     runUnlockedNewCourse = !!d.runUnlockedNewCourse;
     if (d.campaignSeed && typeof setCampaignSeed === 'function') {
-      try { setCampaignSeed(String(d.campaignSeed)); } catch {};
+      try { setCampaignSeed(String(d.campaignSeed)); } catch { };
     }
     // Restore treasure collected state for current hole (supports 3 chests on hole3)
     // Only mutate runtime LEVELS/level, not the stored course definition (which stays false for future runs)
@@ -2416,22 +2422,22 @@ function loadProgress() {
       if (Array.isArray(d.treasures) && d.treasures.length) {
         const curTreasures = getLevelTreasures(LEVELS[currentHoleIndex]);
         const curLevelTreasures = getLevelTreasures(level);
-        for (let i=0;i<d.treasures.length;i++){
+        for (let i = 0; i < d.treasures.length; i++) {
           const src = d.treasures[i];
-          if (!src || typeof src.isCollected!=='boolean') continue;
+          if (!src || typeof src.isCollected !== 'boolean') continue;
           if (curTreasures[i]) curTreasures[i].isCollected = !!src.isCollected;
           if (curLevelTreasures[i]) curLevelTreasures[i].isCollected = !!src.isCollected;
         }
         // keep single pointer in sync (repoint only, never mutate array elements via shared ref)
         try {
           const L = LEVELS[currentHoleIndex];
-          if (L && Array.isArray(L.treasures) && L.treasures.length) L.treasure = L.treasures.find(t=>!t.isCollected) || L.treasures[0];
+          if (L && Array.isArray(L.treasures) && L.treasures.length) L.treasure = L.treasures.find(t => !t.isCollected) || L.treasures[0];
           else if (L && L.treasure && curTreasures[0] && L.treasure !== curTreasures[0]) L.treasure.isCollected = !!curTreasures[0].isCollected;
-        } catch {}
+        } catch { }
         try {
-          if (level && Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
+          if (level && Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t => !t.isCollected) || level.treasures[0];
           else if (level && level.treasure && curLevelTreasures[0] && level.treasure !== curLevelTreasures[0]) level.treasure.isCollected = !!curLevelTreasures[0].isCollected;
-        } catch {}
+        } catch { }
       } else if (d.treasure && typeof d.treasure.isCollected === 'boolean') {
         if (LEVELS[currentHoleIndex] && LEVELS[currentHoleIndex].treasure) LEVELS[currentHoleIndex].treasure.isCollected = !!d.treasure.isCollected;
         if (typeof level !== 'undefined' && level && level.treasure) level.treasure.isCollected = !!d.treasure.isCollected;
@@ -2441,7 +2447,7 @@ function loadProgress() {
         if (curTreasures[0]) curTreasures[0].isCollected = !!d.treasure.isCollected;
         if (curLevelTreasures[0]) curLevelTreasures[0].isCollected = !!d.treasure.isCollected;
       }
-    } catch {};
+    } catch { };
     // Restore gameState, handle legacy saves
     if (d.gameState === 'GAME_OVER') {
       gameState = 'GAME_OVER';
@@ -2463,7 +2469,7 @@ function loadProgress() {
       modifiers = [];
     }
     if (typeof d.aimAngle === 'number' && Number.isFinite(d.aimAngle)) {
-      try { setAimAngle(d.aimAngle); } catch {};
+      try { setAimAngle(d.aimAngle); } catch { };
     }
     if (d.rewardChosenCounts && typeof d.rewardChosenCounts === 'object') {
       for (const k of Object.keys(rewardChosenCounts)) {
@@ -2530,21 +2536,21 @@ function loadProgress() {
   }
 }
 function clearProgress() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch {};
+  try { localStorage.removeItem(STORAGE_KEY); } catch { };
 }
 function clearAllStorageForSeedGeneration() {
   // Requirement: Generating a new seed shall remove all state from local storage
-  try { localStorage.clear(); } catch {}
-  try { clearProgression(); } catch {}
-  try { clearLastLoadout(); } catch {}
-  try { clearHighScore(); } catch {}
-  try { clearProgress(); } catch {}
+  try { localStorage.clear(); } catch { }
+  try { clearProgression(); } catch { }
+  try { clearLastLoadout(); } catch { }
+  try { clearHighScore(); } catch { }
+  try { clearProgress(); } catch { }
   // Also invalidate in-memory course cache
-  try { invalidateCoursesCache(); } catch {}
+  try { invalidateCoursesCache(); } catch { }
   // Reset run-specific progress variables
-  try { runHolesCleared = 0; runCoinsEarned = 0; } catch {}
-  try { coinSummaryVisible = false; syncCoinSummaryOverlay(); } catch {}
-  try { courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); } catch {}
+  try { runHolesCleared = 0; runCoinsEarned = 0; } catch { }
+  try { coinSummaryVisible = false; syncCoinSummaryOverlay(); } catch { }
+  try { courseClearedVisible = false; pendingCourseComplete = false; pendingCourseClearedIsRecord = false; syncCourseClearedOverlay(); } catch { }
 }
 
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
@@ -2587,15 +2593,15 @@ function startNewGame() {
   clearProgress();
   isTutorialRun = false;
   // Journal: fresh legacy run (no starting picks)
-  try { journalStartRun([]); } catch {}
+  try { journalStartRun([]); } catch { }
   // Generate fresh 18 levels with increasing difficulty per REQ-010
-  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch { };
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
   hideSoftlockBanner();
   resetSoftlockDetection();
-  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender: true, powerCell: true }; try { setFieldPowerCellCount(0); } catch { }; rewardPending = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null;
@@ -2633,7 +2639,7 @@ function _courseListSignature() {
     // (teaser appears once end-18-hole has been seen; include it so the menu
     // re-renders when the cutscene is first marked seen).
     let teaser = false;
-    try { teaser = cutsceneHasSeen('end-18-hole'); } catch {}
+    try { teaser = cutsceneHasSeen('end-18-hole'); } catch { }
     return courses.map(c => `${c.id}:${c.holeCount}:${c.bestTotal}`).join('|') + `;dy:${teaser ? 1 : 0}`;
   } catch { return null; }
 }
@@ -2658,7 +2664,7 @@ function renderMainMenuRootVisibility() {
     const sig = _courseListSignature();
     if (sig !== _lastCourseListSig) {
       _lastCourseListSig = sig;
-      try { renderCourseList(); } catch {};
+      try { renderCourseList(); } catch { };
     }
   }
 }
@@ -2710,7 +2716,7 @@ function showCourseMenu() {
   if (ia) ia.classList.add('hidden');
   if (cmf) cmf.classList.remove('hidden');
   if (ie) { ie.textContent = ''; ie.classList.add('hidden'); }
-  try { renderCourseList(); } catch {};
+  try { renderCourseList(); } catch { };
 }
 function showHelpOverlay() {
   helpVisible = true;
@@ -2762,7 +2768,7 @@ function handleContinue() {
     syncModifiersToField();
     createBall(level.tee);
     // Restore freeShot glow after ball created (ball at tee, AIMING follows)
-    try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
+    try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch { };
     gameState = "AIMING";
     if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
     resetHotbarCollapsed();
@@ -2800,9 +2806,9 @@ function getHighScore() {
   } catch { return null; }
 }
 function setHighScore(n) {
-  try { localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify({ version: 1, bestTotal: Math.max(0, Math.floor(n)) })); } catch {};
+  try { localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify({ version: 1, bestTotal: Math.max(0, Math.floor(n)) })); } catch { };
 }
-function clearHighScore() { try { localStorage.removeItem(HIGH_SCORE_KEY); } catch {}; }
+function clearHighScore() { try { localStorage.removeItem(HIGH_SCORE_KEY); } catch { }; }
 function maybeUpdateHighScore() {
   if (!activeCourse) return;
   // Course record (bestTotal) only counts on full course clear — this function is
@@ -2817,14 +2823,14 @@ function maybeUpdateHighScore() {
     firstClear = (activeCourse.bestTotal == null);
     activeCourse.bestTotal = totalPoints;
     updated = true;
-    try { saveCourses(); } catch {};
+    try { saveCourses(); } catch { };
     // Re-render course list to show new record
-    try { renderCourseList(); } catch {};
+    try { renderCourseList(); } catch { };
   }
   // Shop stock milestones (10-progression.md §1.6): first clear of a course
   // unlocks stock. Replays never re-grant.
   if (firstClear) {
-    try { grantShopMilestoneStock(activeCourse.holeCount); } catch {}
+    try { grantShopMilestoneStock(activeCourse.holeCount); } catch { }
   }
   // First-clear + unlock tracking for this run (coin bonus, summary notices,
   // end-9-hole cutscene). Replays leave both flags false.
@@ -2837,10 +2843,10 @@ function maybeUpdateHighScore() {
     if (next) {
       // A new staged course was generated by this run's clear.
       runUnlockedNewCourse = true;
-      try { renderCourseList(); } catch {};
+      try { renderCourseList(); } catch { };
     } else if (updated) {
       // still re-render to show unlock
-      try { renderCourseList(); } catch {};
+      try { renderCourseList(); } catch { };
     }
   }
 }
@@ -2853,11 +2859,11 @@ function isFirstRestockStockPresent() {
   try {
     const ss = getShopStock();
     if (ss && (ss.deflector > 0 || ss.rotator > 0 || ss.magnifier > 0)) return true;
-  } catch {}
+  } catch { }
   try {
     const ps = getPersonalSupply();
     if (ps && (ps.deflector > 0 || ps.rotator > 0 || ps.magnifier > 0)) return true;
-  } catch {}
+  } catch { }
   return false;
 }
 function grantShopMilestoneStock(holeCount, announce = true) {
@@ -2870,7 +2876,7 @@ function grantShopMilestoneStock(holeCount, announce = true) {
     // NOTE: do NOT use isShopRestockedFirstTime() here because it also checks bestTotal
     // which was just set for this clear, causing the first 3-hole clear on first run to
     // incorrectly appear as already restocked and block its own grant.
-    try { if (isFirstRestockStockPresent()) return granted; } catch {}
+    try { if (isFirstRestockStockPresent()) return granted; } catch { }
     granted = addShopStock('deflector', 1) || granted;
     granted = addShopStock('rotator', 1) || granted;
     granted = addShopStock('magnifier', 1) || granted;
@@ -2887,8 +2893,8 @@ function grantShopMilestoneStock(holeCount, announce = true) {
   }
   // 18-hole clears grant no additional stock.
   if (announce && granted) runShopRestocked = true;
-  try { syncLoadoutOverlay(); } catch {}
-  try { syncProgressionDisplay(); } catch {}
+  try { syncLoadoutOverlay(); } catch { }
+  try { syncProgressionDisplay(); } catch { }
 }
 // 11-cutscenes §11c: shop counts as restocked for the first time when any shop
 // stock exists (first milestone granted) or — if already emptied by purchases —
@@ -2903,15 +2909,15 @@ function isShopRestockedFirstTime() {
         if (Math.floor(Number(ss[k] ?? 0)) > 0) return true;
       }
     }
-  } catch {}
+  } catch { }
   try {
     const c3 = Array.isArray(courses) ? courses.find(x => x && x.holeCount === 3) : null;
     if (c3 && c3.bestTotal !== null && c3.bestTotal !== undefined) return true;
-  } catch {}
+  } catch { }
   try {
     const ps = getPersonalSupply();
     if (ps && (ps.deflector > 0 || ps.rotator > 0 || ps.magnifier > 0)) return true;
-  } catch {}
+  } catch { }
   return false;
 }
 function ensureFirstRestockOnSecondRun() {
@@ -2926,8 +2932,8 @@ function ensureFirstRestockOnSecondRun() {
     granted = addShopStock('rotator', 1) || granted;
     granted = addShopStock('magnifier', 1) || granted;
     if (granted) {
-      try { syncLoadoutOverlay(); } catch {}
-      try { syncProgressionDisplay(); } catch {}
+      try { syncLoadoutOverlay(); } catch { }
+      try { syncProgressionDisplay(); } catch { }
     }
     return granted;
   } catch { return false; }
@@ -2940,8 +2946,8 @@ function ensureFirstRestockStock() {
     granted = addShopStock('rotator', 1) || granted;
     granted = addShopStock('magnifier', 1) || granted;
     if (granted) {
-      try { syncLoadoutOverlay(); } catch {}
-      try { syncProgressionDisplay(); } catch {}
+      try { syncLoadoutOverlay(); } catch { }
+      try { syncProgressionDisplay(); } catch { }
     }
     return granted;
   } catch { return false; }
@@ -2988,14 +2994,14 @@ function renderCourseList() {
         lockedBtn.className = 'course-play-button';
         lockedBtn.disabled = true;
         // The 6-hole course unlocks by clearing the tutorial: hint names it.
-        const prevHoles = STAGES[STAGES.indexOf(holeCount)-1];
+        const prevHoles = STAGES[STAGES.indexOf(holeCount) - 1];
         const prevCourse = courses.find(c => c.holeCount === prevHoles);
         const unlockHint = (prevCourse && isTutorialCourse(prevCourse)) ? 'Finish tutorial to unlock' : `Clear ${prevHoles} Holes to unlock`;
         lockedBtn.innerHTML = `<span class="course-name">🔒 ${holeCount} Holes — Locked</span><span class="course-meta"></span>`;
         try {
           const spans = lockedBtn.querySelectorAll('.course-meta');
           spans.forEach(s => { s.textContent = unlockHint; });
-        } catch {}
+        } catch { }
         lockedBtn.title = `Locked — ${unlockHint}`;
         row.appendChild(lockedBtn);
       } else if (course) {
@@ -3030,7 +3036,7 @@ function renderCourseList() {
     // teaser row below the staged courses. Non-playable (no courseId/holes,
     // disabled button, no click handler) so it never affects unlocking or play.
     let showDimensionY = false;
-    try { showDimensionY = cutsceneHasSeen('end-18-hole'); } catch {}
+    try { showDimensionY = cutsceneHasSeen('end-18-hole'); } catch { }
     if (showDimensionY) {
       const teaserRow = document.createElement('div');
       teaserRow.className = 'course-row locked';
@@ -3042,32 +3048,32 @@ function renderCourseList() {
       try {
         const spans = teaserBtn.querySelectorAll('.course-meta');
         spans.forEach(s => { s.textContent = 'Coming Soon'; });
-      } catch {}
+      } catch { }
       teaserBtn.title = 'Locked — Coming Soon';
       teaserRow.appendChild(teaserBtn);
       list.appendChild(teaserRow);
     }
   }
   // Cache signature after render to avoid re-rendering on every help close / menu toggle
-  try { _lastCourseListSig = _courseListSignature(); } catch {};
+  try { _lastCourseListSig = _courseListSignature(); } catch { };
   // After rendering, ensure Continue remains hidden (removed) — auto-resume handles saves
   try {
     const contBtn = document.getElementById('continue-button');
     if (contBtn) contBtn.classList.add('hidden');
-  } catch {};
+  } catch { };
 }
 
 function handleCoursePlay(courseId) {
   // Click blip (gesture — also unlocks AudioContext).
-  try { audioUIClick(); } catch {}
+  try { audioUIClick(); } catch { }
   // New flow: show loadout before first hole (10-progression.md §2) — pre-load last saved or random
   if (hasRestorableSave()) return;
   // Feedback: content (cutscene JSON + assets, or loadout) loads async below.
-  try { showLoadingScreen(); } catch {}
+  try { showLoadingScreen(); } catch { }
   const _tutCourse = findCourseById(courseId);
   const _isTut = isTutorialCourse(_tutCourse);
-  try { loadProgression(); } catch {}
-  const _afterPrologue = (opts) => { try { hideLoadingScreen(); } catch {}; if (_isTut) { startTutorialCourse(courseId); } else { playBanterThenShowStartingOverlay(courseId, opts); } };
+  try { loadProgression(); } catch { }
+  const _afterPrologue = (opts) => { try { hideLoadingScreen(); } catch { }; if (_isTut) { startTutorialCourse(courseId); } else { playBanterThenShowStartingOverlay(courseId, opts); } };
   // 11-cutscenes §11: first time player clicks 3-hole course, show prologue.json before next state (loadout / tutorial)
   // For 3-hole Trial tutorial, prologue/intro still play when not yet seen, but after they complete we start the tutorial (controls-first banter), not the generic Starting Items overlay.
   try {
@@ -3081,13 +3087,13 @@ function handleCoursePlay(courseId) {
         const el = document.getElementById('main-menu-overlay');
         if (el) { el.classList.add('hidden'); el.classList.remove('with-backdrop'); }
         const parallaxEl = document.getElementById('parallax-scene');
-        if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden','true'); }
+        if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden', 'true'); }
         const hud = document.getElementById('hud');
         if (hud) hud.classList.add('hidden');
-      } catch {}
-      try { syncMainMenu(); } catch {}
-      try { redrawBottom(); } catch {}
-      try { syncParallaxVisibility(); } catch {}
+      } catch { }
+      try { syncMainMenu(); } catch { }
+      try { redrawBottom(); } catch { }
+      try { syncParallaxVisibility(); } catch { }
       // Preload both cutscenes up-front so prologue → intro-3-hole chain plays
       // back-to-back with no intermediate screen (11-cutscenes §11b): the second
       // starts synchronously inside the first's onComplete (same call stack as
@@ -3103,11 +3109,11 @@ function handleCoursePlay(courseId) {
         }
         // Tier 2: both chained cutscenes' assets (incl. audio) ready before
         // either plays — the chain stays synchronous with no menu flash.
-        try { await preloadCutsceneAssets(data); } catch {}
-        try { if (preloadedIntro) await preloadCutsceneAssets(preloadedIntro); } catch {}
+        try { await preloadCutsceneAssets(data); } catch { }
+        try { if (preloadedIntro) await preloadCutsceneAssets(preloadedIntro); } catch { }
         // Helper to start intro-3-hole synchronously (already preloaded) or fall back.
         const playIntroSync = () => {
-          const introNotSeen = (()=>{ try{ return !cutsceneHasSeen('intro-3-hole'); }catch{ return true; }})();
+          const introNotSeen = (() => { try { return !cutsceneHasSeen('intro-3-hole'); } catch { return true; } })();
           if (!(introNotSeen && isThreeHole)) {
             _afterPrologue();
             syncProgressionDisplay();
@@ -3116,34 +3122,34 @@ function handleCoursePlay(courseId) {
           const data2 = preloadedIntro || null;
           if (!data2) {
             console.warn('[intro-3-hole] failed to load, skipping to loadout');
-            try { cutsceneMarkSeen('intro-3-hole'); } catch {}
-            _afterPrologue({hideShop:true});
+            try { cutsceneMarkSeen('intro-3-hole'); } catch { }
+            _afterPrologue({ hideShop: true });
             syncProgressionDisplay();
             return;
           }
           const ok2 = playCutsceneWrapped(data2, {
             onComplete: (completed2) => {
-              try { cutsceneMarkSeen('intro-3-hole'); } catch {}
-              _afterPrologue({hideShop:true});
+              try { cutsceneMarkSeen('intro-3-hole'); } catch { }
+              _afterPrologue({ hideShop: true });
               syncProgressionDisplay();
             }
           });
           if (!ok2) {
             console.warn('[intro-3-hole] play failed, skipping to loadout');
-            try { cutsceneMarkSeen('intro-3-hole'); } catch {}
-            _afterPrologue({hideShop:true});
+            try { cutsceneMarkSeen('intro-3-hole'); } catch { }
+            _afterPrologue({ hideShop: true });
             syncProgressionDisplay();
           } else {
-            try { syncMainMenu(); } catch {}
-            try { redrawBottom(); } catch {}
-            try { syncParallaxVisibility(); } catch {}
+            try { syncMainMenu(); } catch { }
+            try { redrawBottom(); } catch { }
+            try { syncParallaxVisibility(); } catch { }
           }
         };
         // Use wrapped version so main menu/splash are hidden immediately and cutscene bg is visible
-        try { hideLoadingScreen(); } catch {}
+        try { hideLoadingScreen(); } catch { }
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
-            try { cutsceneMarkSeen('prologue'); } catch {}
+            try { cutsceneMarkSeen('prologue'); } catch { }
             // Chain intro-3-hole directly after prologue before loadout (11b),
             // synchronously — no other screen between.
             if (!cutsceneIsActive()) playIntroSync();
@@ -3156,19 +3162,19 @@ function handleCoursePlay(courseId) {
         if (!ok) {
           // Play failed (invalid data) — fallback to loadout and still mark seen to avoid loop?
           console.warn('[prologue] playCutscene failed, skipping to loadout');
-          try { cutsceneMarkSeen('prologue'); } catch {}
+          try { cutsceneMarkSeen('prologue'); } catch { }
           // still attempt intro chain before loadout?
-          const introNotSeen2 = (()=>{ try{ return !cutsceneHasSeen('intro-3-hole'); }catch{ return true; }})();
+          const introNotSeen2 = (() => { try { return !cutsceneHasSeen('intro-3-hole'); } catch { return true; } })();
           if (introNotSeen2 && isThreeHole) {
-            try { cutsceneMarkSeen('intro-3-hole'); } catch {}
+            try { cutsceneMarkSeen('intro-3-hole'); } catch { }
           }
-          _afterPrologue({hideShop: introNotSeen2 && isThreeHole});
+          _afterPrologue({ hideShop: introNotSeen2 && isThreeHole });
           syncProgressionDisplay();
         } else {
           // Ensure main menu is hidden immediately (playCutsceneWrapped already does, but force again for race where syncMainMenu hasn't run yet)
-          try { syncMainMenu(); } catch {}
-          try { redrawBottom(); } catch {}
-          try { syncParallaxVisibility(); } catch {}
+          try { syncMainMenu(); } catch { }
+          try { redrawBottom(); } catch { }
+          try { syncParallaxVisibility(); } catch { }
         }
       }).catch((e) => {
         console.warn('[prologue] load error', e);
@@ -3182,7 +3188,7 @@ function handleCoursePlay(courseId) {
     // Fall through to normal loadout
   }
   // Guarantee first restock on second run regardless of clear (10-progression §1.6)
-  try { ensureFirstRestockOnSecondRun(); } catch {}
+  try { ensureFirstRestockOnSecondRun(); } catch { }
   // 11-cutscenes §11c: on the start of the run where the shop is restocked for
   // the first time, play "first-restock" before the loadout overlay is shown.
   try {
@@ -3194,46 +3200,46 @@ function handleCoursePlay(courseId) {
         const el = document.getElementById('main-menu-overlay');
         if (el) { el.classList.add('hidden'); el.classList.remove('with-backdrop'); }
         const parallaxEl = document.getElementById('parallax-scene');
-        if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden','true'); }
+        if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden', 'true'); }
         const hud = document.getElementById('hud');
         if (hud) hud.classList.add('hidden');
-      } catch {}
-      try { syncMainMenu(); } catch {}
-      try { redrawBottom(); } catch {}
-      try { syncParallaxVisibility(); } catch {}
+      } catch { }
+      try { syncMainMenu(); } catch { }
+      try { redrawBottom(); } catch { }
+      try { syncParallaxVisibility(); } catch { }
       cutsceneLoad('first-restock').then(async (data) => {
         if (!data) {
           console.warn('[first-restock] failed to load first-restock.json, skipping to loadout');
-          try { ensureFirstRestockStock(); } catch {}
+          try { ensureFirstRestockStock(); } catch { }
           _afterPrologue();
           syncProgressionDisplay();
           return;
         }
         // Tier 2: cutscene assets (incl. audio) ready before play.
-        try { await preloadCutsceneAssets(data); } catch {}
-        try { hideLoadingScreen(); } catch {}
+        try { await preloadCutsceneAssets(data); } catch { }
+        try { hideLoadingScreen(); } catch { }
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
-            try { cutsceneMarkSeen('first-restock'); } catch {}
-            try { ensureFirstRestockStock(); } catch {}
+            try { cutsceneMarkSeen('first-restock'); } catch { }
+            try { ensureFirstRestockStock(); } catch { }
             _afterPrologue();
             syncProgressionDisplay();
           }
         });
         if (!ok) {
           console.warn('[first-restock] playCutscene failed, skipping to loadout');
-          try { cutsceneMarkSeen('first-restock'); } catch {}
-          try { ensureFirstRestockStock(); } catch {}
+          try { cutsceneMarkSeen('first-restock'); } catch { }
+          try { ensureFirstRestockStock(); } catch { }
           _afterPrologue();
           syncProgressionDisplay();
         } else {
-          try { syncMainMenu(); } catch {}
-          try { redrawBottom(); } catch {}
-          try { syncParallaxVisibility(); } catch {}
+          try { syncMainMenu(); } catch { }
+          try { redrawBottom(); } catch { }
+          try { syncParallaxVisibility(); } catch { }
         }
       }).catch((e) => {
         console.warn('[first-restock] load error', e);
-        try { ensureFirstRestockStock(); } catch {}
+        try { ensureFirstRestockStock(); } catch { }
         _afterPrologue();
         syncProgressionDisplay();
       });
@@ -3263,7 +3269,7 @@ function exportCourseById(courseId) {
         ta.value = b64;
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); } catch {};
+        try { document.execCommand('copy'); } catch { };
         document.body.removeChild(ta);
         showToast('copied to clipboard');
       });
@@ -3277,7 +3283,7 @@ function exportCourseById(courseId) {
       ta.value = b64;
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); } catch {};
+      try { document.execCommand('copy'); } catch { };
       document.body.removeChild(ta);
       window.__lastExported = b64;
       showToast('copied to clipboard');
@@ -3291,7 +3297,7 @@ function exportCourseById(courseId) {
 
 function createNewCourseWithHoles(holeCount, difficulty) {
   try {
-    const opts = difficulty && ['easy','medium','hard'].includes(difficulty) ? { difficulty } : {};
+    const opts = difficulty && ['easy', 'medium', 'hard'].includes(difficulty) ? { difficulty } : {};
     const c = (holeCount === 3 && difficulty) ? generateCourse(holeCount, Date.now(), opts) : generateCourse(holeCount, Date.now(), opts);
     courses.push(c);
     saveCourses();
@@ -3304,7 +3310,7 @@ function createNewCourseWithHoles(holeCount, difficulty) {
 }
 
 function syncMainMenu() {
-  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch { }
   // During cutscene, hide main menu and splash so cutscene background is visible
   if (isCut) {
     const cutEl = document.getElementById("main-menu-overlay");
@@ -3312,7 +3318,7 @@ function syncMainMenu() {
       cutEl.classList.add("hidden");
       cutEl.classList.remove("with-backdrop");
     }
-    try { if (parallaxSceneEl) { parallaxSceneEl.classList.add("hidden"); parallaxSceneEl.setAttribute('aria-hidden','true'); } } catch {}
+    try { if (parallaxSceneEl) { parallaxSceneEl.classList.add("hidden"); parallaxSceneEl.setAttribute('aria-hidden', 'true'); } } catch { }
   }
   const el = document.getElementById("main-menu-overlay");
   if (el) {
@@ -3348,7 +3354,7 @@ function syncMainMenu() {
           if (nccDiff2) nccDiff2.classList.add('hidden');
           if (ia2) ia2.classList.add('hidden');
           if (cmf2) cmf2.classList.remove('hidden');
-          try { renderCourseList(); } catch {};
+          try { renderCourseList(); } catch { };
           if (mmc) mmc.classList.remove('hidden');
         } else {
           if (root) root.classList.remove('hidden');
@@ -3398,16 +3404,16 @@ function syncMainMenu() {
     syncCampaignConfirmOverlay();
   }
   // Parallax layered background
-  try { syncParallaxVisibility(); } catch {}
+  try { syncParallaxVisibility(); } catch { }
   // Ensure bottom background reflects mode (splash vs terrain)
   redrawBottom();
   // Wind overlay: hidden on entry splash, visible on level and also while paused (pause has backdrop) — hidden during cutscene
-  let isCutW=false; try{ isCutW=cutsceneIsActive(); }catch{}
-  try { const showWind = !mainMenuVisible && !pauseMenuVisible && !isCutW; setWindVisible(!showWind ? false : true); } catch {};
+  let isCutW = false; try { isCutW = cutsceneIsActive(); } catch { }
+  try { const showWind = !mainMenuVisible && !pauseMenuVisible && !isCutW; setWindVisible(!showWind ? false : true); } catch { };
   // Actually wind should be visible on level and also while paused (dimmed), hidden only on main menu entry
-  try { const showWind2 = !mainMenuVisible && !isCutW; setWindVisible(showWind2 || pauseMenuVisible); } catch {};
+  try { const showWind2 = !mainMenuVisible && !isCutW; setWindVisible(showWind2 || pauseMenuVisible); } catch { };
   updateHotbarUI();
-  try { updateAttemptsUI(); } catch {}
+  try { updateAttemptsUI(); } catch { }
 }
 
 let campaignEditVisible = false;
@@ -3436,9 +3442,9 @@ function syncCampaignEditOverlay() {
         // clear previous error
         const err = document.getElementById('campaign-seed-error');
         if (err) { err.textContent = ''; err.classList.add('hidden'); }
-        setTimeout(() => { try { inp.focus(); inp.select(); } catch {}; }, 0);
+        setTimeout(() => { try { inp.focus(); inp.select(); } catch { }; }, 0);
       }
-    } catch {};
+    } catch { };
   } else {
     el.classList.add('hidden');
   }
@@ -3461,7 +3467,7 @@ function hideCampaignEditOverlay() {
   try {
     const err = document.getElementById('campaign-seed-error');
     if (err) { err.textContent = ''; err.classList.add('hidden'); }
-  } catch {};
+  } catch { };
 }
 function syncCampaignConfirmOverlay() {
   const el = document.getElementById('campaign-confirm-overlay');
@@ -3491,7 +3497,7 @@ function executePendingCampaignAction() {
       rewardSeedCounter = 0;
       rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
       _lastCourseListSig = null;
-      try { renderCourseList(); } catch {};
+      try { renderCourseList(); } catch { };
       syncCampaignSeedDisplay();
       syncProgressionDisplay();
       hideCampaignEditOverlay();
@@ -3506,12 +3512,12 @@ function executePendingCampaignAction() {
       rewardSeedCounter = 0;
       rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
       _lastCourseListSig = null;
-      try { renderCourseList(); } catch {};
+      try { renderCourseList(); } catch { };
       syncCampaignSeedDisplay();
       syncProgressionDisplay();
       hideCampaignEditOverlay();
       updateHotbarUI();
-    } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {}; }
+    } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch { }; }
   }
   pendingCampaignAction = null;
   campaignConfirmVisible = false;
@@ -3525,14 +3531,14 @@ function syncCampaignSeedDisplay() {
   try {
     const cs = (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null) || '';
     el.textContent = 'Seed: ' + String(cs);
-    let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+    let isCut = false; try { isCut = cutsceneIsActive(); } catch { }
     const show = !!mainMenuVisible && !startingItemsVisible && !loadoutVisible && !coinSummaryVisible && !courseClearedVisible && !isCut;
     if (wrapper) wrapper.classList.toggle('hidden', !show);
     else el.classList.toggle('hidden', !show);
     // also update popup current seed if visible
     const cur = document.getElementById('campaign-edit-current-seed');
     if (cur) cur.textContent = String(cs);
-  } catch {};
+  } catch { };
 }
 
 function handleCampaignRegenerate() {
@@ -3545,7 +3551,7 @@ function handleCampaignRefreshViaConfirm() {
   // If confirm returns false, abort; else execute refresh
   try {
     if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
-  } catch {};
+  } catch { };
   try {
     clearAllStorageForSeedGeneration();
     const res = regenerateCampaign();
@@ -3553,7 +3559,7 @@ function handleCampaignRefreshViaConfirm() {
     rewardSeedCounter = 0;
     rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
     _lastCourseListSig = null;
-    try { renderCourseList(); } catch {};
+    try { renderCourseList(); } catch { };
     syncCampaignSeedDisplay();
     syncProgressionDisplay();
     hideCampaignEditOverlay();
@@ -3568,12 +3574,12 @@ function handleManualSeedApply() {
   // Validation: must be 0-9 a-f hex and expected length 8
   if (!val) {
     if (errEl) { errEl.textContent = 'Seed cannot be empty'; errEl.classList.remove('hidden'); }
-    else try { showToast('Seed cannot be empty'); } catch {};
+    else try { showToast('Seed cannot be empty'); } catch { };
     return;
   }
   if (!isValidCampaignSeed(val)) {
     if (errEl) { errEl.textContent = 'Invalid seed: must be ' + CAMPAIGN_SEED_LENGTH + ' characters 0-9a-f'; errEl.classList.remove('hidden'); }
-    else try { showToast('Invalid seed'); } catch {};
+    else try { showToast('Invalid seed'); } catch { };
     return;
   }
   const current = (typeof getCampaignSeed === 'function' ? String(getCampaignSeed() || '') : '');
@@ -3592,12 +3598,12 @@ function handleManualSeedApplyLegacy() {
   const input = document.getElementById('campaign-seed-input');
   const val = input ? String(input.value || '').trim() : '';
   if (!val) {
-    try { showToast('Seed cannot be empty'); } catch {};
+    try { showToast('Seed cannot be empty'); } catch { };
     return;
   }
   try {
     if (typeof confirm === 'function' && !confirm('Re-generating the seed will regenerate all levels and you will lose your progress. Continue?')) return;
-  } catch {};
+  } catch { };
   try {
     clearAllStorageForSeedGeneration();
     const res = applyManualSeed(val);
@@ -3605,12 +3611,12 @@ function handleManualSeedApplyLegacy() {
     rewardSeedCounter = 0;
     rewardPending = false; rewardOffered = []; rewardMenuVisible = false; pendingRewardType = null; rewardRerolled = false;
     _lastCourseListSig = null;
-    try { renderCourseList(); } catch {};
+    try { renderCourseList(); } catch { };
     syncCampaignSeedDisplay();
     syncProgressionDisplay();
     hideCampaignEditOverlay();
     updateHotbarUI();
-  } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch {}; }
+  } catch (e) { console.warn('apply seed failed', e); try { showToast('Invalid seed'); } catch { }; }
 }
 
 function syncHelpOverlay() {
@@ -3636,10 +3642,10 @@ function startNewGameFromMain() {
   clearProgress();
   isTutorialRun = false;
   // Journal: fresh legacy run (no starting picks)
-  try { journalStartRun([]); } catch {}
-  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
+  try { journalStartRun([]); } catch { }
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch { };
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  setBagFromTypeList(['liquifier']); clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {}; rewardPending = false; 
+  setBagFromTypeList(['liquifier']); clearFreeShotGlow(); hideSoftlockBanner(); resetSoftlockDetection(); maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender: true, powerCell: true }; try { setFieldPowerCellCount(0); } catch { }; rewardPending = false;
   rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
   pauseMenuVisible = false; pauseMenuHover = null; mainMenuVisible = false; mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
@@ -3656,9 +3662,9 @@ function endRun() {
   // Allow End Run from either legacy pause or new in-level pause (main menu with backdrop)
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
   // Journal: record this unfinished run as a best candidate before clearing
-  try { commitRunJournal(false); } catch {}
+  try { commitRunJournal(false); } catch { }
   // Coin economy: finalize coins before clearing run
-  try { finalizeRunCoinsAndShowSummary(); } catch {}
+  try { finalizeRunCoinsAndShowSummary(); } catch { }
   if (coinSummaryVisible) {
     // End screen over the loaded level (10-progression.md §4): keep
     // mainMenuVisible=false and the level; menu return deferred to dismissal.
@@ -3680,16 +3686,16 @@ function endRun() {
 function finishReturnToMainMenu() {
   clearProgress();
   isTutorialRun = false;
-  try { journalStopRun(); } catch {}
+  try { journalStopRun(); } catch { }
   deferredMenuReturn = false;
-  try{ courseClearedVisible=false; pendingCourseComplete=false; pendingCourseClearedIsRecord=false; syncCourseClearedOverlay(); }catch{}
+  try { courseClearedVisible = false; pendingCourseComplete = false; pendingCourseClearedIsRecord = false; syncCourseClearedOverlay(); } catch { }
   currentHoleIndex = 0; holeAttempts = 0; totalAttempts = 0; attempts = 0;
   setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
   hideSoftlockBanner(); resetSoftlockDetection();
   maxAttempts = 10;
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true };
-  try { setFieldPowerCellCount(0); } catch {};
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender: true, powerCell: true };
+  try { setFieldPowerCellCount(0); } catch { };
   rewardPending = false; rewardMenuVisible = false; rewardOffered = [];
   rewardRerolled = false; rewardRerollHover = false; rewardMenuHover = null; rewardClaimedFor = null;
   rewardSeedCounter = 0;
@@ -3708,9 +3714,9 @@ function finishReturnToMainMenu() {
   } else if (courses.length && courses[0] && courses[0].holes && courses[0].holes.length) {
     level = courses[0].holes[0];
   } else {
-    level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
+    level = { field: { cols: 32, rows: 18, strength: 80, seed: 0, sources: 1, sinks: 1, doublets: 0, vortexes: 0 }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], canvas: { width: LOGICAL_W, height: LOGICAL_H } };
   }
-  try { if (level && level.tee) createBall(level.tee); } catch {};
+  try { if (level && level.tee) createBall(level.tee); } catch { };
   _lastCourseListSig = null;
   resetHotbarCollapsed();
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
@@ -3734,7 +3740,7 @@ function selectHole(n) {
   maybeShowRewardMenu();
   saveProgress();
   // Update URL hash for sharing without reload (secret but visible)
-  try { history.replaceState(null, "", `#hole-${idx+1}`); } catch {};
+  try { history.replaceState(null, "", `#hole-${idx + 1}`); } catch { };
   return true;
 }
 
@@ -3742,11 +3748,11 @@ function getSecretHoleFromURL() {
   try {
     const params = new URLSearchParams(window.location.search);
     let h = params.get("hole") || params.get("level") || params.get("lvl");
-    if (h) return parseInt(h,10);
+    if (h) return parseInt(h, 10);
     const hash = window.location.hash || "";
     const m = hash.match(/hole[-_]?(\d+)/i) || hash.match(/#(\d+)$/);
-    if (m) return parseInt(m[1],10);
-  } catch {};
+    if (m) return parseInt(m[1], 10);
+  } catch { };
   return null;
 }
 
@@ -3897,7 +3903,7 @@ function maybeFilterAreaUp(offer, seedStr) {
       const pickSeed = hashSeedString(seedStr + ':filter');
       const r = mulberry32Reward(pickSeed)();
       const replacement = notInOffer[Math.floor(r * notInOffer.length)];
-      return offer.map((t,i) => i===idx ? replacement : t);
+      return offer.map((t, i) => i === idx ? replacement : t);
     }
   }
   return offer;
@@ -3989,8 +3995,8 @@ let runJournalActive = false;
 let journalChestPending = false; // set when a chest collect triggers the next menu
 let rewardSource = null; // 'hole-start' | 'chest' | null — what opened the current reward menu
 let isJournalCollapsed = true; // icon slid out of the way until opened
-const JOURNAL_TYPE_NAMES = { magnifier:'Magnifier', liquifier:'Liquifier', deflector:'Deflector', rotator:'Rotator', fieldExtender:'Field Extender', powerCell:'Power Cell', rangeModifier:'Power Cell', freeShot:'Free Shots' };
-const JOURNAL_TYPE_ICONS = { magnifier:'./img/magnifier-icon.png', liquifier:'./img/liquifier-icon.png', deflector:'./img/deflector-icon.png', rotator:'./img/rotator-icon.png', fieldExtender:'./img/field-extender-icon.png', powerCell:'./img/power-cell-icon.png', freeShot:null };
+const JOURNAL_TYPE_NAMES = { magnifier: 'Magnifier', liquifier: 'Liquifier', deflector: 'Deflector', rotator: 'Rotator', fieldExtender: 'Field Extender', powerCell: 'Power Cell', rangeModifier: 'Power Cell', freeShot: 'Free Shots' };
+const JOURNAL_TYPE_ICONS = { magnifier: './img/magnifier-icon.png', liquifier: './img/liquifier-icon.png', deflector: './img/deflector-icon.png', rotator: './img/rotator-icon.png', fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
 function journalTypeName(t) { return JOURNAL_TYPE_NAMES[normalizeSupplyType(t)] || JOURNAL_TYPE_NAMES[t] || String(t); }
 function journalCourseKey() { try { return activeCourse ? String(activeCourse.holeCount) : null; } catch { return null; } }
 function journalCourseName() { try { return (activeCourse && activeCourse.name) || ''; } catch { return ''; } }
@@ -4004,7 +4010,7 @@ function loadJournalStore() {
   } catch { return { version: 1, best: {} }; }
 }
 function saveJournalStore(store) {
-  try { localStorage.setItem(JOURNAL_KEY, JSON.stringify(store)); } catch {}
+  try { localStorage.setItem(JOURNAL_KEY, JSON.stringify(store)); } catch { }
 }
 function getJournalBest(key) {
   try {
@@ -4050,7 +4056,7 @@ function journalRecordReward(normalized) {
     } else {
       entry.startReward = normalized;
     }
-  } catch {}
+  } catch { }
 }
 // Record a skipped reward menu (conscious skip, not a grant).
 function journalRecordSkip() {
@@ -4064,7 +4070,7 @@ function journalRecordSkip() {
     } else {
       if (!entry.startReward) entry.startReward = 'skipped';
     }
-  } catch {}
+  } catch { }
 }
 // Types of modifiers the ball was inside on the clearing shot (activated to
 // clear the hole). Placed-but-never-entered modifiers are excluded.
@@ -4081,7 +4087,7 @@ function journalClearingTypes() {
       const t = byId.get(String(k));
       if (t && !out.includes(t)) out.push(t);
     }
-  } catch {}
+  } catch { }
   return out;
 }
 function journalRecordHoleClear(idx, points, attempts) {
@@ -4093,7 +4099,7 @@ function journalRecordHoleClear(idx, points, attempts) {
     entry.points = Number.isFinite(points) ? Math.floor(points) : 0;
     entry.attempts = Math.max(0, Math.floor(attempts)) || 0;
     entry.cleared = true;
-  } catch {}
+  } catch { }
 }
 // Commit the finished run as the course best when it qualifies:
 // cleared run with a higher score wins; otherwise (never cleared) the run
@@ -4101,7 +4107,7 @@ function journalRecordHoleClear(idx, points, attempts) {
 function commitRunJournal(cleared) {
   try {
     const key = journalCourseKey();
-    if (!key || !runJournalActive || !runJournal) { try { journalStopRun(); } catch {} return false; }
+    if (!key || !runJournalActive || !runJournal) { try { journalStopRun(); } catch { } return false; }
     const holesReached = Math.max(0, currentHoleIndex + 1);
     const holes = [];
     for (let i = 0; i < holesReached; i++) {
@@ -4144,19 +4150,19 @@ function commitRunJournal(cleared) {
     }
     journalStopRun();
     return take;
-  } catch { try { journalStopRun(); } catch {} return false; }
+  } catch { try { journalStopRun(); } catch { } return false; }
 }
 
 // --- Journal UI (book icon top-left, J hotkey, per-hole best-run rows) ---
 function canToggleJournal() {
   try {
-    try { if (isTutorialActive()) return false; } catch {}
+    try { if (isTutorialActive()) return false; } catch { }
     if (pauseMenuVisible || mainMenuVisible) return false;
     if (startingItemsVisible || coinSummaryVisible || courseClearedVisible) return false;
     if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return false;
     if (gameState === "WIN" || gameState === "GAME_OVER") return false;
-    try { if (cutsceneIsActive()) return false; } catch {}
-    try { if (banterIsActive()) return false; } catch {}
+    try { if (cutsceneIsActive()) return false; } catch { }
+    try { if (banterIsActive()) return false; } catch { }
     return true;
   } catch { return false; }
 }
@@ -4164,14 +4170,14 @@ function isJournalOpen() { return !isJournalCollapsed; }
 function toggleJournal() {
   if (!canToggleJournal()) return false;
   isJournalCollapsed = !isJournalCollapsed;
-  try { syncJournalUI(); } catch {}
+  try { syncJournalUI(); } catch { }
   return true;
 }
 function syncJournalUI() {
   try {
-    let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
-    let isBanter = false; try { isBanter = banterIsActive(); } catch {}
-    let isTut = false; try { isTut = isTutorialActive(); } catch {}
+    let isCut = false; try { isCut = cutsceneIsActive(); } catch { }
+    let isBanter = false; try { isBanter = banterIsActive(); } catch { }
+    let isTut = false; try { isTut = isTutorialActive(); } catch { }
     const hidden = isTut || pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || courseClearedVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
     if (journalWrapperEl) journalWrapperEl.classList.toggle("hidden", !!hidden);
     if (journalContainerEl) {
@@ -4193,12 +4199,12 @@ function syncJournalUI() {
             journalPanelEl.dataset.journalSig = sig;
             renderJournalPanel();
           }
-        } catch { try { renderJournalPanel(); } catch {} }
+        } catch { try { renderJournalPanel(); } catch { } }
       } else {
-        try { delete journalPanelEl.dataset.journalSig; } catch {}
+        try { delete journalPanelEl.dataset.journalSig; } catch { }
       }
     }
-  } catch {}
+  } catch { }
 }
 function journalTypeChip(t) {
   const name = journalTypeName(t);
@@ -4316,10 +4322,10 @@ function renderJournalPanel() {
           breakdown.appendChild(mkField('Cleared with:', []));
         }
       }
-        row.appendChild(breakdown);
+      row.appendChild(breakdown);
       journalRowsEl.appendChild(row);
     }
-  } catch {}
+  } catch { }
 }
 
 function maybeShowRewardMenu() {
@@ -4344,9 +4350,9 @@ function maybeShowRewardMenu() {
     // Tutorial holes 1-4 have no start reward; hole3 (3 chests) and hole4 chest give rewards
     if (isTutorialActive() && (currentHoleIndex === 1 || currentHoleIndex === 2 || currentHoleIndex === 3)) {
       // For hole3 treasure trigger, check treasure collected — special 2-option, otherwise suppress
-      if (currentHoleIndex === 2 && getLevelTreasures(level).some(t=>t && t.isCollected)) {
+      if (currentHoleIndex === 2 && getLevelTreasures(level).some(t => t && t.isCollected)) {
         // hole3: 3 chests each give deflector/rotator/magnifier (3 options)
-        rewardOffered = ['deflector','rotator','magnifier'];
+        rewardOffered = ['deflector', 'rotator', 'magnifier'];
         pendingRewardType = null;
         pendingPickup = null;
         rewardSource = journalChestPending ? 'chest' : 'hole-start';
@@ -4361,9 +4367,9 @@ function maybeShowRewardMenu() {
         saveProgress();
         return;
       }
-      if (currentHoleIndex === 3 && getLevelTreasures(level).some(t=>t && t.isCollected)) {
+      if (currentHoleIndex === 3 && getLevelTreasures(level).some(t => t && t.isCollected)) {
         // hole4 chest: show passive triple as reward (no banner after)
-        rewardOffered = ['fieldExtender','powerCell','freeShot'];
+        rewardOffered = ['fieldExtender', 'powerCell', 'freeShot'];
         pendingRewardType = null;
         pendingPickup = null;
         rewardSource = journalChestPending ? 'chest' : 'hole-start';
@@ -4379,7 +4385,7 @@ function maybeShowRewardMenu() {
         return;
       }
       // For hole2/3/4 start (no treasure), suppress
-      rewardPending=false; return;
+      rewardPending = false; return;
     }
     rewardOffered = getSeededRewardOffer();
     pendingRewardType = null;
@@ -4410,7 +4416,7 @@ function syncRewardDiscardUI(overlay) {
   try {
     const titleEl = overlay.querySelector('.reward-title');
     if (titleEl) titleEl.textContent = pendingRewardType ? ('Bag full — destroy one to take ' + (pretty[pendingRewardType] || pendingRewardType)) : 'Pick an Item';
-  } catch {}
+  } catch { }
   // Highlight the chosen reward button
   try {
     const btns = overlay.querySelectorAll('#reward-buttons .reward-button');
@@ -4418,10 +4424,10 @@ function syncRewardDiscardUI(overlay) {
       const isPending = !!pendingRewardType && (b.dataset.type === pendingRewardType);
       b.classList.toggle('pending', isPending);
     });
-  } catch {}
+  } catch { }
   // Skip button — always available while menu open, except special tutorial hole3 treasure (mandatory 3 chests)
   try {
-    const isSpecialTut = !!(isTutorialActive() && currentHoleIndex===2 && Array.isArray(rewardOffered) && ((rewardOffered.length===3 && rewardOffered.includes('deflector') && rewardOffered.includes('rotator') && rewardOffered.includes('magnifier')) || (rewardOffered.length===2 && rewardOffered.includes('rotator') && rewardOffered.includes('deflector'))));
+    const isSpecialTut = !!(isTutorialActive() && currentHoleIndex === 2 && Array.isArray(rewardOffered) && ((rewardOffered.length === 3 && rewardOffered.includes('deflector') && rewardOffered.includes('rotator') && rewardOffered.includes('magnifier')) || (rewardOffered.length === 2 && rewardOffered.includes('rotator') && rewardOffered.includes('deflector'))));
     let skipBtn = overlay.querySelector('#reward-skip-button');
     if (!skipBtn) {
       skipBtn = document.createElement('button');
@@ -4438,7 +4444,7 @@ function syncRewardDiscardUI(overlay) {
       skipBtn.style.display = '';
       skipBtn.disabled = false;
     }
-  } catch {}
+  } catch { }
   // Discard hint (no in-overlay bag cards — discard via golfbag .discard-target)
   try {
     let discardEl = overlay.querySelector('#reward-discard-hint');
@@ -4456,7 +4462,7 @@ function syncRewardDiscardUI(overlay) {
     } else {
       if (discardEl) { discardEl.style.display = 'none'; discardEl.textContent = ''; }
     }
-  } catch {}
+  } catch { }
 }
 // HTML Reward Overlay (replaces canvas drawRewardMenu)
 function syncRewardOverlay() {
@@ -4482,7 +4488,7 @@ function syncRewardOverlay() {
         rerollBtn.textContent = rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
       }
     }
-    try { syncRewardDiscardUI(overlay); } catch {}
+    try { syncRewardDiscardUI(overlay); } catch { }
     return;
   }
   if (shouldBeVisible) {
@@ -4551,7 +4557,7 @@ function syncRewardOverlay() {
           img.style.display = 'none';
           const fb = document.createElement('div');
           fb.className = 'reward-button-icon fallback';
-          const sym = type==='magnifier'?'\u00BB': type==='liquifier'?'\u2205': type==='deflector'?'\u21C4': type==='rotator'?'\u21BB': type==='fieldExtender'?'\u25EF': type==='powerCell'?'\u26A1': '•';
+          const sym = type === 'magnifier' ? '\u00BB' : type === 'liquifier' ? '\u2205' : type === 'deflector' ? '\u21C4' : type === 'rotator' ? '\u21BB' : type === 'fieldExtender' ? '\u25EF' : type === 'powerCell' ? '\u26A1' : '•';
           fb.textContent = sym;
           btn.insertBefore(fb, img);
         };
@@ -4572,11 +4578,11 @@ function syncRewardOverlay() {
       btn.appendChild(hint);
       const keyEl = document.createElement('div');
       keyEl.className = 'reward-button-key';
-      keyEl.textContent = '[' + (idx+1) + ']';
+      keyEl.textContent = '[' + (idx + 1) + ']';
       btn.appendChild(keyEl);
       // Hover state via CSS, but track for keyboard selection highlight
       btn.addEventListener('mouseenter', () => { rewardMenuHover = type; });
-      btn.addEventListener('mouseleave', () => { if (rewardMenuHover===type) rewardMenuHover = null; });
+      btn.addEventListener('mouseleave', () => { if (rewardMenuHover === type) rewardMenuHover = null; });
       btn.addEventListener('click', () => { claimReward(type); });
       btnContainer.appendChild(btn);
     });
@@ -4590,7 +4596,7 @@ function syncRewardOverlay() {
       rerollBtn.onclick = () => { if (!isRerollDisabled()) rerollReward(); };
     }
     // Skip + in-modal discard UI (bag-full flow)
-    try { syncRewardDiscardUI(overlay); } catch {}
+    try { syncRewardDiscardUI(overlay); } catch { }
   } else {
     overlay.classList.add('hidden');
     if (btnContainer) btnContainer.innerHTML = '';
@@ -4603,7 +4609,7 @@ function syncRewardOverlay() {
       if (staleBagRow) staleBagRow.remove();
       const titleEl = overlay.querySelector('.reward-title');
       if (titleEl) titleEl.textContent = 'Pick an Item';
-    } catch {}
+    } catch { }
     pendingRewardType = null;
   }
   // Hotbar stays visible during reward per spec; sync already handles
@@ -4635,7 +4641,7 @@ function hideHoleBanner() {
   holeBannerTimer = 0;
   // auto-transition to reward if pending (hole >0) — called from update timer expiry; also allow immediate maybeShowRewardMenu
   // Defer to next tick to keep dim continuous
-  setTimeout(() => { try { maybeShowRewardMenu(); } catch {}; }, 0);
+  setTimeout(() => { try { maybeShowRewardMenu(); } catch { }; }, 0);
   return true;
 }
 function isAttemptsBannerVisible() { return attemptsBannerVisible; }
@@ -4859,16 +4865,16 @@ function grantRewardToBag(normalized) {
 }
 function closeRewardMenuWithoutReward() {
   // Tutorial hole3 (3 chests) reward is mandatory — cannot skip (deflector/rotator/magnifier)
-  if (isTutorialActive() && currentHoleIndex===2 && Array.isArray(rewardOffered) && rewardOffered.length===3 && rewardOffered.includes('deflector') && rewardOffered.includes('rotator') && rewardOffered.includes('magnifier')) {
+  if (isTutorialActive() && currentHoleIndex === 2 && Array.isArray(rewardOffered) && rewardOffered.length === 3 && rewardOffered.includes('deflector') && rewardOffered.includes('rotator') && rewardOffered.includes('magnifier')) {
     return false;
   }
   // Legacy 2-option check for backward compat
-  if (isTutorialActive() && currentHoleIndex===2 && Array.isArray(rewardOffered) && rewardOffered.length===2 && rewardOffered.includes('rotator') && rewardOffered.includes('deflector')) {
+  if (isTutorialActive() && currentHoleIndex === 2 && Array.isArray(rewardOffered) && rewardOffered.length === 2 && rewardOffered.includes('rotator') && rewardOffered.includes('deflector')) {
     return false;
   }
   pendingRewardType = null;
   rewardClaimedFor = totalAttempts;
-  try { journalRecordSkip(); } catch {}
+  try { journalRecordSkip(); } catch { }
   rewardSource = null;
   rewardMenuVisible = false;
   rewardMenuHover = null;
@@ -4879,9 +4885,9 @@ function closeRewardMenuWithoutReward() {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
-  if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
+  if (isTutorialActive() && currentHoleIndex === 3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
     tutorialHole4StartRewardPending = false;
-    try{ showHoleBanner(3, getTotalHoles()); }catch{}
+    try { showHoleBanner(3, getTotalHoles()); } catch { }
   }
   return true;
 }
@@ -4894,7 +4900,7 @@ function discardBagSlotAndClaimReward(slotIdx) {
   syncDerivedFromBag();
   const ok = grantRewardToBag(wanted);
   if (!ok) { updateHotbarUI(); syncRewardOverlay(); return false; }
-  try { journalRecordReward(normalizeSupplyType(wanted)); } catch {}
+  try { journalRecordReward(normalizeSupplyType(wanted)); } catch { }
   rewardSource = null;
   pendingRewardType = null;
   rewardClaimedFor = totalAttempts;
@@ -4907,10 +4913,10 @@ function discardBagSlotAndClaimReward(slotIdx) {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
-  try { audioReward(); } catch {}
-  if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
+  try { audioReward(); } catch { }
+  if (isTutorialActive() && currentHoleIndex === 3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
     tutorialHole4StartRewardPending = false;
-    try{ showHoleBanner(3, getTotalHoles()); }catch{}
+    try { showHoleBanner(3, getTotalHoles()); } catch { }
   }
   return true;
 }
@@ -4923,7 +4929,7 @@ function claimReward(type) {
   const normOffered = rewardOffered.map(legacyNormalize);
   if (!rewardOffered.includes(type) && !normOffered.includes(normalized)) return false;
   // Spatial rewards need empty slot; passives are stackable and never need discard
-  const isPassive = normalized==='fieldExtender' || normalized==='areaUp' || normalized==='powerCell' || normalized==='rangeModifier' || normalized==='freeShot';
+  const isPassive = normalized === 'fieldExtender' || normalized === 'areaUp' || normalized === 'powerCell' || normalized === 'rangeModifier' || normalized === 'freeShot';
   if (!isPassive && !golfbagHasEmpty()) {
     pendingRewardType = normalized;
     updateHotbarUI();
@@ -4940,7 +4946,7 @@ function claimReward(type) {
   }
   // Mark first and general claimed for backward compat
   rewardClaimedFor = totalAttempts;
-  try { journalRecordReward(normalized); } catch {}
+  try { journalRecordReward(normalized); } catch { }
   rewardSource = null;
   pendingRewardType = null;
   rewardMenuVisible = false;
@@ -4952,11 +4958,11 @@ function claimReward(type) {
   syncRewardOverlay();
   if (canvas) canvas.style.cursor = "default";
   saveProgress();
-  try { audioReward(); } catch {}
+  try { audioReward(); } catch { }
   // Tutorial hole4: after claiming start passive reward (not chest), show hole banner to start play
-  if (isTutorialActive() && currentHoleIndex===3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
+  if (isTutorialActive() && currentHoleIndex === 3 && tutorialHole4StartRewardPending && !holeBannerVisible) {
     tutorialHole4StartRewardPending = false;
-    try{ showHoleBanner(3, getTotalHoles()); }catch{}
+    try { showHoleBanner(3, getTotalHoles()); } catch { }
   }
   return true;
 }
@@ -5014,9 +5020,9 @@ function setupCanvases() { return setupCanvas(); }
 function loadLevel(index) {
   currentHoleIndex = index;
   // Tier 3: level theme + SFX + banter portraits stream in (cached after first).
-  try { preloadLevelAssets(); } catch {}
+  try { preloadLevelAssets(); } catch { }
   // Journal: track the highest-numbered hole reached this run
-  try { if (runJournalActive && runJournal && index > runJournal.maxHole) runJournal.maxHole = index; } catch {}
+  try { if (runJournalActive && runJournal && index > runJournal.maxHole) runJournal.maxHole = index; } catch { }
   // 14-cheat-mode: new hole cancels any ball drag.
   cheatDraggingBall = false;
   cheatMousePos = null;
@@ -5028,13 +5034,13 @@ function loadLevel(index) {
   // REQ-020: supply persists across hole advances, do NOT reset supply here
   modifiers = [];
   syncModifiersToField();
-  try { clearWaterRipples(); } catch {}
+  try { clearWaterRipples(); } catch { }
   // Keep canvas size consistent per REQ-010 16:9 (1280×720); if varying, would re-setup canvas
   // Wind particles now handled by Three.js overlay (REQ-004), not canvas initParticles
   createBall(level.tee);
   const dx = level.hole.x - level.tee.x;
   const dy = level.hole.y - level.tee.y;
-  setAimAngle(Math.atan2(dy, dx));
+  setAimAngle(0);
   // REQ-09: queue reward before first attempt on holes >0 (except first hole of course), treasure handled separately
   // Free Shot: clear armed state on hole advance per 09 §3
   // 13-tutorial: hole2 (1) no reward, hole3 (2) no reward at start (treasure triggers special rotator/deflector), hole4 (3) no reward
@@ -5091,20 +5097,20 @@ function loadLevel(index) {
   holeStartAttempts = holeAttempts; holeRerolls = 0;
   updateHotbarUI();
   // Redraw terrain for new hole (zoned background per REQ-010/033)
-  try { redrawBottom(); } catch {};
+  try { redrawBottom(); } catch { };
   // 11-banners: show Hole N banner for 2s before reward (same dim, auto-transition)
-  try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch {};
+  try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { };
 }
 
 function initLevel() {
   // Hole 1 no longer auto-sets bag; bag already has starting picks
   if (currentHoleIndex === 0) {
     // keep existing golfbag (starting picks), do not reset
-    if (golfbagUsedCount()===0) setBagFromTypeList([]);
+    if (golfbagUsedCount() === 0) setBagFromTypeList([]);
     clearFreeShotGlow();
-    maxAttempts = 10; 
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {};
-    try { syncDerivedFromBag(); } catch {}
+    maxAttempts = 10;
+    areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender: true, powerCell: true }; try { setFieldPowerCellCount(0); } catch { };
+    try { syncDerivedFromBag(); } catch { }
     rewardPending = false;
     rewardMenuVisible = false;
     rewardClaimedFor = null;
@@ -5198,22 +5204,22 @@ function updateAttemptsUI() {
       }
     }
     if (hudEl) {
-      let isCut2=false; try{ isCut2=cutsceneIsActive(); }catch{}
-      let isBanter=false; try{ isBanter=banterIsActive(); }catch{}
+      let isCut2 = false; try { isCut2 = cutsceneIsActive(); } catch { }
+      let isBanter = false; try { isBanter = banterIsActive(); } catch { }
       const shouldHide = !!mainMenuVisible || isCut2 || isBanter || coinSummaryVisible || courseClearedVisible || startingItemsVisible;
       hudEl.classList.toggle("hidden", shouldHide);
       if (gameState === "WIN" || gameState === "GAME_OVER") hudEl.style.opacity = "0.55";
       else hudEl.style.opacity = "";
     }
-  } catch {}
+  } catch { }
 }
 
 function updateHotbarUI() {
   if (!hotbarEl && !golfbagContainerEl && !bottomBarEl) return;
   // Bag+hotbar are always visible during gameplay including FLYING and reward,
   // but hidden while the starting overlay is shown.
-  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
-  let isBanter=false; try{ isBanter=banterIsActive(); }catch{}
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch { }
+  let isBanter = false; try { isBanter = banterIsActive(); } catch { }
   const isOverlayHidden = pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || courseClearedVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
   const hideHotbar = isOverlayHidden;
   const hideBag = isOverlayHidden;
@@ -5223,7 +5229,7 @@ function updateHotbarUI() {
   }
   if (golfbagContainerEl) golfbagContainerEl.classList.toggle("hidden", hideBag);
   syncHotbarCollapsedUI();
-  try { syncDerivedFromBag(); } catch {}
+  try { syncDerivedFromBag(); } catch { }
   // Rebuild golfbag hotbar from golfbag (one item per slot, no stacking) — only unlocked slots
   const grid = hotbarGridEl || (hotbarEl ? hotbarEl.querySelector('#hotbar-grid') : null);
   if (grid) {
@@ -5250,116 +5256,116 @@ function updateHotbarUI() {
           slot.classList.toggle('discard-target', !!((pendingRewardType && rewardMenuVisible && golfbag[i]) || (pendingPickup && golfbag[i])));
         });
       } else {
-      grid.dataset.bagSig = sig;
-      grid.innerHTML = '';
-      for (let i = 0; i < eff; i++) {
-        const entry = golfbag[i];
-        const t = entry ? bagEntryType(entry) : null;
-        const slot = document.createElement('div');
-        slot.className = 'hotbar-slot' + (t ? '' : ' empty');
-        slot.dataset.slotIndex = String(i);
-        slot.dataset.type = t || '';
-        if (t) {
-          slot.style.background = bgs[t] || '';
-          slot.style.borderColor = borders[t] || '';
-          slot.dataset.supply = '1';
-          slot.dataset.count = t === 'freeShot' ? String(entry.charges ?? 0) : '1';
-          const ic = icons[t];
-          if (ic) {
-            const im = document.createElement('img');
-            im.className = 'hotbar-icon-img';
-            im.src = ic; im.alt = t;
-            slot.appendChild(im);
-          } else {
-            const fb = document.createElement('div');
-            fb.className = 'hotbar-icon-img hotbar-free-fallback';
-            fb.textContent = '★';
-            fb.style.font = '700 22px system-ui'; fb.style.color = '#FFD700';
-            slot.appendChild(fb);
-          }
-          // Hotkey badge 1-4 on every occupied slot except Free Shot (display-only, not selectable)
-          if (t !== 'freeShot') {
-            const hk = document.createElement('span');
-            hk.className = 'hotbar-hotkey';
-            hk.textContent = String(i + 1);
-            slot.appendChild(hk);
-          }
-          // Count badge: freeShot shows remaining charges xN; others show nothing (one per slot)
-          const cnt = document.createElement('span');
-          cnt.className = 'hotbar-count';
-          if (t === 'freeShot') { cnt.textContent = 'x' + (entry.charges ?? 0); cnt.style.display = ''; }
-          else { cnt.textContent = ''; cnt.style.display = 'none'; }
-          slot.appendChild(cnt);
-          const tip = document.createElement('span');
-          tip.className = 'hotbar-tooltip';
-          tip.textContent = names[t] || t;
-          slot.appendChild(tip);
-          if (i === selectedBagIndex && t !== 'freeShot') slot.classList.add('selected');
-          // Discard mode: highlight bag slots as destroy targets (reward or pickup-discard)
-          const inRewardDiscard = !!(pendingRewardType && rewardMenuVisible);
-          const inPickupDiscard = !!pendingPickup;
-          if (inRewardDiscard) {
-            slot.classList.add('discard-target');
-            slot.title = 'Click to destroy ' + (names[t] || t) + ' and take ' + pendingRewardType;
-            slot.style.cursor = 'pointer';
-          } else if (inPickupDiscard) {
-            slot.classList.add('discard-target');
-            slot.title = 'Click to discard ' + (names[t] || t) + ' and pick up ' + (names[pendingPickup.type] || pendingPickup.type);
-            slot.style.cursor = 'pointer';
-          } else {
-            slot.style.cursor = (t === 'fieldExtender' || t === 'powerCell' || t === 'freeShot') ? 'default' : 'pointer';
-          }
-          slot.addEventListener('click', () => {
-            if (suppressSlotClick) { suppressSlotClick = false; return; }
-            if (rewardMenuVisible && pendingRewardType) {
-              discardBagSlotAndClaimReward(i);
-              return;
+        grid.dataset.bagSig = sig;
+        grid.innerHTML = '';
+        for (let i = 0; i < eff; i++) {
+          const entry = golfbag[i];
+          const t = entry ? bagEntryType(entry) : null;
+          const slot = document.createElement('div');
+          slot.className = 'hotbar-slot' + (t ? '' : ' empty');
+          slot.dataset.slotIndex = String(i);
+          slot.dataset.type = t || '';
+          if (t) {
+            slot.style.background = bgs[t] || '';
+            slot.style.borderColor = borders[t] || '';
+            slot.dataset.supply = '1';
+            slot.dataset.count = t === 'freeShot' ? String(entry.charges ?? 0) : '1';
+            const ic = icons[t];
+            if (ic) {
+              const im = document.createElement('img');
+              im.className = 'hotbar-icon-img';
+              im.src = ic; im.alt = t;
+              slot.appendChild(im);
+            } else {
+              const fb = document.createElement('div');
+              fb.className = 'hotbar-icon-img hotbar-free-fallback';
+              fb.textContent = '★';
+              fb.style.font = '700 22px system-ui'; fb.style.color = '#FFD700';
+              slot.appendChild(fb);
             }
-            if (pendingPickup) {
-              discardBagSlotForPickup(i);
-              return;
+            // Hotkey badge 1-4 on every occupied slot except Free Shot (display-only, not selectable)
+            if (t !== 'freeShot') {
+              const hk = document.createElement('span');
+              hk.className = 'hotbar-hotkey';
+              hk.textContent = String(i + 1);
+              slot.appendChild(hk);
             }
-            if (rewardMenuVisible) return;
-            if (banterIsActive()) return;
-            if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
-            if (pauseMenuVisible || mainMenuVisible) return;
-            if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
-            selectBagSlot(i);
-          });
-          slot.addEventListener('mousedown', (e) => {
-            // Bag drag-and-drop: press-drag from an occupied spatial slot arms
-            // on move (ghost follows) and drops on canvas to place. Plain
-            // clicks (no move) fall through to the click handler untouched.
-            try {
-              if (e.button !== 0 || !t || !isSpatialBagType(t)) return;
-              if (bagDrag || isDragging) return;
-              if (rewardMenuVisible || pendingRewardType || pendingPickup) return;
+            // Count badge: freeShot shows remaining charges xN; others show nothing (one per slot)
+            const cnt = document.createElement('span');
+            cnt.className = 'hotbar-count';
+            if (t === 'freeShot') { cnt.textContent = 'x' + (entry.charges ?? 0); cnt.style.display = ''; }
+            else { cnt.textContent = ''; cnt.style.display = 'none'; }
+            slot.appendChild(cnt);
+            const tip = document.createElement('span');
+            tip.className = 'hotbar-tooltip';
+            tip.textContent = names[t] || t;
+            slot.appendChild(tip);
+            if (i === selectedBagIndex && t !== 'freeShot') slot.classList.add('selected');
+            // Discard mode: highlight bag slots as destroy targets (reward or pickup-discard)
+            const inRewardDiscard = !!(pendingRewardType && rewardMenuVisible);
+            const inPickupDiscard = !!pendingPickup;
+            if (inRewardDiscard) {
+              slot.classList.add('discard-target');
+              slot.title = 'Click to destroy ' + (names[t] || t) + ' and take ' + pendingRewardType;
+              slot.style.cursor = 'pointer';
+            } else if (inPickupDiscard) {
+              slot.classList.add('discard-target');
+              slot.title = 'Click to discard ' + (names[t] || t) + ' and pick up ' + (names[pendingPickup.type] || pendingPickup.type);
+              slot.style.cursor = 'pointer';
+            } else {
+              slot.style.cursor = (t === 'fieldExtender' || t === 'powerCell' || t === 'freeShot') ? 'default' : 'pointer';
+            }
+            slot.addEventListener('click', () => {
+              if (suppressSlotClick) { suppressSlotClick = false; return; }
+              if (rewardMenuVisible && pendingRewardType) {
+                discardBagSlotAndClaimReward(i);
+                return;
+              }
+              if (pendingPickup) {
+                discardBagSlotForPickup(i);
+                return;
+              }
+              if (rewardMenuVisible) return;
               if (banterIsActive()) return;
               if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
               if (pauseMenuVisible || mainMenuVisible) return;
               if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
-              bagDrag = {
-                slotIdx: i, type: normalizeSupplyType(t),
-                startX: e.clientX, startY: e.clientY, active: false,
-              };
-            } catch {}
-          });
-        } else {
-          slot.style.background = 'rgba(128,128,128,0.28)';
-          slot.style.borderColor = '#7a7a7a';
-          slot.style.cursor = 'default';
-          slot.dataset.supply = '0';
-          slot.dataset.count = '0';
-          slot.title = 'Empty slot (' + (i + 1) + ')';
-          const hk = document.createElement('span');
-          hk.className = 'hotbar-hotkey hotbar-hotkey-empty';
-          hk.textContent = String(i + 1);
-          hk.style.display = '';
-          hk.style.opacity = '0.45';
-          slot.appendChild(hk);
+              selectBagSlot(i);
+            });
+            slot.addEventListener('mousedown', (e) => {
+              // Bag drag-and-drop: press-drag from an occupied spatial slot arms
+              // on move (ghost follows) and drops on canvas to place. Plain
+              // clicks (no move) fall through to the click handler untouched.
+              try {
+                if (e.button !== 0 || !t || !isSpatialBagType(t)) return;
+                if (bagDrag || isDragging) return;
+                if (rewardMenuVisible || pendingRewardType || pendingPickup) return;
+                if (banterIsActive()) return;
+                if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
+                if (pauseMenuVisible || mainMenuVisible) return;
+                if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
+                bagDrag = {
+                  slotIdx: i, type: normalizeSupplyType(t),
+                  startX: e.clientX, startY: e.clientY, active: false,
+                };
+              } catch { }
+            });
+          } else {
+            slot.style.background = 'rgba(128,128,128,0.28)';
+            slot.style.borderColor = '#7a7a7a';
+            slot.style.cursor = 'default';
+            slot.dataset.supply = '0';
+            slot.dataset.count = '0';
+            slot.title = 'Empty slot (' + (i + 1) + ')';
+            const hk = document.createElement('span');
+            hk.className = 'hotbar-hotkey hotbar-hotkey-empty';
+            hk.textContent = String(i + 1);
+            hk.style.display = '';
+            hk.style.opacity = '0.45';
+            slot.appendChild(hk);
+          }
+          grid.appendChild(slot);
         }
-        grid.appendChild(slot);
-      }
       } // end deferred-rebuild guard (inner else)
     } else {
       // Update selection/discard classes without rebuild
@@ -5373,27 +5379,27 @@ function updateHotbarUI() {
   // Passive slots (3 stackable, no hotkey, not placeable, xN badge).
   // Click a filled passive slot to toggle its effect on/off (freeShot arms/disarms).
   // Off state is visible via .passive-off (dimmed icon); freeShot armed via .passive-active.
-  try{
+  try {
     const passiveGrid = document.getElementById('passive-hotbar-grid');
-    if(passiveGrid){
-      const passTypes=['fieldExtender','powerCell','freeShot'];
-      const passIcons={fieldExtender:'./img/field-extender-icon.png',powerCell:'./img/power-cell-icon.png',freeShot:null};
-      const passNames={fieldExtender:'Field Extender',powerCell:'Power Cell',freeShot:'Free Shots'};
+    if (passiveGrid) {
+      const passTypes = ['fieldExtender', 'powerCell', 'freeShot'];
+      const passIcons = { fieldExtender: './img/field-extender-icon.png', powerCell: './img/power-cell-icon.png', freeShot: null };
+      const passNames = { fieldExtender: 'Field Extender', powerCell: 'Power Cell', freeShot: 'Free Shots' };
       // Ensure 3 slots exist; recreate if needed
-      if(passiveGrid.children.length!==3){
-        passiveGrid.innerHTML='';
-        for(const t of passTypes){
-          const slot=document.createElement('div');
-          slot.className='hotbar-slot passive';
-          slot.dataset.type=t;
+      if (passiveGrid.children.length !== 3) {
+        passiveGrid.innerHTML = '';
+        for (const t of passTypes) {
+          const slot = document.createElement('div');
+          slot.className = 'hotbar-slot passive';
+          slot.dataset.type = t;
           passiveGrid.appendChild(slot);
         }
       }
       // Signature-guard the rebuild: counts/toggles/armed state change rarely,
       // but updateHotbarUI runs every frame — skip DOM churn when nothing changed.
-      const passSig = 'fe' + (passiveCounts.fieldExtender||0) + ((passiveEnabled.fieldExtender!==false)?1:0)
-        + '|pc' + (passiveCounts.powerCell||0) + ((passiveEnabled.powerCell!==false)?1:0)
-        + '|fs' + (passiveCounts.freeShot||0) + (isFreeShotActive?1:0);
+      const passSig = 'fe' + (passiveCounts.fieldExtender || 0) + ((passiveEnabled.fieldExtender !== false) ? 1 : 0)
+        + '|pc' + (passiveCounts.powerCell || 0) + ((passiveEnabled.powerCell !== false) ? 1 : 0)
+        + '|fs' + (passiveCounts.freeShot || 0) + (isFreeShotActive ? 1 : 0);
       if (passiveGrid.dataset.passSig === passSig) {
         // Still refresh the freeShot armed outline cheaply (class-only, no rebuild).
         try {
@@ -5401,66 +5407,66 @@ function updateHotbarUI() {
             if (slot.dataset.type === 'freeShot')
               slot.classList.toggle('passive-active', !!(passiveCounts.freeShot > 0 && isFreeShotActive));
           }
-        } catch {}
+        } catch { }
       } else {
         passiveGrid.dataset.passSig = passSig;
-      for(const slot of passiveGrid.children){
-        const t=slot.dataset.type;
-        const cnt = t==='fieldExtender' ? (passiveCounts.fieldExtender||0) : t==='powerCell' ? (passiveCounts.powerCell||0) : (passiveCounts.freeShot||0);
-        slot.classList.remove('empty');
-        slot.classList.remove('passive-off');
-        slot.classList.remove('passive-active');
-        // clear and rebuild content
-        slot.innerHTML='';
-        if(cnt>0){
-          const isOn = (t==='freeShot') ? !!isFreeShotActive : (passiveEnabled[t] !== false);
-          if (!isOn) slot.classList.add('passive-off');
-          if (t==='freeShot' && isFreeShotActive) slot.classList.add('passive-active');
-          slot.style.display='';
-          slot.style.background='transparent';
-          slot.style.border='none';
-          slot.style.borderColor='transparent';
-          slot.style.cursor='pointer';
-          if(passIcons[t]){
-            const im=document.createElement('img'); im.className='hotbar-icon-img'; im.src=passIcons[t]; im.alt=t; slot.appendChild(im);
+        for (const slot of passiveGrid.children) {
+          const t = slot.dataset.type;
+          const cnt = t === 'fieldExtender' ? (passiveCounts.fieldExtender || 0) : t === 'powerCell' ? (passiveCounts.powerCell || 0) : (passiveCounts.freeShot || 0);
+          slot.classList.remove('empty');
+          slot.classList.remove('passive-off');
+          slot.classList.remove('passive-active');
+          // clear and rebuild content
+          slot.innerHTML = '';
+          if (cnt > 0) {
+            const isOn = (t === 'freeShot') ? !!isFreeShotActive : (passiveEnabled[t] !== false);
+            if (!isOn) slot.classList.add('passive-off');
+            if (t === 'freeShot' && isFreeShotActive) slot.classList.add('passive-active');
+            slot.style.display = '';
+            slot.style.background = 'transparent';
+            slot.style.border = 'none';
+            slot.style.borderColor = 'transparent';
+            slot.style.cursor = 'pointer';
+            if (passIcons[t]) {
+              const im = document.createElement('img'); im.className = 'hotbar-icon-img'; im.src = passIcons[t]; im.alt = t; slot.appendChild(im);
+            } else {
+              const fb = document.createElement('div'); fb.className = 'hotbar-icon'; fb.textContent = '★'; fb.style.color = '#FFD700'; fb.style.font = '700 22px system-ui'; slot.appendChild(fb);
+            }
+            const badge = document.createElement('span'); badge.className = 'hotbar-count'; badge.textContent = 'x' + cnt; badge.style.display = ''; slot.appendChild(badge);
+            const tip = document.createElement('span'); tip.className = 'hotbar-tooltip'; tip.textContent = (passNames[t] || t) + (t === 'freeShot' ? (isFreeShotActive ? ' (ON)' : ' (OFF)') : (isOn ? ' (ON)' : ' (OFF)')); slot.appendChild(tip);
+            slot.title = (passNames[t] || t) + ' x' + cnt + ' (' + (isOn ? 'ON' : 'OFF') + ' — click to turn ' + (isOn ? 'off' : 'on') + ')';
+            // idempotent handler (slot element persists across rebuilds)
+            slot.onclick = () => {
+              try {
+                if (mainMenuVisible || pauseMenuVisible) return;
+                if (rewardMenuVisible || coinSummaryVisible || courseClearedVisible) return;
+                if (typeof banterIsActive === 'function' && banterIsActive()) return;
+                if (typeof cutsceneIsActive === 'function' && cutsceneIsActive()) return;
+                if (startingItemsVisible) return;
+                if (gameState === 'WIN' || gameState === 'GAME_OVER') return;
+                if (t === 'freeShot') { toggleFreeShot(); return; }
+                togglePassive(t);
+              } catch { }
+            };
           } else {
-            const fb=document.createElement('div'); fb.className='hotbar-icon'; fb.textContent='★'; fb.style.color='#FFD700'; fb.style.font='700 22px system-ui'; slot.appendChild(fb);
+            slot.style.display = 'none';
+            slot.style.background = 'transparent';
+            slot.style.border = 'none';
+            slot.style.borderColor = 'transparent';
+            slot.style.cursor = 'default';
+            slot.onclick = null;
+            const badge = document.createElement('span'); badge.className = 'hotbar-count'; badge.textContent = 'x0'; badge.style.display = 'none'; badge.classList.add('hidden'); slot.appendChild(badge);
           }
-          const badge=document.createElement('span'); badge.className='hotbar-count'; badge.textContent='x'+cnt; badge.style.display=''; slot.appendChild(badge);
-          const tip=document.createElement('span'); tip.className='hotbar-tooltip'; tip.textContent=(passNames[t]||t)+(t==='freeShot' ? (isFreeShotActive?' (ON)':' (OFF)') : (isOn?' (ON)':' (OFF)')); slot.appendChild(tip);
-          slot.title=(passNames[t]||t)+' x'+cnt+' ('+(isOn?'ON':'OFF')+' — click to turn '+(isOn?'off':'on')+')';
-          // idempotent handler (slot element persists across rebuilds)
-          slot.onclick = () => {
-            try {
-              if (mainMenuVisible || pauseMenuVisible) return;
-              if (rewardMenuVisible || coinSummaryVisible || courseClearedVisible) return;
-              if (typeof banterIsActive === 'function' && banterIsActive()) return;
-              if (typeof cutsceneIsActive === 'function' && cutsceneIsActive()) return;
-              if (startingItemsVisible) return;
-              if (gameState === 'WIN' || gameState === 'GAME_OVER') return;
-              if (t === 'freeShot') { toggleFreeShot(); return; }
-              togglePassive(t);
-            } catch {}
-          };
-        } else {
-          slot.style.display='none';
-          slot.style.background='transparent';
-          slot.style.border='none';
-          slot.style.borderColor='transparent';
-          slot.style.cursor='default';
-          slot.onclick = null;
-          const badge=document.createElement('span'); badge.className='hotbar-count'; badge.textContent='x0'; badge.style.display='none'; badge.classList.add('hidden'); slot.appendChild(badge);
+          if (cnt <= 0) slot.title = (passNames[t] || t) + ' x' + cnt;
         }
-        if(cnt<=0) slot.title=(passNames[t]||t)+' x'+cnt;
-      }
       } // end signature-guarded rebuild
     }
-  }catch(e){ console.warn('passive hotbar update failed',e); }
+  } catch (e) { console.warn('passive hotbar update failed', e); }
   // Also update HUD attempts left display to show (+freeShot charges)
-  try { updateAttemptsUI(); } catch {}
+  try { updateAttemptsUI(); } catch { }
   // Journal icon follows the same gameplay visibility; re-render rows when open
-  try { syncJournalUI(); } catch {}
-  try { syncMobileUI(); } catch {}
+  try { syncJournalUI(); } catch { }
+  try { syncMobileUI(); } catch { }
 }
 
 function showGameOver() {
@@ -5507,8 +5513,8 @@ function hideGameOver() {
 function handleGameOverReturn() {
   hideGameOver();
   // Journal: record this unfinished run as a best candidate before clearing
-  try { commitRunJournal(false); } catch {}
-  try { finalizeRunCoinsAndShowSummary(); } catch {}
+  try { commitRunJournal(false); } catch { }
+  try { finalizeRunCoinsAndShowSummary(); } catch { }
   if (coinSummaryVisible) {
     // End screen over the loaded level (10-progression.md §4); menu return deferred.
     deferredMenuReturn = true;
@@ -5528,14 +5534,14 @@ function handleGameOverReturn() {
 
 function syncModifiersToField() {
   setModifiers(modifiers);
-  try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch {};
+  try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch { };
   syncWindFieldToShader();
 }
 function syncWindFieldToShader() {
   try {
     const comps = getFieldComponents();
     setWindUniformsFromField(comps, modifiers, windStrength);
-  } catch {};
+  } catch { };
 }
 
 function syncPauseOverlay() {
@@ -5563,7 +5569,7 @@ function syncPauseOverlay() {
           if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
         }
       }
-    } catch {};
+    } catch { };
   } else {
     po.classList.add("hidden");
     po.classList.remove("with-backdrop");
@@ -5586,14 +5592,14 @@ function isMobilePhone() {
   try {
     const qs = new URLSearchParams(window.location.search);
     if (qs.get('mobile') === '1') return true;
-  } catch {}
+  } catch { }
   try {
     const ua = navigator.userAgent || navigator.vendor || '';
     if (/Android.*Mobile|iPhone|iPod|Windows Phone|IEMobile|Opera Mini|Mobile/i.test(ua)) return true;
-  } catch {}
+  } catch { }
   try {
     if (navigator.maxTouchPoints > 0 && window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return true;
-  } catch {}
+  } catch { }
   return false;
 }
 function isMobileMode() { return isMobilePhone(); }
@@ -5603,10 +5609,10 @@ let mobileDegraded = false;
 let fpsAccumTime = 0;
 let fpsAccumFrames = 0;
 // Shared with cutscene.js (no import to avoid a cycle): the current cap value.
-try { window.__mobileDPRCapValue = mobileDPRCap; } catch {}
+try { window.__mobileDPRCapValue = mobileDPRCap; } catch { }
 function effectiveDPR() {
   const dpr = window.devicePixelRatio || 1;
-  try { if (isMobileMode()) return Math.min(dpr, mobileDPRCap); } catch {}
+  try { if (isMobileMode()) return Math.min(dpr, mobileDPRCap); } catch { }
   return dpr;
 }
 function isFullscreenActive() {
@@ -5621,20 +5627,20 @@ function requestMobileFullscreen() {
     if (el.requestFullscreen) p = el.requestFullscreen();
     else if (el.webkitRequestFullscreen) p = el.webkitRequestFullscreen();
     else if (document.documentElement.requestFullscreen) p = document.documentElement.requestFullscreen();
-    if (p && p.catch) p.catch(() => {});
-  } catch {}
+    if (p && p.catch) p.catch(() => { });
+  } catch { }
   try {
     if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
+      screen.orientation.lock('landscape').catch(() => { });
     }
-  } catch {}
+  } catch { }
 }
 function dispatchEscapeKey() {
   // Identical path to hitting Escape: reuse the global keydown handler.
   try {
     const ev = new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true, cancelable: true });
     window.dispatchEvent(ev);
-  } catch {}
+  } catch { }
 }
 function dispatchResetKey() {
   // Identical path to hitting R: reuse the global keydown handlers
@@ -5642,7 +5648,7 @@ function dispatchResetKey() {
   try {
     const ev = new KeyboardEvent('keydown', { code: 'KeyR', key: 'r', bubbles: true, cancelable: true });
     window.dispatchEvent(ev);
-  } catch {}
+  } catch { }
 }
 function getCanvasTouchPos(t) {
   const rect = canvas.getBoundingClientRect();
@@ -5691,9 +5697,9 @@ function handleRightClickAt(x, y) {
   return removeModifierAt(pos.x, pos.y);
 }
 function isMobileChromeHidden() {
-  try { if (typeof bootGateVisible !== 'undefined' && bootGateVisible) return true; } catch {}
-  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
-  let isBanter = false; try { isBanter = banterIsActive(); } catch {}
+  try { if (typeof bootGateVisible !== 'undefined' && bootGateVisible) return true; } catch { }
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch { }
+  let isBanter = false; try { isBanter = banterIsActive(); } catch { }
   return pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || courseClearedVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
 }
 function syncMobileUI() {
@@ -5710,13 +5716,13 @@ function syncMobileUI() {
     if (!mobile) {
       if (fsBtn) fsBtn.classList.add('hidden');
       if (controls) controls.classList.add('hidden');
-      try { document.getElementById('game-container').classList.remove('mobile-mode'); } catch {}
+      try { document.getElementById('game-container').classList.remove('mobile-mode'); } catch { }
       return;
     }
-    try { document.getElementById('game-container').classList.add('mobile-mode'); } catch {}
+    try { document.getElementById('game-container').classList.add('mobile-mode'); } catch { }
     if (controls) controls.classList.toggle('hidden', chromeHidden);
     if (fsBtn) fsBtn.classList.toggle('hidden', isFullscreenActive());
-  } catch {}
+  } catch { }
 }
 // Touch-drag bookkeeping shared by canvas + bag touch handlers.
 let touchBoardId = null; // touch identifier driving a board drag
@@ -5778,10 +5784,10 @@ function finishBoardDragAt(logicalPos, clientX, clientY) {
             updateHotbarUI();
           }
         }
-      } catch {}
+      } catch { }
       isDragging = false; draggingIdx = -1; draggingMates = []; dragOrigin = null; dragOffset = null;
       selectedBagIndex = -1; selectedModifier = null;
-      try { if (canvas) canvas.style.cursor = "default"; } catch {}
+      try { if (canvas) canvas.style.cursor = "default"; } catch { }
       saveProgress();
       return;
     }
@@ -5804,7 +5810,7 @@ function finishBoardDragAt(logicalPos, clientX, clientY) {
       if (snap && snap.mod) {
         for (const mi of mates) { modifiers[mi].x = snap.mod.x; modifiers[mi].y = snap.mod.y; }
       }
-    } catch {}
+    } catch { }
     syncModifiersToField();
   }
   isDragging = false;
@@ -5812,7 +5818,7 @@ function finishBoardDragAt(logicalPos, clientX, clientY) {
   draggingMates = [];
   dragOrigin = null;
   dragOffset = null;
-  try { if (canvas) canvas.style.cursor = "default"; } catch {}
+  try { if (canvas) canvas.style.cursor = "default"; } catch { }
   saveProgress();
 }
 
@@ -5825,7 +5831,7 @@ function startBoardDragAt(idx, pos) {
   try { dragOrigin = { x: modifiers[idx].x, y: modifiers[idx].y }; } catch { dragOrigin = null; }
   try { dragOffset = { x: modifiers[idx].x - pos.x, y: modifiers[idx].y - pos.y }; } catch { dragOffset = null; }
   isDragging = true;
-  try { if (canvas) canvas.style.cursor = "grabbing"; } catch {}
+  try { if (canvas) canvas.style.cursor = "grabbing"; } catch { }
 }
 
 function initMobileControls() {
@@ -5835,8 +5841,8 @@ function initMobileControls() {
     if (menuBtn && !menuBtn._mobileBound) {
       menuBtn._mobileBound = true;
       menuBtn.addEventListener('click', (e) => {
-        try { e.preventDefault(); } catch {}
-        try { if (menuBtn.blur) menuBtn.blur(); } catch {}
+        try { e.preventDefault(); } catch { }
+        try { if (menuBtn.blur) menuBtn.blur(); } catch { }
         dispatchEscapeKey();
       });
     }
@@ -5844,8 +5850,8 @@ function initMobileControls() {
     if (resetBtn && !resetBtn._mobileBound) {
       resetBtn._mobileBound = true;
       resetBtn.addEventListener('click', (e) => {
-        try { e.preventDefault(); } catch {}
-        try { if (resetBtn.blur) resetBtn.blur(); } catch {}
+        try { e.preventDefault(); } catch { }
+        try { if (resetBtn.blur) resetBtn.blur(); } catch { }
         dispatchResetKey();
       });
     }
@@ -5853,24 +5859,24 @@ function initMobileControls() {
     if (fsBtn && !fsBtn._mobileBound) {
       fsBtn._mobileBound = true;
       fsBtn.addEventListener('click', (e) => {
-        try { e.preventDefault(); } catch {}
-        try { if (fsBtn.blur) fsBtn.blur(); } catch {}
+        try { e.preventDefault(); } catch { }
+        try { if (fsBtn.blur) fsBtn.blur(); } catch { }
         requestMobileFullscreen();
-        try { setTimeout(syncMobileUI, 300); } catch {}
+        try { setTimeout(syncMobileUI, 300); } catch { }
       });
     }
-  } catch {}
+  } catch { }
   // First-gesture fullscreen on mobile: boot gate + Play buttons.
   try {
     if (isMobileMode() && !initMobileControls._fsGestureBound) {
       initMobileControls._fsGestureBound = true;
       const gate = document.getElementById('continue-overlay');
-      if (gate) gate.addEventListener('click', () => { try { requestMobileFullscreen(); } catch {} }, { passive: true });
-      const onFsChange = () => { try { setupCanvas(); } catch {} try { resizeWindOverlay(); } catch {} try { syncMobileUI(); } catch {} };
+      if (gate) gate.addEventListener('click', () => { try { requestMobileFullscreen(); } catch { } }, { passive: true });
+      const onFsChange = () => { try { setupCanvas(); } catch { } try { resizeWindOverlay(); } catch { } try { syncMobileUI(); } catch { } };
       document.addEventListener('fullscreenchange', onFsChange);
       document.addEventListener('webkitfullscreenchange', onFsChange);
     }
-  } catch {}
+  } catch { }
   // Touch overlay buttons: hold left/right = arrows, hold launch = Space.
   try {
     const leftBtn = document.getElementById('mobile-aim-left');
@@ -5895,7 +5901,7 @@ function initMobileControls() {
           if (holder) return; // first contact wins (multi-touch: one hold)
           holder = { kind, id };
           down();
-        } catch {}
+        } catch { }
       };
       const release = (kind, id) => {
         try {
@@ -5903,39 +5909,39 @@ function initMobileControls() {
           holder = null;
           up();
           if (el.blur) el.blur();
-        } catch {}
+        } catch { }
       };
       el.addEventListener('pointerdown', (e) => {
-        try { e.preventDefault(); } catch {}
-        try { el.setPointerCapture(e.pointerId); } catch {}
+        try { e.preventDefault(); } catch { }
+        try { el.setPointerCapture(e.pointerId); } catch { }
         press('pointer', e.pointerId);
       });
       el.addEventListener('pointerup', (e) => release('pointer', e.pointerId));
       el.addEventListener('pointercancel', (e) => release('pointer', e.pointerId));
       el.addEventListener('lostpointercapture', (e) => release('pointer', e.pointerId));
       el.addEventListener('touchstart', (e) => {
-        try { if (e.cancelable) e.preventDefault(); } catch {}
+        try { if (e.cancelable) e.preventDefault(); } catch { }
         try {
           const t = e.changedTouches && e.changedTouches[0];
           if (t) press('touch', t.identifier);
-        } catch {}
+        } catch { }
       }, { passive: false });
       el.addEventListener('touchend', (e) => {
         try {
           for (const t of Array.from((e && e.changedTouches) || [])) release('touch', t.identifier);
-        } catch {}
+        } catch { }
       });
       el.addEventListener('touchcancel', (e) => {
         try {
           for (const t of Array.from((e && e.changedTouches) || [])) release('touch', t.identifier);
-        } catch {}
+        } catch { }
       });
-      el.addEventListener('contextmenu', (e) => { try { e.preventDefault(); } catch {} });
+      el.addEventListener('contextmenu', (e) => { try { e.preventDefault(); } catch { } });
     };
     if (leftBtn) bindHold(leftBtn, () => touchAimStart('left'), () => touchAimEnd('left'));
     if (rightBtn) bindHold(rightBtn, () => touchAimStart('right'), () => touchAimEnd('right'));
     if (launchBtn) bindHold(launchBtn, () => touchChargeStart(), () => touchChargeEnd());
-  } catch {}
+  } catch { }
   // Canvas touch: tap-to-place + drag placed bubbles/stacks + double-tap as right-click.
   try {
     if (canvas && !canvas._mobileTouchBound) {
@@ -5944,11 +5950,11 @@ function initMobileControls() {
         try {
           if (!isMobileMode()) return;
           if (e.cancelable) e.preventDefault();
-          try { if (banterIsActive()) { banterHandleInput({ type: 'click', preventDefault: () => {} }); return; } } catch {}
-          try { if (cutsceneIsActive()) { cutsceneHandleInput({ type: 'click', preventDefault: () => {} }); return; } } catch {}
+          try { if (banterIsActive()) { banterHandleInput({ type: 'click', preventDefault: () => { } }); return; } } catch { }
+          try { if (cutsceneIsActive()) { cutsceneHandleInput({ type: 'click', preventDefault: () => { } }); return; } } catch { }
           if (mainMenuVisible || pauseMenuVisible || rewardMenuVisible) return;
           if (gameState !== "AIMING" && gameState !== "CHARGING") return;
-          if (pendingPickup) { try { cancelPickupDiscard(); } catch {} return; }
+          if (pendingPickup) { try { cancelPickupDiscard(); } catch { } return; }
           const t = e.changedTouches[0];
           if (!t) return;
           const pos = getCanvasTouchPos(t);
@@ -5958,11 +5964,11 @@ function initMobileControls() {
           touchLastPos = pos;
           mousePos = pos;
           let armedPlaceable = false;
-          try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+          try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch { }
           if (armedPlaceable) return; // tap-to-place on touchend; no drag start
           const idx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
           if (idx !== -1) startBoardDragAt(idx, pos);
-        } catch {}
+        } catch { }
       }, { passive: false });
       canvas.addEventListener('touchmove', (e) => {
         try {
@@ -5982,10 +5988,10 @@ function initMobileControls() {
                 const ny = pos.y + (dragOffset ? dragOffset.y : 0);
                 for (const mi of mates) { modifiers[mi].x = nx; modifiers[mi].y = ny; }
                 syncModifiersToField();
-              } catch {}
+              } catch { }
             }
             // Bag→canvas touch drag preview follows finger.
-            if (bagTouch && bagTouch.active) { try { mousePos = pos; } catch {} }
+            if (bagTouch && bagTouch.active) { try { mousePos = pos; } catch { } }
             else if (bagTouch && !bagTouch.active) {
               if (Math.hypot(t.clientX - bagTouch.startX, t.clientY - bagTouch.startY) > BAG_DRAG_THRESHOLD_PX) {
                 try {
@@ -5993,11 +5999,11 @@ function initMobileControls() {
                   selectedModifier = bagTouch.type;
                   updateHotbarUI();
                   bagTouch.active = true;
-                } catch {}
+                } catch { }
               }
             }
           }
-        } catch {}
+        } catch { }
       }, { passive: false });
       const endTouch = (e) => {
         try {
@@ -6017,10 +6023,10 @@ function initMobileControls() {
                     && !pauseMenuVisible && !mainMenuVisible
                     && (gameState === 'AIMING' || gameState === 'CHARGING')
                     && golfbag[bd.slotIdx] && bagEntryType(golfbag[bd.slotIdx]) === bd.type) {
-                    try { if (banterIsActive()) { continue; } } catch {}
+                    try { if (banterIsActive()) { continue; } } catch { }
                     selectBagSlot(bd.slotIdx);
                   }
-                } catch {}
+                } catch { }
                 continue;
               }
               try {
@@ -6056,10 +6062,10 @@ function initMobileControls() {
                         placeModifier(pos.x, pos.y);
                       }
                     }
-                  } catch {}
+                  } catch { }
                   disarm();
                 }
-              } catch {}
+              } catch { }
               continue;
             }
             if (!isBoardTouch) continue;
@@ -6068,18 +6074,18 @@ function initMobileControls() {
             touchLastPos = pos;
             if (isDragging && draggingIdx !== -1) {
               if (touchBoardMoved) {
-                try { finishBoardDragAt(pos, t.clientX, t.clientY); } catch {}
+                try { finishBoardDragAt(pos, t.clientX, t.clientY); } catch { }
               } else {
                 // Tap on bubble without move: no-op (drag to move, double-tap to remove) — reset drag state.
                 isDragging = false; draggingIdx = -1; draggingMates = [];
                 dragOrigin = null; dragOffset = null;
-                try { canvas.style.cursor = "default"; } catch {}
+                try { canvas.style.cursor = "default"; } catch { }
               }
               // Double-tap check still applies to taps on bubbles.
               if (!touchBoardMoved) {
                 const now = Date.now();
                 if (now - lastTapTime <= DOUBLE_TAP_MS && Math.hypot(pos.x - lastTapX, pos.y - lastTapY) <= DOUBLE_TAP_PX) {
-                  try { handleRightClickAt(pos.x, pos.y); } catch {}
+                  try { handleRightClickAt(pos.x, pos.y); } catch { }
                   lastTapTime = 0;
                 } else { lastTapTime = now; lastTapX = pos.x; lastTapY = pos.y; }
               }
@@ -6089,12 +6095,12 @@ function initMobileControls() {
             // Not dragging: tap = click-to-place (armed) or double-tap-as-right-click.
             try {
               let armedPlaceable = false;
-              try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+              try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch { }
               const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
               const now = Date.now();
               const isDouble = (now - lastTapTime <= DOUBLE_TAP_MS && Math.hypot(pos.x - lastTapX, pos.y - lastTapY) <= DOUBLE_TAP_PX);
               if (isDouble) {
-                try { handleRightClickAt(pos.x, pos.y); } catch {}
+                try { handleRightClickAt(pos.x, pos.y); } catch { }
                 lastTapTime = 0;
                 mousePos = null;
                 continue;
@@ -6103,10 +6109,10 @@ function initMobileControls() {
               if (overIdx !== -1 && !armedPlaceable) { mousePos = null; continue; }
               if (!selectedModifier) { mousePos = null; continue; }
               placeModifier(pos.x, pos.y);
-            } catch {}
+            } catch { }
             mousePos = null;
           }
-        } catch {}
+        } catch { }
       };
       canvas.addEventListener('touchend', endTouch, { passive: false });
       canvas.addEventListener('touchcancel', (e) => {
@@ -6115,10 +6121,10 @@ function initMobileControls() {
           if (isDragging) { isDragging = false; draggingIdx = -1; draggingMates = []; dragOrigin = null; dragOffset = null; }
           bagTouch = null;
           mousePos = null;
-        } catch {}
+        } catch { }
       });
     }
-  } catch {}
+  } catch { }
   // Bag slot touch drag (delegated: slots rebuild on every bag change).
   try {
     const grid = document.getElementById('hotbar-grid');
@@ -6140,7 +6146,7 @@ function initMobileControls() {
           if (!touch) return;
           if (e.cancelable) e.preventDefault();
           bagTouch = { slotIdx: idx, type: normalizeSupplyType(t), startX: touch.clientX, startY: touch.clientY, active: false, identifier: touch.identifier };
-        } catch {}
+        } catch { }
       }, { passive: false });
       grid.addEventListener('touchmove', (e) => {
         try {
@@ -6154,11 +6160,11 @@ function initMobileControls() {
                 selectedModifier = bagTouch.type;
                 updateHotbarUI();
                 bagTouch.active = true;
-              } catch {}
+              } catch { }
             }
-            if (bagTouch.active) { try { mousePos = getCanvasTouchPos(touch); } catch {} }
+            if (bagTouch.active) { try { mousePos = getCanvasTouchPos(touch); } catch { } }
           }
-        } catch {}
+        } catch { }
       }, { passive: false });
       // All bag-touch releases land here (touch events retarget to the
       // touchstart element): tap = arm/select, slot = move/swap, canvas = place.
@@ -6175,13 +6181,13 @@ function initMobileControls() {
               // mouse click, so arm/select explicitly (same as click/1-3).
               try {
                 if (rewardMenuVisible || pendingRewardType || pendingPickup) return;
-                try { if (banterIsActive()) return; } catch {}
+                try { if (banterIsActive()) return; } catch { }
                 if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
                 if (pauseMenuVisible || mainMenuVisible) return;
                 if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
                 if (!golfbag[bd.slotIdx] || bagEntryType(golfbag[bd.slotIdx]) !== bd.type) return;
                 selectBagSlot(bd.slotIdx);
-              } catch {}
+              } catch { }
               return;
             }
             try {
@@ -6205,7 +6211,7 @@ function initMobileControls() {
               // touch events retarget to the touchstart element, so a drag that
               // began on a slot ENDS HERE even when the finger is over the
               // canvas — the canvas touchend handler never sees it.
-              try { if (e.cancelable) e.preventDefault(); } catch {}
+              try { if (e.cancelable) e.preventDefault(); } catch { }
               try {
                 const rc = canvas.getBoundingClientRect();
                 const overCanvas = touch.clientX >= rc.left && touch.clientX <= rc.right && touch.clientY >= rc.top && touch.clientY <= rc.bottom;
@@ -6215,15 +6221,15 @@ function initMobileControls() {
                   try {
                     const pos = getCanvasTouchPos(touch);
                     placeModifier(pos.x, pos.y);
-                  } catch {}
+                  } catch { }
                   selectedBagIndex = -1; selectedModifier = null; updateHotbarUI();
                 } else {
                   selectedBagIndex = -1; selectedModifier = null; updateHotbarUI();
                 }
               } catch { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); }
-            } catch {}
+            } catch { }
           }
-        } catch {}
+        } catch { }
       });
       grid.addEventListener('touchcancel', (e) => {
         try {
@@ -6238,12 +6244,12 @@ function initMobileControls() {
           const wasActive = !!bagTouch.active;
           bagTouch = null;
           if (wasActive) { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); }
-          try { mousePos = null; } catch {}
-        } catch {}
+          try { mousePos = null; } catch { }
+        } catch { }
       });
     }
-  } catch {}
-  try { syncMobileUI(); } catch {}
+  } catch { }
+  try { syncMobileUI(); } catch { }
 }
 
 // --- Modifier stacking (snap, move together, split on pickup) ---
@@ -6358,7 +6364,7 @@ function placeModifier(x, y) {
   try {
     const snap = findSnapTarget(x, y, null);
     if (snap && snap.mod) { px = snap.mod.x; py = snap.mod.y; }
-  } catch {}
+  } catch { }
   // Out of bounds (canvas edge or OB terrain) is never placeable: no-op that
   // consumes nothing and keeps the item armed (click-placement retries
   // elsewhere; bag-drop callers disarm after the attempt).
@@ -6382,7 +6388,7 @@ function isPlacementOutOfBounds(x, y) {
   if (x < 0 || y < 0 || x > LOGICAL_W || y > LOGICAL_H) return true;
   try {
     if (level && level.terrain && terrainZoneAt(x, y, level) === 'ob') return true;
-  } catch {}
+  } catch { }
   return false;
 }
 
@@ -6397,12 +6403,12 @@ function removeModifierAt(x, y) {
         updateHotbarUI();
         return true;
       }
-    } catch {}
+    } catch { }
     // Tactical: can only be picked up again if there is bag space;
     // when full, toast and leave the modifier on the board (no discard mode;
     // discard mode is only for reward claims while full).
     if (!golfbagHasEmpty()) {
-      try { showToast('Golfbag is already full'); } catch {}
+      try { showToast('Golfbag is already full'); } catch { }
       return false;
     }
     const [removed] = modifiers.splice(idx, 1);
@@ -6446,7 +6452,7 @@ function resetBall() {
       const free = supply.freeShot ?? 0;
       if (left === 1) {
         if (free > 0) {
-          try { showFreeShotBanner(); } catch {};
+          try { showFreeShotBanner(); } catch { };
           if (!isFreeShotActive) {
             isFreeShotActive = true;
             syncFreeShotGlow();
@@ -6454,8 +6460,8 @@ function resetBall() {
             saveProgress();
           }
         } else {
-          try { showAttemptsBanner(1); } catch {};
-          try { syncPauseOverlay(); } catch {};
+          try { showAttemptsBanner(1); } catch { };
+          try { syncPauseOverlay(); } catch { };
         }
       }
     } else {
@@ -6472,7 +6478,7 @@ function resetBall() {
           return;
         } else if (left === 1) {
           if (free > 0) {
-            try { showFreeShotBanner(); } catch {};
+            try { showFreeShotBanner(); } catch { };
             if (!isFreeShotActive) {
               isFreeShotActive = true;
               syncFreeShotGlow();
@@ -6480,9 +6486,9 @@ function resetBall() {
               saveProgress();
             }
           } else {
-            try { showAttemptsBanner(1); } catch {};
+            try { showAttemptsBanner(1); } catch { };
           }
-          try { syncPauseOverlay(); } catch {};
+          try { syncPauseOverlay(); } catch { };
         }
       }
     }
@@ -6491,17 +6497,17 @@ function resetBall() {
   // Re-sync glow now that we're back at the tee: syncs above ran while
   // gameState was still FLYING (ball sprite suppressed); an armed free shot
   // must glow on the ball at the tee again.
-  try { syncFreeShotGlow(); } catch {};
+  try { syncFreeShotGlow(); } catch { };
   winOverlay.classList.add("hidden");
   updateForceBar();
   // REQ-021: check reward menu on re-entering AIMING (death/OOB/R during play)
   maybeShowRewardMenu();
   saveProgress();
-  try { syncPauseOverlay(); } catch {};
+  try { syncPauseOverlay(); } catch { };
   // 13-tutorial: reminders (hole1 3/10, hole2 rotator 3 + gadgets 5)
-  try { maybeShowTutorialHole1LiquifierReminder(); } catch {}
-  try { maybeShowTutorialHole2RotatorReminder(); } catch {}
-  try { maybeShowTutorialHole2GadgetsReminder(); } catch {}
+  try { maybeShowTutorialHole1LiquifierReminder(); } catch { }
+  try { maybeShowTutorialHole2RotatorReminder(); } catch { }
+  try { maybeShowTutorialHole2GadgetsReminder(); } catch { }
 }
 function getHoleFailuresBeforeWin(winWasFreeFlight = false) {
   // Failures = counted attempts since hole start, minus the winning shot itself,
@@ -6513,13 +6519,13 @@ function advanceHole(winWasFreeFlight = false) {
   if (currentHoleIndex < getTotalHoles() - 1) {
     if (isTutorialActive()) {
       // No points or summary on tutorial — still journal the clearing modifiers
-      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts - holeRerolls)); } catch {}
+      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts - holeRerolls)); } catch { }
       const wasIdx = currentHoleIndex;
       // Defer via same pending mechanism but without showing overlay — hideCoinSummary will handle tutorial branching immediately
       // To avoid showing overlay, set pending and directly invoke hideCoinSummary path via timeout
       pendingHoleAdvance = true;
       // For tutorial, auto-advance without needing user to dismiss overlay
-      setTimeout(()=>{ try{ hideCoinSummary(); }catch{} }, 50);
+      setTimeout(() => { try { hideCoinSummary(); } catch { } }, 50);
       return;
     }
     // Points per hole: -1 per failed attempt, +10 per modifier traversed, +50 first attempt — only applied on hole clear.
@@ -6533,9 +6539,9 @@ function advanceHole(winWasFreeFlight = false) {
     runPointsEarned += holePoints;
     runCoinsEarned = runPointsEarned;
     runHolesCleared++;
-    try { journalRecordHoleClear(currentHoleIndex, holePoints, attemptsOnHole); } catch {}
+    try { journalRecordHoleClear(currentHoleIndex, holePoints, attemptsOnHole); } catch { }
     // show per-hole points summary before advancing
-    try{ showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints); }catch{}
+    try { showPerHoleSummary(traversed, attemptsOnHole, firstBonus, holePoints); } catch { }
     // Defer actual level load until summary dismissed: pendingHoleAdvance handled in hideCoinSummary
     pendingHoleAdvance = true;
     return;
@@ -6585,18 +6591,18 @@ function returnToMainMenu() {
 function playEnd9HoleThenReturn() {
   // Hide the victory overlay so the cutscene background is visible; the summary
   // (and deferred menu return) runs on completion/skip. Never blocks on failure.
-  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch {}
-  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch {}
-  const proceed = () => { try { cutsceneMarkSeen('end-9-hole'); } catch {} continueReturnToMainMenu(); };
-  const fallback = () => { console.warn('[end-9-hole] failed to load, skipping to summary'); try { hideLoadingScreen(); } catch {} proceed(); };
+  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch { }
+  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch { }
+  const proceed = () => { try { cutsceneMarkSeen('end-9-hole'); } catch { } continueReturnToMainMenu(); };
+  const fallback = () => { console.warn('[end-9-hole] failed to load, skipping to summary'); try { hideLoadingScreen(); } catch { } proceed(); };
   // Feedback: cutscene JSON + assets load async below.
-  try { showLoadingScreen(); } catch {}
+  try { showLoadingScreen(); } catch { }
   try {
     cutsceneLoad('end-9-hole').then(async (loaded) => {
       if (!loaded) { fallback(); return; }
       // Tier 2: cutscene assets (incl. audio) ready before play.
-      try { await preloadCutsceneAssets(loaded); } catch {}
-      try { hideLoadingScreen(); } catch {}
+      try { await preloadCutsceneAssets(loaded); } catch { }
+      try { hideLoadingScreen(); } catch { }
       let ok = false;
       try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
       if (!ok) fallback();
@@ -6608,18 +6614,18 @@ function playEnd18HoleThenReturn() {
   // Same hide-summary-then-proceed pattern as end-9-hole. Never blocks on failure.
   // NOTE: fallback does NOT mark seen (unlike end-9-hole) so a failed load
   // retries on the next 18-hole clear instead of suppressing the finale forever.
-  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch {}
-  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch {}
-  const proceed = () => { try { cutsceneMarkSeen('end-18-hole'); } catch {} continueReturnToMainMenu(); };
-  const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); try { hideLoadingScreen(); } catch {} try { continueReturnToMainMenu(); } catch {} };
+  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch { }
+  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch { }
+  const proceed = () => { try { cutsceneMarkSeen('end-18-hole'); } catch { } continueReturnToMainMenu(); };
+  const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); try { hideLoadingScreen(); } catch { } try { continueReturnToMainMenu(); } catch { } };
   // Feedback: cutscene JSON + assets load async below.
-  try { showLoadingScreen(); } catch {}
+  try { showLoadingScreen(); } catch { }
   try {
     cutsceneLoad('end-18-hole').then(async (loaded) => {
       if (!loaded) { fallback(); return; }
       // Tier 2: cutscene assets (incl. audio) ready before play.
-      try { await preloadCutsceneAssets(loaded); } catch {}
-      try { hideLoadingScreen(); } catch {}
+      try { await preloadCutsceneAssets(loaded); } catch { }
+      try { hideLoadingScreen(); } catch { }
       let ok = false;
       try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
       if (!ok) fallback();
@@ -6628,7 +6634,7 @@ function playEnd18HoleThenReturn() {
 }
 function continueReturnToMainMenu() {
   // Coin economy: add coins for holes cleared this run and show summary
-  try { finalizeRunCoinsAndShowSummary(); } catch {}
+  try { finalizeRunCoinsAndShowSummary(); } catch { }
   if (coinSummaryVisible) {
     // End screen over the loaded level (10-progression.md §4); menu return deferred.
     deferredMenuReturn = true;
@@ -6656,7 +6662,7 @@ function resetGameAfterWin() {
   }
   clearProgress();
   isTutorialRun = false;
-  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch {};
+  try { generateLevels(Date.now() & 0x7fffffff, 18); } catch { };
   currentHoleIndex = 0;
   holeAttempts = 0;
   totalAttempts = 0;
@@ -6664,8 +6670,8 @@ function resetGameAfterWin() {
   // REQ-020/022/023/024: reset supply to one of each on new game, no award before first attempt
   setBagFromTypeList(['liquifier']);
   clearFreeShotGlow();
-  maxAttempts = 10; 
-  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {};
+  maxAttempts = 10;
+  areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender: true, powerCell: true }; try { setFieldPowerCellCount(0); } catch { };
   // REQ-021 + REQ-025 + REQ-028: reset secret counter + reward state + reroll + pause stats
   rewardPending = false;
   rewardMenuVisible = false;
@@ -6722,7 +6728,7 @@ function handleLaunch(angle, power) {
     return;
   }
   launchBall(angle, power);
-  try { audioLaunch(); } catch {}
+  try { audioLaunch(); } catch { }
   // Free Shot: if armed and charges available, this launch is free — consume one charge, mark flight as free
   // If the item's charges reach 0 it is automatically removed from the bag.
   if (isFreeShotActive && golfbagTotalFreeShots() > 0) {
@@ -6777,7 +6783,7 @@ function checkWin() {
   const dist = Math.hypot(ball.pos.x - level.hole.x, ball.pos.y - level.hole.y);
   // Victory when ball touches any part of black circle per new requirement (ground projection)
   if (dist < level.hole.radius + BALL_RADIUS) {
-    try { audioHoleWin(); } catch {}
+    try { audioHoleWin(); } catch { }
     const isFinalHole = currentHoleIndex === getTotalHoles() - 1;
     // Attempts are consumed on launch: holeAttempts includes the winning shot.
     // Capture whether the winning flight was free before any glow clearing below.
@@ -6806,20 +6812,20 @@ function checkWin() {
       clearFreeShotFlightGlow();
       hideSoftlockBanner();
       resetSoftlockDetection();
-      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts - holeRerolls)); } catch {}
-      try { commitRunJournal(true); } catch {}
+      try { journalRecordHoleClear(currentHoleIndex, 0, Math.max(0, holeAttempts - holeStartAttempts - holeRerolls)); } catch { }
+      try { commitRunJournal(true); } catch { }
       // No points, no summary on tutorial final hole — play congratulations banter before returning
-      try{ maybeUpdateHighScore(); }catch{}
+      try { maybeUpdateHighScore(); } catch { }
       gameState = "WIN";
       updateAttemptsUI();
       if (winOverlay) winOverlay.classList.add("hidden");
       if (nextHoleButton) nextHoleButton.classList.add("hidden");
       if (continueButton) continueButton.classList.add("hidden");
-      (async()=>{
-        try{ await banterLoadFile(); }catch{}
-        const ok = banterPlay('tutorial-hole4-complete', {onComplete: ()=>{ try{ syncBanterSkipButton(); }catch{} try{ finishReturnToMainMenu(); }catch{} }});
-        if(!ok) setTimeout(()=>{ try{ finishReturnToMainMenu(); }catch{} }, 600);
-        try{ syncBanterSkipButton(); }catch{}
+      (async () => {
+        try { await banterLoadFile(); } catch { }
+        const ok = banterPlay('tutorial-hole4-complete', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { finishReturnToMainMenu(); } catch { } } });
+        if (!ok) setTimeout(() => { try { finishReturnToMainMenu(); } catch { } }, 600);
+        try { syncBanterSkipButton(); } catch { }
       })();
       return true;
     }
@@ -6833,8 +6839,8 @@ function checkWin() {
     runPointsEarned += holePointsF;
     runCoinsEarned = runPointsEarned;
     runHolesCleared++;
-    try { journalRecordHoleClear(currentHoleIndex, holePointsF, attemptsF); } catch {}
-    try { commitRunJournal(true); } catch {}
+    try { journalRecordHoleClear(currentHoleIndex, holePointsF, attemptsF); } catch { }
+    try { commitRunJournal(true); } catch { }
     ball.vel.x = 0;
     ball.vel.y = 0;
     ball.isMoving = false;
@@ -6845,13 +6851,13 @@ function checkWin() {
     resetSoftlockDetection();
     // Final hole: Hole Complete summary first, then Course Cleared overlay, then cutscene/menu.
     pendingCourseComplete = true;
-    try{ showPerHoleSummary(traversedF, attemptsF, firstBonusF, holePointsF, 0); }catch{}
+    try { showPerHoleSummary(traversedF, attemptsF, firstBonusF, holePointsF, 0); } catch { }
     // Update course record (only full clears count). Capture new-record flag for the overlay.
-    try{
+    try {
       const prevBest = (activeCourse && typeof activeCourse.bestTotal === 'number') ? activeCourse.bestTotal : null;
       maybeUpdateHighScore();
       pendingCourseClearedIsRecord = (prevBest == null || totalPoints > prevBest);
-    }catch{ try{ maybeUpdateHighScore(); }catch{} pendingCourseClearedIsRecord = !!runFirstCourseClear; }
+    } catch { try { maybeUpdateHighScore(); } catch { } pendingCourseClearedIsRecord = !!runFirstCourseClear; }
     // Stay in WIN-like paused state but without winOverlay
     gameState = "WIN";
     updateAttemptsUI();
@@ -6907,21 +6913,21 @@ function tickWindVisual(frameDt) {
   const step = Math.max(0, Math.min(0.05, Number(frameDt) || 0));
   if (step <= 0) return;
   try { updateWindUniforms(step, getWindAt); }
-  catch (e) { try { if (!window.__windLastError) window.__windLastError = String((e && e.stack) || e); } catch {} }
-  try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, step); } catch {}
+  catch (e) { try { if (!window.__windLastError) window.__windLastError = String((e && e.stack) || e); } catch { } }
+  try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, step); } catch { }
 }
 
 function update(dt) {
   // Water splash ripples animate on their own clock (even while physics is frozen).
-  try { updateWaterRipples(dt); } catch {}
+  try { updateWaterRipples(dt); } catch { }
   // 11-cutscenes: when active, freeze game physics but advance cutscene (wind ticks per-frame in loop)
-  try { if (cutsceneIsActive()) { cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch {} return; } } catch {}
+  try { if (cutsceneIsActive()) { cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch { } return; } } catch { }
   // 12-banter: in-place dialog freezes physics/input like the Hole 1 banner but keeps terrain+wind visible
-  try { if (banterIsActive()) { banterUpdate(dt); needHotbarSync = true; try { syncBanterSkipButton(); } catch {} if (charging) { resetCharge(); gameState = "AIMING"; } if (!banterIsActive()) { try { syncBanterSkipButton(); } catch {} } return; } } catch {}
+  try { if (banterIsActive()) { banterUpdate(dt); needHotbarSync = true; try { syncBanterSkipButton(); } catch { } if (charging) { resetCharge(); gameState = "AIMING"; } if (!banterIsActive()) { try { syncBanterSkipButton(); } catch { } } return; } } catch { }
   // Banter just ended on this tick (auto-advance inside banterUpdate above also
   // returns through the branch, but a banter that ended between frames needs a
   // sync so the skip button never leaks into gameplay).
-  try { syncBanterSkipButton(); } catch {}
+  try { syncBanterSkipButton(); } catch { }
   // REQ-021: when reward menu visible, block aiming/charging (wind ticks per-frame in loop)
   if (rewardMenuVisible) {
     // Ensure we stay in AIMING and not charging, and don't process input drift
@@ -6964,9 +6970,9 @@ function update(dt) {
       holeBannerVisible = false;
       holeBannerTimer = 0;
       // auto-transition to reward menu if pending (holes >0)
-      try { maybeShowRewardMenu(); } catch {};
-      if (!rewardMenuVisible) try { maybeShowAttemptsBanner(); } catch {};
-      if (!rewardMenuVisible && !attemptsBannerVisible) try { maybeShowFreeShotBanner(); } catch {};
+      try { maybeShowRewardMenu(); } catch { };
+      if (!rewardMenuVisible) try { maybeShowAttemptsBanner(); } catch { };
+      if (!rewardMenuVisible && !attemptsBannerVisible) try { maybeShowFreeShotBanner(); } catch { };
     }
     if (charging) {
       resetCharge();
@@ -7012,23 +7018,23 @@ function update(dt) {
 
   needHotbarSync = true;
   // 13-tutorial: hole1 liquifier reminders at 3 and 10, hole2 rotator at 3 + gadgets at 5
-  if(isTutorialActive() && (gameState==="AIMING"||gameState==="CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible && !banterIsActive() && !cutsceneIsActive()){
-    if(currentHoleIndex===0){
-      if(!tutorialHole1Liquifier3Shown && holeAttempts>=3){ try{ maybeShowTutorialHole1LiquifierReminder(); }catch{} if(banterIsActive()) return; }
-      if(!tutorialHole1Liquifier10Shown && holeAttempts>=10){ try{ maybeShowTutorialHole1LiquifierReminder(); }catch{} if(banterIsActive()) return; }
-    } else if(currentHoleIndex===1){
-      if(!tutorialHole2RotatorShown && holeAttempts>=3){ try{ maybeShowTutorialHole2RotatorReminder(); }catch{} if(banterIsActive()) return; }
-      if(!tutorialHole2GadgetsReminderShown && holeAttempts>=5){ try{ maybeShowTutorialHole2GadgetsReminder(); }catch{} if(banterIsActive()) return; }
+  if (isTutorialActive() && (gameState === "AIMING" || gameState === "CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible && !banterIsActive() && !cutsceneIsActive()) {
+    if (currentHoleIndex === 0) {
+      if (!tutorialHole1Liquifier3Shown && holeAttempts >= 3) { try { maybeShowTutorialHole1LiquifierReminder(); } catch { } if (banterIsActive()) return; }
+      if (!tutorialHole1Liquifier10Shown && holeAttempts >= 10) { try { maybeShowTutorialHole1LiquifierReminder(); } catch { } if (banterIsActive()) return; }
+    } else if (currentHoleIndex === 1) {
+      if (!tutorialHole2RotatorShown && holeAttempts >= 3) { try { maybeShowTutorialHole2RotatorReminder(); } catch { } if (banterIsActive()) return; }
+      if (!tutorialHole2GadgetsReminderShown && holeAttempts >= 5) { try { maybeShowTutorialHole2GadgetsReminder(); } catch { } if (banterIsActive()) return; }
     }
   }
   // 11-banners: maybe show attempts/freeShot banner (triggered after counter decreased to 1)
   if ((gameState === "AIMING" || gameState === "CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible) {
-    try { maybeShowAttemptsBanner(); } catch {};
+    try { maybeShowAttemptsBanner(); } catch { };
     if (attemptsBannerVisible) {
       if (charging) { resetCharge(); gameState = "AIMING"; }
       return;
     }
-    try { maybeShowFreeShotBanner(); } catch {};
+    try { maybeShowFreeShotBanner(); } catch { };
     if (freeShotBannerVisible) {
       if (charging) { resetCharge(); gameState = "AIMING"; }
       return;
@@ -7044,11 +7050,11 @@ function update(dt) {
         for (const tr of getUncollectedTreasures(level)) {
           if (checkGroundTreasureHit(ball.pos, BALL_RADIUS, tr)) {
             collectTreasure(tr);
-            try { audioChest(); } catch {}
+            try { audioChest(); } catch { }
             // Keep single treasure pointer in sync for backward compat (repoint only,
             // never mutate isCollected — mutating via level.treasure would un-collect
             // the just-collected 2nd/3rd chest on tutorial hole 3).
-            if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
+            if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t => !t.isCollected) || level.treasures[0];
             rewardPending = true;
             journalChestPending = true;
             saveProgress();
@@ -7056,7 +7062,7 @@ function update(dt) {
             break;
           }
         }
-      } catch {};
+      } catch { };
     }
   }
 
@@ -7070,7 +7076,7 @@ function update(dt) {
           ball.pos.x = c.x; ball.pos.y = c.y;
         }
         ball.vel = { x: 0, y: 0 };
-      } catch {};
+      } catch { };
       return;
     }
     updateBall(dt, getWindAt, windStrength, LOGICAL_W, LOGICAL_H);
@@ -7090,10 +7096,10 @@ function update(dt) {
         for (const tr of getUncollectedTreasures(level)) {
           if (checkGroundTreasureHit(ball.pos, BALL_RADIUS, tr)) {
             collectTreasure(tr);
-            try { audioChest(); } catch {}
+            try { audioChest(); } catch { }
             // Keep single treasure pointer in sync for backward compat (repoint only,
             // never mutate array elements via shared ref — see AIMING branch above).
-            if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t=>!t.isCollected) || level.treasures[0];
+            if (Array.isArray(level.treasures) && level.treasures.length) level.treasure = level.treasures.find(t => !t.isCollected) || level.treasures[0];
             rewardPending = true;
             journalChestPending = true;
             saveProgress();
@@ -7102,28 +7108,28 @@ function update(dt) {
             break;
           }
         }
-      } catch {};
+      } catch { };
     }
 
     // Track modifiers traversed for points bonus (+10 per unique modifier) – per hole and per shot (bonus only for clearing shot)
     // Also triggers a quick area-of-effect flash on fresh ball entry (see 06-wind-system §7.3).
-    try{
+    try {
       const nowMs = modifierNowMs();
       const newInside = new Set();
-      for(const m of modifiers){
-        if(Math.hypot(ball.pos.x - m.x, ball.pos.y - m.y) < (m.radius||54)){
+      for (const m of modifiers) {
+        if (Math.hypot(ball.pos.x - m.x, ball.pos.y - m.y) < (m.radius || 54)) {
           const key = modifierFlashKey(m);
           newInside.add(key);
           modifiersTraversedThisHole.add(key);
           modifiersTraversedThisShot.add(key);
-          if(!ballInsideModifierIds.has(key)){
-            try { m.flashAt = nowMs; } catch {}
-            try { audioModifier(m.type); } catch {}
+          if (!ballInsideModifierIds.has(key)) {
+            try { m.flashAt = nowMs; } catch { }
+            try { audioModifier(m.type); } catch { }
           }
         }
       }
       ballInsideModifierIds = newInside;
-    }catch{}
+    } catch { }
     // Check OOB / edge, terrain OB/water, and obstacle - bounce vs death per REQ-024/008/010
     // Physics is 2D on the ground shadow (ball.pos); z is visual arc only.
     // While visually in the air (z > AIRBORNE_Z) the ball may travel over
@@ -7148,9 +7154,9 @@ function update(dt) {
       try {
         const drowned = !!waterHit || !!(terrainHit && (terrainHit.zone === 'water' || terrainHit.type === 'water'));
         if (drowned && ball && ball.pos) spawnWaterRipple(ball.pos.x, ball.pos.y);
-        if (drowned) { try { audioWater(); } catch {} }
-        else { try { audioOB(); } catch {} }
-      } catch {}
+        if (drowned) { try { audioWater(); } catch { } }
+        else { try { audioOB(); } catch { } }
+      } catch { }
       resetBall();
       return;
     }
@@ -7164,7 +7170,7 @@ function update(dt) {
     }
 
     // Softlock detection: show banner if ball confined without progress
-    try { updateSoftlockDetection(dt); } catch {};
+    try { updateSoftlockDetection(dt); } catch { };
 
     // No auto-reset on rest - ball continues drifting per REQ-005
 
@@ -7186,24 +7192,24 @@ function render() {
   // silent in cutscene. Both music tracks fade (crossfade on switch, no hard cut).
   try {
     let isCut = false;
-    try { isCut = cutsceneIsActive(); } catch {}
+    try { isCut = cutsceneIsActive(); } catch { }
     const shouldStageAudio = !mainMenuVisible && !isCut;
     const shouldMenuAudio = !!mainMenuVisible && !isCut;
     if (shouldStageAudio !== lastWindAudioState) {
       lastWindAudioState = shouldStageAudio;
-      try { audioSetWind(shouldStageAudio); } catch {}
+      try { audioSetWind(shouldStageAudio); } catch { }
     }
     if (shouldStageAudio !== lastMusicAudioState) {
       lastMusicAudioState = shouldStageAudio;
-      try { audioSetMusic(shouldStageAudio); } catch {}
+      try { audioSetMusic(shouldStageAudio); } catch { }
     }
     if (shouldMenuAudio !== lastMenuMusicAudioState) {
       lastMenuMusicAudioState = shouldMenuAudio;
-      try { audioSetMenuMusic(shouldMenuAudio); } catch {}
+      try { audioSetMenuMusic(shouldMenuAudio); } catch { }
     }
-  } catch {}
+  } catch { }
   // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
-  try { if (cutsceneIsActive()) { try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch {} return; } } catch {}
+  try { if (cutsceneIsActive()) { try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch { } return; } } catch { }
   // Top canvas is transparent; clear every frame with DPR transform
   const dpr = effectiveDPR();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -7228,8 +7234,8 @@ function render() {
   let snapForArrows = null;
   try {
     let _cut = false, _ban = false;
-    try { _cut = cutsceneIsActive(); } catch {}
-    try { _ban = banterIsActive(); } catch {}
+    try { _cut = cutsceneIsActive(); } catch { }
+    try { _ban = banterIsActive(); } catch { }
     if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cut && !_ban && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
       snapForArrows = getSnapPreviewTarget();
     }
@@ -7249,12 +7255,12 @@ function render() {
         setModifiers(hypo);
         try { drawArrowsInModifiers(ctx, getWindAt, hypo, cols, rows, cellW, cellH, null); }
         finally { setModifiers(modifiers); }
-      } catch { try { setModifiers(modifiers); } catch {} }
+      } catch { try { setModifiers(modifiers); } catch { } }
     } else {
-      try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch {};
+      try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch { };
     }
   } else {
-    try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch {};
+    try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch { };
   }
   // Static scenery (trees/bricks + hole + chests) is pre-rendered offscreen per
   // level/collect-state/DPR and blitted here — one GPU blit instead of hundreds
@@ -7270,14 +7276,14 @@ function render() {
     const sig = currentHoleIndex + '|' + lvlId + '|' + treasures.map(t => (t && t.isCollected) ? 1 : 0).join('') + '|' + dpr;
     if (sig !== lastStaticSig) {
       lastStaticSig = sig;
-      try { renderStaticScenery(level, treasures, dpr); } catch {}
+      try { renderStaticScenery(level, treasures, dpr); } catch { }
     }
     if (!drawStaticScenery(ctx)) {
       // Fallback: direct draw if the offscreen blit is unavailable.
       drawObstacles(ctx, level.obstacles);
       drawHole(ctx, level.hole);
       for (const tr of treasures) {
-        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
+        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch { }; }
       }
     }
   } catch {
@@ -7285,18 +7291,18 @@ function render() {
       drawObstacles(ctx, level.obstacles);
       drawHole(ctx, level.hole);
       for (const tr of getLevelTreasures(level)) {
-        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {}; }
+        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch { }; }
       }
-    } catch {}
+    } catch { }
   }
   drawBall(ctx, ball);
-  try { drawWaterRipples(ctx, level && level.waterHazards); } catch {}
+  try { drawWaterRipples(ctx, level && level.waterHazards); } catch { }
   // During the end screen (over the level) no aim/preview/force-bar/softlock chrome.
   // Also suppress aim while a cutscene/banter is active or a hole transition is
   // pending: the ball may still sit in the cleared hole (e.g. tutorial hole 1
   // before the first-restock cutscene) and the orbit must never draw there.
-  let _cutActive = false; try { _cutActive = cutsceneIsActive(); } catch {}
-  let _banterActive = false; try { _banterActive = banterIsActive(); } catch {}
+  let _cutActive = false; try { _cutActive = cutsceneIsActive(); } catch { }
+  let _banterActive = false; try { _banterActive = banterIsActive(); } catch { }
   if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance) {
     drawAim(ctx, ball, getAimAngle(), charge, gameState);
   }
@@ -7304,14 +7310,14 @@ function render() {
   // REQ-020: only show preview if supply allows placement; REQ-021/023: not during reward menu.
   // Out-of-bounds centers (canvas edge / OB terrain) show the blocked preview.
   let oobPreview = false;
-  try { oobPreview = !!(mousePos && selectedModifier && isPlacementOutOfBounds(mousePos.x, mousePos.y)); } catch {}
+  try { oobPreview = !!(mousePos && selectedModifier && isPlacementOutOfBounds(mousePos.x, mousePos.y)); } catch { }
   if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && canPlace(selectedModifier) && !oobPreview) {
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius());
   } else if (!rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING") && mousePos && selectedModifier && (!canPlace(selectedModifier) || oobPreview)) {
     // Insufficient supply or out of bounds: blocked preview (gray/red).
     // Caption names the reason ('out of bounds' vs default 'no supply').
     let placeableNow = false;
-    try { placeableNow = canPlace(selectedModifier); } catch {}
+    try { placeableNow = canPlace(selectedModifier); } catch { }
     drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true, placeableNow ? 'out of bounds' : null);
   }
   // Bag-placement preview shows wind arrows inside its area as they would be
@@ -7327,7 +7333,7 @@ function render() {
         drawArrowsInModifiers(ctx, getWindAt, [], cols, rows, cellW, cellH,
           { x: mousePos.x, y: mousePos.y, radius: getEffectiveModifierRadius(), type: selectedModifier });
       } finally { setModifiers(modifiers); }
-    } catch { try { setModifiers(modifiers); } catch {} };
+    } catch { try { setModifiers(modifiers); } catch { } };
   }
   // Stacking EM-pull link: preview/dragged center inside another modifier
   if (snapForArrows && !rewardMenuVisible && !coinSummaryVisible && !courseClearedVisible && !_cutActive && !_banterActive && !pendingHoleAdvance && (gameState === "AIMING" || gameState === "CHARGING")) {
@@ -7335,10 +7341,10 @@ function render() {
       const snap = snapForArrows;
       {
         let nowMs = 0;
-        try { nowMs = performance.now(); } catch { try { nowMs = Date.now(); } catch {} }
+        try { nowMs = performance.now(); } catch { try { nowMs = Date.now(); } catch { } }
         drawSnapLink(ctx, snap.fromX, snap.fromY, snap.toX, snap.toY, nowMs);
       }
-    } catch {}
+    } catch { }
   }
   // HUD is now HTML #hud on top of canvas (see 03-rendering.md §4) — no canvas drawHUD
   // Power bar under ball when charging per REQ-007
@@ -7347,22 +7353,22 @@ function render() {
   }
   // Softlock banner (non-blocking) below HUD — informs player they can reset via R or pause menu
   if (softlockBannerVisible && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible && !rewardMenuVisible && !pauseMenuVisible && !mainMenuVisible && !coinSummaryVisible && !courseClearedVisible && !helpVisible && gameState === "FLYING") {
-    try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch {};
+    try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch { };
   }
   // HTML reward overlay (sync handled on state change, not per-frame to avoid thrashing)
   // 11-banners: hole/attempts/freeShot banners share reward backdrop/style, auto-hide 1s; hole banner transitions to reward
   if (holeBannerVisible) {
-    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch {};
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch { };
   } else if (attemptsBannerVisible) {
-    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, attemptsBannerText); } catch {};
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, attemptsBannerText); } catch { };
   } else if (freeShotBannerVisible) {
-    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, freeShotBannerText); } catch {};
+    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, freeShotBannerText); } catch { };
   } else if (rewardMenuVisible) {
     // Reward is HTML overlay #reward-overlay; no canvas draw (icon background removed)
   }
   // REQ-028: pause menu is DOM-only (#pause-overlay) to avoid duplicate rendering; canvas pause draw disabled
   // Render wind overlay (Three.js shader lines + particles) on top of game canvas, transparent
-  try { renderWind(); } catch {};
+  try { renderWind(); } catch { };
 }
 
 function loop(now) {
@@ -7381,16 +7387,16 @@ function loop(now) {
     try {
       if (cutsceneIsActive()) {
         const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
-        try { tickWindVisual(dt); } catch {}
-        try { cutsceneUpdate(dt); } catch {}
-        try { syncCutsceneSkipButton(); } catch {}
+        try { tickWindVisual(dt); } catch { }
+        try { cutsceneUpdate(dt); } catch { }
+        try { syncCutsceneSkipButton(); } catch { }
       } else if (banterIsActive()) {
         const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
-        try { tickWindVisual(dt); } catch {}
-        try { banterUpdate(dt); } catch {}
-        try { syncBanterSkipButton(); } catch {}
+        try { tickWindVisual(dt); } catch { }
+        try { banterUpdate(dt); } catch { }
+        try { syncBanterSkipButton(); } catch { }
       }
-    } catch {}
+    } catch { }
     render();
     requestAnimationFrame(loop);
     lastTime = now;
@@ -7406,10 +7412,10 @@ function loop(now) {
     steps++;
   }
   // Wind visuals + queued hotbar DOM sync run once per frame (never per step).
-  try { tickWindVisual(frameTime); } catch {}
+  try { tickWindVisual(frameTime); } catch { }
   if (needHotbarSync) {
     needHotbarSync = false;
-    try { updateHotbarUI(); } catch {}
+    try { updateHotbarUI(); } catch { }
   }
   // Mobile auto-degrade: sustained low fps → drop DPR cap 1.5→1.0 once.
   try {
@@ -7423,13 +7429,13 @@ function loop(now) {
         if (avgFps < 45 && mobileDPRCap > 1) {
           mobileDegraded = true;
           mobileDPRCap = 1;
-          try { window.__mobileDPRCapValue = 1; } catch {}
-          try { setupCanvas(); } catch {}
-          try { resizeWindOverlay(); } catch {}
+          try { window.__mobileDPRCapValue = 1; } catch { }
+          try { setupCanvas(); } catch { }
+          try { resizeWindOverlay(); } catch { }
         }
       }
     }
-  } catch {}
+  } catch { }
   render();
   requestAnimationFrame(loop);
 }
@@ -7446,15 +7452,15 @@ function init() {
     const gate = document.getElementById("continue-overlay");
     if (gate) {
       gate.classList.remove("hidden");
-      gate.addEventListener("click", () => { try { continueFromBootGate(); } catch {} });
+      gate.addEventListener("click", () => { try { continueFromBootGate(); } catch { } });
       gate.addEventListener("keydown", (e) => {
         if (e.code === "Enter" || e.code === "Space") {
-          try { continueFromBootGate(); } catch {}
-          try { e.preventDefault(); } catch {}
+          try { continueFromBootGate(); } catch { }
+          try { e.preventDefault(); } catch { }
         }
       });
     }
-  } catch {}
+  } catch { }
   ctx = canvas.getContext("2d");
   bgCtx = bgCanvas.getContext("2d");
   winOverlay = document.getElementById("win-overlay");
@@ -7499,7 +7505,7 @@ function init() {
       toggleHotbar();
       // Release focus so a subsequent Space (charge/shoot) goes to the game,
       // not back into the focused bag (which would re-toggle on every key repeat).
-      try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch {}
+      try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch { }
     };
     golfbagContainerEl.addEventListener("click", handleGolfbagToggle);
     golfbagContainerEl.addEventListener("keydown", (e) => {
@@ -7508,14 +7514,14 @@ function init() {
         if (e.repeat) { e.preventDefault(); return; }
         e.preventDefault();
         toggleHotbar();
-        try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch {}
+        try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch { }
       } else if (e.code === "Space") {
         // Space is shoot game-wide: never toggle the bag with it. Release
         // focus (e.g. Tabbed to the bag) so holding Space charges instead of
         // re-activating the focused bag on every key repeat. Do NOT stop
         // propagation — the global input handler still starts charging.
         e.preventDefault();
-        try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch {}
+        try { if (golfbagContainerEl && document.activeElement === golfbagContainerEl) golfbagContainerEl.blur(); } catch { }
       }
     });
   }
@@ -7525,7 +7531,7 @@ function init() {
       toggleJournal();
       // Release focus so a subsequent Space (charge/shoot) goes to the game,
       // not back into the focused icon (which would re-toggle on key repeat).
-      try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch {}
+      try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch { }
     };
     journalContainerEl.addEventListener("click", handleJournalToggle);
     journalContainerEl.addEventListener("keydown", (e) => {
@@ -7533,10 +7539,10 @@ function init() {
         if (e.repeat) { e.preventDefault(); return; }
         e.preventDefault();
         toggleJournal();
-        try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch {}
+        try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch { }
       } else if (e.code === "Space") {
         e.preventDefault();
-        try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch {}
+        try { if (journalContainerEl && document.activeElement === journalContainerEl) journalContainerEl.blur(); } catch { }
       }
     });
   }
@@ -7616,7 +7622,7 @@ function init() {
     newCourseChoices.querySelectorAll('button[data-holes]').forEach(btn => {
       btn.addEventListener('click', () => {
         const hc = parseInt(btn.dataset.holes, 10);
-        if ([3,6,9,18].includes(hc)) {
+        if ([3, 6, 9, 18].includes(hc)) {
           if (hc === 3 && newCourseChoicesDifficulty) {
             // For 3-hole courses, show difficulty chooser per REQ-031/010/034
             newCourseChoices.classList.add('hidden');
@@ -7636,7 +7642,7 @@ function init() {
     newCourseChoicesDifficulty.querySelectorAll('button[data-difficulty]').forEach(btn => {
       btn.addEventListener('click', () => {
         const diff = btn.dataset.difficulty;
-        if (['easy','medium','hard'].includes(diff)) {
+        if (['easy', 'medium', 'hard'].includes(diff)) {
           createNewCourseWithHoles(3, diff);
           newCourseChoicesDifficulty.classList.add('hidden');
           newCourseChoices.classList.add('hidden');
@@ -7675,8 +7681,8 @@ function init() {
         const existing = findCourseById(imported.id);
         if (existing) {
           try {
-            imported.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});
-          } catch {};
+            imported.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); });
+          } catch { };
           imported.name = imported.name + ' (Import)';
         }
         courses.push(imported);
@@ -7775,7 +7781,7 @@ function init() {
       let v = campaignInput.value.toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, 8);
       if (v !== campaignInput.value) {
         campaignInput.value = v;
-        try { campaignInput.setSelectionRange(start, end); } catch {};
+        try { campaignInput.setSelectionRange(start, end); } catch { };
       }
       const err = document.getElementById('campaign-seed-error');
       if (err && !err.classList.contains('hidden')) { err.textContent = ''; err.classList.add('hidden'); }
@@ -7856,8 +7862,8 @@ function init() {
     cutsceneSkipBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch {}
-      try { if (cutsceneIsActive()) cutsceneSkip(); } catch {}
+      try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch { }
+      try { if (cutsceneIsActive()) cutsceneSkip(); } catch { }
     });
   }
   // 12-banter §6: Skip button top-right, same pill design — ends the active banter at once.
@@ -7867,9 +7873,9 @@ function init() {
     banterSkipBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch {}
-      try { if (banterIsActive()) banterSkip(); } catch {}
-      try { syncBanterSkipButton(); } catch {}
+      try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch { }
+      try { if (banterIsActive()) banterSkip(); } catch { }
+      try { syncBanterSkipButton(); } catch { }
     });
   }
 
@@ -7890,7 +7896,7 @@ function init() {
         legacyMissingShopStock = !d0 || d0.version !== 1 || !d0.shopStock || typeof d0.shopStock !== 'object';
       } catch { legacyMissingShopStock = true; }
     }
-  } catch {}
+  } catch { }
   try { loadProgression(); } catch (e) { console.warn('loadProgression failed', e); }
   if (legacyMissingShopStock) {
     // Baseline is the milestone-derived stock for already-cleared courses.
@@ -7898,13 +7904,13 @@ function init() {
       try {
         const cc = courses.find(x => x.holeCount === hc);
         if (cc && cc.bestTotal !== null && cc.bestTotal !== undefined) grantShopMilestoneStock(hc, false);
-      } catch {}
+      } catch { }
     }
   }
-  try { syncCampaignSeedDisplay(); } catch {};
-  try { syncProgressionDisplay(); } catch {};
-  try { syncLoadoutOverlay(); } catch {};
-  try { syncCoinSummaryOverlay(); } catch {};
+  try { syncCampaignSeedDisplay(); } catch { };
+  try { syncProgressionDisplay(); } catch { };
+  try { syncLoadoutOverlay(); } catch { };
+  try { syncCoinSummaryOverlay(); } catch { };
   try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 1; }
   // No immediate auto-create if courses empty — allow empty per updated REQ-031 (persist [])
   // loadCourses already created default on first ever missing key; empty from delete stays empty
@@ -7919,7 +7925,7 @@ function init() {
       courses[0].bestTotal = legacy;
       saveCourses();
     }
-  } catch {};
+  } catch { };
   // REQ-004: init Three.js wind overlay (transparent shader + particles) on top of game canvas
   try {
     const container = document.getElementById('game-container');
@@ -7933,7 +7939,7 @@ function init() {
     try {
       const _secretHole = getSecretHoleFromURL();
       if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
-        try { clearProgress(); } catch {};
+        try { clearProgress(); } catch { };
         throw new Error('secret hole overrides save');
       }
       const data = loadProgress();
@@ -7944,7 +7950,7 @@ function init() {
         createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
         syncModifiersToField();
         createBall(level.tee);
-        try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch {};
+        try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch { };
         // Handle GAME_OVER save: show Game Over screen directly
         if (data.gameState === 'GAME_OVER') {
           gameState = 'GAME_OVER';
@@ -7972,7 +7978,7 @@ function init() {
           // If reward was pending/visible before save, restore it
           if (data.rewardMenuVisible && (rewardOffered.length >= 1 && rewardOffered.length <= 3)) {
             rewardMenuVisible = true;
-            try { syncRewardOverlay(); } catch {};
+            try { syncRewardOverlay(); } catch { };
           } else if (rewardPending) {
             maybeShowRewardMenu();
           }
@@ -7986,7 +7992,7 @@ function init() {
         updateAttemptsUI(); updateHotbarUI(); updateForceBar();
         syncMainMenu(); syncPauseOverlay();
         redrawBottom();
-        try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch {};
+        try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch { };
         // Mark that we auto-resumed so main-menu block below is skipped
         window.__autoResumed = true;
       } else {
@@ -8001,47 +8007,47 @@ function init() {
     }
   }
   if (!window.__autoResumed) {
-  // No save or failed — show main menu (no Continue button)
-  // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden) — clear save and set hole behind menu
-  const _secretHole = getSecretHoleFromURL();
-  if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
-    try { clearProgress(); } catch {};
-    currentHoleIndex = _secretHole - 1;
-  } else {
-    currentHoleIndex = 0;
-  }
-  // Always show main menu entry (REQ-029) — no Continue button, auto-resume handles saves
-  if (LEVELS.length) {
-    level = LEVELS[0];
-    windStrength = level.field.strength ?? WIND_STRENGTH;
-    createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
-    modifiers = []; syncModifiersToField();
-    createBall(level.tee);
-    const dx0 = level.hole.x - level.tee.x;
-    const dy0 = level.hole.y - level.tee.y;
-    setAimAngle(Math.atan2(dy0, dx0));
-  } else {
-    level = { field:{cols:32,rows:18,strength:80,seed:0,sources:1,sinks:1,doublets:0,vortexes:0}, tee:{x:80,y:360}, hole:{x:1200,y:360,radius:14}, obstacles:[], canvas:{width:LOGICAL_W,height:LOGICAL_H} };
-    createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
-    modifiers = []; syncModifiersToField();
-    createBall(level.tee);
-    setAimAngle(0);
-  }
-  gameState = "AIMING";
-  mainMenuVisible = true;
-  courseMenuVisible = false;
-  helpVisible = false;
-  pauseMenuVisible = false; rewardMenuVisible = false;
-  if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
-  holeAttempts = 0; totalAttempts = 0; attempts = 0;
-  setBagFromTypeList(['liquifier']);
-  maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender:true, powerCell:true }; try { setFieldPowerCellCount(0); } catch {}; rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
-  rewardPending = false; rewardOffered = []; rewardRerolled = false;
-  resetHotbarCollapsed();
-  updateAttemptsUI(); updateHotbarUI(); updateForceBar();
-  syncMainMenu(); syncPauseOverlay();
-  // Hide loading after splash is ready (also handled via image onload)
-  try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch {};
+    // No save or failed — show main menu (no Continue button)
+    // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden) — clear save and set hole behind menu
+    const _secretHole = getSecretHoleFromURL();
+    if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
+      try { clearProgress(); } catch { };
+      currentHoleIndex = _secretHole - 1;
+    } else {
+      currentHoleIndex = 0;
+    }
+    // Always show main menu entry (REQ-029) — no Continue button, auto-resume handles saves
+    if (LEVELS.length) {
+      level = LEVELS[0];
+      windStrength = level.field.strength ?? WIND_STRENGTH;
+      createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
+      modifiers = []; syncModifiersToField();
+      createBall(level.tee);
+      const dx0 = level.hole.x - level.tee.x;
+      const dy0 = level.hole.y - level.tee.y;
+      setAimAngle(0);
+    } else {
+      level = { field: { cols: 32, rows: 18, strength: 80, seed: 0, sources: 1, sinks: 1, doublets: 0, vortexes: 0 }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], canvas: { width: LOGICAL_W, height: LOGICAL_H } };
+      createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
+      modifiers = []; syncModifiersToField();
+      createBall(level.tee);
+      setAimAngle(0);
+    }
+    gameState = "AIMING";
+    mainMenuVisible = true;
+    courseMenuVisible = false;
+    helpVisible = false;
+    pauseMenuVisible = false; rewardMenuVisible = false;
+    if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
+    holeAttempts = 0; totalAttempts = 0; attempts = 0;
+    setBagFromTypeList(['liquifier']);
+    maxAttempts = 10; areaUpgradeCount = 0; fieldExtenderCount = 0; powerCellCount = 0; passiveEnabled = { fieldExtender: true, powerCell: true }; try { setFieldPowerCellCount(0); } catch { }; rewardChosenCounts = { magnifier: 0, liquifier: 0, deflector: 0, rotator: 0, freeShot: 0, areaUp: 0, fieldExtender: 0, powerCell: 0 };
+    rewardPending = false; rewardOffered = []; rewardRerolled = false;
+    resetHotbarCollapsed();
+    updateAttemptsUI(); updateHotbarUI(); updateForceBar();
+    syncMainMenu(); syncPauseOverlay();
+    // Hide loading after splash is ready (also handled via image onload)
+    try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch { };
   }
   if (window.__autoResumed) {
     // Clean up flag after auto-resume
@@ -8123,20 +8129,20 @@ function init() {
       const origGetById = document.getElementById.bind(document);
       const origQS = document.querySelector.bind(document);
       const origQSA = document.querySelectorAll.bind(document);
-      document.getElementById = function(id) {
+      document.getElementById = function (id) {
         if (id === 'pause-next-attempt-button' || id === 'pause-reset-attempt-button') return pauseNextBtn;
         return origGetById(id);
       };
-      document.querySelector = function(sel) {
+      document.querySelector = function (sel) {
         if (sel === '#pause-next-attempt-button' || sel === '#pause-reset-attempt-button') return pauseNextBtn;
         return origQS(sel);
       };
-      document.querySelectorAll = function(sel) {
+      document.querySelectorAll = function (sel) {
         if (sel === '#pause-next-attempt-button' || sel === '#pause-reset-attempt-button') return [pauseNextBtn];
         return origQSA(sel);
       };
     }
-  } catch {};
+  } catch { };
   // Ensure text is Next Attempt
   for (const btn of [pauseNextAttemptBtnDom, pauseResetAttemptBtnDom].filter(Boolean)) {
     if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
@@ -8211,15 +8217,15 @@ function init() {
     // Boot gate first: Enter/Space continues, everything else is swallowed.
     if (bootGateVisible) {
       if (e.code === "Enter" || e.code === "Space") {
-        try { continueFromBootGate(); } catch {}
+        try { continueFromBootGate(); } catch { }
       }
-      try { e.preventDefault(); } catch {}
+      try { e.preventDefault(); } catch { }
       return;
     }
     // 11-cutscenes has top priority — Space/R fast-forward and advance dialog, Escape skip
-    try { if (cutsceneIsActive()) { if (cutsceneHandleInput(e)) { return; } const ae0=document.activeElement; const isIn0=ae0 && (ae0.tagName==='INPUT'||ae0.tagName==='TEXTAREA'||ae0.isContentEditable); if(!isIn0) e.preventDefault(); return; } } catch {}
+    try { if (cutsceneIsActive()) { if (cutsceneHandleInput(e)) { return; } const ae0 = document.activeElement; const isIn0 = ae0 && (ae0.tagName === 'INPUT' || ae0.tagName === 'TEXTAREA' || ae0.isContentEditable); if (!isIn0) e.preventDefault(); return; } } catch { }
     // 12-banter: in-place dialog — Space/R/Click fast-forward then advance, Escape advances (pause stays blocked)
-    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch {}
+    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch { }
     // Coin summary has top priority (above game over) — animated End Run overlay
     if (coinSummaryVisible) {
       const isDismissKey = e.code === "Escape" || e.code === "Enter" || e.code === "Space" || e.code === "KeyR" || e.key === "r" || e.key === "R";
@@ -8245,9 +8251,9 @@ function init() {
     // Starting items overlay has next priority — Choose 2 starting items before run
     if (startingItemsVisible) {
       if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3" || e.code === "Digit4") {
-        const idx = parseInt(e.code.slice(5),10)-1;
+        const idx = parseInt(e.code.slice(5), 10) - 1;
         const type = startingChoices[idx];
-        if(type) handleStartingPick(type);
+        if (type) handleStartingPick(type);
         e.preventDefault(); return;
       }
       if (e.code === "Escape") {
@@ -8450,7 +8456,7 @@ function init() {
       // In AIMING/CHARGING handle deselection first per 07 spec (Escape clears selection/active) before opening pause
       if ((gameState === "AIMING" || gameState === "CHARGING") && (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive)) {
         selectedModifier = null; selectedBagIndex = -1;
-        try { cancelBagDrag(); } catch {}
+        try { cancelBagDrag(); } catch { }
         if (isFreeShotActive) clearFreeShotGlow();
         updateHotbarUI();
         e.preventDefault();
@@ -8467,7 +8473,7 @@ function init() {
       // Not in level (entry menu hidden?): handle deselection fallback
       if (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive) {
         selectedModifier = null; selectedBagIndex = -1;
-        try { cancelBagDrag(); } catch {}
+        try { cancelBagDrag(); } catch { }
         if (isFreeShotActive) clearFreeShotGlow();
         updateHotbarUI();
         e.preventDefault();
@@ -8546,9 +8552,9 @@ function init() {
             e.preventDefault();
             return;
           }
-        } catch {}
+        } catch { }
         if (!golfbagHasEmpty()) {
-          try { showToast('Golfbag is already full'); } catch {}
+          try { showToast('Golfbag is already full'); } catch { }
         } else {
           const removed = modifiers.pop();
           if (removed && removed.type) {
@@ -8612,7 +8618,7 @@ function init() {
     try {
       const ae = document.activeElement;
       if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
-    } catch {}
+    } catch { }
     const code = e.code;
     if (typeof code !== "string" || !code) return;
     if (code === "ShiftLeft" || code === "ShiftRight" || code === "ControlLeft" || code === "ControlRight" || code === "AltLeft" || code === "AltRight" || code === "MetaLeft" || code === "MetaRight" || code === "CapsLock") return;
@@ -8620,7 +8626,7 @@ function init() {
       _konamiProgress++;
       if (_konamiProgress >= KONAMI_SEQUENCE.length) {
         _konamiProgress = 0;
-        try { toggleCheatMode(); } catch {}
+        try { toggleCheatMode(); } catch { }
       }
     } else {
       // Overlap restart (e.g. Up,Up,Up restarts at 1), otherwise reset.
@@ -8669,12 +8675,12 @@ function init() {
           cheatMousePos = c;
           try {
             if (ball && ball.pos) { ball.pos.x = c.x; ball.pos.y = c.y; ball.vel = { x: 0, y: 0 }; }
-          } catch {}
+          } catch { }
           canvas.style.cursor = "grabbing";
           return;
         }
         if (!pauseMenuVisible && !mainMenuVisible && (gameState === "FLYING") && ball && ball.pos &&
-            Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) <= BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) {
+          Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) <= BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) {
           canvas.style.cursor = "grab";
           return;
         }
@@ -8690,7 +8696,7 @@ function init() {
       cheatMousePos = c;
       try {
         if (ball && ball.pos) { ball.pos.x = c.x; ball.pos.y = c.y; ball.vel = { x: 0, y: 0 }; }
-      } catch {}
+      } catch { }
       canvas.style.cursor = "grabbing";
       return;
     }
@@ -8715,14 +8721,14 @@ function init() {
     } else {
       // 14-cheat-mode: hovering the ball shows grab (ball wins over modifiers).
       if (cheatMode && !cheatGrabBlocked() && ball && ball.pos &&
-          Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) <= BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) {
+        Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) <= BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) {
         canvas.style.cursor = "grab";
         return;
       }
       // Update cursor based on hover over modifier (armed placement wins: crosshair)
       const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
       let hoverArmedPlaceable = false;
-      try { hoverArmedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+      try { hoverArmedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch { }
       if (overIdx !== -1 && !hoverArmedPlaceable) {
         canvas.style.cursor = "grab";
       } else if (selectedModifier) {
@@ -8744,7 +8750,7 @@ function init() {
       return;
     }
     // 12-banter: block drag-start while the in-place dialog is up
-    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch {}
+    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch { }
     if (pauseMenuVisible) {
       e.preventDefault();
       return;
@@ -8778,7 +8784,7 @@ function init() {
     // not grab the existing modifier. The click handler performs the placement.
     try {
       if (selectedModifier && canPlace(selectedModifier)) return;
-    } catch {}
+    } catch { }
     const idx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     if (idx !== -1) {
       // Start dragging existing modifier (or stack); snapshot membership now
@@ -8802,7 +8808,7 @@ function init() {
       try {
         const pos = getCanvasMousePos(e);
         dropCheatBall(pos);
-      } catch { try { dropCheatBall(null); } catch {} }
+      } catch { try { dropCheatBall(null); } catch { } }
       canvas.style.cursor = "default";
     }
     if (isDragging && draggingIdx !== -1) {
@@ -8844,7 +8850,7 @@ function init() {
           if (snap && snap.mod) {
             for (const mi of mates) { modifiers[mi].x = snap.mod.x; modifiers[mi].y = snap.mod.y; }
           }
-        } catch {}
+        } catch { }
         syncModifiersToField();
       }
       isDragging = false;
@@ -8908,7 +8914,7 @@ function init() {
       syncDerivedFromBag();
       updateHotbarUI();
       finish(); saveProgress();
-    } catch { try { finish(); } catch {} }
+    } catch { try { finish(); } catch { } }
   }
   // Bag drag-and-drop gesture tracking (slot mousedown starts pendingBagDrag).
   window.addEventListener("mousemove", (e) => {
@@ -8928,7 +8934,7 @@ function init() {
           syncModifiersToField();
           canvas.style.cursor = "grabbing";
         }
-      } catch {}
+      } catch { }
     }
     if (!bagDrag) return;
     try {
@@ -8950,9 +8956,9 @@ function init() {
         // Keep the placement preview tracking the pointer even over HUD slots
         // (the canvas mousemove listener doesn't fire there, which used to
         // freeze the preview area mid-drag while drag mode stayed active).
-        try { mousePos = getCanvasMousePos(e); } catch {}
+        try { mousePos = getCanvasMousePos(e); } catch { }
       }
-    } catch {}
+    } catch { }
   });
   window.addEventListener("mouseup", (e) => {
     if (!bagDrag) return;
@@ -9001,14 +9007,14 @@ function init() {
       }
       // Release anywhere else: not placed — stays in its slot, deselected
       disarm();
-    } catch {}
+    } catch { }
   });
-  window.addEventListener("blur", () => { try { cancelBagDrag(); } catch {} });
+  window.addEventListener("blur", () => { try { cancelBagDrag(); } catch { } });
   canvas.addEventListener("click", (e) => {
     // 11-cutscenes: Space/R/Click fast-forward while active
-    try { if (cutsceneIsActive()) { cutsceneHandleInput(e); e.preventDefault(); return; } } catch {}
+    try { if (cutsceneIsActive()) { cutsceneHandleInput(e); e.preventDefault(); return; } } catch { }
     // 12-banter: clicks advance the in-place dialog, never place modifiers
-    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch {}
+    try { if (banterIsActive()) { banterHandleInput(e); e.preventDefault(); return; } } catch { }
     // REQ-029/030: main menu is HTML overlay bounded to canvas — canvas clicks while menu visible are ignored (HTML button handles New Game)
     if (mainMenuVisible) {
       e.preventDefault();
@@ -9029,7 +9035,7 @@ function init() {
           e.preventDefault();
           return;
         }
-      } catch {};
+      } catch { };
       const layout = getRewardButtonsLayout(LOGICAL_W, LOGICAL_H, rewardOffered);
       for (const btn of layout) {
         if (pos.x >= btn.x && pos.x <= btn.x + btn.w && pos.y >= btn.y && pos.y <= btn.y + btn.h) {
@@ -9063,7 +9069,7 @@ function init() {
     // (drag to move, right-click to remove/split).
     const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
     let armedPlaceable = false;
-    try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+    try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch { }
     if (overIdx !== -1 && !armedPlaceable) {
       // Click on existing without drag - no action (drag to move, right-click to remove)
       return;
@@ -9076,7 +9082,7 @@ function init() {
     try {
       const pos = getCanvasMousePos(e);
       handleRightClickAt(pos.x, pos.y);
-    } catch {}
+    } catch { }
   });
   initMobileControls();
 
@@ -9086,8 +9092,8 @@ function init() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       setupCanvas();
-      try { resizeWindOverlay(); } catch {};
-      try { syncMobileUI(); } catch {};
+      try { resizeWindOverlay(); } catch { };
+      try { syncMobileUI(); } catch { };
     }, 200);
   });
 
@@ -9135,7 +9141,7 @@ function getRewardMenuState() {
   return { visible: rewardMenuVisible, claimedFor: rewardClaimedFor, hover: rewardMenuHover, offered: [...rewardOffered] };
 }
 function setRewardClaimedFor(v) { rewardClaimedFor = v; }
-function setRewardMenuVisible(v) { rewardMenuVisible = !!v; try { syncRewardOverlay(); } catch {}; }
+function setRewardMenuVisible(v) { rewardMenuVisible = !!v; try { syncRewardOverlay(); } catch { }; }
 function setRewardOffered(v) { if (Array.isArray(v)) rewardOffered = [...v]; }
 
 // Expose for manual/browser testing and for acceptance checks without import
@@ -9246,7 +9252,7 @@ if (typeof window !== 'undefined') {
   });
   Object.defineProperty(window, 'rewardMenuVisible', {
     get: () => rewardMenuVisible,
-    set: (v) => { rewardMenuVisible = !!v; try { syncRewardOverlay(); } catch {}; }
+    set: (v) => { rewardMenuVisible = !!v; try { syncRewardOverlay(); } catch { }; }
   });
   Object.defineProperty(window, 'rewardClaimedFor', {
     get: () => rewardClaimedFor,
@@ -9298,7 +9304,7 @@ if (typeof window !== 'undefined') {
     get: () => powerCellCount,
     set: (v) => {
       powerCellCount = Math.max(0, Math.floor(v));
-      try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch {}
+      try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch { }
       updateHotbarUI();
     }
   });
@@ -9306,7 +9312,7 @@ if (typeof window !== 'undefined') {
     get: () => powerCellCount,
     set: (v) => {
       powerCellCount = Math.max(0, Math.floor(v));
-      try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch {}
+      try { setFieldPowerCellCount(getEffectivePowerCellCount()); } catch { }
       updateHotbarUI();
     }
   });
@@ -9356,8 +9362,8 @@ if (typeof window !== 'undefined') {
   window.isPauseMenuVisible = isPauseMenuVisible;
   Object.defineProperty(window, 'pauseMenuVisible', { get: () => pauseMenuVisible, set: (v) => { pauseMenuVisible = !!v; } });
   Object.defineProperty(window, '__pauseMenuVisible', { get: () => pauseMenuVisible, set: (v) => { pauseMenuVisible = !!v; } });
-  Object.defineProperty(window, 'rewardChosenCounts', { get: () => ({...rewardChosenCounts}), set: (v) => setRewardChosenCounts(v) });
-  Object.defineProperty(window, '__rewardChosenCounts', { get: () => ({...rewardChosenCounts}), set: (v) => setRewardChosenCounts(v) });
+  Object.defineProperty(window, 'rewardChosenCounts', { get: () => ({ ...rewardChosenCounts }), set: (v) => setRewardChosenCounts(v) });
+  Object.defineProperty(window, '__rewardChosenCounts', { get: () => ({ ...rewardChosenCounts }), set: (v) => setRewardChosenCounts(v) });
   // REQ-029: expose main menu + high score helpers + new menu helpers
   window.__getHighScore = getHighScore;
   window.__setHighScore = setHighScore;
@@ -9543,8 +9549,8 @@ if (typeof window !== 'undefined') {
   window.__getRunCoinsEarned = getRunCoinsEarned;
   window.__getRunHolesCleared = getRunHolesCleared;
   window.__coinSummaryAttempts = coinSummaryAttempts;
-  Object.defineProperty(window, 'coinSummaryAttempts', { get: ()=>coinSummaryAttempts, set:(v)=>{coinSummaryAttempts=Math.max(0,Math.floor(v));} });
-  Object.defineProperty(window, '__coinSummaryAttempts', { get: ()=>coinSummaryAttempts, set:(v)=>{coinSummaryAttempts=Math.max(0,Math.floor(v));} });
+  Object.defineProperty(window, 'coinSummaryAttempts', { get: () => coinSummaryAttempts, set: (v) => { coinSummaryAttempts = Math.max(0, Math.floor(v)); } });
+  Object.defineProperty(window, '__coinSummaryAttempts', { get: () => coinSummaryAttempts, set: (v) => { coinSummaryAttempts = Math.max(0, Math.floor(v)); } });
   window.__COINS_PER_ATTEMPT = COINS_PER_ATTEMPT;
   window.COINS_PER_ATTEMPT = COINS_PER_ATTEMPT;
   window.__isCoinSummaryVisible = isCoinSummaryVisible;
@@ -9605,23 +9611,23 @@ if (typeof window !== 'undefined') {
   window.__getCanvasTouchPos = (t) => { try { return getCanvasTouchPos(t); } catch { return null; } };
   window.isMobilePhone = isMobilePhone;
   window.isMobileMode = isMobileMode;
-  Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
-  Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
-  Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<4) p.push(null); loadoutSlots=p.slice(0,4); } syncLoadoutOverlay();} });
-  Object.defineProperty(window, 'coinSummaryVisible', { get: ()=>coinSummaryVisible, set:(v)=>{coinSummaryVisible=!!v; syncCoinSummaryOverlay();} });
-  Object.defineProperty(window, 'courseClearedVisible', { get: ()=>courseClearedVisible, set:(v)=>{courseClearedVisible=!!v; syncCourseClearedOverlay();} });
+  Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v) => { loadoutVisible = !!v; syncLoadoutOverlay(); } });
+  Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v) => { loadoutVisible = !!v; syncLoadoutOverlay(); } });
+  Object.defineProperty(window, 'loadoutSlots', { get: () => [...loadoutSlots], set: (v) => { if (Array.isArray(v)) { const p = [...v]; while (p.length < 4) p.push(null); loadoutSlots = p.slice(0, 4); } syncLoadoutOverlay(); } });
+  Object.defineProperty(window, 'coinSummaryVisible', { get: () => coinSummaryVisible, set: (v) => { coinSummaryVisible = !!v; syncCoinSummaryOverlay(); } });
+  Object.defineProperty(window, 'courseClearedVisible', { get: () => courseClearedVisible, set: (v) => { courseClearedVisible = !!v; syncCourseClearedOverlay(); } });
   window.__isCourseClearedVisible = isCourseClearedVisible;
   window.__showCourseClearedOverlay = showCourseClearedOverlay;
   window.__hideCourseCleared = hideCourseCleared;
-  Object.defineProperty(window, 'runHolesCleared', { get: ()=>runHolesCleared, set:(v)=>{runHolesCleared=Math.max(0,Math.floor(v));} });
-  Object.defineProperty(window, 'runCoinsEarned', { get: ()=>runCoinsEarned, set:(v)=>{runCoinsEarned=Math.max(0,Math.floor(v));} });
-  Object.defineProperty(window, 'loadoutUnlockedAtRunStart', { get: ()=>loadoutUnlockedAtRunStart, set:(v)=>{loadoutUnlockedAtRunStart=Math.max(1,Math.min(4,Math.floor(v)));} });
+  Object.defineProperty(window, 'runHolesCleared', { get: () => runHolesCleared, set: (v) => { runHolesCleared = Math.max(0, Math.floor(v)); } });
+  Object.defineProperty(window, 'runCoinsEarned', { get: () => runCoinsEarned, set: (v) => { runCoinsEarned = Math.max(0, Math.floor(v)); } });
+  Object.defineProperty(window, 'loadoutUnlockedAtRunStart', { get: () => loadoutUnlockedAtRunStart, set: (v) => { loadoutUnlockedAtRunStart = Math.max(1, Math.min(4, Math.floor(v))); } });
   window.__loadoutUnlockedAtRunStart = loadoutUnlockedAtRunStart;
   window.__getLoadoutUnlockedAtRunStart = () => loadoutUnlockedAtRunStart;
   Object.defineProperty(window, 'campaignEditVisible', { get: () => campaignEditVisible, set: (v) => { campaignEditVisible = !!v; syncCampaignEditOverlay(); } });
   Object.defineProperty(window, '__campaignEditVisible', { get: () => campaignEditVisible, set: (v) => { campaignEditVisible = !!v; syncCampaignEditOverlay(); } });
   Object.defineProperty(window, 'campaignSeed', { get: () => (typeof getCampaignSeed === 'function' ? getCampaignSeed() : null), set: (v) => { if (typeof setCampaignSeed === 'function') setCampaignSeed(v); syncCampaignSeedDisplay(); } });
-  Object.defineProperty(window, 'rewardSeedCounter', { get: () => rewardSeedCounter, set: (v) => { rewardSeedCounter = Math.max(0, Math.floor(v||0)); } });
+  Object.defineProperty(window, 'rewardSeedCounter', { get: () => rewardSeedCounter, set: (v) => { rewardSeedCounter = Math.max(0, Math.floor(v || 0)); } });
 }
 
 // 11-cutscenes helpers
@@ -9631,9 +9637,9 @@ function syncCutsceneSkipButton() {
     const btn = document.getElementById('cutscene-skip-button');
     if (!btn) return;
     let active = false;
-    try { active = cutsceneIsActive(); } catch {}
+    try { active = cutsceneIsActive(); } catch { }
     btn.classList.toggle('hidden', !active);
-  } catch {}
+  } catch { }
 }
 // 12-banter §6: Skip button, same pill design, visible only while banter is active.
 function syncBanterSkipButton() {
@@ -9641,58 +9647,60 @@ function syncBanterSkipButton() {
     const btn = document.getElementById('banter-skip-button');
     if (!btn) return;
     let active = false;
-    try { active = banterIsActive(); } catch {}
+    try { active = banterIsActive(); } catch { }
     btn.classList.toggle('hidden', !active);
-  } catch {}
+  } catch { }
 }
 function playCutsceneWrapped(idOrData, opts) {
   // hide wind, hud etc will be synced via isCut check; also pause any banners
   const ok = cutscenePlay(idOrData, {
     onComplete: (completed) => {
-      try { updateHotbarUI(); } catch {}
-      try { updateAttemptsUI(); } catch {}
-      try { syncMainMenu(); } catch {}
-      try { redrawBottom(); } catch {}
-      try { syncParallaxVisibility(); } catch {}
-      try { syncCutsceneSkipButton(); } catch {}
-      if (opts && opts.onComplete) try { opts.onComplete(completed); } catch {}
+      try { updateHotbarUI(); } catch { }
+      try { updateAttemptsUI(); } catch { }
+      try { syncMainMenu(); } catch { }
+      try { redrawBottom(); } catch { }
+      try { syncParallaxVisibility(); } catch { }
+      try { syncCutsceneSkipButton(); } catch { }
+      if (opts && opts.onComplete) try { opts.onComplete(completed); } catch { }
     }
   });
   if (ok) {
-    try { updateHotbarUI(); updateAttemptsUI(); } catch {}
-    try { syncMainMenu(); } catch {}
-    try { redrawBottom(); } catch {}
-    try { syncParallaxVisibility(); } catch {}
-    try { syncCutsceneSkipButton(); } catch {}
+    try { updateHotbarUI(); updateAttemptsUI(); } catch { }
+    try { syncMainMenu(); } catch { }
+    try { redrawBottom(); } catch { }
+    try { syncParallaxVisibility(); } catch { }
+    try { syncCutsceneSkipButton(); } catch { }
     // Force hide main menu overlay and parallax immediately so cutscene bg is visible (mainMenuVisible stays true until loadout)
     try {
       const el = document.getElementById('main-menu-overlay');
       if (el) { el.classList.add('hidden'); el.classList.remove('with-backdrop'); }
       const parallaxEl = document.getElementById('parallax-scene');
-      if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden','true'); }
+      if (parallaxEl) { parallaxEl.classList.add('hidden'); parallaxEl.setAttribute('aria-hidden', 'true'); }
       const hud = document.getElementById('hud');
       if (hud) hud.classList.add('hidden');
-    } catch {}
+    } catch { }
     // bind dialog click to advance
     try {
       const dlg = document.getElementById('cutscene-dialog');
       const box = dlg && dlg.querySelector('.cutscene-dialog-box');
       if (box && !box._cutBound) {
         box._cutBound = true;
-        box.addEventListener('click', (e)=>{ try{ cutsceneHandleInput({type:'click', preventDefault:()=>{}}); }catch{} e.stopPropagation(); });
+        box.addEventListener('click', (e) => { try { cutsceneHandleInput({ type: 'click', preventDefault: () => { } }); } catch { } e.stopPropagation(); });
       }
       if (dlg && !dlg._cutBound) {
         dlg._cutBound = true;
-        dlg.addEventListener('click', (e)=>{ if(e.target===dlg) try{ cutsceneHandleInput({type:'click', preventDefault:()=>{}});}catch{} });
+        dlg.addEventListener('click', (e) => { if (e.target === dlg) try { cutsceneHandleInput({ type: 'click', preventDefault: () => { } }); } catch { } });
       }
-    } catch {}
+    } catch { }
   }
   return ok;
 }
-try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__getDragOffset = () => (dragOffset ? { ...dragOffset } : null); window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
+try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId; window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__getDragOffset = () => (dragOffset ? { ...dragOffset } : null); window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch { }
 
-export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall,   isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, syncMobileUI, dispatchEscapeKey, dispatchResetKey, handleRightClickAt, getCanvasTouchPos };
+export {
+  init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall, isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, syncMobileUI, dispatchEscapeKey, dispatchResetKey, handleRightClickAt, getCanvasTouchPos
+};
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {
