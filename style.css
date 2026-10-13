@@ -2296,7 +2296,7 @@ body {
 #mobile-controls {
   position: absolute;
   bottom: 12px;
-  right: 12px;
+  right: 64px;
   display: flex;
   align-items: center;
   gap: 8px;
