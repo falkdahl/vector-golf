@@ -50,6 +50,7 @@ import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COINS_PER_ATTEMPT, COURSE
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip, playBanter as banterPlay, loadBanterFile as banterLoadFile } from "./banter.js";
 import { playLaunch as audioLaunch, playWater as audioWater, playHoleWin as audioHoleWin, playModifierActivated as audioModifier, playPointsCount as audioPointsCount, playNewRecord as audioNewRecord, setWindActive as audioSetWind, playChest as audioChest, playReward as audioReward, playOB as audioOB, playUIClick as audioUIClick, setMusicActive as audioSetMusic, setMenuMusicActive as audioSetMenuMusic } from "./audio.js";
+import { preloadAllAssets as preloadAllGameAssets } from "./preload.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -93,8 +94,35 @@ function isParallaxReady() {
   } catch { return false; }
 }
 function hideLoadingScreen() {
+  // Deferred until the first-load asset preload (all images + audio) finishes,
+  // so cutscenes never start with audio still downloading. Callers just
+  // record the request; the actual hide happens once assets are ready.
+  loadingHideRequested = true;
+  if (!assetsReady) return;
   const ls = document.getElementById('loading-screen');
   if (ls) ls.classList.add('hidden');
+}
+// First-load preload: every image + audio file, before the loading screen lifts.
+let assetsReady = false;
+let loadingHideRequested = false;
+if (typeof window !== 'undefined') {
+  try {
+    preloadAllGameAssets().then(() => {
+      assetsReady = true;
+      if (loadingHideRequested) hideLoadingScreen();
+    }).catch(() => {
+      assetsReady = true;
+      if (loadingHideRequested) hideLoadingScreen();
+    });
+    // Hard cap: preload internals already time out per file + overall, but
+    // never trap the player on the loading screen no matter what.
+    setTimeout(() => {
+      if (!assetsReady) {
+        assetsReady = true;
+        if (loadingHideRequested) hideLoadingScreen();
+      }
+    }, 120000);
+  } catch {}
 }
 function maybeHideLoadingAfterSplash() {
   // Hide once parallax layers decoded/complete (or fallback splash)

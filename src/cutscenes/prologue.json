@@ -299,7 +299,7 @@
   "music": [
     {
       "t": 0,
-      "src": "./audio/cortex-theme.wav",
+      "src": "./audio/cortex-theme.ogg",
       "volume": 0.4,
       "fadeMs": 800,
       "loop": true

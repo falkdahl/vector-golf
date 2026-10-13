@@ -21,7 +21,7 @@ let scene = {
     { t:4500, speaker:"Slicer", text:"Putting is for cowards!", cps:28, portrait:"./img/cutscenes/portrait-slicer.png", portraitSide:"right" }
   ],
   music: [
-    { t:0, src:"./audio/main-theme.wav", volume:0.4, fadeMs:800, loop:true }
+    { t:0, src:"./audio/main-theme.ogg", volume:0.4, fadeMs:800, loop:true }
   ],
   sfx: []
 };
@@ -170,8 +170,10 @@ async function refreshAvailableImages(){
 
 // Audio discovery from ./audio/ (for music + SFX dropdowns)
 let availableAudio = [
-  "./audio/main-theme.wav",
-  "./audio/main-menu.wav",
+  "./audio/main-theme.ogg",
+  "./audio/main-menu.ogg",
+  "./audio/cortex-theme.ogg",
+  "./audio/may-theme.ogg",
   "./audio/rushing-footsteps.wav",
   "./audio/surprised.wav",
   "./audio/caution.wav",
@@ -1930,7 +1932,7 @@ async function init(){
     ensureAudioArrays();
     const introBeforeFade = getIntroBeforeFadeForEditor();
     const eff = Math.max(0, Math.round(scrubTime - introBeforeFade));
-    const defSrc = availableAudio[0] || './audio/main-theme.wav';
+    const defSrc = availableAudio[0] || './audio/main-theme.ogg';
     scene.music.push({t:eff, src:defSrc, volume:0.4, fadeMs:800, loop:true});
     scene.music.sort((a,b)=>(a.t??0)-(b.t??0));
     renderMusicList(); syncJson(); renderPreview();

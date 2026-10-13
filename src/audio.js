@@ -152,14 +152,14 @@ export function setWindActive(on) {
 
 export function isWindActive() { return windActive; }
 
-// --- Stage + menu theme music (./audio/main-theme.wav + ./audio/main-menu.wav) ---
+// --- Stage + menu theme music (./audio/main-theme.ogg + ./audio/main-menu.ogg) ---
 // Streams via <audio> (no big decode), independent of the SFX master gain so
 // SFX stay clearly audible above it. Gesture-safe: play() rejections are
 // swallowed and retried on the next pointer/key gesture.
 // Both tracks share the same nominal level and crossfade (no hard cuts)
 // when switching between menu and levels.
-const MUSIC_SRC = './audio/main-theme.wav';
-const MENU_MUSIC_SRC = './audio/main-menu.wav';
+const MUSIC_SRC = './audio/main-theme.ogg';
+const MENU_MUSIC_SRC = './audio/main-menu.ogg';
 const MUSIC_VOL = 0.15;
 const MENU_MUSIC_VOL = MUSIC_VOL;
 const MUSIC_DUCK_VOL = 0.05;

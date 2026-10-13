@@ -568,7 +568,7 @@
     "music": [
         {
             "t": 0,
-            "src": "./audio/may-theme.wav",
+            "src": "./audio/may-theme.ogg",
             "volume": 0.4,
             "fadeMs": 800,
             "loop": true

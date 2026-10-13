@@ -1042,14 +1042,14 @@
   "music": [
     {
       "t": 0,
-      "src": "./audio/may-theme.wav",
+      "src": "./audio/may-theme.ogg",
       "volume": 0.4,
       "fadeMs": 800,
       "loop": true
     },
     {
       "t": 28000,
-      "src": "./audio/cortex-theme.wav",
+      "src": "./audio/cortex-theme.ogg",
       "volume": 0.4,
       "fadeMs": 800,
       "loop": true
