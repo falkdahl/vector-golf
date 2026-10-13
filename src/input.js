@@ -35,8 +35,57 @@ function isTypingInInput() {
   return false;
 }
 
+// Stored for touch controls (12-mobile): same callbacks/state as keyboard.
+let _touchStateGetter = null;
+let _touchCallbacks = null;
+
+function beginChargeFromInput() {
+  try {
+    const state = _touchStateGetter ? _touchStateGetter() : null;
+    if ((state === "AIMING" || state === "CHARGING") && !charging) {
+      charging = true;
+      holdTime = 0;
+      charge = 0;
+    }
+  } catch {}
+  keys.Space = true;
+}
+
+function releaseChargeFromInput() {
+  keys.Space = false;
+  if (!charging) return;
+  try {
+    const state = _touchStateGetter ? _touchStateGetter() : null;
+    if (state === "CHARGING" || state === "AIMING") {
+      const MAX_POWER = 600;
+      const MIN_POWER = 50;
+      const power = MIN_POWER + charge * (MAX_POWER - MIN_POWER);
+      charging = false;
+      if (_touchCallbacks && _touchCallbacks.onLaunch) _touchCallbacks.onLaunch(aimAngle, power);
+    } else {
+      charging = false;
+    }
+  } catch { charging = false; }
+}
+
+// Touch equivalents (12-mobile): identical effects to ArrowLeft/Right/Space.
+export function touchAimStart(dir) {
+  if (dir === "left") { keys.ArrowLeft = true; keys.KeyA = true; }
+  else if (dir === "right") { keys.ArrowRight = true; keys.KeyD = true; }
+}
+export function touchAimEnd(dir) {
+  if (dir === "left") { keys.ArrowLeft = false; keys.KeyA = false; }
+  else if (dir === "right") { keys.ArrowRight = false; keys.KeyD = false; }
+  else { keys.ArrowLeft = false; keys.KeyA = false; keys.ArrowRight = false; keys.KeyD = false; }
+}
+export function touchChargeStart() { beginChargeFromInput(); }
+export function touchChargeEnd() { releaseChargeFromInput(); }
+export function isTouchCharging() { return charging; }
+
 export function initInput(gameStateGetter, callbacks) {
   // callbacks: { onLaunch(angle, power), onReset(), onToggleWind() }
+  _touchStateGetter = gameStateGetter;
+  _touchCallbacks = callbacks;
   window.addEventListener("keydown", (e) => {
     if (isTypingInInput()) {
       // Allow all valid seed characters [0-9a-f] and normal editing keys to be typed into input boxes
@@ -53,13 +102,8 @@ export function initInput(gameStateGetter, callbacks) {
       e.preventDefault();
     } else if (e.code === "Space") {
       e.preventDefault();
-      const state = gameStateGetter();
-      if ((state === "AIMING" || state === "CHARGING") && !charging && !e.repeat) {
-        charging = true;
-        holdTime = 0;
-        charge = 0;
-      }
-      keys.Space = true;
+      if (!e.repeat) beginChargeFromInput();
+      else keys.Space = true;
     } else if (e.code === "KeyR") {
       callbacks.onReset();
     } else if (e.code === "KeyH") {
@@ -85,22 +129,7 @@ export function initInput(gameStateGetter, callbacks) {
       e.preventDefault();
     } else if (e.code === "Space") {
       e.preventDefault();
-      keys.Space = false;
-      if (charging) {
-        const state = gameStateGetter();
-        if (state === "CHARGING" || state === "AIMING") {
-          // compute power and launch
-          // Import constants lazily via callbacks? Use fixed values here matching physics.js
-          const MAX_POWER = 600;
-          const MIN_POWER = 50;
-          const power = MIN_POWER + charge * (MAX_POWER - MIN_POWER);
-          charging = false;
-          // reset charge after launch handled by main
-          callbacks.onLaunch(aimAngle, power);
-        } else {
-          charging = false;
-        }
-      }
+      releaseChargeFromInput();
     }
   });
 }

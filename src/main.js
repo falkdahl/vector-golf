@@ -3,7 +3,7 @@ import { createField, getWindAt, WIND_STRENGTH, field, cols, rows, cellW, cellH,
 import { ball, createBall, launchBall, resetBall as physicsResetBall, updateBall, BALL_RADIUS, BOUNCE_DAMPING, isBallAirborne, isBallOverTree, isBallOverTreasure, TREE_CLEAR_Z, TREASURE_CLEAR_Z, drawnBallCircle } from "./physics.js";
 import { checkGroundTreeCollision, checkGroundTreasureHit, isOutOfBounds, checkWaterCollision, checkTerrainCollision, collectTreasure } from "./obstacles.js";
 import { terrainZoneAt } from "./terrain.js";
-import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys } from "./input.js";
+import { initInput, updateInput, getAimAngle, setAimAngle, charge, charging, resetCharge, keys, touchAimStart, touchAimEnd, touchChargeStart, touchChargeEnd } from "./input.js";
 import {
   drawObstacles,
   drawHole,
@@ -5418,6 +5418,7 @@ function updateHotbarUI() {
   try { updateAttemptsUI(); } catch {}
   // Journal icon follows the same gameplay visibility; re-render rows when open
   try { syncJournalUI(); } catch {}
+  try { syncMobileUI(); } catch {}
 }
 
 function showGameOver() {
@@ -5537,6 +5538,538 @@ function getCanvasMousePos(e) {
   const x = (e.clientX - rect.left) * scaleX;
   const y = (e.clientY - rect.top) * scaleY;
   return { x, y };
+}
+
+// --- 12-mobile: phone detection, fullscreen, touch ---
+function isMobilePhone() {
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get('mobile') === '1') return true;
+  } catch {}
+  try {
+    const ua = navigator.userAgent || navigator.vendor || '';
+    if (/Android.*Mobile|iPhone|iPod|Windows Phone|IEMobile|Opera Mini|Mobile/i.test(ua)) return true;
+  } catch {}
+  try {
+    if (navigator.maxTouchPoints > 0 && window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return true;
+  } catch {}
+  return false;
+}
+function isMobileMode() { return isMobilePhone(); }
+function isFullscreenActive() {
+  try {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  } catch { return false; }
+}
+function requestMobileFullscreen() {
+  try {
+    const el = document.getElementById('game-container') || document.documentElement;
+    let p = null;
+    if (el.requestFullscreen) p = el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) p = el.webkitRequestFullscreen();
+    else if (document.documentElement.requestFullscreen) p = document.documentElement.requestFullscreen();
+    if (p && p.catch) p.catch(() => {});
+  } catch {}
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+  } catch {}
+}
+function dispatchEscapeKey() {
+  // Identical path to hitting Escape: reuse the global keydown handler.
+  try {
+    const ev = new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true, cancelable: true });
+    window.dispatchEvent(ev);
+  } catch {}
+}
+function getCanvasTouchPos(t) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = LOGICAL_W / rect.width;
+  const scaleY = LOGICAL_H / rect.height;
+  return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
+}
+// Shared right-click path (mouse contextmenu + mobile double-tap must be identical).
+function handleRightClickAt(x, y) {
+  if (rewardMenuVisible) return false;
+  if (pauseMenuVisible) return false;
+  if (mainMenuVisible) return false;
+  if (banterIsActive()) return false;
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return false;
+  if (bagDrag) {
+    const wasActive = !!bagDrag.active;
+    cancelBagDrag();
+    if (wasActive) {
+      selectedBagIndex = -1; selectedModifier = null;
+      updateHotbarUI();
+    }
+    return true;
+  }
+  const pos = { x, y };
+  if (isDragging) {
+    isDragging = false;
+    draggingIdx = -1;
+    draggingMates = [];
+    dragOrigin = null;
+    dragOffset = null;
+  }
+  const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+  if (pendingPickup) {
+    if (overIdx !== -1) {
+      enterPickupDiscard({ type: modifiers[overIdx].type, id: modifiers[overIdx].id, index: overIdx });
+    } else {
+      cancelPickupDiscard();
+    }
+    return true;
+  }
+  if (selectedModifier) {
+    selectedBagIndex = -1; selectedModifier = null;
+    updateHotbarUI();
+    return true;
+  }
+  return removeModifierAt(pos.x, pos.y);
+}
+function isMobileChromeHidden() {
+  try { if (typeof bootGateVisible !== 'undefined' && bootGateVisible) return true; } catch {}
+  let isCut = false; try { isCut = cutsceneIsActive(); } catch {}
+  let isBanter = false; try { isBanter = banterIsActive(); } catch {}
+  return pauseMenuVisible || mainMenuVisible || startingItemsVisible || coinSummaryVisible || courseClearedVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER" || isCut || isBanter;
+}
+function syncMobileUI() {
+  try {
+    const mobile = isMobileMode();
+    const menuBtn = document.getElementById('mobile-menu-button');
+    const fsBtn = document.getElementById('mobile-fullscreen-button');
+    const controls = document.getElementById('mobile-controls');
+    const chromeHidden = isMobileChromeHidden();
+    // Hamburger is gameplay chrome on all platforms (desktop + mobile).
+    if (menuBtn) menuBtn.classList.toggle('hidden', chromeHidden);
+    if (!mobile) {
+      if (fsBtn) fsBtn.classList.add('hidden');
+      if (controls) controls.classList.add('hidden');
+      try { document.getElementById('game-container').classList.remove('mobile-mode'); } catch {}
+      return;
+    }
+    try { document.getElementById('game-container').classList.add('mobile-mode'); } catch {}
+    if (controls) controls.classList.toggle('hidden', chromeHidden);
+    if (fsBtn) fsBtn.classList.toggle('hidden', isFullscreenActive());
+  } catch {}
+}
+// Touch-drag bookkeeping shared by canvas + bag touch handlers.
+let touchBoardId = null; // touch identifier driving a board drag
+let touchBoardMoved = false;
+let touchStartX = 0, touchStartY = 0;
+let touchLastPos = null;
+let bagTouch = null; // {slotIdx,type,startX,startY,active,identifier}
+let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
+const DOUBLE_TAP_MS = 300, DOUBLE_TAP_PX = 24;
+
+function finishBoardDragAt(logicalPos, clientX, clientY) {
+  // Shared commit path for touch board-drag release (snap on release only).
+  // Includes canvas→bag drop (self-contained: handleBoardDropOnBag lives inside init()).
+  if (gameState === "AIMING" || gameState === "CHARGING") {
+    let slotEl = null;
+    try {
+      if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        const el = document.elementFromPoint(clientX, clientY);
+        const cand = el ? el.closest('.hotbar-slot:not(.passive)') : null;
+        slotEl = (cand && cand.closest('#hotbar-grid')) ? cand : null;
+      }
+    } catch { slotEl = null; }
+    if (slotEl) {
+      try {
+        const slotIdx = Number(slotEl.dataset.slotIndex);
+        if (Number.isInteger(slotIdx) && slotIdx >= 0 && slotIdx < getEffectiveGolfbagSize()) {
+          const mates = (draggingMates.length ? draggingMates : [draggingIdx])
+            .filter(mi => Number.isInteger(mi) && mi >= 0 && mi < modifiers.length);
+          if (mates.length && modifiers[mates[0]]) {
+            const origin = dragOrigin || { x: modifiers[mates[0]].x, y: modifiers[mates[0]].y };
+            for (const mi of mates) { modifiers[mi].x = origin.x; modifiers[mi].y = origin.y; }
+            const occupant = golfbag[slotIdx];
+            if (occupant) {
+              const bt = bagEntryType(occupant);
+              if (isSpatialBagType(bt)) {
+                golfbag[slotIdx] = null;
+                modifiers.push({ id: Date.now() + Math.random(), type: normalizeSupplyType(bt), x: origin.x, y: origin.y, radius: getEffectiveModifierRadius() });
+              }
+            }
+            const emptySlots = [];
+            for (let i = 0; i < getEffectiveGolfbagSize(); i++) {
+              if (!golfbag[i]) emptySlots.push(i);
+            }
+            emptySlots.sort((a, b) => (a === slotIdx ? -1 : b === slotIdx ? 1 : a - b));
+            for (const mi of [...mates].sort((a, b) => b - a)) {
+              if (!emptySlots.length) break;
+              if (!modifiers[mi]) continue;
+              const s = emptySlots.shift();
+              golfbag[s] = { type: normalizeSupplyType(modifiers[mi].type) };
+              modifiers.splice(mi, 1);
+            }
+            const atOrigin = [];
+            for (let i = 0; i < modifiers.length; i++) {
+              if (Math.hypot(modifiers[i].x - origin.x, modifiers[i].y - origin.y) <= 2) atOrigin.push(i);
+            }
+            if (atOrigin.length > 1) splitStackAtIndex(atOrigin[0]);
+            else syncModifiersToField();
+            syncDerivedFromBag();
+            updateHotbarUI();
+          }
+        }
+      } catch {}
+      isDragging = false; draggingIdx = -1; draggingMates = []; dragOrigin = null; dragOffset = null;
+      selectedBagIndex = -1; selectedModifier = null;
+      try { if (canvas) canvas.style.cursor = "default"; } catch {}
+      saveProgress();
+      return;
+    }
+  }
+  if (logicalPos) {
+    const nx = logicalPos.x + (dragOffset ? dragOffset.x : 0);
+    const ny = logicalPos.y + (dragOffset ? dragOffset.y : 0);
+    const cx = Math.max(0, Math.min(LOGICAL_W, nx));
+    const cy = Math.max(0, Math.min(LOGICAL_H, ny));
+    let mates = [];
+    try {
+      mates = (draggingMates.length ? draggingMates : getStackIndicesFor(draggingIdx))
+        .filter(mi => mi >= 0 && mi < modifiers.length);
+    } catch { mates = [draggingIdx]; }
+    if (!mates.length) mates = [draggingIdx];
+    for (const mi of mates) { modifiers[mi].x = cx; modifiers[mi].y = cy; }
+    try {
+      const exclude = new Set(mates);
+      const snap = findSnapTarget(cx, cy, exclude);
+      if (snap && snap.mod) {
+        for (const mi of mates) { modifiers[mi].x = snap.mod.x; modifiers[mi].y = snap.mod.y; }
+      }
+    } catch {}
+    syncModifiersToField();
+  }
+  isDragging = false;
+  draggingIdx = -1;
+  draggingMates = [];
+  dragOrigin = null;
+  dragOffset = null;
+  try { if (canvas) canvas.style.cursor = "default"; } catch {}
+  saveProgress();
+}
+
+function startBoardDragAt(idx, pos) {
+  draggingIdx = idx;
+  try {
+    draggingMates = getStackIndicesFor(idx);
+    if (!draggingMates.length) draggingMates = [idx];
+  } catch { draggingMates = [idx]; }
+  try { dragOrigin = { x: modifiers[idx].x, y: modifiers[idx].y }; } catch { dragOrigin = null; }
+  try { dragOffset = { x: modifiers[idx].x - pos.x, y: modifiers[idx].y - pos.y }; } catch { dragOffset = null; }
+  isDragging = true;
+  try { if (canvas) canvas.style.cursor = "grabbing"; } catch {}
+}
+
+function initMobileControls() {
+  // Hamburger (Escape equivalent) + fullscreen re-entry. Always wired; visibility gated by syncMobileUI.
+  try {
+    const menuBtn = document.getElementById('mobile-menu-button');
+    if (menuBtn && !menuBtn._mobileBound) {
+      menuBtn._mobileBound = true;
+      menuBtn.addEventListener('click', (e) => {
+        try { e.preventDefault(); } catch {}
+        try { if (menuBtn.blur) menuBtn.blur(); } catch {}
+        dispatchEscapeKey();
+      });
+    }
+    const fsBtn = document.getElementById('mobile-fullscreen-button');
+    if (fsBtn && !fsBtn._mobileBound) {
+      fsBtn._mobileBound = true;
+      fsBtn.addEventListener('click', (e) => {
+        try { e.preventDefault(); } catch {}
+        try { if (fsBtn.blur) fsBtn.blur(); } catch {}
+        requestMobileFullscreen();
+        try { setTimeout(syncMobileUI, 300); } catch {}
+      });
+    }
+  } catch {}
+  // First-gesture fullscreen on mobile: boot gate + Play buttons.
+  try {
+    if (isMobileMode() && !initMobileControls._fsGestureBound) {
+      initMobileControls._fsGestureBound = true;
+      const gate = document.getElementById('continue-overlay');
+      if (gate) gate.addEventListener('click', () => { try { requestMobileFullscreen(); } catch {} }, { passive: true });
+      document.addEventListener('fullscreenchange', () => { try { syncMobileUI(); } catch {} });
+      document.addEventListener('webkitfullscreenchange', () => { try { syncMobileUI(); } catch {} });
+    }
+  } catch {}
+  // Touch overlay buttons: hold left/right = arrows, hold launch = Space.
+  try {
+    const leftBtn = document.getElementById('mobile-aim-left');
+    const rightBtn = document.getElementById('mobile-aim-right');
+    const launchBtn = document.getElementById('mobile-launch');
+    const bindHold = (el, down, up) => {
+      if (!el || el._mobileBound) return;
+      el._mobileBound = true;
+      const start = (e) => { try { e.preventDefault(); } catch {} down(); };
+      const end = (e) => { try { e.preventDefault(); } catch {} up(); try { if (el.blur) el.blur(); } catch {} };
+      el.addEventListener('touchstart', start, { passive: false });
+      el.addEventListener('touchend', end);
+      el.addEventListener('touchcancel', end);
+      el.addEventListener('mousedown', start);
+      el.addEventListener('mouseup', end);
+      el.addEventListener('mouseleave', () => { try { up(); } catch {} });
+    };
+    if (leftBtn) bindHold(leftBtn, () => touchAimStart('left'), () => touchAimEnd('left'));
+    if (rightBtn) bindHold(rightBtn, () => touchAimStart('right'), () => touchAimEnd('right'));
+    if (launchBtn) bindHold(launchBtn, () => touchChargeStart(), () => touchChargeEnd());
+  } catch {}
+  // Canvas touch: tap-to-place + drag placed bubbles/stacks + double-tap as right-click.
+  try {
+    if (canvas && !canvas._mobileTouchBound) {
+      canvas._mobileTouchBound = true;
+      canvas.addEventListener('touchstart', (e) => {
+        try {
+          if (!isMobileMode()) return;
+          if (e.cancelable) e.preventDefault();
+          try { if (banterIsActive()) { banterHandleInput({ type: 'click', preventDefault: () => {} }); return; } } catch {}
+          try { if (cutsceneIsActive()) { cutsceneHandleInput({ type: 'click', preventDefault: () => {} }); return; } } catch {}
+          if (mainMenuVisible || pauseMenuVisible || rewardMenuVisible) return;
+          if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+          if (pendingPickup) { try { cancelPickupDiscard(); } catch {} return; }
+          const t = e.changedTouches[0];
+          if (!t) return;
+          const pos = getCanvasTouchPos(t);
+          touchBoardId = t.identifier;
+          touchBoardMoved = false;
+          touchStartX = t.clientX; touchStartY = t.clientY;
+          touchLastPos = pos;
+          mousePos = pos;
+          let armedPlaceable = false;
+          try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+          if (armedPlaceable) return; // tap-to-place on touchend; no drag start
+          const idx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+          if (idx !== -1) startBoardDragAt(idx, pos);
+        } catch {}
+      }, { passive: false });
+      canvas.addEventListener('touchmove', (e) => {
+        try {
+          if (!isMobileMode()) return;
+          if (e.cancelable) e.preventDefault();
+          for (const t of Array.from(e.changedTouches)) {
+            if (touchBoardId !== null && t.identifier !== touchBoardId) continue;
+            const pos = getCanvasTouchPos(t);
+            touchLastPos = pos;
+            mousePos = pos;
+            if (Math.hypot(t.clientX - touchStartX, t.clientY - touchStartY) > 6) touchBoardMoved = true;
+            if (isDragging && draggingIdx !== -1 && draggingIdx < modifiers.length) {
+              try {
+                const mates = (draggingMates.length ? draggingMates : [draggingIdx])
+                  .filter(mi => mi >= 0 && mi < modifiers.length);
+                const nx = pos.x + (dragOffset ? dragOffset.x : 0);
+                const ny = pos.y + (dragOffset ? dragOffset.y : 0);
+                for (const mi of mates) { modifiers[mi].x = nx; modifiers[mi].y = ny; }
+                syncModifiersToField();
+              } catch {}
+            }
+            // Bag→canvas touch drag preview follows finger.
+            if (bagTouch && bagTouch.active) { try { mousePos = pos; } catch {} }
+            else if (bagTouch && !bagTouch.active) {
+              if (Math.hypot(t.clientX - bagTouch.startX, t.clientY - bagTouch.startY) > BAG_DRAG_THRESHOLD_PX) {
+                try {
+                  selectedBagIndex = bagTouch.slotIdx;
+                  selectedModifier = bagTouch.type;
+                  updateHotbarUI();
+                  bagTouch.active = true;
+                } catch {}
+              }
+            }
+          }
+        } catch {}
+      }, { passive: false });
+      const endTouch = (e) => {
+        try {
+          if (!isMobileMode()) return;
+          if (e.cancelable) e.preventDefault();
+          for (const t of Array.from(e.changedTouches)) {
+            const isBoardTouch = (touchBoardId !== null && t.identifier === touchBoardId);
+            // Bag touch release.
+            if (bagTouch && t.identifier === bagTouch.identifier) {
+              const bd = bagTouch;
+              bagTouch = null;
+              try {
+                if (bd.active) {
+                  const stillArmed = selectedBagIndex === bd.slotIdx && golfbag[bd.slotIdx] && bagEntryType(golfbag[bd.slotIdx]) === bd.type;
+                  let dropSlot = -1;
+                  try {
+                    const el = document.elementFromPoint(t.clientX, t.clientY);
+                    const cand = el ? el.closest('.hotbar-slot:not(.passive)') : null;
+                    if (cand && cand.closest('#hotbar-grid')) dropSlot = Number(cand.dataset.slotIndex);
+                  } catch { dropSlot = -1; }
+                  const disarm = () => { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); };
+                  if (rewardMenuVisible || pendingPickup || pendingRewardType) { disarm(); continue; }
+                  if (Number.isInteger(dropSlot) && dropSlot >= 0 && dropSlot < getEffectiveGolfbagSize()) {
+                    if (stillArmed && dropSlot !== bd.slotIdx) {
+                      const moving = golfbag[bd.slotIdx];
+                      golfbag[bd.slotIdx] = golfbag[dropSlot] || null;
+                      golfbag[dropSlot] = moving;
+                      syncDerivedFromBag();
+                      saveProgress();
+                    }
+                    disarm();
+                    continue;
+                  }
+                  if (!stillArmed) continue;
+                  try {
+                    const rc = canvas.getBoundingClientRect();
+                    if (t.clientX >= rc.left && t.clientX <= rc.right && t.clientY >= rc.top && t.clientY <= rc.bottom) {
+                      if (gameState === "AIMING" || gameState === "CHARGING") {
+                        selectedBagIndex = bd.slotIdx;
+                        selectedModifier = bd.type;
+                        const pos = getCanvasTouchPos(t);
+                        placeModifier(pos.x, pos.y);
+                      }
+                    }
+                  } catch {}
+                  disarm();
+                }
+              } catch {}
+              continue;
+            }
+            if (!isBoardTouch) continue;
+            touchBoardId = null;
+            const pos = getCanvasTouchPos(t);
+            touchLastPos = pos;
+            if (isDragging && draggingIdx !== -1) {
+              if (touchBoardMoved) {
+                try { finishBoardDragAt(pos, t.clientX, t.clientY); } catch {}
+              } else {
+                // Tap on bubble without move: no-op (drag to move, double-tap to remove) — reset drag state.
+                isDragging = false; draggingIdx = -1; draggingMates = [];
+                dragOrigin = null; dragOffset = null;
+                try { canvas.style.cursor = "default"; } catch {}
+              }
+              // Double-tap check still applies to taps on bubbles.
+              if (!touchBoardMoved) {
+                const now = Date.now();
+                if (now - lastTapTime <= DOUBLE_TAP_MS && Math.hypot(pos.x - lastTapX, pos.y - lastTapY) <= DOUBLE_TAP_PX) {
+                  try { handleRightClickAt(pos.x, pos.y); } catch {}
+                  lastTapTime = 0;
+                } else { lastTapTime = now; lastTapX = pos.x; lastTapY = pos.y; }
+              }
+              mousePos = null;
+              continue;
+            }
+            // Not dragging: tap = click-to-place (armed) or double-tap-as-right-click.
+            try {
+              let armedPlaceable = false;
+              try { armedPlaceable = !!(selectedModifier && canPlace(selectedModifier)); } catch {}
+              const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
+              const now = Date.now();
+              const isDouble = (now - lastTapTime <= DOUBLE_TAP_MS && Math.hypot(pos.x - lastTapX, pos.y - lastTapY) <= DOUBLE_TAP_PX);
+              if (isDouble) {
+                try { handleRightClickAt(pos.x, pos.y); } catch {}
+                lastTapTime = 0;
+                mousePos = null;
+                continue;
+              }
+              lastTapTime = now; lastTapX = pos.x; lastTapY = pos.y;
+              if (overIdx !== -1 && !armedPlaceable) { mousePos = null; continue; }
+              if (!selectedModifier) { mousePos = null; continue; }
+              placeModifier(pos.x, pos.y);
+            } catch {}
+            mousePos = null;
+          }
+        } catch {}
+      };
+      canvas.addEventListener('touchend', endTouch, { passive: false });
+      canvas.addEventListener('touchcancel', (e) => {
+        try {
+          touchBoardId = null;
+          if (isDragging) { isDragging = false; draggingIdx = -1; draggingMates = []; dragOrigin = null; dragOffset = null; }
+          bagTouch = null;
+          mousePos = null;
+        } catch {}
+      });
+    }
+  } catch {}
+  // Bag slot touch drag (delegated: slots rebuild on every bag change).
+  try {
+    const grid = document.getElementById('hotbar-grid');
+    if (grid && !grid._mobileTouchBound) {
+      grid._mobileTouchBound = true;
+      grid.addEventListener('touchstart', (e) => {
+        try {
+          if (!isMobileMode()) return;
+          const slot = e.target && e.target.closest ? e.target.closest('.hotbar-slot:not(.passive)') : null;
+          if (!slot) return;
+          const idx = Number(slot.dataset.slotIndex);
+          const entry = golfbag[idx];
+          const t = entry ? bagEntryType(entry) : null;
+          if (!t || !isSpatialBagType(t)) return;
+          if (bagTouch || isDragging) return;
+          if (rewardMenuVisible || pendingRewardType || pendingPickup) return;
+          if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
+          const touch = e.changedTouches[0];
+          if (!touch) return;
+          if (e.cancelable) e.preventDefault();
+          bagTouch = { slotIdx: idx, type: normalizeSupplyType(t), startX: touch.clientX, startY: touch.clientY, active: false, identifier: touch.identifier };
+        } catch {}
+      }, { passive: false });
+      grid.addEventListener('touchmove', (e) => {
+        try {
+          if (!bagTouch) return;
+          if (e.cancelable) e.preventDefault();
+          for (const touch of Array.from(e.changedTouches)) {
+            if (touch.identifier !== bagTouch.identifier) continue;
+            if (!bagTouch.active && Math.hypot(touch.clientX - bagTouch.startX, touch.clientY - bagTouch.startY) > BAG_DRAG_THRESHOLD_PX) {
+              try {
+                selectedBagIndex = bagTouch.slotIdx;
+                selectedModifier = bagTouch.type;
+                updateHotbarUI();
+                bagTouch.active = true;
+              } catch {}
+            }
+            if (bagTouch.active) { try { mousePos = getCanvasTouchPos(touch); } catch {} }
+          }
+        } catch {}
+      }, { passive: false });
+      // touchend for bag drag is handled on canvas endTouch via identifier match;
+      // release over slots (outside canvas) is handled here.
+      grid.addEventListener('touchend', (e) => {
+        try {
+          if (!bagTouch) return;
+          for (const touch of Array.from(e.changedTouches)) {
+            if (touch.identifier !== bagTouch.identifier) continue;
+            const bd = bagTouch;
+            const wasActive = !!bd.active;
+            bagTouch = null;
+            if (!wasActive) return; // plain tap: click handler selects normally
+            try {
+              const el = document.elementFromPoint(touch.clientX, touch.clientY);
+              const cand = el ? el.closest('.hotbar-slot:not(.passive)') : null;
+              const dropSlot = (cand && cand.closest('#hotbar-grid')) ? Number(cand.dataset.slotIndex) : -1;
+              const stillArmed = selectedBagIndex === bd.slotIdx && golfbag[bd.slotIdx] && bagEntryType(golfbag[bd.slotIdx]) === bd.type;
+              if (Number.isInteger(dropSlot) && dropSlot >= 0 && dropSlot < getEffectiveGolfbagSize()) {
+                if (stillArmed && dropSlot !== bd.slotIdx) {
+                  const moving = golfbag[bd.slotIdx];
+                  golfbag[bd.slotIdx] = golfbag[dropSlot] || null;
+                  golfbag[dropSlot] = moving;
+                  syncDerivedFromBag();
+                  saveProgress();
+                }
+                selectedBagIndex = -1; selectedModifier = null; updateHotbarUI();
+                if (e.cancelable) e.preventDefault();
+                return;
+              }
+              // Release over canvas is handled by canvas touchend; anything else deselects.
+              try {
+                const rc = canvas.getBoundingClientRect();
+                const overCanvas = touch.clientX >= rc.left && touch.clientX <= rc.right && touch.clientY >= rc.top && touch.clientY <= rc.bottom;
+                if (!overCanvas) { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); }
+              } catch { selectedBagIndex = -1; selectedModifier = null; updateHotbarUI(); }
+            } catch {}
+          }
+        } catch {}
+      });
+    }
+  } catch {}
+  try { syncMobileUI(); } catch {}
 }
 
 // --- Modifier stacking (snap, move together, split on pickup) ---
@@ -8315,51 +8848,12 @@ function init() {
   });
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    // REQ-021: block removal while reward menu visible; REQ-028: block while pause; REQ-029: block while main menu
-    if (rewardMenuVisible) return;
-    if (pauseMenuVisible) return;
-    if (mainMenuVisible) return;
-    if (banterIsActive()) return;
-    if (gameState !== "AIMING" && gameState !== "CHARGING") return;
-    // Bag drag in progress: right-click cancels it (and deselects when armed,
-    // same as hotkey/click arming) — never picks anything up.
-    if (bagDrag) {
-      const wasActive = !!bagDrag.active;
-      cancelBagDrag();
-      if (wasActive) {
-        selectedBagIndex = -1; selectedModifier = null;
-        updateHotbarUI();
-      }
-      return;
-    }
-    const pos = getCanvasMousePos(e);
-    // If dragging, cancel drag and remove?
-    if (isDragging) {
-      isDragging = false;
-      draggingIdx = -1;
-      draggingMates = [];
-      dragOrigin = null;
-      dragOffset = null;
-    }
-    const overIdx = modifiers.findIndex(m => Math.hypot(m.x - pos.x, m.y - pos.y) < m.radius);
-    if (pendingPickup) {
-      // Right-click another modifier switches the pickup target; empty map cancels.
-      if (overIdx !== -1) {
-        enterPickupDiscard({ type: modifiers[overIdx].type, id: modifiers[overIdx].id, index: overIdx });
-      } else {
-        cancelPickupDiscard();
-      }
-      return;
-    }
-    // Armed bag item: right-click deselects it and never picks anything up.
-    // (A second right-click with nothing armed picks up / splits as usual.)
-    if (selectedModifier) {
-      selectedBagIndex = -1; selectedModifier = null;
-      updateHotbarUI();
-      return;
-    }
-    removeModifierAt(pos.x, pos.y);
+    try {
+      const pos = getCanvasMousePos(e);
+      handleRightClickAt(pos.x, pos.y);
+    } catch {}
   });
+  initMobileControls();
 
   // Resize handling debounced (all three layers)
   let resizeTimer;
@@ -8368,6 +8862,7 @@ function init() {
     resizeTimer = setTimeout(() => {
       setupCanvas();
       try { resizeWindOverlay(); } catch {};
+      try { syncMobileUI(); } catch {};
     }, 200);
   });
 
@@ -8873,6 +9368,17 @@ if (typeof window !== 'undefined') {
   window.__isCheatDraggingBall = isCheatDraggingBall;
   window.__tryCheatGrabBall = tryCheatGrabBall;
   window.__dropCheatBall = dropCheatBall;
+  // 12-mobile hooks
+  window.__isMobilePhone = isMobilePhone;
+  window.__isMobileMode = isMobileMode;
+  window.__isFullscreenActive = isFullscreenActive;
+  window.__requestMobileFullscreen = requestMobileFullscreen;
+  window.__syncMobileUI = syncMobileUI;
+  window.__dispatchEscapeKey = dispatchEscapeKey;
+  window.__handleRightClickAt = handleRightClickAt;
+  window.__getCanvasTouchPos = (t) => { try { return getCanvasTouchPos(t); } catch { return null; } };
+  window.isMobilePhone = isMobilePhone;
+  window.isMobileMode = isMobileMode;
   Object.defineProperty(window, 'loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, '__loadoutVisible', { get: () => loadoutVisible, set: (v)=>{loadoutVisible=!!v; syncLoadoutOverlay();} });
   Object.defineProperty(window, 'loadoutSlots', { get: ()=>[...loadoutSlots], set:(v)=>{ if(Array.isArray(v)) { const p=[...v]; while(p.length<4) p.push(null); loadoutSlots=p.slice(0,4); } syncLoadoutOverlay();} });
@@ -8960,7 +9466,7 @@ function playCutsceneWrapped(idOrData, opts) {
 try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__getDragOffset = () => (dragOffset ? { ...dragOffset } : null); window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall };
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall, isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, syncMobileUI, dispatchEscapeKey, handleRightClickAt, getCanvasTouchPos };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {

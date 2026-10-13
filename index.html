@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Gale Force Golf</title>
   <link rel="stylesheet" href="style.css">
   <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
@@ -28,6 +28,13 @@
       <span id="hud-hole">Hole: 1/3</span>
       <span id="hud-attempts">Attempts Left: 10</span>
       <span id="hud-total">Points: 0</span>
+    </div>
+    <button id="mobile-menu-button" class="hidden" aria-label="Menu" title="Menu (Esc)">☰</button>
+    <button id="mobile-fullscreen-button" class="hidden" aria-label="Fullscreen" title="Fullscreen">⛶</button>
+    <div id="mobile-controls" class="hidden" aria-hidden="false">
+      <button id="mobile-aim-left" aria-label="Aim left" title="Aim left">◀</button>
+      <button id="mobile-launch" aria-label="Launch" title="Hold to charge, release to shoot">●</button>
+      <button id="mobile-aim-right" aria-label="Aim right" title="Aim right">▶</button>
     </div>
     <div id="bottom-bar">
       <div id="golfbag-wrapper">

@@ -2232,3 +2232,88 @@ body {
   cursor: pointer;
 }
 #course-cleared-ok:hover { background: #1e8449; }
+
+/* 12-mobile — phone landscape + touch controls (hidden on desktop) */
+#game-container { touch-action: none; }
+#game-container canvas { touch-action: none; }
+#game-container:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  aspect-ratio: auto;
+  border-radius: 0;
+  margin: 0;
+}
+#game-container:fullscreen canvas { border-radius: 0; }
+#mobile-menu-button,
+#mobile-fullscreen-button {
+  position: absolute;
+  top: 36px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 20px system-ui, sans-serif;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 7;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  padding: 0;
+  line-height: 1;
+}
+#mobile-menu-button { left: 12px; }
+#mobile-fullscreen-button { right: 12px; top: 36px; font-size: 18px; z-index: 15; }
+#mobile-menu-button.hidden,
+#mobile-fullscreen-button.hidden { display: none !important; }
+#mobile-controls {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 7;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+#mobile-controls.hidden { display: none !important; }
+#mobile-controls button {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  border-radius: 50%;
+  font: 700 20px system-ui, sans-serif;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  border: 2px solid rgba(255,255,255,0.45);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  padding: 0;
+  line-height: 1;
+}
+#mobile-controls button:active { background: rgba(255,255,255,0.25); }
+#mobile-launch {
+  width: 68px !important;
+  height: 68px !important;
+  min-width: 68px !important;
+  min-height: 68px !important;
+  background: rgba(20,90,50,0.75) !important;
+  border-color: rgba(255,255,255,0.7) !important;
+  font-size: 24px !important;
+}
