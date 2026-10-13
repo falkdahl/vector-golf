@@ -152,16 +152,73 @@ export function setWindActive(on) {
 
 export function isWindActive() { return windActive; }
 
-// --- Stage theme music (./audio/main-theme.wav, low-volume loop) ---
-// Streams via <audio> (no 23MB decode), independent of the SFX master gain so
+// --- Stage + menu theme music (./audio/main-theme.wav + ./audio/main-menu.wav) ---
+// Streams via <audio> (no big decode), independent of the SFX master gain so
 // SFX stay clearly audible above it. Gesture-safe: play() rejections are
 // swallowed and retried on the next pointer/key gesture.
+// Both tracks share the same nominal level and crossfade (no hard cuts)
+// when switching between menu and levels.
 const MUSIC_SRC = './audio/main-theme.wav';
+const MENU_MUSIC_SRC = './audio/main-menu.wav';
 const MUSIC_VOL = 0.15;
+const MENU_MUSIC_VOL = MUSIC_VOL;
 const MUSIC_DUCK_VOL = 0.05;
+const MUSIC_FADE_MS = 900;
 let musicEl = null;
+let menuMusicEl = null;
 let musicWanted = false;
+let menuMusicWanted = false;
 let duckToken = 0;
+const musicFade = { id: 0, timer: null };
+const menuFade = { id: 0, timer: null };
+
+// Linear fade of an <audio> element to targetVol. Fade-in auto-plays from 0;
+// fade-out pauses on completion. Overlapping fades cancel via token.
+function fadeAudioTo(el, targetVol, durationMs, fadeState) {
+  try {
+    if (!el) return;
+    const dur = Math.max(50, Number(durationMs) || MUSIC_FADE_MS);
+    const target = Math.max(0, Math.min(1, Number(targetVol) || 0));
+    fadeState.id = (fadeState.id || 0) + 1;
+    const my = fadeState.id;
+    try { if (fadeState.timer) clearInterval(fadeState.timer); } catch {}
+    fadeState.timer = null;
+    let from = target;
+    try { from = typeof el.volume === 'number' ? el.volume : target; } catch {}
+    // Fading up a paused element: start silent then play so the ramp is heard.
+    if (target > 0 && el.paused) {
+      try { el.volume = 0; } catch {}
+      from = 0;
+      try {
+        const p = el.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch {}
+    } else if (target > 0 && from !== from) {
+      from = 0;
+    }
+    if (from === target) {
+      if (target === 0) { try { el.pause(); } catch {} }
+      else { try { if (el.paused) { const p = el.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } } catch {} }
+      return;
+    }
+    const steps = Math.max(1, Math.round(dur / 50));
+    let i = 0;
+    fadeState.timer = setInterval(() => {
+      try {
+        if (my !== fadeState.id) { try { clearInterval(fadeState.timer); } catch {} fadeState.timer = null; return; }
+        i++;
+        const t = Math.min(1, i / steps);
+        const v = from + (target - from) * t;
+        try { el.volume = Math.max(0, Math.min(1, v)); } catch {}
+        if (t >= 1) {
+          try { clearInterval(fadeState.timer); } catch {}
+          fadeState.timer = null;
+          if (target === 0) { try { el.pause(); } catch {} }
+        }
+      } catch {}
+    }, 50);
+  } catch {}
+}
 
 export function ensureMusic() {
   try {
@@ -178,45 +235,96 @@ export function ensureMusic() {
   } catch { return null; }
 }
 
-function musicPlay() {
+export function ensureMenuMusic() {
+  try {
+    if (typeof window === 'undefined' || typeof Audio === 'undefined') return null;
+    if (!menuMusicEl) {
+      const el = new Audio();
+      el.src = MENU_MUSIC_SRC;
+      el.loop = true;
+      el.preload = 'auto';
+      el.volume = MENU_MUSIC_VOL;
+      menuMusicEl = el;
+    }
+    return menuMusicEl;
+  } catch { return null; }
+}
+
+function musicPlay(fadeMs = MUSIC_FADE_MS) {
   try {
     const el = ensureMusic();
     if (!el) return;
-    try { el.volume = MUSIC_VOL; } catch {}
-    const p = el.play();
-    if (p && typeof p.catch === 'function') p.catch(() => {});
+    fadeAudioTo(el, MUSIC_VOL, fadeMs, musicFade);
   } catch {}
 }
 
-function musicPause() {
-  try { if (musicEl) musicEl.pause(); } catch {}
+function musicPause(fadeMs = MUSIC_FADE_MS) {
+  try {
+    const el = ensureMusic();
+    if (!el) { try { if (musicEl) musicEl.pause(); } catch {} return; }
+    fadeAudioTo(el, 0, fadeMs, musicFade);
+  } catch {}
 }
 
-export function setMusicActive(on) {
+function menuMusicPlay(fadeMs = MUSIC_FADE_MS) {
+  try {
+    const el = ensureMenuMusic();
+    if (!el) return;
+    fadeAudioTo(el, MENU_MUSIC_VOL, fadeMs, menuFade);
+  } catch {}
+}
+
+function menuMusicPause(fadeMs = MUSIC_FADE_MS) {
+  try {
+    const el = ensureMenuMusic();
+    if (!el) { try { if (menuMusicEl) menuMusicEl.pause(); } catch {} return; }
+    fadeAudioTo(el, 0, fadeMs, menuFade);
+  } catch {}
+}
+
+export function setMusicActive(on, fadeMs = MUSIC_FADE_MS) {
   try {
     musicWanted = !!on;
     if (musicWanted) {
       ensureAudio();
-      musicPlay();
+      musicPlay(fadeMs);
     } else {
-      musicPause();
+      musicPause(fadeMs);
     }
   } catch {}
 }
 
 export function isMusicActive() { return musicWanted; }
 
+export function setMenuMusicActive(on, fadeMs = MUSIC_FADE_MS) {
+  try {
+    menuMusicWanted = !!on;
+    if (menuMusicWanted) {
+      ensureAudio();
+      menuMusicPlay(fadeMs);
+    } else {
+      menuMusicPause(fadeMs);
+    }
+  } catch {}
+}
+
+export function isMenuMusicActive() { return menuMusicWanted; }
+
 // Briefly dip the theme under a prominent SFX (hole win), then restore.
 export function duckMusic(ms = 800) {
   try {
     const el = ensureMusic();
     if (!el || !musicWanted || el.paused) return;
+    // Cancel any in-progress level fade so the duck level sticks.
+    try { musicFade.id = (musicFade.id || 0) + 1; } catch {}
+    try { if (musicFade.timer) clearInterval(musicFade.timer); } catch {}
+    musicFade.timer = null;
     const my = ++duckToken;
     try { el.volume = MUSIC_DUCK_VOL; } catch {}
     setTimeout(() => {
       try {
         if (my !== duckToken) return;
-        if (musicWanted && musicEl === el) el.volume = MUSIC_VOL;
+        if (musicWanted && musicEl === el && !el.paused) el.volume = MUSIC_VOL;
       } catch {}
     }, Math.max(200, ms || 800));
   } catch {}
@@ -334,6 +442,7 @@ try {
     const unlock = () => {
       try { ensureAudio(); } catch {}
       try { if (musicWanted) musicPlay(); } catch {}
+      try { if (menuMusicWanted) menuMusicPlay(); } catch {}
     };
     window.addEventListener('pointerdown', unlock, { passive: true });
     window.addEventListener('keydown', unlock);
@@ -349,6 +458,7 @@ if (typeof window !== 'undefined') {
       playNewRecord, playPointsTick, playPointsCount,
       playChest, playReward, playOB, playUIClick,
       ensureMusic, setMusicActive, isMusicActive, duckMusic,
+      ensureMenuMusic, setMenuMusicActive, isMenuMusicActive,
     };
   } catch {}
 }

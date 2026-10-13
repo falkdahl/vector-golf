@@ -49,13 +49,14 @@ import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCourses
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COINS_PER_ATTEMPT, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, LOADOUT_SLOT_COSTS, DEFAULT_UNLOCKED_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout, getUnlockedLoadoutSlots as getProgressionUnlockedSlots, getNextLoadoutSlotCost, canUnlockNextLoadoutSlot, unlockNextLoadoutSlot, setUnlockedLoadoutSlots, getRunsStarted, incrementRunsStarted } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip, playBanter as banterPlay, loadBanterFile as banterLoadFile } from "./banter.js";
-import { playLaunch as audioLaunch, playWater as audioWater, playHoleWin as audioHoleWin, playModifierActivated as audioModifier, playPointsCount as audioPointsCount, playNewRecord as audioNewRecord, setWindActive as audioSetWind, playChest as audioChest, playReward as audioReward, playOB as audioOB, playUIClick as audioUIClick, setMusicActive as audioSetMusic } from "./audio.js";
+import { playLaunch as audioLaunch, playWater as audioWater, playHoleWin as audioHoleWin, playModifierActivated as audioModifier, playPointsCount as audioPointsCount, playNewRecord as audioNewRecord, setWindActive as audioSetWind, playChest as audioChest, playReward as audioReward, playOB as audioOB, playUIClick as audioUIClick, setMusicActive as audioSetMusic, setMenuMusicActive as audioSetMenuMusic } from "./audio.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
 const FIXED_DT = 1 / 60;
 let lastWindAudioState = false;
 let lastMusicAudioState = false;
+let lastMenuMusicAudioState = false;
 
 let canvas;
 let ctx;
@@ -6375,11 +6376,13 @@ function updateForceBar() {
 }
 
 function render() {
-  // Ambient wind loop + stage theme: play on levels, silent in menu/cutscene.
+  // Ambient wind loop + music: stage theme on levels, menu theme on main menu,
+  // silent in cutscene. Both music tracks fade (crossfade on switch, no hard cut).
   try {
     let isCut = false;
     try { isCut = cutsceneIsActive(); } catch {}
     const shouldStageAudio = !mainMenuVisible && !isCut;
+    const shouldMenuAudio = !!mainMenuVisible && !isCut;
     if (shouldStageAudio !== lastWindAudioState) {
       lastWindAudioState = shouldStageAudio;
       try { audioSetWind(shouldStageAudio); } catch {}
@@ -6387,6 +6390,10 @@ function render() {
     if (shouldStageAudio !== lastMusicAudioState) {
       lastMusicAudioState = shouldStageAudio;
       try { audioSetMusic(shouldStageAudio); } catch {}
+    }
+    if (shouldMenuAudio !== lastMenuMusicAudioState) {
+      lastMenuMusicAudioState = shouldMenuAudio;
+      try { audioSetMenuMusic(shouldMenuAudio); } catch {}
     }
   } catch {}
   // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
