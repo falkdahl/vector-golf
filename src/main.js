@@ -658,7 +658,7 @@ function showCourseClearedOverlay(total, isRecord){
   courseClearedIsRecord = !!isRecord;
   courseClearedVisible = true;
   const amt = document.getElementById('course-cleared-amount');
-  if(amt) amt.textContent = '+' + courseClearedTotal + ' points';
+  if(amt) amt.textContent = courseClearedTotal + ' points';
   const rec = document.getElementById('course-cleared-record');
   if(rec){
     rec.innerHTML = '';
