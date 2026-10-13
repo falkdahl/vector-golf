@@ -2247,6 +2247,7 @@ body {
 }
 #game-container:fullscreen canvas { border-radius: 0; }
 #mobile-menu-button,
+#mobile-reset-button,
 #mobile-fullscreen-button {
   position: absolute;
   top: 36px;
@@ -2271,8 +2272,10 @@ body {
   line-height: 1;
 }
 #mobile-menu-button { left: 12px; }
+#mobile-reset-button { left: 64px; }
 #mobile-fullscreen-button { right: 12px; top: 36px; font-size: 18px; z-index: 15; }
 #mobile-menu-button.hidden,
+#mobile-reset-button.hidden,
 #mobile-fullscreen-button.hidden { display: none !important; }
 #mobile-controls {
   position: absolute;

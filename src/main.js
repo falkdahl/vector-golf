@@ -5583,6 +5583,14 @@ function dispatchEscapeKey() {
     window.dispatchEvent(ev);
   } catch {}
 }
+function dispatchResetKey() {
+  // Identical path to hitting R: reuse the global keydown handlers
+  // (initInput onReset + main keydown reroll/gameover/win branching).
+  try {
+    const ev = new KeyboardEvent('keydown', { code: 'KeyR', key: 'r', bubbles: true, cancelable: true });
+    window.dispatchEvent(ev);
+  } catch {}
+}
 function getCanvasTouchPos(t) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = LOGICAL_W / rect.width;
@@ -5639,11 +5647,13 @@ function syncMobileUI() {
   try {
     const mobile = isMobileMode();
     const menuBtn = document.getElementById('mobile-menu-button');
+    const resetBtn = document.getElementById('mobile-reset-button');
     const fsBtn = document.getElementById('mobile-fullscreen-button');
     const controls = document.getElementById('mobile-controls');
     const chromeHidden = isMobileChromeHidden();
-    // Hamburger is gameplay chrome on all platforms (desktop + mobile).
+    // Hamburger + reset are gameplay chrome on all platforms (desktop + mobile).
     if (menuBtn) menuBtn.classList.toggle('hidden', chromeHidden);
+    if (resetBtn) resetBtn.classList.toggle('hidden', chromeHidden);
     if (!mobile) {
       if (fsBtn) fsBtn.classList.add('hidden');
       if (controls) controls.classList.add('hidden');
@@ -5766,7 +5776,7 @@ function startBoardDragAt(idx, pos) {
 }
 
 function initMobileControls() {
-  // Hamburger (Escape equivalent) + fullscreen re-entry. Always wired; visibility gated by syncMobileUI.
+  // Hamburger (Escape equivalent) + reset (R equivalent) + fullscreen re-entry. Always wired; visibility gated by syncMobileUI.
   try {
     const menuBtn = document.getElementById('mobile-menu-button');
     if (menuBtn && !menuBtn._mobileBound) {
@@ -5775,6 +5785,15 @@ function initMobileControls() {
         try { e.preventDefault(); } catch {}
         try { if (menuBtn.blur) menuBtn.blur(); } catch {}
         dispatchEscapeKey();
+      });
+    }
+    const resetBtn = document.getElementById('mobile-reset-button');
+    if (resetBtn && !resetBtn._mobileBound) {
+      resetBtn._mobileBound = true;
+      resetBtn.addEventListener('click', (e) => {
+        try { e.preventDefault(); } catch {}
+        try { if (resetBtn.blur) resetBtn.blur(); } catch {}
+        dispatchResetKey();
       });
     }
     const fsBtn = document.getElementById('mobile-fullscreen-button');
@@ -9375,6 +9394,7 @@ if (typeof window !== 'undefined') {
   window.__requestMobileFullscreen = requestMobileFullscreen;
   window.__syncMobileUI = syncMobileUI;
   window.__dispatchEscapeKey = dispatchEscapeKey;
+  window.__dispatchResetKey = dispatchResetKey;
   window.__handleRightClickAt = handleRightClickAt;
   window.__getCanvasTouchPos = (t) => { try { return getCanvasTouchPos(t); } catch { return null; } };
   window.isMobilePhone = isMobilePhone;
@@ -9466,7 +9486,7 @@ function playCutsceneWrapped(idOrData, opts) {
 try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneWrapped; window.playCutscene = playCutsceneWrapped; window.__isCutsceneActive = cutsceneIsActive; window.isCutsceneActive = cutsceneIsActive; window.__getActiveCutsceneId = cutsceneGetId;   window.__cutsceneSkip = cutsceneSkip; window.__cutsceneLoad = cutsceneLoad; window.__syncCutsceneSkipButton = syncCutsceneSkipButton; window.__syncBanterSkipButton = syncBanterSkipButton; window.__banterSkip = banterSkip; window.__skipBanter = banterSkip; window.__isPickupDiscardActive = isPickupDiscardActive; window.__getPendingPickup = getPendingPickup; window.__enterPickupDiscard = enterPickupDiscard; window.__cancelPickupDiscard = cancelPickupDiscard; window.__discardBagSlotForPickup = discardBagSlotForPickup; window.__getSnapPreviewTarget = getSnapPreviewTarget; window.__findSnapTarget = findSnapTarget; window.__splitStackAtIndex = splitStackAtIndex; window.__getStackIndicesFor = getStackIndicesFor; window.__cancelBagDrag = cancelBagDrag; window.__getDragOffset = () => (dragOffset ? { ...dragOffset } : null); window.__isPlacementOutOfBounds = isPlacementOutOfBounds; window.__validateCutscene = cutsceneValidate; window.__hasSeenCutscene = cutsceneHasSeen; window.__markCutsceneSeen = cutsceneMarkSeen; window.__CUTSCENE_SEEN_KEY = cutsceneSeenKey; window.hasSeenCutscene = cutsceneHasSeen; window.markCutsceneSeen = cutsceneMarkSeen; } } catch {}
 
 export { init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall, isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, syncMobileUI, dispatchEscapeKey, handleRightClickAt, getCanvasTouchPos };
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall,   isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, syncMobileUI, dispatchEscapeKey, dispatchResetKey, handleRightClickAt, getCanvasTouchPos };
 
 // Auto-init when loaded as module via script tag
 if (document.readyState === "loading") {

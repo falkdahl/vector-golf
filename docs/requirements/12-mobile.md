@@ -35,9 +35,14 @@
 - `#mobile-menu-button` (`☰`, `44×44`, `absolute; top:36px; left:12px` — just below the 28px `#hud`; `z-index:7`): visible on all platforms (desktop + mobile) while gameplay chrome is visible (same rule as `#bottom-bar`: `AIMING`/`CHARGING`/`FLYING` + reward open, hidden in pause/menus/banners/`WIN`/`GAME_OVER`/summaries/cutscene/banter/boot gate/starting overlay).
 - Click/tap dispatches the identical Escape path as keyboard (`Escape` keydown handling in `src/main.js`: deselect → close help/confirm/reward-skip → open in-level pause / resume — per `06-run-rules.md` §4 and `08-campaign-and-menus.md` §6). No separate pause logic; synthetic `Escape` keydown event reused so behavior can never diverge.
 
+## 5. Reset button (R equivalent)
+
+- `#mobile-reset-button` (`↻`, `44×44`, `absolute; top:36px; left:64px` — just right of the hamburger; `z-index:7`): visible on all platforms while gameplay chrome is visible (same rule as the hamburger).
+- Click/tap dispatches the identical `R` path as keyboard (`KeyR` keydown handling: reward re-roll when a reward menu is open, `Game Over`/`WIN` continue, `resetBall()` otherwise with last-attempt blocking — per `06-run-rules.md` §§3–4 and `07-rewards-and-economy.md` §4). Synthetic `KeyR` keydown event reused so behavior can never diverge.
+
 ## Acceptance
 
-- [ ] Phone UA (or `?mobile=1`) shows fullscreen + 3 touch buttons; desktop shows neither (hamburger shows on both).
+- [ ] Phone UA (or `?mobile=1`) shows fullscreen + 3 touch buttons; desktop shows neither (hamburger + reset show on both).
 - [ ] First tap on mobile requests fullscreen + landscape lock attempt; exiting fullscreen shows `⛶` which re-enters.
 - [ ] Hold left/right rotates aim at keyboard rate; hold-launch charges force bar and releases with identical power/accounting; all blocked in same states as keyboard.
 - [ ] Touch drag moves placed bubbles/stacks with snap-on-release; bag→canvas touch drag places; double-tap inside bubble splits/picks up/deselects exactly like right-click; single-tap places like click.
@@ -45,4 +50,4 @@
 
 ## File paths
 
-- `index.html:1` (`#mobile-menu-button`, `#mobile-fullscreen-button`, `#mobile-controls`), `style.css:1`, `src/input.js:1` (touch API), `src/main.js:1` (detection, fullscreen, touch wiring, `handleRightClickAt`)
+- `index.html:1` (`#mobile-menu-button`, `#mobile-reset-button`, `#mobile-fullscreen-button`, `#mobile-controls`), `style.css:1`, `src/input.js:1` (touch API), `src/main.js:1` (detection, fullscreen, touch wiring, `handleRightClickAt`, `dispatchResetKey`)
