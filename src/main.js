@@ -110,13 +110,37 @@ function isParallaxReady() {
   } catch { return false; }
 }
 function hideLoadingScreen() {
-  // Deferred until the first-load asset preload (all images + audio) finishes,
-  // so cutscenes never start with audio still downloading. Callers just
-  // record the request; the actual hide happens once assets are ready.
+  // Deferred until the Tier 0 preload (menu-critical assets) finishes.
+  // Callers just record the request; the actual hide happens once ready.
   loadingHideRequested = true;
   if (!assetsReady) return;
   const ls = document.getElementById('loading-screen');
   if (ls) ls.classList.add('hidden');
+}
+function showLoadingScreen() {
+  // Content-load feedback (Play click → cutscene etc.). No-op while the
+  // boot loading screen is still up; safe to call from any flow.
+  try {
+    const ls = document.getElementById('loading-screen');
+    if (ls) ls.classList.remove('hidden');
+  } catch {}
+}
+// Boot gate: splash + "click to continue". The click is the user gesture
+// that unlocks WebAudio, so menu music reliably starts. Blocks all game
+// input until dismissed (overlay covers pointer; key handlers check the flag).
+let bootGateVisible = true;
+function isBootGateVisible() { return !!bootGateVisible; }
+function continueFromBootGate() {
+  if (!bootGateVisible) return;
+  bootGateVisible = false;
+  try {
+    const gate = document.getElementById('continue-overlay');
+    if (gate) gate.classList.add('hidden');
+  } catch {}
+  // Unlock + (re)start whatever music the render loop currently wants. The
+  // gate click itself also trips the audio.js gesture listeners; this makes
+  // the menu theme start deterministically on continue.
+  try { audioUIClick(); } catch {}
 }
 // First-load preload (tiered for fast menu): Tier 0 blocks the loading
 // screen (splash + menu theme only); Tier 1 streams right after.
@@ -1552,15 +1576,19 @@ function handleTutorialHole1To2Chain(){
     }catch{}
     try{ syncMainMenu(); }catch{}
     try{ redrawBottom(); }catch{}
+    // Feedback: cutscene JSON + assets load async below.
+    try { showLoadingScreen(); } catch {}
     cutsceneLoad('first-restock').then(async (data)=>{
       if(!data){
         try{ cutsceneMarkSeen('first-restock'); }catch{}
+        try { hideLoadingScreen(); } catch {}
         prepareHole2ThenBanter();
         startStackingBanter();
         return;
       }
       // Tier 2: cutscene assets (incl. audio) ready before play.
       try { await preloadCutsceneAssets(data); } catch {}
+      try { hideLoadingScreen(); } catch {}
       const ok = playCutsceneWrapped(data, {onComplete:()=>{
          try{ cutsceneMarkSeen('first-restock'); }catch{}
          prepareHole2ThenBanter();
@@ -1568,12 +1596,14 @@ function handleTutorialHole1To2Chain(){
       }});
       if(!ok){
         try{ cutsceneMarkSeen('first-restock'); }catch{}
+        try { hideLoadingScreen(); } catch {}
         prepareHole2ThenBanter();
         startStackingBanter();
       }
       try{ syncMainMenu(); }catch{}
       try{ redrawBottom(); }catch{}
     }).catch(()=>{
+      try { hideLoadingScreen(); } catch {}
       prepareHole2ThenBanter();
       startStackingBanter();
     });
@@ -3025,10 +3055,12 @@ function handleCoursePlay(courseId) {
   try { audioUIClick(); } catch {}
   // New flow: show loadout before first hole (10-progression.md §2) — pre-load last saved or random
   if (hasRestorableSave()) return;
+  // Feedback: content (cutscene JSON + assets, or loadout) loads async below.
+  try { showLoadingScreen(); } catch {}
   const _tutCourse = findCourseById(courseId);
   const _isTut = isTutorialCourse(_tutCourse);
   try { loadProgression(); } catch {}
-  const _afterPrologue = (opts) => { if (_isTut) { startTutorialCourse(courseId); } else { playBanterThenShowStartingOverlay(courseId, opts); } };
+  const _afterPrologue = (opts) => { try { hideLoadingScreen(); } catch {}; if (_isTut) { startTutorialCourse(courseId); } else { playBanterThenShowStartingOverlay(courseId, opts); } };
   // 11-cutscenes §11: first time player clicks 3-hole course, show prologue.json before next state (loadout / tutorial)
   // For 3-hole Trial tutorial, prologue/intro still play when not yet seen, but after they complete we start the tutorial (controls-first banter), not the generic Starting Items overlay.
   try {
@@ -3101,6 +3133,7 @@ function handleCoursePlay(courseId) {
           }
         };
         // Use wrapped version so main menu/splash are hidden immediately and cutscene bg is visible
+        try { hideLoadingScreen(); } catch {}
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
             try { cutsceneMarkSeen('prologue'); } catch {}
@@ -3171,6 +3204,7 @@ function handleCoursePlay(courseId) {
         }
         // Tier 2: cutscene assets (incl. audio) ready before play.
         try { await preloadCutsceneAssets(data); } catch {}
+        try { hideLoadingScreen(); } catch {}
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
             try { cutsceneMarkSeen('first-restock'); } catch {}
@@ -5847,12 +5881,15 @@ function playEnd9HoleThenReturn() {
   try { if (winOverlay) winOverlay.classList.add("hidden"); } catch {}
   try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch {}
   const proceed = () => { try { cutsceneMarkSeen('end-9-hole'); } catch {} continueReturnToMainMenu(); };
-  const fallback = () => { console.warn('[end-9-hole] failed to load, skipping to summary'); proceed(); };
+  const fallback = () => { console.warn('[end-9-hole] failed to load, skipping to summary'); try { hideLoadingScreen(); } catch {} proceed(); };
+  // Feedback: cutscene JSON + assets load async below.
+  try { showLoadingScreen(); } catch {}
   try {
     cutsceneLoad('end-9-hole').then(async (loaded) => {
       if (!loaded) { fallback(); return; }
       // Tier 2: cutscene assets (incl. audio) ready before play.
       try { await preloadCutsceneAssets(loaded); } catch {}
+      try { hideLoadingScreen(); } catch {}
       let ok = false;
       try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
       if (!ok) fallback();
@@ -5867,12 +5904,15 @@ function playEnd18HoleThenReturn() {
   try { if (winOverlay) winOverlay.classList.add("hidden"); } catch {}
   try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch {}
   const proceed = () => { try { cutsceneMarkSeen('end-18-hole'); } catch {} continueReturnToMainMenu(); };
-  const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); try { continueReturnToMainMenu(); } catch {} };
+  const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); try { hideLoadingScreen(); } catch {} try { continueReturnToMainMenu(); } catch {} };
+  // Feedback: cutscene JSON + assets load async below.
+  try { showLoadingScreen(); } catch {}
   try {
     cutsceneLoad('end-18-hole').then(async (loaded) => {
       if (!loaded) { fallback(); return; }
       // Tier 2: cutscene assets (incl. audio) ready before play.
       try { await preloadCutsceneAssets(loaded); } catch {}
+      try { hideLoadingScreen(); } catch {}
       let ok = false;
       try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
       if (!ok) fallback();
@@ -6643,6 +6683,20 @@ function init() {
     console.error("Canvas #game or #bg-canvas not found");
     return;
   }
+  // Boot gate: splash + "click to continue" (audio-unlock gesture).
+  try {
+    const gate = document.getElementById("continue-overlay");
+    if (gate) {
+      gate.classList.remove("hidden");
+      gate.addEventListener("click", () => { try { continueFromBootGate(); } catch {} });
+      gate.addEventListener("keydown", (e) => {
+        if (e.code === "Enter" || e.code === "Space") {
+          try { continueFromBootGate(); } catch {}
+          try { e.preventDefault(); } catch {}
+        }
+      });
+    }
+  } catch {}
   ctx = canvas.getContext("2d");
   bgCtx = bgCanvas.getContext("2d");
   winOverlay = document.getElementById("win-overlay");
@@ -7244,11 +7298,12 @@ function init() {
   });
 
   initInput(
-    () => rewardMenuVisible ? "REWARD" : banterIsActive() ? "BANTER" : gameState,
+    () => bootGateVisible ? "BOOT" : rewardMenuVisible ? "REWARD" : banterIsActive() ? "BANTER" : gameState,
     {
       onLaunch: handleLaunch,
       onReset: () => {
         // REQ-021: block R while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners: block on last attempt
+        if (bootGateVisible) return;
         if (rewardMenuVisible) return;
         if (banterIsActive()) return;
         if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
@@ -7273,6 +7328,7 @@ function init() {
         }
       },
       onToggleWind: () => {
+        if (bootGateVisible) return;
         if (rewardMenuVisible) return;
         if (banterIsActive()) return;
         if (pauseMenuVisible) return;
@@ -7394,6 +7450,14 @@ function init() {
   syncPauseOverlay();
   syncMainMenu();
   window.addEventListener("keydown", (e) => {
+    // Boot gate first: Enter/Space continues, everything else is swallowed.
+    if (bootGateVisible) {
+      if (e.code === "Enter" || e.code === "Space") {
+        try { continueFromBootGate(); } catch {}
+      }
+      try { e.preventDefault(); } catch {}
+      return;
+    }
     // 11-cutscenes has top priority — Space/R fast-forward and advance dialog, Escape skip
     try { if (cutsceneIsActive()) { if (cutsceneHandleInput(e)) { return; } const ae0=document.activeElement; const isIn0=ae0 && (ae0.tagName==='INPUT'||ae0.tagName==='TEXTAREA'||ae0.isContentEditable); if(!isIn0) e.preventDefault(); return; } } catch {}
     // 12-banter: in-place dialog — Space/R/Click fast-forward then advance, Escape advances (pause stays blocked)
@@ -8636,6 +8700,10 @@ if (typeof window !== 'undefined') {
   window.__resetGameAfterWin = resetGameAfterWin;
   window.__hideLoadingScreen = hideLoadingScreen;
   window.hideLoadingScreen = hideLoadingScreen;
+  window.__showLoadingScreen = showLoadingScreen;
+  window.showLoadingScreen = showLoadingScreen;
+  window.__isBootGateVisible = isBootGateVisible;
+  window.__continueFromBootGate = continueFromBootGate;
   window.__maybeHideLoadingAfterSplash = maybeHideLoadingAfterSplash;
   // 11-banners
   window.__isHoleBannerVisible = isHoleBannerVisible;

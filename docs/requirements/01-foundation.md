@@ -41,13 +41,14 @@
     <button id="cutscene-skip-button" class="hidden">Skip »</button>
     <button id="banter-skip-button" class="hidden">Skip »</button>
     <div id="toast" class="hidden">copied to clipboard</div>
+    <div id="continue-overlay">...</div>                   <!-- z60 boot gate: splash + Click to continue (audio-unlock gesture), visible until first click/key -->
   </div>
   <div id="loading-screen">Loading...</div>
 </body>
 ```
 
 - Outside `#game-container` only `#loading-screen` may exist. No `<h1>`, no `#instructions`, no other body children. No horizontal scroll.
-- Stacking: `canvas,#wind-canvas { position:absolute; inset:0; width:100%; height:100% }`, `#bg-canvas{z-index:1}`, `#game{z-index:2}`, `#wind-canvas{z-index:3; pointer-events:none; background:transparent}`, `#hud{z-index:4; pointer-events:none}`; overlays `z-index 6–14` bounded to container (`getBoundingClientRect()` inside container). Scrollable children use `overflow-y:auto; overscroll-behavior:contain`.
+- Stacking: `canvas,#wind-canvas { position:absolute; inset:0; width:100%; height:100% }`, `#bg-canvas{z-index:1}`, `#game{z-index:2}`, `#wind-canvas{z-index:3; pointer-events:none; background:transparent}`, `#hud{z-index:4; pointer-events:none}`; overlays `z-index 6–14` bounded to container (`getBoundingClientRect()` inside container); `#continue-overlay{z-index:60}` (boot gate, above game overlays, below `#loading-screen`). Scrollable children use `overflow-y:auto; overscroll-behavior:contain`.
 - Centering: `body { display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:0; background:#000; overflow:hidden; }`, `#game-container { position:relative; aspect-ratio:16/9; width:min(95vw, calc(95vh * 16/9)); height:min(95vh, calc(95vw * 9/16)); margin:auto; overflow:hidden; }`. Container ratio `1.777±0.02`; all three layers share identical `getBoundingClientRect()`.
 
 ## 4. Game loop
@@ -63,7 +64,7 @@
 
 ## 6. Loading screen
 
-- `#loading-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; color:#fff; font:600 18px system-ui,sans-serif; z-index:100 }`, text exactly `Loading...`. Visible while splash is loading; hidden after `onload`/`decode()`; never re-shown on resize.
+- `#loading-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; color:#fff; font:600 18px system-ui,sans-serif; z-index:100 }`, text exactly `Loading...`. Visible while Tier 0 splash assets load; hidden after Tier 0 completes. Re-shown as content-load feedback (Play click → cutscene, hole-transition and finale cutscenes) until the content starts; never re-shown on resize.
 
 ## Acceptance
 

@@ -143,6 +143,40 @@ body {
 }
 #loading-screen.hidden { display: none !important; }
 
+/* Boot gate: splash + "click to continue" (audio-unlock gesture).
+   Transparent over the splash/menu; above all game overlays, below #loading-screen. */
+#continue-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  z-index: 60;
+  cursor: pointer;
+  user-select: none;
+}
+#continue-overlay.hidden { display: none !important; }
+/* While the boot gate is up, hide all buttons/chrome behind it. */
+#game-container:has(#continue-overlay:not(.hidden)) #main-menu-overlay,
+#game-container:has(#continue-overlay:not(.hidden)) #bottom-bar,
+#game-container:has(#continue-overlay:not(.hidden)) #journal-wrapper,
+#game-container:has(#continue-overlay:not(.hidden)) #journal-panel {
+  display: none !important;
+}
+.continue-prompt {
+  font: 700 30px system-ui, sans-serif;
+  color: #fff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  animation: continuePulse 1.6s ease-in-out infinite;
+}
+@keyframes continuePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(0.985); }
+}
+
 #win-overlay {
   position: absolute;
   inset: 0;
