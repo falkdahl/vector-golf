@@ -5040,7 +5040,7 @@ function loadLevel(index) {
   createBall(level.tee);
   const dx = level.hole.x - level.tee.x;
   const dy = level.hole.y - level.tee.y;
-  setAimAngle(0);
+  setAimAngle(Math.atan2(dy, dx));
   // REQ-09: queue reward before first attempt on holes >0 (except first hole of course), treasure handled separately
   // Free Shot: clear armed state on hole advance per 09 §3
   // 13-tutorial: hole2 (1) no reward, hole3 (2) no reward at start (treasure triggers special rotator/deflector), hole4 (3) no reward
@@ -8025,7 +8025,7 @@ function init() {
       createBall(level.tee);
       const dx0 = level.hole.x - level.tee.x;
       const dy0 = level.hole.y - level.tee.y;
-      setAimAngle(0);
+      setAimAngle(Math.atan2(dy0, dx0));
     } else {
       level = { field: { cols: 32, rows: 18, strength: 80, seed: 0, sources: 1, sinks: 1, doublets: 0, vortexes: 0 }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], canvas: { width: LOGICAL_W, height: LOGICAL_H } };
       createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
