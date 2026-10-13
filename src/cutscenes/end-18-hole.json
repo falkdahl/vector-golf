@@ -1038,5 +1038,28 @@
   },
   "outro": {
     "fadeOutMs": 500
-  }
+  },
+  "music": [
+    {
+      "t": 0,
+      "src": "./audio/may-theme.wav",
+      "volume": 0.4,
+      "fadeMs": 800,
+      "loop": true
+    },
+    {
+      "t": 28000,
+      "src": "./audio/cortex-theme.wav",
+      "volume": 0.4,
+      "fadeMs": 800,
+      "loop": true
+    }
+  ],
+  "sfx": [
+    {
+      "t": 81400,
+      "src": "./audio/surprised.wav",
+      "volume": 0.8
+    }
+  ]
 }

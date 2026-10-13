@@ -19,7 +19,11 @@ let scene = {
   dialogs: [
     { t:500, speaker:"May", text:"Welcome to Mt. Aeolus...", cps:32, portrait:"./img/splash/may-gfg-splash.png", portraitSide:"left" },
     { t:4500, speaker:"Slicer", text:"Putting is for cowards!", cps:28, portrait:"./img/cutscenes/portrait-slicer.png", portraitSide:"right" }
-  ]
+  ],
+  music: [
+    { t:0, src:"./audio/main-theme.wav", volume:0.4, fadeMs:800, loop:true }
+  ],
+  sfx: []
 };
 
 let selectedCharId = "may";
@@ -41,7 +45,9 @@ function createBlankScene(){
     duration: 15000,
     camera: { keyframes: [] },
     characters: [],
-    dialogs: []
+    dialogs: [],
+    music: [],
+    sfx: []
   };
 }
 function handleNewScene(){
@@ -52,7 +58,7 @@ function handleNewScene(){
   collapsedDialogs = new Set();
   try{ localStorage.removeItem('cutsceneEditorDraft.v1'); }catch{}
   try{ localStorage.setItem('cutsceneEditorDraft.v1', JSON.stringify(scene)); }catch{}
-  syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); syncJson(); renderPreview();
+  syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); renderMusicList(); renderSfxList(); syncJson(); renderPreview();
   showToast('new scene — blank template');
 }
 
@@ -162,6 +168,67 @@ async function refreshAvailableImages(){
   }catch{}
 }
 
+// Audio discovery from ./audio/ (for music + SFX dropdowns)
+let availableAudio = [
+  "./audio/main-theme.wav",
+  "./audio/main-menu.wav",
+  "./audio/rushing-footsteps.wav",
+  "./audio/surprised.wav",
+  "./audio/caution.wav",
+  "./audio/place-on-table.wav"
+];
+async function fetchFolderAudios(folder){
+  try{
+    const res = await fetch(folder, {cache:'no-store'});
+    if(!res.ok) return [];
+    const text = await res.text();
+    const re = /href="([^"]+\.(wav|mp3|ogg))"/gi;
+    const out=[];
+    let m;
+    while((m=re.exec(text))){
+      const href=m[1];
+      if(href.startsWith('http') || href.startsWith('/')) continue;
+      if(href.includes('..')) continue;
+      let full = href;
+      if(!href.includes('/')){
+        const folderNorm = folder.replace(/\/$/,'');
+        full = folderNorm + '/' + href;
+      } else if(href.startsWith('./')) {
+        full = href;
+      } else if(!href.startsWith('./audio')){
+        const folderNorm = folder.replace(/\/$/,'');
+        full = folderNorm + '/' + href.split('/').pop();
+      }
+      if(full.startsWith('audio/')) full='./'+full;
+      if(!full.startsWith('./audio/')) full='./audio/'+full.split('/').pop();
+      out.push(full);
+    }
+    return out;
+  }catch{ return []; }
+}
+async function refreshAvailableAudio(){
+  try{
+    const found = await fetchFolderAudios('./audio/');
+    const merged = [...new Set([...availableAudio, ...found])].sort();
+    availableAudio = merged.filter(p=>p.startsWith('./audio/'));
+  }catch{}
+  try{ renderMusicList(); }catch{}
+  try{ renderSfxList(); }catch{}
+}
+let previewAudioEl = null;
+function previewAudioSrc(src, volume){
+  try{
+    if(!src) return;
+    if(previewAudioEl){ try{ previewAudioEl.pause(); }catch{} }
+    const el = new Audio();
+    el.src = src;
+    try{ const vv = Number(volume); el.volume = Math.max(0, Math.min(1, Number.isFinite(vv) ? vv : 0.8)); }catch{}
+    previewAudioEl = el;
+    const p = el.play();
+    if(p && typeof p.catch === 'function') p.catch(()=>{});
+  }catch{}
+}
+
 const els = {};
 function q(id){ return document.getElementById(id); }
 
@@ -200,6 +267,10 @@ function initEls(){
   els.loadIdInput = q('load-cutscene-id');
   els.loadIdBtn = q('load-cutscene-id-btn');
   els.newSceneBtn = q('new-scene-button');
+  els.musicList = q('music-list');
+  els.addMusicCue = q('add-music-cue');
+  els.sfxList = q('sfx-list');
+  els.addSfxCue = q('add-sfx-cue');
   // 12 — intro/outro
   els.introEnabled = q('intro-enabled');
   els.introBlackMs = q('intro-black-ms');
@@ -1390,6 +1461,114 @@ function renderDialogList(){
   });
 }
 
+function ensureAudioArrays(){
+  if(!Array.isArray(scene.music)) scene.music = [];
+  if(!Array.isArray(scene.sfx)) scene.sfx = [];
+}
+
+function audioOptionsHtml(selected){
+  const opts = [...new Set([...availableAudio, ...(selected && !availableAudio.includes(selected) && selected ? [selected] : [])])];
+  return opts.map(v=>`<option value="${v}" ${v===selected?'selected':''}>${v.replace('./audio/','')}</option>`).join('');
+}
+
+function renderMusicList(){
+  if(!els.musicList) return;
+  ensureAudioArrays();
+  els.musicList.innerHTML='';
+  const cues=[...(scene.music||[])].sort((a,b)=>(a.t??0)-(b.t??0));
+  if(!cues.length){
+    const h=document.createElement('div');
+    h.className='hint'; h.textContent='No music cues — add one at the scrub time.';
+    els.musicList.appendChild(h);
+    return;
+  }
+  cues.forEach((cue)=>{
+    const idx=(scene.music||[]).indexOf(cue);
+    const div=document.createElement('div');
+    div.className='item';
+    const src=typeof cue.src==='string'?cue.src:'';
+    div.innerHTML=`
+      <div class="kf-row" style="cursor:pointer" title="Click row to jump to cue time">
+        <span class="small" style="min-width:30px">🎵</span>
+        <input type="number" data-k="t" value="${cue.t ?? 0}" min="0" step="100" style="width:76px" title="t ms (content time)">
+        <select data-k="src" style="min-width:150px" title="audio file from ./audio/">${audioOptionsHtml(src)}</select>
+      </div>
+      <div class="kf-row">
+        <label class="small" style="margin:0">vol</label>
+        <input type="number" data-k="volume" value="${cue.volume ?? 0.4}" min="0" max="1" step="0.05" style="width:64px" title="0-1">
+        <label class="small" style="margin:0">fade</label>
+        <input type="number" data-k="fadeMs" value="${cue.fadeMs ?? 800}" min="0" max="10000" step="100" style="width:72px" title="fade ms">
+        <label class="small" style="margin:0;display:flex;align-items:center;gap:4px"><input type="checkbox" data-k="loop" ${cue.loop!==false?'checked':''} style="width:auto">loop</label>
+      </div>
+      <input data-k="src-custom" placeholder="or custom ./audio/... path (empty = stop)" value="${src && !availableAudio.includes(src) ? src : ''}" style="margin-top:4px">
+      <div class="item-actions"><button data-act="jump" class="secondary" title="Jump to cue time">⏱ @ ${cue.t ?? 0}ms</button><button data-act="preview" class="secondary">▶ Preview</button><button data-act="remove" class="danger">✕</button></div>
+      <div class="hint">empty src stops music. Later cues crossfade over fadeMs.</div>
+    `;
+    const tIn=div.querySelector('[data-k="t"]');
+    const srcSel=div.querySelector('[data-k="src"]');
+    const volIn=div.querySelector('[data-k="volume"]');
+    const fadeIn=div.querySelector('[data-k="fadeMs"]');
+    const loopIn=div.querySelector('[data-k="loop"]');
+    const customIn=div.querySelector('[data-k="src-custom"]');
+    tIn.addEventListener('input',()=>{ cue.t=Math.max(0, parseInt(tIn.value)||0); scene.music.sort((a,b)=>(a.t??0)-(b.t??0)); syncJson(); });
+    srcSel.addEventListener('change',()=>{ cue.src=srcSel.value; customIn.value=''; syncJson(); });
+    customIn.addEventListener('input',()=>{ const v=customIn.value.trim(); cue.src=v; if(v){ /* keep select as-is */ } syncJson(); });
+    volIn.addEventListener('input',()=>{ let v=parseFloat(volIn.value); if(!Number.isFinite(v)) v=0.4; cue.volume=Math.max(0, Math.min(1, v)); syncJson(); });
+    fadeIn.addEventListener('input',()=>{ let v=parseInt(fadeIn.value); if(!Number.isFinite(v)) v=800; cue.fadeMs=Math.max(0, Math.min(10000, v)); syncJson(); });
+    loopIn.addEventListener('change',()=>{ cue.loop=loopIn.checked; syncJson(); });
+    div.querySelector('[data-act="jump"]').addEventListener('click',(e)=>{ e.stopPropagation(); const ibf=getIntroBeforeFadeForEditor(); scrubTime=ibf+(cue.t??0); els.scrub.value=String(scrubTime); updateScrubLabel(); renderPreview(); });
+    div.querySelector('[data-act="preview"]').addEventListener('click',(e)=>{ e.stopPropagation(); previewAudioSrc(cue.src, cue.volume ?? 0.4); });
+    div.querySelector('[data-act="remove"]').addEventListener('click',(e)=>{ e.stopPropagation(); scene.music.splice(idx,1); renderMusicList(); syncJson(); });
+    div.querySelector('.kf-row').addEventListener('click',(e)=>{ if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='BUTTON') return; const ibf=getIntroBeforeFadeForEditor(); scrubTime=ibf+(cue.t??0); els.scrub.value=String(scrubTime); updateScrubLabel(); renderPreview(); });
+    els.musicList.appendChild(div);
+  });
+}
+
+function renderSfxList(){
+  if(!els.sfxList) return;
+  ensureAudioArrays();
+  els.sfxList.innerHTML='';
+  const cues=[...(scene.sfx||[])].sort((a,b)=>(a.t??0)-(b.t??0));
+  if(!cues.length){
+    const h=document.createElement('div');
+    h.className='hint'; h.textContent='No SFX — add one at the scrub time.';
+    els.sfxList.appendChild(h);
+    return;
+  }
+  cues.forEach((cue)=>{
+    const idx=(scene.sfx||[]).indexOf(cue);
+    const div=document.createElement('div');
+    div.className='item';
+    const src=typeof cue.src==='string'?cue.src:'';
+    div.innerHTML=`
+      <div class="kf-row" style="cursor:pointer" title="Click row to jump to cue time">
+        <span class="small" style="min-width:30px">🔔</span>
+        <input type="number" data-k="t" value="${cue.t ?? 0}" min="0" step="100" style="width:76px" title="t ms (content time)">
+        <select data-k="src" style="min-width:150px" title="audio file from ./audio/">${audioOptionsHtml(src)}</select>
+      </div>
+      <div class="kf-row">
+        <label class="small" style="margin:0">vol</label>
+        <input type="number" data-k="volume" value="${cue.volume ?? 0.8}" min="0" max="1" step="0.05" style="width:64px" title="0-1">
+      </div>
+      <input data-k="src-custom" placeholder="or custom ./audio/... path" value="${src && !availableAudio.includes(src) ? src : ''}" style="margin-top:4px">
+      <div class="item-actions"><button data-act="jump" class="secondary">⏱ @ ${cue.t ?? 0}ms</button><button data-act="preview" class="secondary">▶ Preview</button><button data-act="remove" class="danger">✕</button></div>
+    `;
+    const tIn=div.querySelector('[data-k="t"]');
+    const srcSel=div.querySelector('[data-k="src"]');
+    const volIn=div.querySelector('[data-k="volume"]');
+    const customIn=div.querySelector('[data-k="src-custom"]');
+    tIn.addEventListener('input',()=>{ cue.t=Math.max(0, parseInt(tIn.value)||0); scene.sfx.sort((a,b)=>(a.t??0)-(b.t??0)); syncJson(); });
+    srcSel.addEventListener('change',()=>{ cue.src=srcSel.value; customIn.value=''; syncJson(); });
+    customIn.addEventListener('input',()=>{ const v=customIn.value.trim(); if(v) cue.src=v; syncJson(); });
+    volIn.addEventListener('input',()=>{ let v=parseFloat(volIn.value); if(!Number.isFinite(v)) v=0.8; cue.volume=Math.max(0, Math.min(1, v)); syncJson(); });
+    div.querySelector('[data-act="jump"]').addEventListener('click',(e)=>{ e.stopPropagation(); const ibf=getIntroBeforeFadeForEditor(); scrubTime=ibf+(cue.t??0); els.scrub.value=String(scrubTime); updateScrubLabel(); renderPreview(); });
+    div.querySelector('[data-act="preview"]').addEventListener('click',(e)=>{ e.stopPropagation(); previewAudioSrc(cue.src, cue.volume ?? 0.8); });
+    div.querySelector('[data-act="remove"]').addEventListener('click',(e)=>{ e.stopPropagation(); scene.sfx.splice(idx,1); renderSfxList(); syncJson(); });
+    div.querySelector('.kf-row').addEventListener('click',(e)=>{ if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='BUTTON') return; const ibf=getIntroBeforeFadeForEditor(); scrubTime=ibf+(cue.t??0); els.scrub.value=String(scrubTime); updateScrubLabel(); renderPreview(); });
+    els.sfxList.appendChild(div);
+  });
+}
+
 function syncJson(){
   syncFromUI();
   // dialogs are kept in authored order; effective order for playback is computed via
@@ -1399,6 +1578,9 @@ function syncJson(){
   // Only sort camera/char keyframes which are purely time-ordered.
   if(scene.camera && scene.camera.keyframes) scene.camera.keyframes.sort((a,b)=>a.t-b.t);
   for(const ch of scene.characters||[]) if(ch.keyframes) ch.keyframes.sort((a,b)=>a.t-b.t);
+  ensureAudioArrays();
+  if(scene.music) scene.music.sort((a,b)=>(a.t??0)-(b.t??0));
+  if(scene.sfx) scene.sfx.sort((a,b)=>(a.t??0)-(b.t??0));
   const json=JSON.stringify(scene, null, 2);
   els.jsonPreview.value=json;
 }
@@ -1435,10 +1617,11 @@ function importJson(){
     if(!scene.camera) scene.camera={keyframes:[]};
     if(!scene.characters) scene.characters=[];
     if(!scene.dialogs) scene.dialogs=[];
+    ensureAudioArrays();
     // preserve authored order from file — do not sort dialogs here (effective order is computed for playback)
     selectedCharId=scene.characters[0]?.id||'';
     scrubTime=0; els.scrub.value='0';
-    syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); syncJson(); renderPreview();
+    syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); renderMusicList(); renderSfxList(); syncJson(); renderPreview();
     showToast('loaded');
   }catch(e){ alert('JSON parse failed: '+e.message); }
 }
@@ -1450,10 +1633,11 @@ function applyLoadedScene(data){
   if(!scene.camera) scene.camera={keyframes:[]};
   if(!scene.characters) scene.characters=[];
   if(!scene.dialogs) scene.dialogs=[];
+  ensureAudioArrays();
   // preserve authored order from file
   selectedCharId=scene.characters[0]?.id||'';
   scrubTime=0;
-  syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); syncJson(); renderPreview();
+  syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); renderMusicList(); renderSfxList(); syncJson(); renderPreview();
   showToast('loaded '+ (scene.id||''));
   return true;
 }
@@ -1662,9 +1846,11 @@ async function init(){
   try{ await loadSpriteLibraryEditor(); }catch{}
   try{ await refreshCutsceneList(); }catch{}
   try{ await refreshAvailableImages(); }catch{}
+  try{ ensureAudioArrays(); }catch{}
+  try{ await refreshAvailableAudio(); }catch{}
   // ensure bg dropdown reflects discovered subfolder images
   try{ if(els.bgSrc) { /* already populated by refreshAvailableImages */ } }catch{}
-  syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); syncJson(); renderPreview();
+  syncToUI(); renderCharList(); renderCameraKfs(); renderDialogList(); renderMusicList(); renderSfxList(); syncJson(); renderPreview();
 
   // events
   els.sceneId.addEventListener('input', ()=>{ syncJson(); });
@@ -1739,6 +1925,24 @@ async function init(){
     scene.dialogs.push({t:eff, speaker:'May', text:'New dialog...', cps:20, portrait:defPortrait, portraitSide:'left'});
     // keep insertion order — do not sort, effective order handles playback
     renderDialogList(); syncJson(); renderPreview();
+  });
+  if(els.addMusicCue) els.addMusicCue.addEventListener('click', ()=>{
+    ensureAudioArrays();
+    const introBeforeFade = getIntroBeforeFadeForEditor();
+    const eff = Math.max(0, Math.round(scrubTime - introBeforeFade));
+    const defSrc = availableAudio[0] || './audio/main-theme.wav';
+    scene.music.push({t:eff, src:defSrc, volume:0.4, fadeMs:800, loop:true});
+    scene.music.sort((a,b)=>(a.t??0)-(b.t??0));
+    renderMusicList(); syncJson(); renderPreview();
+  });
+  if(els.addSfxCue) els.addSfxCue.addEventListener('click', ()=>{
+    ensureAudioArrays();
+    const introBeforeFade = getIntroBeforeFadeForEditor();
+    const eff = Math.max(0, Math.round(scrubTime - introBeforeFade));
+    const defSrc = availableAudio.find(s=>s.includes('surprised')) || availableAudio[0] || './audio/surprised.wav';
+    scene.sfx.push({t:eff, src:defSrc, volume:0.8});
+    scene.sfx.sort((a,b)=>(a.t??0)-(b.t??0));
+    renderSfxList(); syncJson(); renderPreview();
   });
   els.scrub.addEventListener('input', ()=>{
     scrubTime=parseInt(els.scrub.value)||0;

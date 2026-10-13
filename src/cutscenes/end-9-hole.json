@@ -538,5 +538,29 @@
   },
   "outro": {
     "fadeOutMs": 500
-  }
+  },
+  "music": [
+    {
+      "t": 0,
+      "src": "./audio/may-theme.wav",
+      "volume": 0.4,
+      "fadeMs": 800,
+      "loop": true
+    },
+    {
+      "t": 18600,
+      "src": "./audio/cortex-theme.wav",
+      "volume": 0.4,
+      "fadeMs": 800,
+      "loop": true
+    },
+    {
+      "t": 49300,
+      "src": "./audio/caution.wav",
+      "volume": 0.4,
+      "fadeMs": 800,
+      "loop": true
+    }
+  ],
+  "sfx": []
 }

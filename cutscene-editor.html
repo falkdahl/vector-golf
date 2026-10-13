@@ -165,6 +165,17 @@
     </div>
 
     <div class="panel">
+      <h3>Audio — music &amp; SFX keyframes <span class="small">from ./audio/</span></h3>
+      <label>Background music cues <span class="small">looped, crossfaded at t</span></label>
+      <div id="music-list" class="list"></div>
+      <button id="add-music-cue">+ Add music cue at scrub time</button>
+      <label style="margin-top:8px">Sound effects <span class="small">one-shot at t</span></label>
+      <div id="sfx-list" class="list"></div>
+      <button id="add-sfx-cue">+ Add SFX at scrub time</button>
+      <div class="hint">t is content ms (after intro). Music with empty src stops playback. Preview with ▶ per row.</div>
+    </div>
+
+    <div class="panel">
       <h3>JSON <span class="small">live preview</span></h3>
       <textarea id="json-preview" readonly></textarea>
       <div class="row"><button id="cutscene-export-button">Export — Copy JSON</button><button id="import-btn" class="secondary">Load pasted JSON</button></div>

@@ -328,5 +328,31 @@
     },
     "outro": {
         "fadeOutMs": 500
-    }
+    },
+    "music": [
+        {
+            "t": 0,
+            "src": "./audio/may-theme.wav",
+            "volume": 0.4,
+            "fadeMs": 800,
+            "loop": true
+        }
+    ],
+    "sfx": [
+        {
+            "t": 29100,
+            "src": "./audio/place-on-table.wav",
+            "volume": 0.8
+        },
+        {
+            "t": 29500,
+            "src": "./audio/place-on-table.wav",
+            "volume": 0.8
+        },
+        {
+            "t": 30000,
+            "src": "./audio/place-on-table.wav",
+            "volume": 0.8
+        }
+    ]
 }

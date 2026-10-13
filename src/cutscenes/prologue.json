@@ -79,13 +79,6 @@
       "id": "cortex",
       "character": "cortex",
       "sprite": "cortex-front",
-      "src": "./img/cutscenes/chars-front.png",
-      "frame": {
-        "x": 552,
-        "y": 42,
-        "w": 300,
-        "h": 300
-      },
       "x": 754,
       "y": 340,
       "scale": 0.6,
@@ -137,13 +130,6 @@
       "id": "acolyte",
       "character": "acolyte",
       "sprite": "acolyte-back",
-      "src": "./img/cutscenes/chars-back.png",
-      "frame": {
-        "x": 865,
-        "y": 414,
-        "w": 300,
-        "h": 256
-      },
       "x": 273,
       "y": 543,
       "scale": 0.5,
@@ -152,16 +138,9 @@
       "keyframes": []
     },
     {
-      "id": "acolyte-copy",
+      "id": "acolyte-2",
       "character": "acolyte",
       "sprite": "acolyte-back",
-      "src": "./img/cutscenes/chars-back.png",
-      "frame": {
-        "x": 865,
-        "y": 414,
-        "w": 300,
-        "h": 256
-      },
       "x": 666,
       "y": 555,
       "scale": 0.5,
@@ -170,16 +149,9 @@
       "keyframes": []
     },
     {
-      "id": "acolyte-copy-copy",
+      "id": "acolyte-3",
       "character": "acolyte",
       "sprite": "acolyte-back",
-      "src": "./img/cutscenes/chars-back.png",
-      "frame": {
-        "x": 865,
-        "y": 414,
-        "w": 300,
-        "h": 256
-      },
       "x": 376,
       "y": 568,
       "scale": 0.5,
@@ -188,16 +160,9 @@
       "keyframes": []
     },
     {
-      "id": "acolyte-copy-copy1",
+      "id": "acolyte-4",
       "character": "acolyte",
       "sprite": "acolyte-back",
-      "src": "./img/cutscenes/chars-back.png",
-      "frame": {
-        "x": 865,
-        "y": 414,
-        "w": 300,
-        "h": 256
-      },
       "x": 781,
       "y": 523,
       "scale": 0.5,
@@ -209,13 +174,6 @@
       "id": "slicer",
       "character": "slicer",
       "sprite": "slicer-right",
-      "src": "./img/cutscenes/chars-slicer.png",
-      "frame": {
-        "x": 558,
-        "y": 58,
-        "w": 400,
-        "h": 400
-      },
       "x": -293,
       "y": 400,
       "scale": 0.4,
@@ -337,5 +295,15 @@
   },
   "outro": {
     "fadeOutMs": 1000
-  }
+  },
+  "music": [
+    {
+      "t": 0,
+      "src": "./audio/cortex-theme.wav",
+      "volume": 0.4,
+      "fadeMs": 800,
+      "loop": true
+    }
+  ],
+  "sfx": []
 }

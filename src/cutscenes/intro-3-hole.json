@@ -564,5 +564,15 @@
     },
     "outro": {
         "fadeOutMs": 1000
-    }
+    },
+    "music": [
+        {
+            "t": 0,
+            "src": "./audio/may-theme.wav",
+            "volume": 0.4,
+            "fadeMs": 800,
+            "loop": true
+        }
+    ],
+    "sfx": []
 }

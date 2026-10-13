@@ -123,6 +123,37 @@ export function validateCutscene(data) {
     }
   }
   if (data.duration !== undefined && (typeof data.duration !== 'number' || data.duration<0)) errors.push('duration invalid');
+  // Audio keyframes: background music cues + one-shot SFX (optional, backward-compat)
+  const AUDIO_EXT = /\.(wav|mp3|ogg)$/i;
+  function isAudioSrc(s) {
+    if (typeof s !== 'string' || !s.trim()) return false;
+    const t = s.trim();
+    if (t.toLowerCase() === 'none' || t === '') return true; // stop sentinel for music
+    if (t.includes('..')) return false;
+    return AUDIO_EXT.test(t);
+  }
+  if (data.music !== undefined && data.music !== null) {
+    if (!Array.isArray(data.music)) errors.push('music must be array');
+    else for (let i=0;i<data.music.length;i++) {
+      const m = data.music[i];
+      if (!m || typeof m !== 'object') { errors.push(`music[${i}] must be object`); continue; }
+      if (typeof m.t !== 'number' || !Number.isFinite(m.t) || m.t < 0 || m.t > 600000) errors.push(`music[${i}].t must be 0-600000`);
+      if (m.src !== undefined && m.src !== null && m.src !== '' && !isAudioSrc(m.src)) errors.push(`music[${i}].src must be ./audio/*.wav|mp3|ogg or none`);
+      if (m.volume !== undefined && (typeof m.volume !== 'number' || !Number.isFinite(m.volume) || m.volume < 0 || m.volume > 1)) errors.push(`music[${i}].volume must be 0-1`);
+      if (m.fadeMs !== undefined && (typeof m.fadeMs !== 'number' || !Number.isFinite(m.fadeMs) || m.fadeMs < 0 || m.fadeMs > 10000)) errors.push(`music[${i}].fadeMs must be 0-10000`);
+      if (m.loop !== undefined && typeof m.loop !== 'boolean') errors.push(`music[${i}].loop must be boolean`);
+    }
+  }
+  if (data.sfx !== undefined && data.sfx !== null) {
+    if (!Array.isArray(data.sfx)) errors.push('sfx must be array');
+    else for (let i=0;i<data.sfx.length;i++) {
+      const s = data.sfx[i];
+      if (!s || typeof s !== 'object') { errors.push(`sfx[${i}] must be object`); continue; }
+      if (typeof s.t !== 'number' || !Number.isFinite(s.t) || s.t < 0 || s.t > 600000) errors.push(`sfx[${i}].t must be 0-600000`);
+      if (!isAudioSrc(s.src) || String(s.src).trim().toLowerCase() === 'none' || String(s.src).trim() === '') errors.push(`sfx[${i}].src must be ./audio/*.wav|mp3|ogg`);
+      if (s.volume !== undefined && (typeof s.volume !== 'number' || !Number.isFinite(s.volume) || s.volume < 0 || s.volume > 1)) errors.push(`sfx[${i}].volume must be 0-1`);
+    }
+  }
   // 12 — Title Intro & Fade Transitions (optional, backward-compat)
   const introObj = data.intro;
   if (introObj !== undefined && introObj !== null) {
@@ -464,6 +495,164 @@ export function preloadCutscene(data) {
 // Internal active state
 let active = null; // { data, startTime, elapsed, bgImg, charImgs: Map, currentDialogIndex, dialogStart, revealed, onComplete, camera }
 let activeId = null;
+
+// Cutscene audio keyframes: one looping music <audio> (crossfaded between
+// music cues) + one-shot SFX. Times are content ms (after intro), matching
+// camera/character/dialog timing.
+let cutMusicEl = null;
+let cutMusicFadeTimer = null;
+let cutMusicFadeId = 0;
+let cutMusicSrc = null;
+function cutFadeTo(el, target, ms) {
+  try {
+    if (!el) return;
+    const dur = Math.max(50, Number(ms) || 800);
+    const tgt = Math.max(0, Math.min(1, Number(target) || 0));
+    cutMusicFadeId = (cutMusicFadeId || 0) + 1;
+    const my = cutMusicFadeId;
+    try { if (cutMusicFadeTimer) clearInterval(cutMusicFadeTimer); } catch {}
+    cutMusicFadeTimer = null;
+    let from = tgt;
+    try { from = typeof el.volume === 'number' ? el.volume : tgt; } catch {}
+    if (tgt > 0 && el.paused) {
+      try { el.volume = 0; } catch {}
+      from = 0;
+      try { const p = el.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch {}
+    }
+    if (from === tgt) {
+      if (tgt === 0) { try { el.pause(); } catch {} }
+      return;
+    }
+    const steps = Math.max(1, Math.round(dur / 50));
+    let i = 0;
+    cutMusicFadeTimer = setInterval(() => {
+      try {
+        if (my !== cutMusicFadeId) { try { clearInterval(cutMusicFadeTimer); } catch {} cutMusicFadeTimer = null; return; }
+        i++;
+        const t = Math.min(1, i / steps);
+        try { el.volume = Math.max(0, Math.min(1, from + (tgt - from) * t)); } catch {}
+        if (t >= 1) {
+          try { clearInterval(cutMusicFadeTimer); } catch {}
+          cutMusicFadeTimer = null;
+          if (tgt === 0) { try { el.pause(); } catch {} }
+        }
+      } catch {}
+    }, 50);
+  } catch {}
+}
+function getCutContentElapsed() {
+  if (!active) return 0;
+  const ic = active.introConfig;
+  const introTotal = ic ? ic.total : 0;
+  const introBeforeFade = ic ? (ic.introBeforeFade ?? introTotal - (ic.fadeInMs || 0)) : 0;
+  if (!ic || !ic.enabled) return Math.min(active.elapsed, active.contentDuration);
+  if (active.elapsed < introBeforeFade) return 0;
+  const c = active.elapsed - introBeforeFade;
+  return c > active.contentDuration ? active.contentDuration : c;
+}
+function sortedMusicCues() {
+  if (!active || !Array.isArray(active.data.music)) return [];
+  return [...active.data.music]
+    .filter(m => m && typeof m.t === 'number' && Number.isFinite(m.t))
+    .sort((a, b) => a.t - b.t);
+}
+function sortedSfxCues() {
+  if (!active || !Array.isArray(active.data.sfx)) return [];
+  return [...active.data.sfx]
+    .filter(s => s && typeof s.t === 'number' && Number.isFinite(s.t) && typeof s.src === 'string' && s.src.trim())
+    .sort((a, b) => a.t - b.t);
+}
+function startCutMusicCue(cue) {
+  try {
+    const raw = cue && typeof cue.src === 'string' ? cue.src.trim() : '';
+    const isStop = !raw || raw.toLowerCase() === 'none';
+    const vol = cue && Number.isFinite(cue.volume) ? Math.max(0, Math.min(1, cue.volume)) : 0.4;
+    const fade = cue && Number.isFinite(cue.fadeMs) ? Math.max(0, Math.min(10000, cue.fadeMs)) : 800;
+    const loop = cue ? cue.loop !== false : true;
+    if (isStop) {
+      cutMusicSrc = null;
+      if (cutMusicEl) cutFadeTo(cutMusicEl, 0, fade);
+      return;
+    }
+    if (cutMusicSrc === raw && cutMusicEl && !cutMusicEl.paused) {
+      try { cutMusicEl.volume = vol; } catch {}
+      return;
+    }
+    // Crossfade: fade out old, swap in new element faded in.
+    const old = cutMusicEl;
+    if (old) cutFadeTo(old, 0, fade);
+    const el = new Audio();
+    el.src = raw;
+    el.loop = !!loop;
+    el.preload = 'auto';
+    try { el.volume = 0; } catch {}
+    cutMusicEl = el;
+    cutMusicSrc = raw;
+    cutFadeTo(el, vol, fade);
+  } catch {}
+}
+function fireCutSfxCue(cue) {
+  try {
+    const raw = cue.src.trim();
+    if (!raw || raw.toLowerCase() === 'none') return;
+    const vol = Number.isFinite(cue.volume) ? Math.max(0, Math.min(1, cue.volume)) : 0.8;
+    const el = new Audio();
+    el.src = raw;
+    el.preload = 'auto';
+    try { el.volume = vol; } catch {}
+    try { const p = el.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch {}
+    // Cap overlap: keep last ~8 one-shots alive implicitly via GC; explicit cleanup on ended.
+    try { el.addEventListener('ended', () => { try { el.src = ''; } catch {} }); } catch {}
+  } catch {}
+}
+function processCutsceneAudio() {
+  if (!active) return;
+  const ce = getCutContentElapsed();
+  // Music: advance to latest cue <= ce.
+  const mc = sortedMusicCues();
+  let wantIdx = -1;
+  for (let i = 0; i < mc.length; i++) if (mc[i].t <= ce) wantIdx = i;
+  if (wantIdx !== (active.musicIdx ?? -1)) {
+    active.musicIdx = wantIdx;
+    if (wantIdx >= 0) startCutMusicCue(mc[wantIdx]);
+    else { cutMusicSrc = null; if (cutMusicEl) cutFadeTo(cutMusicEl, 0, 400); }
+  }
+  // SFX: fire any unfired cue <= ce.
+  if (!active.firedSfx) active.firedSfx = new Set();
+  const sc = sortedSfxCues();
+  sc.forEach((cue) => {
+    const key = cue.t + '|' + cue.src;
+    if (cue.t <= ce && !active.firedSfx.has(key)) {
+      active.firedSfx.add(key);
+      fireCutSfxCue(cue);
+    }
+  });
+}
+function syncCutsceneAudioAfterJump() {
+  if (!active) return;
+  const ce = getCutContentElapsed();
+  // Snap music to latest cue (no backlog), mark skipped SFX as fired.
+  const mc = sortedMusicCues();
+  let wantIdx = -1;
+  for (let i = 0; i < mc.length; i++) if (mc[i].t <= ce) wantIdx = i;
+  active.musicIdx = wantIdx;
+  if (wantIdx >= 0) startCutMusicCue(mc[wantIdx]);
+  else { cutMusicSrc = null; if (cutMusicEl) cutFadeTo(cutMusicEl, 0, 300); }
+  if (!active.firedSfx) active.firedSfx = new Set();
+  for (const cue of sortedSfxCues()) {
+    if (cue.t <= ce) active.firedSfx.add(cue.t + '|' + cue.src);
+  }
+}
+function stopCutsceneAudio(fadeMs = 300) {
+  try {
+    cutMusicFadeId = (cutMusicFadeId || 0) + 1;
+    try { if (cutMusicFadeTimer) clearInterval(cutMusicFadeTimer); } catch {}
+    cutMusicFadeTimer = null;
+    if (cutMusicEl) { try { cutMusicEl.pause(); } catch {} }
+  } catch {}
+  cutMusicEl = null;
+  cutMusicSrc = null;
+}
 let dialogEl = null; // HTML elements cached
 let dialogBoxEl = null;
 let portraitEl = null;
@@ -1111,7 +1300,11 @@ export function playCutscene(idOrData, options={}) {
     contentDuration,
     introConfig: introCfg,
     outroConfig: outroCfg,
+    musicIdx: -1,
+    firedSfx: new Set(),
   };
+  // Stop any previous cutscene audio, then preload this scene's cues.
+  try { stopCutsceneAudio(); } catch {}
   // Load background image
   if (data.background && data.background.type !== 'color' && data.background.src) {
     const img = new Image();
@@ -1174,6 +1367,20 @@ export function playCutscene(idOrData, options={}) {
   // Start at 0, advance if needed
   advanceDialogIfNeeded();
   updateDialogDisplay();
+  // Preload + fire t<=0 audio cues immediately (music starts under intro).
+  try {
+    if (Array.isArray(data.music)) for (const m of data.music) {
+      if (m && typeof m.src === 'string' && m.src.trim() && m.src.trim().toLowerCase() !== 'none') {
+        try { const a = new Audio(); a.src = m.src.trim(); a.preload = 'auto'; } catch {}
+      }
+    }
+    if (Array.isArray(data.sfx)) for (const s of data.sfx) {
+      if (s && typeof s.src === 'string' && s.src.trim()) {
+        try { const a = new Audio(); a.src = s.src.trim(); a.preload = 'auto'; } catch {}
+      }
+    }
+  } catch {}
+  try { processCutsceneAudio(); } catch {}
   // dispatch event
   try { window.dispatchEvent(new CustomEvent('cutscene:start', {detail:{id:activeId}})); } catch {}
   return true;
@@ -1219,6 +1426,7 @@ export function updateCutscene(dtMs) {
   if (typeof dt !== 'number' || !Number.isFinite(dt)) return;
   active.elapsed += dt;
   try{ syncTitleOverlay(); }catch{}
+  try { processCutsceneAudio(); } catch {}
   const dialogs = getSortedDialogs(active.data);
   const introTotal = active.introConfig ? active.introConfig.total : 0;
   const introBeforeFade = introTotal ? (active.introConfig?.introBeforeFade ?? introTotal - (active.introConfig?.fadeInMs||0)) : 0;
@@ -1301,6 +1509,7 @@ function endCutscene(completed) {
   ensureDialogElements();
   if (dialogEl) dialogEl.classList.add('hidden');
   try{ ensureTitleElements(); if(titleOverlayEl){ titleOverlayEl.classList.add('hidden'); titleOverlayEl.style.display='none'; titleOverlayEl.style.opacity='0'; } }catch{}
+  try { stopCutsceneAudio(); } catch {}
   active = null;
   activeId = null;
   try { window.dispatchEvent(new CustomEvent('cutscene:end', {detail:{id, completed}})); } catch {}
@@ -1337,6 +1546,7 @@ export function handleCutsceneInput(e) {
       if(effT<=0){ active.currentDialogIndex=i; active.currentBoxIndex=0; active.dialogStart=introBeforeFade + effT; active.revealed=null; break; }
     }
     updateDialogDisplay();
+    try { syncCutsceneAudioAfterJump(); } catch {}
     return true;
   }
   // outro skip: if in fade-out, complete immediately
@@ -1353,7 +1563,7 @@ export function handleCutsceneInput(e) {
   if (active.currentDialogIndex < 0) {
     // jump to next dialog's t (content time)
     const next = dialogs.find(d=> (d.effectiveT ?? d.t) > contentElapsed);
-    if (next) { const eff = next.effectiveT ?? next.t; active.elapsed = introBeforeFade + eff; active.currentDialogIndex = dialogs.indexOf(next); active.dialogStart= introBeforeFade + eff; active.revealed=null; updateDialogDisplay(); try{ syncTitleOverlay(); }catch{} return true; }
+    if (next) { const eff = next.effectiveT ?? next.t; active.elapsed = introBeforeFade + eff; active.currentDialogIndex = dialogs.indexOf(next); active.dialogStart= introBeforeFade + eff; active.revealed=null; updateDialogDisplay(); try{ syncTitleOverlay(); }catch{} try { syncCutsceneAudioAfterJump(); } catch {} return true; }
     return true;
   }
   const dlg = dialogs[active.currentDialogIndex];
@@ -1386,6 +1596,7 @@ export function handleCutsceneInput(e) {
       active.currentBoxIndex = curBoxIdx + 1;
       active.revealed = null;
       updateDialogDisplay();
+      try { syncCutsceneAudioAfterJump(); } catch {}
       return true;
     }
     // no more boxes — advance to next dialog or close if last
@@ -1400,6 +1611,7 @@ export function handleCutsceneInput(e) {
       active.dialogStart = active.elapsed;
       active.revealed = null;
       updateDialogDisplay();
+      try { syncCutsceneAudioAfterJump(); } catch {}
       return true;
     } else {
       endCutscene(true);
