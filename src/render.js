@@ -123,6 +123,12 @@ export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cel
   ctx.lineJoin = "round";
   const MIN_MAG = 0.66;
   const MAX_MAG_RANGE = 1.5;
+  // Perf: precompute modifier bounding boxes so most cells skip without hypot.
+  const mods = modifiers || [];
+  const boxes = mods.map((m) => {
+    const r = m.radius ?? 54;
+    return { m, x0: m.x - r, x1: m.x + r, y0: m.y - r, y1: m.y + r, r };
+  });
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const cx = col * cellW + cellW / 2;
@@ -131,8 +137,9 @@ export function drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cel
       // A bag-placement preview circle also shows arrows (current field wind),
       // so the player sees the wind they are about to modify.
       let insideMod = null;
-      for (const m of (modifiers || [])) {
-        if (Math.hypot(cx - m.x, cy - m.y) < (m.radius ?? 54)) { insideMod = m; break; }
+      for (const b of boxes) {
+        if (cx < b.x0 || cx > b.x1 || cy < b.y0 || cy > b.y1) continue;
+        if (Math.hypot(cx - b.m.x, cy - b.m.y) < b.r) { insideMod = b.m; break; }
       }
       let insidePreview = false;
       if (!insideMod && preview && typeof preview.x === 'number') {

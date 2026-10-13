@@ -225,8 +225,9 @@ function initParallax() {
   if (container) {
     container.addEventListener('mousemove', handleParallaxMouseMove);
     container.addEventListener('mouseleave', handleParallaxMouseLeave);
-    // Touch support - subtle follow on touch move
+    // Touch support - subtle follow on touch move (disabled on mobile: static splash saves compositor work)
     container.addEventListener('touchmove', (e) => {
+      try { if (isMobileMode()) return; } catch {}
       if (!mainMenuVisible || isInLevelPause) return;
       const t = e.touches[0];
       if (!t) return;
@@ -263,6 +264,8 @@ function handleParallaxMouseLeave() {
 
 function applyParallaxTransforms() {
   if (!parallaxLayers.length) return;
+  // Mobile: static splash (no per-frame transform writes).
+  try { if (isMobileMode()) return; } catch {}
   // Lerp current toward target for smooth subtle motion — X only (Y locked to 0)
   const lerp = 0.08;
   parallaxCurrentX += (parallaxTargetX - parallaxCurrentX) * lerp;
@@ -4984,7 +4987,7 @@ let hudAttemptsEl;
 let hudTotalEl;
 
 function setupCanvas() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = effectiveDPR();
   // Both canvases share same logical 16:9 and same backing store DPR
   for (const c of [bgCanvas, canvas].filter(Boolean)) {
     c.width = LOGICAL_W * dpr;
@@ -5556,6 +5559,16 @@ function isMobilePhone() {
   return false;
 }
 function isMobileMode() { return isMobilePhone(); }
+// Mobile perf: cap backing-store DPR (phones report 2-3x, quadrupling fill rate).
+let mobileDPRCap = 1.5;
+let mobileDegraded = false;
+let fpsAccumTime = 0;
+let fpsAccumFrames = 0;
+function effectiveDPR() {
+  const dpr = window.devicePixelRatio || 1;
+  try { if (isMobileMode()) return Math.min(dpr, mobileDPRCap); } catch {}
+  return dpr;
+}
 function isFullscreenActive() {
   try {
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -5813,8 +5826,9 @@ function initMobileControls() {
       initMobileControls._fsGestureBound = true;
       const gate = document.getElementById('continue-overlay');
       if (gate) gate.addEventListener('click', () => { try { requestMobileFullscreen(); } catch {} }, { passive: true });
-      document.addEventListener('fullscreenchange', () => { try { syncMobileUI(); } catch {} });
-      document.addEventListener('webkitfullscreenchange', () => { try { syncMobileUI(); } catch {} });
+      const onFsChange = () => { try { setupCanvas(); } catch {} try { resizeWindOverlay(); } catch {} try { syncMobileUI(); } catch {} };
+      document.addEventListener('fullscreenchange', onFsChange);
+      document.addEventListener('webkitfullscreenchange', onFsChange);
     }
   } catch {}
   // Touch overlay buttons: hold left/right = arrows, hold launch = Space.
@@ -5911,8 +5925,22 @@ function initMobileControls() {
             if (bagTouch && t.identifier === bagTouch.identifier) {
               const bd = bagTouch;
               bagTouch = null;
+              if (!bd.active) {
+                // Tap that slid off the slot onto canvas: arm like a slot tap.
+                try {
+                  if (!rewardMenuVisible && !pendingRewardType && !pendingPickup
+                    && !holeBannerVisible && !attemptsBannerVisible && !freeShotBannerVisible
+                    && !pauseMenuVisible && !mainMenuVisible
+                    && (gameState === 'AIMING' || gameState === 'CHARGING')
+                    && golfbag[bd.slotIdx] && bagEntryType(golfbag[bd.slotIdx]) === bd.type) {
+                    try { if (banterIsActive()) { continue; } } catch {}
+                    selectBagSlot(bd.slotIdx);
+                  }
+                } catch {}
+                continue;
+              }
               try {
-                if (bd.active) {
+                {
                   const stillArmed = selectedBagIndex === bd.slotIdx && golfbag[bd.slotIdx] && bagEntryType(golfbag[bd.slotIdx]) === bd.type;
                   let dropSlot = -1;
                   try {
@@ -6058,7 +6086,20 @@ function initMobileControls() {
             const bd = bagTouch;
             const wasActive = !!bd.active;
             bagTouch = null;
-            if (!wasActive) return; // plain tap: click handler selects normally
+            if (!wasActive) {
+              // Plain tap: touchstart preventDefault() suppresses the emulated
+              // mouse click, so arm/select explicitly (same as click/1-3).
+              try {
+                if (rewardMenuVisible || pendingRewardType || pendingPickup) return;
+                try { if (banterIsActive()) return; } catch {}
+                if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
+                if (pauseMenuVisible || mainMenuVisible) return;
+                if (gameState !== 'AIMING' && gameState !== 'CHARGING') return;
+                if (!golfbag[bd.slotIdx] || bagEntryType(golfbag[bd.slotIdx]) !== bd.type) return;
+                selectBagSlot(bd.slotIdx);
+              } catch {}
+              return;
+            }
             try {
               const el = document.elementFromPoint(touch.clientX, touch.clientY);
               const cand = el ? el.closest('.hotbar-slot:not(.passive)') : null;
@@ -6743,63 +6784,65 @@ function handleNextHole() {
   }
 }
 
+// 12-mobile perf: wind visuals tick once per rAF (see tickWindVisual), never per
+// fixed step; hotbar DOM sync is flagged here and flushed once per frame in loop().
+let needHotbarSync = false;
+function tickWindVisual(frameDt) {
+  const step = Math.max(0, Math.min(0.05, Number(frameDt) || 0));
+  if (step <= 0) return;
+  try { updateWindUniforms(step, getWindAt); }
+  catch (e) { try { if (!window.__windLastError) window.__windLastError = String((e && e.stack) || e); } catch {} }
+  try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, step); } catch {}
+}
+
 function update(dt) {
   // Water splash ripples animate on their own clock (even while physics is frozen).
   try { updateWaterRipples(dt); } catch {}
-  // 11-cutscenes: when active, freeze game physics but advance cutscene & wind
-  try { if (cutsceneIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch {} return; } } catch {}
+  // 11-cutscenes: when active, freeze game physics but advance cutscene (wind ticks per-frame in loop)
+  try { if (cutsceneIsActive()) { cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch {} return; } } catch {}
   // 12-banter: in-place dialog freezes physics/input like the Hole 1 banner but keeps terrain+wind visible
-  try { if (banterIsActive()) { try { updateWindUniforms(dt, getWindAt); } catch {}; banterUpdate(dt); try { updateHotbarUI(); } catch {} try { syncBanterSkipButton(); } catch {} if (charging) { resetCharge(); gameState = "AIMING"; } if (!banterIsActive()) { try { syncBanterSkipButton(); } catch {} } return; } } catch {}
+  try { if (banterIsActive()) { banterUpdate(dt); needHotbarSync = true; try { syncBanterSkipButton(); } catch {} if (charging) { resetCharge(); gameState = "AIMING"; } if (!banterIsActive()) { try { syncBanterSkipButton(); } catch {} } return; } } catch {}
   // Banter just ended on this tick (auto-advance inside banterUpdate above also
   // returns through the branch, but a banter that ended between frames needs a
   // sync so the skip button never leaks into gameplay).
   try { syncBanterSkipButton(); } catch {}
-  // REQ-004: wind shader + particles advance even when menu is blocking ball physics
-  const tickWind = () => { try { updateWindUniforms(dt, getWindAt); } catch (e) { try { if (!window.__windLastError) window.__windLastError = String((e && e.stack) || e); } catch {} } try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, dt); } catch {}; };
-  // REQ-021: when reward menu visible, block aiming/charging but still animate wind
+  // REQ-021: when reward menu visible, block aiming/charging (wind ticks per-frame in loop)
   if (rewardMenuVisible) {
-    // Still allow wind animation, but block ball physics and charging transition
-    tickWind();
-    updateHotbarUI();
     // Ensure we stay in AIMING and not charging, and don't process input drift
     if (charging) {
       // cancel stray charging while menu open
       resetCharge();
       gameState = "AIMING";
     }
+    needHotbarSync = true;
     return;
   }
   // REQ-028: when pause menu visible, pause physics like reward/win
   if (pauseMenuVisible) {
-    tickWind();
-    updateHotbarUI();
     if (charging) {
       resetCharge();
       gameState = "AIMING";
     }
+    needHotbarSync = true;
     return;
   }
   // Starting items or coin summary visible, pause like main menu
   if (startingItemsVisible || loadoutVisible || coinSummaryVisible || courseClearedVisible) {
-    tickWind();
-    updateHotbarUI();
     if (charging) { resetCharge(); gameState = "AIMING"; }
+    needHotbarSync = true;
     return;
   }
   // REQ-029: when main menu visible, pause like pause
   if (mainMenuVisible) {
-    tickWind();
-    updateHotbarUI();
     if (charging) {
       resetCharge();
       gameState = "AIMING";
     }
+    needHotbarSync = true;
     return;
   }
   // 11-banners: hole banner (2s, same dim as reward) blocks input and transitions to reward
   if (holeBannerVisible) {
-    tickWind();
-    updateHotbarUI();
     holeBannerTimer -= dt * 1000;
     if (holeBannerTimer <= 0) {
       holeBannerVisible = false;
@@ -6813,11 +6856,10 @@ function update(dt) {
       resetCharge();
       gameState = "AIMING";
     }
+    needHotbarSync = true;
     return;
   }
   if (attemptsBannerVisible) {
-    tickWind();
-    updateHotbarUI();
     attemptsBannerTimer -= dt * 1000;
     if (attemptsBannerTimer <= 0) {
       attemptsBannerVisible = false;
@@ -6827,11 +6869,10 @@ function update(dt) {
       resetCharge();
       gameState = "AIMING";
     }
+    needHotbarSync = true;
     return;
   }
   if (freeShotBannerVisible) {
-    tickWind();
-    updateHotbarUI();
     freeShotBannerTimer -= dt * 1000;
     if (freeShotBannerTimer <= 0) {
       freeShotBannerVisible = false;
@@ -6841,6 +6882,7 @@ function update(dt) {
       resetCharge();
       gameState = "AIMING";
     }
+    needHotbarSync = true;
     return;
   }
 
@@ -6852,7 +6894,7 @@ function update(dt) {
     gameState = "CHARGING";
   }
 
-  updateHotbarUI();
+  needHotbarSync = true;
   // 13-tutorial: hole1 liquifier reminders at 3 and 10, hole2 rotator at 3 + gadgets at 5
   if(isTutorialActive() && (gameState==="AIMING"||gameState==="CHARGING") && !holeBannerVisible && !rewardMenuVisible && !attemptsBannerVisible && !freeShotBannerVisible && !banterIsActive() && !cutsceneIsActive()){
     if(currentHoleIndex===0){
@@ -6903,10 +6945,9 @@ function update(dt) {
   }
 
   if (gameState === "FLYING") {
-    // 14-cheat-mode: held ball sticks to the cursor — wind visuals keep
-    // animating but the ball ignores wind/win/treasure/collision until dropped.
+    // 14-cheat-mode: held ball sticks to the cursor — the ball ignores
+    // wind/win/treasure/collision until dropped (wind ticks per-frame in loop).
     if (cheatDraggingBall) {
-      try { updateWindUniforms(dt, getWindAt); } catch {};
       try {
         if (cheatMousePos) {
           const c = cheatClampPos(cheatMousePos);
@@ -6916,7 +6957,6 @@ function update(dt) {
       } catch {};
       return;
     }
-    try { updateWindUniforms(dt, getWindAt); } catch {};
     updateBall(dt, getWindAt, windStrength, LOGICAL_W, LOGICAL_H);
 
     // Check win every tick - immediate, regardless of speed (REQ-009)
@@ -7013,14 +7053,11 @@ function update(dt) {
     // No auto-reset on rest - ball continues drifting per REQ-005
 
   } else if (gameState === "WIN") {
-    // paused physics, still animate wind
-    try { updateWindUniforms(dt, getWindAt); } catch {};
+    // paused physics (wind ticks per-frame in loop)
   } else if (gameState === "GAME_OVER") {
-    // frozen, still animate wind dimmed
-    try { updateWindUniforms(dt, getWindAt); } catch {};
+    // frozen (wind ticks per-frame in loop)
   } else {
-    // AIMING/CHARGING - animate wind anyway
-    try { updateWindUniforms(dt, getWindAt); } catch {};
+    // AIMING/CHARGING - physics below; wind ticks per-frame in loop
   }
 }
 
@@ -7052,7 +7089,7 @@ function render() {
   // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
   try { if (cutsceneIsActive()) { try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch {} return; } } catch {}
   // Top canvas is transparent; clear every frame with DPR transform
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = effectiveDPR();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
 
@@ -7200,12 +7237,12 @@ function loop(now) {
     try {
       if (cutsceneIsActive()) {
         const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
-        try { updateWindUniforms(dt, getWindAt); } catch {}
+        try { tickWindVisual(dt); } catch {}
         try { cutsceneUpdate(dt); } catch {}
         try { syncCutsceneSkipButton(); } catch {}
       } else if (banterIsActive()) {
         const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
-        try { updateWindUniforms(dt, getWindAt); } catch {}
+        try { tickWindVisual(dt); } catch {}
         try { banterUpdate(dt); } catch {}
         try { syncBanterSkipButton(); } catch {}
       }
@@ -7224,6 +7261,30 @@ function loop(now) {
     accumulator -= FIXED_DT;
     steps++;
   }
+  // Wind visuals + queued hotbar DOM sync run once per frame (never per step).
+  try { tickWindVisual(frameTime); } catch {}
+  if (needHotbarSync) {
+    needHotbarSync = false;
+    try { updateHotbarUI(); } catch {}
+  }
+  // Mobile auto-degrade: sustained low fps → drop DPR cap 1.5→1.0 once.
+  try {
+    if (isMobileMode() && !mobileDegraded) {
+      fpsAccumTime += frameTime;
+      fpsAccumFrames++;
+      if (fpsAccumFrames >= 120) {
+        const avgFps = fpsAccumFrames / Math.max(0.001, fpsAccumTime);
+        fpsAccumFrames = 0;
+        fpsAccumTime = 0;
+        if (avgFps < 45 && mobileDPRCap > 1) {
+          mobileDegraded = true;
+          mobileDPRCap = 1;
+          try { setupCanvas(); } catch {}
+          try { resizeWindOverlay(); } catch {}
+        }
+      }
+    }
+  } catch {}
   render();
   requestAnimationFrame(loop);
 }

@@ -18,6 +18,28 @@ const LOGICAL_H = 720;
 // Streak tuning — calm readable drift: thin elegant lines, moderate density.
 const STREAK_COUNT = 48;
 const STREAK_NODES = 24; // head + history points per streak
+// Mobile quality ladder (12-mobile perf): fewer, shorter streaks on phones.
+let activeStreakCount = STREAK_COUNT;
+let activeStreakNodes = STREAK_NODES;
+function isWindMobileMode() {
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get('mobile') === '1') return true;
+  } catch {}
+  try {
+    const ua = navigator.userAgent || navigator.vendor || '';
+    if (/Android.*Mobile|iPhone|iPod|Windows Phone|IEMobile|Opera Mini|Mobile/i.test(ua)) return true;
+  } catch {}
+  try {
+    if (navigator.maxTouchPoints > 0 && window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return true;
+  } catch {}
+  return false;
+}
+function effectiveWindDPR() {
+  const dpr = window.devicePixelRatio || 1;
+  try { if (isWindMobileMode()) return Math.min(dpr, 1.5); } catch {}
+  return dpr;
+}
 const STREAK_SPEED = 200; // px/s per unit of wind magnitude (|wind| ~0.44..1.5+ -> ~90..300 px/s)
 const STREAK_MIN_SPEED = 60; // never stall completely
 const STREAK_MAX_SPEED = 450; // bounded: gusts move, singularities don't teleport
@@ -124,7 +146,7 @@ function spawnStreak(s, getWindAt) {
     }
   } catch {}
   s.dx = dx; s.dy = dy;
-  for (let i = 0; i < STREAK_NODES; i++) {
+  for (let i = 0; i < activeStreakNodes; i++) {
     s.nodes[i * 2] = p.x;
     s.nodes[i * 2 + 1] = p.y;
   }
@@ -133,8 +155,8 @@ function spawnStreak(s, getWindAt) {
 function createStreaks() {
   streakData = [];
   const totalCells = SPREAD_COLS * SPREAD_ROWS;
-  for (let i = 0; i < STREAK_COUNT; i++) {
-    const s = { hx: 0, hy: 0, dx: 1, dy: 0, nodes: new Float32Array(STREAK_NODES * 2), age: 0, maxAge: 3, jitter: 1, width: 9 };
+  for (let i = 0; i < activeStreakCount; i++) {
+    const s = { hx: 0, hy: 0, dx: 1, dy: 0, nodes: new Float32Array(activeStreakNodes * 2), age: 0, maxAge: 3, jitter: 1, width: 9 };
     // Even start: round-robin across spread cells (~1-2 streaks per cell), jittered
     const p = posInCell(i % totalCells);
     s.hx = p.x; s.hy = p.y;
@@ -143,26 +165,26 @@ function createStreaks() {
     s.maxAge = STREAK_MIN_AGE + Math.random() * (STREAK_MAX_AGE - STREAK_MIN_AGE);
     s.jitter = 0.85 + Math.random() * 0.3;
     s.width = STREAK_MIN_WIDTH + Math.random() * (STREAK_MAX_WIDTH - STREAK_MIN_WIDTH);
-    for (let n = 0; n < STREAK_NODES; n++) {
+    for (let n = 0; n < activeStreakNodes; n++) {
       s.nodes[n * 2] = p.x;
       s.nodes[n * 2 + 1] = p.y;
     }
     streakData.push(s);
   }
-  const vertsPerStreak = STREAK_NODES * 2;
-  const totalVerts = STREAK_COUNT * vertsPerStreak;
+  const vertsPerStreak = activeStreakNodes * 2;
+  const totalVerts = activeStreakCount * vertsPerStreak;
   const positions = new Float32Array(totalVerts * 3);
   const uvs = new Float32Array(totalVerts * 2);
   const alphas = new Float32Array(totalVerts);
   const indices = [];
-  for (let s = 0; s < STREAK_COUNT; s++) {
+  for (let s = 0; s < activeStreakCount; s++) {
     const base = s * vertsPerStreak;
-    for (let n = 0; n < STREAK_NODES; n++) {
+    for (let n = 0; n < activeStreakNodes; n++) {
       const vi = base + n * 2;
-      const t = 1 - n / (STREAK_NODES - 1); // 1 = head, 0 = tail tip
+      const t = 1 - n / (activeStreakNodes - 1); // 1 = head, 0 = tail tip
       uvs[(vi) * 2] = 0; uvs[(vi) * 2 + 1] = t;
       uvs[(vi + 1) * 2] = 1; uvs[(vi + 1) * 2 + 1] = t;
-      if (n < STREAK_NODES - 1) {
+      if (n < activeStreakNodes - 1) {
         const a = vi, b = vi + 1, c = vi + 2, d = vi + 3;
         indices.push(a, b, c, b, d, c);
       }
@@ -221,12 +243,12 @@ function updateStreakGeometry() {
   const alphaAttr = streakGeometry.getAttribute('aAlpha');
   const pos = posAttr.array;
   const alp = alphaAttr.array;
-  const vertsPerStreak = STREAK_NODES * 2;
+  const vertsPerStreak = activeStreakNodes * 2;
   for (let s = 0; s < streakData.length; s++) {
     const st = streakData[s];
     // Polyline length for stretch fade (freshly spawned streaks fade in as they stretch out)
     let length = 0;
-    for (let n = 0; n < STREAK_NODES - 1; n++) {
+    for (let n = 0; n < activeStreakNodes - 1; n++) {
       const dx = st.nodes[n * 2] - st.nodes[(n + 1) * 2];
       const dy = st.nodes[n * 2 + 1] - st.nodes[(n + 1) * 2 + 1];
       length += Math.hypot(dx, dy);
@@ -234,12 +256,12 @@ function updateStreakGeometry() {
     const stretchA = Math.min(1, length / 70);
     const ageA = Math.min(1, st.age / 0.35) * Math.min(1, (st.maxAge - st.age) / 0.6);
     const base = s * vertsPerStreak;
-    for (let n = 0; n < STREAK_NODES; n++) {
-      const t = 1 - n / (STREAK_NODES - 1); // 1 = head, 0 = tail
+    for (let n = 0; n < activeStreakNodes; n++) {
+      const t = 1 - n / (activeStreakNodes - 1); // 1 = head, 0 = tail
       const cx = st.nodes[n * 2];
       const cy = st.nodes[n * 2 + 1];
       // Tangent from neighbors (logical px)
-      const pa = Math.max(0, n - 1), pb = Math.min(STREAK_NODES - 1, n + 1);
+      const pa = Math.max(0, n - 1), pb = Math.min(activeStreakNodes - 1, n + 1);
       let tx = st.nodes[pa * 2] - st.nodes[pb * 2];
       let ty = st.nodes[pa * 2 + 1] - st.nodes[pb * 2 + 1];
       let tl = Math.hypot(tx, ty);
@@ -289,16 +311,20 @@ export function initWindOverlay(container) {
     border: 'none',
     boxShadow: 'none',
   });
+  let mobileQ = false;
+  try { mobileQ = isWindMobileMode(); } catch {}
+  if (mobileQ) { activeStreakCount = 24; activeStreakNodes = 12; }
+  else { activeStreakCount = STREAK_COUNT; activeStreakNodes = STREAK_NODES; }
   try {
-    renderer = new THREE.WebGLRenderer({ canvas: canvasEl, alpha: true, antialias: true, premultipliedAlpha: false });
+    renderer = new THREE.WebGLRenderer({ canvas: canvasEl, alpha: true, antialias: !mobileQ, premultipliedAlpha: false });
   } catch(e){
     console.error('Wind Three.js WebGLRenderer failed', e);
     return;
   }
   renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setPixelRatio(effectiveWindDPR());
   renderer.autoClear = true;
-  console.log('Wind Three.js initialized (Wind Waker streaks x' + STREAK_COUNT + ')', canvasEl.id, 'renderer:', !!renderer);
+  console.log('Wind Three.js initialized (Wind Waker streaks x' + activeStreakCount + ')', canvasEl.id, 'renderer:', !!renderer);
   scene = new THREE.Scene();
   camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
   // Lean uniforms stub (kept for compat: uTime drives gusts, uShowWind mirrors visibility)
@@ -375,7 +401,7 @@ export function resizeWindOverlay() {
   if (!renderer || !canvasEl || !containerEl) {
     containerEl = document.getElementById('game-container');
   }
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = effectiveWindDPR();
   const container = containerEl || document.getElementById('game-container');
   if (!container || !renderer) return;
   const rect = container.getBoundingClientRect();
@@ -482,7 +508,7 @@ export function updateWindUniforms(dt, getWindAt) {
       continue;
     }
     // Shift history back, head at nodes[0]
-    for (let n = STREAK_NODES - 1; n > 0; n--) {
+    for (let n = activeStreakNodes - 1; n > 0; n--) {
       s.nodes[n * 2] = s.nodes[(n - 1) * 2];
       s.nodes[n * 2 + 1] = s.nodes[(n - 1) * 2 + 1];
     }
@@ -492,8 +518,8 @@ export function updateWindUniforms(dt, getWindAt) {
     // trail is writhing in a sink — respawn it elsewhere instead of flooding.
     // Real orbits/swirls travel far more than this and are unaffected.
     if (s.age > STREAK_KNOT_MIN_AGE) {
-      const tx = s.nodes[(STREAK_NODES - 1) * 2] - s.hx;
-      const ty = s.nodes[(STREAK_NODES - 1) * 2 + 1] - s.hy;
+      const tx = s.nodes[(activeStreakNodes - 1) * 2] - s.hx;
+      const ty = s.nodes[(activeStreakNodes - 1) * 2 + 1] - s.hy;
       if (tx * tx + ty * ty < STREAK_KNOT_DIST * STREAK_KNOT_DIST) {
         spawnStreak(s, getWindAt);
         continue;
