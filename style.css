@@ -2236,28 +2236,25 @@ body {
 /* 12-mobile — phone landscape + touch controls (hidden on desktop) */
 #game-container { touch-action: none; }
 #game-container canvas { touch-action: none; }
+/* Fullscreen keeps the SAME 16:9 box as normal mode, centered on black —
+   canvases/HUD/overlays/input mapping are therefore identical in both modes.
+   Only the menu splash breaks out full-bleed (see #parallax-scene rule below). */
 #game-container:fullscreen {
-  width: 100vw;
-  height: 100vh;
-  max-width: 100vw;
-  max-height: 100vh;
-  aspect-ratio: auto;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  aspect-ratio: 16 / 9;
+  inset: 0;
+  margin: auto;
   border-radius: 0;
-  margin: 0;
   background: #000;
 }
 #game-container:fullscreen::backdrop { background: #000; }
-/* Letterboxed 16:9 playfield: canvases stay proportional, pillarboxed on black.
-   Menu splash (#parallax-scene) intentionally stays full-bleed behind them. */
-#game-container:fullscreen canvas {
-  width: min(100vw, calc(100vh * 16 / 9)) !important;
-  height: min(100vh, calc(100vw * 9 / 16)) !important;
-  inset: auto !important;
-  left: 50% !important;
-  top: 50% !important;
-  transform: translate(-50%, -50%);
-  border-radius: 0;
-}
+#game-container:fullscreen canvas { border-radius: 0; }
+/* NOTE: the menu splash deliberately stays container-relative (same 16:9 box as
+   the game). Breaking it out full-viewport would require moving it out of
+   #game-container: fixed-position descendants of a fullscreen element are
+   still contained/clipped by that element on mobile browsers, which risks a
+   zoomed/cropped splash. Pillarbox bars in the menu match desktop behavior. */
 #mobile-menu-button,
 #mobile-reset-button,
 #mobile-fullscreen-button {

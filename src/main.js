@@ -5836,17 +5836,40 @@ function initMobileControls() {
     const leftBtn = document.getElementById('mobile-aim-left');
     const rightBtn = document.getElementById('mobile-aim-right');
     const launchBtn = document.getElementById('mobile-launch');
+    // Pointer Events unify mouse/touch/pen: one pressed pointer holds the
+    // button until it releases, with capture so slides/finger drift keep it
+    // armed. (The old touchstart+mousedown/mouseleave mix double-fired and the
+    // emulated-compat mouseleave released the hold mid-press on phones.)
     const bindHold = (el, down, up) => {
       if (!el || el._mobileBound) return;
       el._mobileBound = true;
-      const start = (e) => { try { e.preventDefault(); } catch {} down(); };
-      const end = (e) => { try { e.preventDefault(); } catch {} up(); try { if (el.blur) el.blur(); } catch {} };
-      el.addEventListener('touchstart', start, { passive: false });
-      el.addEventListener('touchend', end);
-      el.addEventListener('touchcancel', end);
-      el.addEventListener('mousedown', start);
-      el.addEventListener('mouseup', end);
-      el.addEventListener('mouseleave', () => { try { up(); } catch {} });
+      let activePointerId = null;
+      const release = (e) => {
+        try {
+          if (e && e.pointerId !== undefined && activePointerId !== null && e.pointerId !== activePointerId) return;
+          activePointerId = null;
+          up();
+          if (el.blur) el.blur();
+        } catch {}
+      };
+      el.addEventListener('pointerdown', (e) => {
+        try {
+          e.preventDefault();
+          try { el.setPointerCapture(e.pointerId); } catch {}
+          if (activePointerId !== null) return; // multi-touch: first press wins
+          activePointerId = e.pointerId;
+          down();
+        } catch {}
+      });
+      el.addEventListener('pointerup', release);
+      el.addEventListener('pointercancel', release);
+      el.addEventListener('lostpointercapture', (e) => {
+        // Safety net: capture loss without pointerup still ends the hold.
+        try { if (activePointerId !== null && e.pointerId === activePointerId) release(e); } catch {}
+      });
+      // Suppress compat mouse events + long-press menu from a held finger.
+      el.addEventListener('touchstart', (e) => { try { if (e.cancelable) e.preventDefault(); } catch {} }, { passive: false });
+      el.addEventListener('contextmenu', (e) => { try { e.preventDefault(); } catch {} });
     };
     if (leftBtn) bindHold(leftBtn, () => touchAimStart('left'), () => touchAimEnd('left'));
     if (rightBtn) bindHold(rightBtn, () => touchAimStart('right'), () => touchAimEnd('right'));
