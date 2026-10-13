@@ -1,20 +1,51 @@
-// Asset preloading — downloads every image + audio file during the loading
-// screen so cutscenes (and everything else) start fully cached.
-// Strategy: fetch() each URL to completion (bytes land in the HTTP cache),
-// then decode images so they are render-ready. Never rejects: per-file
-// failures resolve as misses and the game falls back to lazy loading.
-// Overall + per-file timeouts guarantee the loading screen can never stick.
+// Tiered asset preloading — menu shows fast, everything else streams by need.
+// Tier 0 (blocks loading screen): menu-critical splash + menu theme only.
+// Tier 1 (idle after menu): HUD/hotbar/help icons.
+// Tier 2 (awaited before each cutscene plays): that cutscene's bg, character
+//   sheets, portraits, music + SFX — cutscenes never start without audio.
+// Tier 3 (on level entry): level theme + SFX + banter portraits.
+// Never rejects: per-file failures resolve as misses and the game falls back
+// to lazy loading. Timeouts guarantee the loading screen can never stick.
 import { IMAGE_ASSETS, AUDIO_ASSETS } from "./asset-manifest.js";
 
-const DISCOVER_FOLDERS = [
-  { folder: "./img/", exts: ["png", "jpg", "jpeg", "webp", "gif"], prefix: "./img/" },
-  { folder: "./img/cutscenes/", exts: ["png", "jpg", "jpeg", "webp", "gif"], prefix: "./img/" },
-  { folder: "./img/splash/", exts: ["png", "jpg", "jpeg", "webp", "gif"], prefix: "./img/" },
-  { folder: "./audio/", exts: ["wav", "mp3", "ogg"], prefix: "./audio/" },
-];
 const FETCH_TIMEOUT_MS = 30000;
 const OVERALL_TIMEOUT_MS = 90000;
 const CONCURRENCY = 6;
+
+// Completed URLs are skipped on repeat calls (per-hole level loads etc.).
+const doneUrls = new Set();
+
+const MENU_CRITICAL_IMAGES = [
+  "./img/splash/background-gfg-splash.webp",
+  "./img/splash/middleground-gfg-splash.webp",
+  "./img/splash/foreground-gfg-splash.webp",
+  "./img/splash/may-gfg-splash.webp",
+  "./img/gfg-splash.webp",
+];
+const MENU_CRITICAL_AUDIO = ["./audio/main-menu.ogg"];
+
+const MENU_IDLE_IMAGES = [
+  "./img/golfbag.png",
+  "./img/journal.png",
+  "./img/magnifier-icon.png",
+  "./img/liquifier-icon.png",
+  "./img/deflector-icon.png",
+  "./img/rotator-icon.png",
+  "./img/field-extender-icon.png",
+  "./img/power-cell-icon.png",
+];
+
+const LEVEL_AUDIO = [
+  "./audio/main-theme.ogg",
+  "./audio/rushing-footsteps.wav",
+  "./audio/surprised.wav",
+  "./audio/caution.wav",
+  "./audio/place-on-table.wav",
+];
+const LEVEL_IMAGES = [
+  "./img/cutscenes/portrait-may.webp",
+  "./img/cutscenes/portrait-caddy.webp",
+];
 
 function withTimeout(promise, ms) {
   let timer = null;
@@ -56,7 +87,10 @@ async function fetchFolderUrls(folder, exts, prefix) {
 
 export async function discoverAssetUrls() {
   const lists = await Promise.all([
-    ...DISCOVER_FOLDERS.map((d) => fetchFolderUrls(d.folder, d.exts, d.prefix)),
+    fetchFolderUrls("./img/", ["png", "jpg", "jpeg", "webp", "gif"], "./img/"),
+    fetchFolderUrls("./img/cutscenes/", ["png", "jpg", "jpeg", "webp", "gif"], "./img/"),
+    fetchFolderUrls("./img/splash/", ["png", "jpg", "jpeg", "webp", "gif"], "./img/"),
+    fetchFolderUrls("./audio/", ["wav", "mp3", "ogg"], "./audio/"),
   ]);
   const found = lists.flat().filter(Boolean);
   const images = [...new Set([...IMAGE_ASSETS, ...found.filter((u) => u.startsWith("./img/"))])].sort();
@@ -65,8 +99,8 @@ export async function discoverAssetUrls() {
 }
 
 async function preloadImage(url) {
+  if (doneUrls.has(url)) return;
   try {
-    // Fetch bytes first so the file is fully downloaded even if decode is slow.
     const ctl = new AbortController();
     const timer = setTimeout(() => { try { ctl.abort(); } catch {} }, FETCH_TIMEOUT_MS);
     try {
@@ -75,7 +109,6 @@ async function preloadImage(url) {
     } catch {} finally {
       try { clearTimeout(timer); } catch {}
     }
-    // Then ensure it decodes (render-ready for cutscenes/canvases).
     const img = new Image();
     img.src = url;
     if (img.decode) {
@@ -87,12 +120,12 @@ async function preloadImage(url) {
         if (img.complete) resolve(true);
       }), 15000);
     }
+    doneUrls.add(url);
   } catch {}
 }
 
 async function preloadAudio(url) {
-  // Fully download the file so later `new Audio(url)` serves from cache.
-  // 90MB of audio: stream the body to completion without holding it all.
+  if (doneUrls.has(url)) return;
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => { try { ctl.abort(); } catch {} }, FETCH_TIMEOUT_MS);
@@ -111,6 +144,7 @@ async function preloadAudio(url) {
     } catch {} finally {
       try { clearTimeout(timer); } catch {}
     }
+    doneUrls.add(url);
   } catch {}
 }
 
@@ -126,14 +160,126 @@ async function runPool(urls, worker) {
   await Promise.all(runners);
 }
 
-export async function preloadAllAssets() {
+async function preloadLists(images, audio) {
   try {
-    const { images, audio } = await discoverAssetUrls();
-    const jobs = withTimeout((async () => {
+    await withTimeout((async () => {
       await runPool(images, preloadImage);
       await runPool(audio, preloadAudio);
     })(), OVERALL_TIMEOUT_MS);
-    try { await jobs; } catch {}
+  } catch {}
+}
+
+// Tier 0 — menu-critical. Awaited before the loading screen lifts.
+export async function preloadMenuCritical() {
+  await preloadLists(MENU_CRITICAL_IMAGES, MENU_CRITICAL_AUDIO);
+}
+
+// Tier 1 — menu chrome. Fire-and-forget after the menu shows.
+export async function preloadMenuIdle() {
+  await preloadLists(MENU_IDLE_IMAGES, []);
+}
+
+// Tier 3 — level assets. Called on level entry; cached after first run.
+export async function preloadForLevel() {
+  await preloadLists(LEVEL_IMAGES, LEVEL_AUDIO);
+}
+
+function looksLikePath(s) {
+  return typeof s === "string" && !!s.trim() && (s.includes("/") || s.includes("."));
+}
+
+// Collect raw asset paths referenced by a cutscene data object: background,
+// character/keyframe image srcs, dialog portraits, music + SFX cues.
+export function collectCutsceneAssetUrls(data) {
+  const images = new Set();
+  const audio = new Set();
+  try {
+    if (!data || typeof data !== "object") return { images: [], audio: [] };
+    const bg = data.background;
+    if (bg && bg.type !== "color" && looksLikePath(bg.src)) images.add(bg.src.trim());
+    if (Array.isArray(data.characters)) {
+      for (const ch of data.characters) {
+        if (ch && looksLikePath(ch.src)) images.add(ch.src.trim());
+        if (ch && Array.isArray(ch.keyframes)) {
+          for (const kf of ch.keyframes) {
+            if (kf && looksLikePath(kf.src)) images.add(kf.src.trim());
+          }
+        }
+      }
+    }
+    if (Array.isArray(data.dialogs)) {
+      for (const d of data.dialogs) {
+        if (d && looksLikePath(d.portrait)) images.add(String(d.portrait).trim());
+      }
+    }
+    if (Array.isArray(data.music)) {
+      for (const m of data.music) {
+        if (m && looksLikePath(m.src)) {
+          const s = String(m.src).trim();
+          if (s.toLowerCase() !== "none") audio.add(s);
+        }
+      }
+    }
+    if (Array.isArray(data.sfx)) {
+      for (const s of data.sfx) {
+        if (s && looksLikePath(s.src)) {
+          const t = String(s.src).trim();
+          if (t.toLowerCase() !== "none") audio.add(t);
+        }
+      }
+    }
+  } catch {}
+  return { images: [...images], audio: [...audio] };
+}
+
+// Tier 2 — await before playing a cutscene (id string or data object).
+// Also preloads character-sprites.json so sprite-id portraits resolve.
+export async function preloadForCutscene(idOrData) {
+  try {
+    let data = null;
+    if (typeof idOrData === "string") {
+      try {
+        const res = await withTimeout(fetch(`./src/cutscenes/${idOrData}.json`), 10000);
+        if (res && !res.__timeout && res.ok) data = await res.json();
+      } catch {}
+      if (!data) return;
+    } else if (idOrData && typeof idOrData === "object") {
+      data = idOrData;
+    } else {
+      return;
+    }
+    const { images, audio } = collectCutsceneAssetUrls(data);
+    // Sprite sheets backing sprite-id portraits/characters.
+    try {
+      const res = await withTimeout(fetch("./src/character-sprites.json"), 10000);
+      if (res && !res.__timeout && res.ok) {
+        const lib = await res.json();
+        const sprites = (lib && lib.sprites) || {};
+        const wanted = new Set();
+        const consider = (ref) => {
+          if (typeof ref === "string" && sprites[ref] && sprites[ref].src) wanted.add(sprites[ref].src);
+        };
+        if (Array.isArray(data.characters)) {
+          for (const ch of data.characters) {
+            consider(ch && ch.sprite);
+            if (ch && Array.isArray(ch.keyframes)) for (const kf of ch.keyframes) consider(kf && kf.sprite);
+          }
+        }
+        if (Array.isArray(data.dialogs)) {
+          for (const d of data.dialogs) consider(d && d.portrait);
+        }
+        for (const src of wanted) images.push(src);
+      }
+    } catch {}
+    await preloadLists([...new Set(images)], [...new Set(audio)]);
+  } catch {}
+}
+
+// Legacy: preload everything (kept for compat; prefer tiers above).
+export async function preloadAllAssets() {
+  try {
+    const { images, audio } = await discoverAssetUrls();
+    await preloadLists(images, audio);
   } catch {}
 }
 
@@ -141,5 +287,9 @@ if (typeof window !== "undefined") {
   try {
     window.__preloadAllAssets = preloadAllAssets;
     window.__discoverAssetUrls = discoverAssetUrls;
+    window.__preloadMenuCritical = preloadMenuCritical;
+    window.__preloadMenuIdle = preloadMenuIdle;
+    window.__preloadForCutscene = preloadForCutscene;
+    window.__preloadForLevel = preloadForLevel;
   } catch {}
 }

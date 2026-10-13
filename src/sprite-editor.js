@@ -2,12 +2,12 @@
 // Maps id -> {src, frame{x,y,w,h}} referencing part of a PNG sheet (transparent background)
 
 const SHEET_OPTIONS = [
-  "./img/splash/may-gfg-splash.png",
-  "./img/splash/background-gfg-splash.png",
-  "./img/splash/middleground-gfg-splash.png",
-  "./img/splash/foreground-gfg-splash.png",
-  "./img/gfg-splash.png",
-  "./img/logo.png",
+  "./img/splash/may-gfg-splash.webp",
+  "./img/splash/background-gfg-splash.webp",
+  "./img/splash/middleground-gfg-splash.webp",
+  "./img/splash/foreground-gfg-splash.webp",
+  "./img/gfg-splash.webp",
+  "./img/logo.webp",
   "./img/golfbag.png",
   "./img/magnifier-icon.png",
   "./img/liquifier-icon.png",
@@ -646,9 +646,9 @@ async function init(){
   // if still empty, create examples may-front etc. for demo
   if (!Object.keys(library).length){
     library = {
-      "may-front": { src: "./img/splash/may-gfg-splash.png", frame: {x:0,y:0,w:96,h:96}},
-      "may-right": { src: "./img/splash/may-gfg-splash.png", frame: {x:96,y:0,w:96,h:96}},
-      "may-back": { src: "./img/splash/may-gfg-splash.png", frame: {x:192,y:0,w:96,h:96}}
+      "may-front": { src: "./img/splash/may-gfg-splash.webp", frame: {x:0,y:0,w:96,h:96}},
+      "may-right": { src: "./img/splash/may-gfg-splash.webp", frame: {x:96,y:0,w:96,h:96}},
+      "may-back": { src: "./img/splash/may-gfg-splash.webp", frame: {x:192,y:0,w:96,h:96}}
     };
     selectedId = "may-front";
   }

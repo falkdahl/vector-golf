@@ -12,7 +12,7 @@ export function setCanvasSize(w, h) {
 
 // Background image for splash (main menu)
 const splashImg = new Image();
-splashImg.src = './img/gfg-splash.png';
+splashImg.src = './img/gfg-splash.webp';
 export function getSplashImage() { return splashImg; }
 export function isSplashLoaded() { return splashImg.complete && splashImg.naturalWidth > 0; }
 
@@ -52,7 +52,7 @@ function isInsideAnyModifier(x, y) {
 }
 
 export function drawBackground(ctx, width, height, mode = 'terrain', level = null) {
-  // Bottom canvas — mode 'splash' gfg-splash.png cover, otherwise draws zoned terrain with fixed palette
+  // Bottom canvas — mode 'splash' gfg-splash.webp cover, otherwise draws zoned terrain with fixed palette
   if (mode === 'splash') {
     ctx.save();
     ctx.fillStyle = '#1a1a1a';

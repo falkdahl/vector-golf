@@ -3,7 +3,7 @@
   "title": "Order of Golfing Purists - Club House",
   "background": {
     "type": "image",
-    "src": "img/cutscenes/bg-club-house.png",
+    "src": "img/cutscenes/bg-club-house.webp",
     "color": "#1a1a1a"
   },
   "duration": 68000,
@@ -213,7 +213,7 @@
       "speaker": "Grandmaster Cortex",
       "text": "Silence the winds in your hearts, brothers of the order!",
       "cps": 20,
-      "portrait": "img/cutscenes/portrait-cortex.png",
+      "portrait": "img/cutscenes/portrait-cortex.webp",
       "portraitSide": "right",
       "texts": [
         "Silence the winds in your hearts, brothers of the order!",
@@ -246,7 +246,7 @@
       "speaker": "Slicer",
       "text": "And let it be known... ",
       "cps": 20,
-      "portrait": "img/cutscenes/portrait-slicer.png",
+      "portrait": "img/cutscenes/portrait-slicer.webp",
       "portraitSide": "left",
       "texts": [
         "And let it be known... ",
@@ -271,7 +271,7 @@
       "speaker": "Grandmaster Cortex",
       "text": "Let the trials begin.",
       "cps": 20,
-      "portrait": "img/cutscenes/portrait-cortex.png",
+      "portrait": "img/cutscenes/portrait-cortex.webp",
       "portraitSide": "right",
       "name": "master final",
       "texts": [

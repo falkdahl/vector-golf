@@ -28,7 +28,7 @@ API: `render(bgCtx, fgCtx, W, H)`, `drawBackground(bgCtx,W,H,mode)` with `mode â
 
 ## 3. Background modes
 
-- Asset `img/gfg-splash.png` preloaded at module load (relative path only).
+- Asset `img/gfg-splash.webp` preloaded at module load (relative path only).
 - Level mode (`mainMenuVisible===false`): zoned terrain covering `0,0,LOGICAL_W,LOGICAL_H` via `drawTerrainZones`.
 - Main-menu mode: splash aspect-covered (`scale=max(W/imgW,H/imgH)`, centered); no terrain visible. Switch via `drawBackground(mode)` on toggle/resize. Solid fallback fill only while decoding; `#loading-screen` covers flash.
 

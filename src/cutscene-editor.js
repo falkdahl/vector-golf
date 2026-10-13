@@ -10,15 +10,15 @@ const scalePreview = PREVIEW_W / LOGICAL_W;
 let scene = {
   id: "intro-mt-aeolus",
   title: "The Windy Peak",
-  background: { type: "image", src: "./img/splash/background-gfg-splash.png", color: "#1a1a1a" },
+  background: { type: "image", src: "./img/splash/background-gfg-splash.webp", color: "#1a1a1a" },
   duration: 15000,
   camera: { keyframes: [{ t:0, x:0, y:0, zoom:1, easing:"easeInOut" },{ t:8000, x:120, y:40, zoom:1.4, easing:"easeInOut" }] },
   characters: [
     { id:"may", character:"may", x:320, y:520, scale:0.65, anchor:"bottom", zIndex:0, keyframes:[{t:0,x:320,y:520,scale:0.65,easing:"easeOut"},{t:4000,x:640,y:520,scale:0.65,easing:"linear"}] }
   ],
   dialogs: [
-    { t:500, speaker:"May", text:"Welcome to Mt. Aeolus...", cps:32, portrait:"./img/splash/may-gfg-splash.png", portraitSide:"left" },
-    { t:4500, speaker:"Slicer", text:"Putting is for cowards!", cps:28, portrait:"./img/cutscenes/portrait-slicer.png", portraitSide:"right" }
+    { t:500, speaker:"May", text:"Welcome to Mt. Aeolus...", cps:32, portrait:"./img/splash/may-gfg-splash.webp", portraitSide:"left" },
+    { t:4500, speaker:"Slicer", text:"Putting is for cowards!", cps:28, portrait:"./img/cutscenes/portrait-slicer.webp", portraitSide:"right" }
   ],
   music: [
     { t:0, src:"./audio/main-theme.ogg", volume:0.4, fadeMs:800, loop:true }
@@ -41,7 +41,7 @@ function createBlankScene(){
   return {
     id: "new-scene",
     title: "",
-    background: { type: "image", src: "./img/splash/background-gfg-splash.png", color: "#1a1a1a" },
+    background: { type: "image", src: "./img/splash/background-gfg-splash.webp", color: "#1a1a1a" },
     duration: 15000,
     camera: { keyframes: [] },
     characters: [],
@@ -64,31 +64,31 @@ function handleNewScene(){
 
 // Image discovery including subfolders (for dropdowns)
 let availableImages = [
-  "./img/splash/background-gfg-splash.png",
-  "./img/splash/middleground-gfg-splash.png",
-  "./img/splash/foreground-gfg-splash.png",
-  "./img/splash/may-gfg-splash.png",
-  "./img/cutscenes/bg-club-house.png",
-  "./img/cutscenes/bg-green.png",
-  "./img/cutscenes/bg-mountains.png",
-  "./img/cutscenes/chars-back.png",
-  "./img/cutscenes/chars-front.png",
-  "./img/cutscenes/chars-left.png",
-  "./img/cutscenes/chars-right.png",
-  "./img/cutscenes/chars-slicer.png",
-  "./img/cutscenes/dialog-caddy.png",
-  "./img/cutscenes/dialog-cortex.png",
-  "./img/cutscenes/dialog-may.png",
-  "./img/cutscenes/dialog-rat.png",
-  "./img/cutscenes/dialog-slicer.png",
-  "./img/cutscenes/portrait-acolyte.png",
-  "./img/cutscenes/portrait-caddy.png",
-  "./img/cutscenes/portrait-cortex.png",
-  "./img/cutscenes/portrait-may.png",
-  "./img/cutscenes/portrait-rat.png",
-  "./img/cutscenes/portrait-slicer.png",
-  "./img/gfg-splash.png",
-  "./img/logo.png",
+  "./img/splash/background-gfg-splash.webp",
+  "./img/splash/middleground-gfg-splash.webp",
+  "./img/splash/foreground-gfg-splash.webp",
+  "./img/splash/may-gfg-splash.webp",
+  "./img/cutscenes/bg-club-house.webp",
+  "./img/cutscenes/bg-green.webp",
+  "./img/cutscenes/bg-mountains.webp",
+  "./img/cutscenes/chars-back.webp",
+  "./img/cutscenes/chars-front.webp",
+  "./img/cutscenes/chars-left.webp",
+  "./img/cutscenes/chars-right.webp",
+  "./img/cutscenes/chars-slicer.webp",
+  "./img/cutscenes/dialog-caddy.webp",
+  "./img/cutscenes/dialog-cortex.webp",
+  "./img/cutscenes/dialog-may.webp",
+  "./img/cutscenes/dialog-rat.webp",
+  "./img/cutscenes/dialog-slicer.webp",
+  "./img/cutscenes/portrait-acolyte.webp",
+  "./img/cutscenes/portrait-caddy.webp",
+  "./img/cutscenes/portrait-cortex.webp",
+  "./img/cutscenes/portrait-may.webp",
+  "./img/cutscenes/portrait-rat.webp",
+  "./img/cutscenes/portrait-slicer.webp",
+  "./img/gfg-splash.webp",
+  "./img/logo.webp",
   "./img/golfbag.png",
   "./img/magnifier-icon.png",
   "./img/liquifier-icon.png",
@@ -113,7 +113,7 @@ async function fetchFolderImages(folder){
       const href=m[1];
       if(href.startsWith('http') || href.startsWith('/')) continue;
       if(href.includes('..')) continue;
-      // href may be "bg-club-house.png" when folder is ./img/cutscenes/
+      // href may be "bg-club-house.webp" when folder is ./img/cutscenes/
       // or "cutscenes/bg..." when folder is ./img/
       let full = href;
       if(!href.includes('/')){
@@ -1160,7 +1160,7 @@ function renderDialogList(){
   // include all discovered images including subfolders (./img/cutscenes/... etc) plus sprite ids
   const basePortraitOptions = [
     '', ...availableImages,
-    './img/splash/may-gfg-splash.png','./img/splash/background-gfg-splash.png','./img/splash/middleground-gfg-splash.png','./img/splash/foreground-gfg-splash.png','./img/gfg-splash.png','./img/logo.png','./img/golfbag.png','./img/magnifier-icon.png','./img/liquifier-icon.png','./img/deflector-icon.png','./img/rotator-icon.png','./img/field-extender-icon.png','./img/power-cell-icon.png'
+    './img/splash/may-gfg-splash.webp','./img/splash/background-gfg-splash.webp','./img/splash/middleground-gfg-splash.webp','./img/splash/foreground-gfg-splash.webp','./img/gfg-splash.webp','./img/logo.webp','./img/golfbag.png','./img/magnifier-icon.png','./img/liquifier-icon.png','./img/deflector-icon.png','./img/rotator-icon.png','./img/field-extender-icon.png','./img/power-cell-icon.png'
   ];
   // dedupe and keep order: availableImages first (includes subfolders correctly)
   const uniqBase = [...new Set(basePortraitOptions)];
@@ -1921,7 +1921,7 @@ async function init(){
   els.addDialog.addEventListener('click', ()=>{
     if(!scene.dialogs) scene.dialogs=[];
     // default portrait is first character's src or may
-    const defPortrait = scene.characters?.[0]?.src || './img/splash/may-gfg-splash.png';
+    const defPortrait = scene.characters?.[0]?.src || './img/splash/may-gfg-splash.webp';
     const introBeforeFade = getIntroBeforeFadeForEditor();
     const eff = Math.round(scrubTime - introBeforeFade);
     scene.dialogs.push({t:eff, speaker:'May', text:'New dialog...', cps:20, portrait:defPortrait, portraitSide:'left'});

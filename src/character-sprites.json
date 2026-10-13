@@ -2,7 +2,7 @@
   "version": 2,
   "sprites": {
     "may-front": {
-      "src": "./img/cutscenes/chars-front.png",
+      "src": "./img/cutscenes/chars-front.webp",
       "frame": {
         "x": 194,
         "y": 51,
@@ -11,7 +11,7 @@
       }
     },
     "may-right": {
-      "src": "./img/cutscenes/chars-right.png",
+      "src": "./img/cutscenes/chars-right.webp",
       "frame": {
         "x": 206,
         "y": 48,
@@ -20,7 +20,7 @@
       }
     },
     "may-back": {
-      "src": "./img/cutscenes/chars-back.png",
+      "src": "./img/cutscenes/chars-back.webp",
       "frame": {
         "x": 205,
         "y": 55,
@@ -29,7 +29,7 @@
       }
     },
     "cortex-front": {
-      "src": "./img/cutscenes/chars-front.png",
+      "src": "./img/cutscenes/chars-front.webp",
       "frame": {
         "x": 552,
         "y": 42,
@@ -38,7 +38,7 @@
       }
     },
     "cortex-back": {
-      "src": "./img/cutscenes/chars-back.png",
+      "src": "./img/cutscenes/chars-back.webp",
       "frame": {
         "x": 546,
         "y": 42,
@@ -47,7 +47,7 @@
       }
     },
     "cortex-right": {
-      "src": "./img/cutscenes/chars-right.png",
+      "src": "./img/cutscenes/chars-right.webp",
       "frame": {
         "x": 540,
         "y": 50,
@@ -56,7 +56,7 @@
       }
     },
     "caddy-front": {
-      "src": "./img/cutscenes/chars-front.png",
+      "src": "./img/cutscenes/chars-front.webp",
       "frame": {
         "x": 897,
         "y": 42,
@@ -65,7 +65,7 @@
       }
     },
     "caddy-back": {
-      "src": "./img/cutscenes/chars-back.png",
+      "src": "./img/cutscenes/chars-back.webp",
       "frame": {
         "x": 885,
         "y": 31,
@@ -74,7 +74,7 @@
       }
     },
     "caddy-right": {
-      "src": "./img/cutscenes/chars-right.png",
+      "src": "./img/cutscenes/chars-right.webp",
       "frame": {
         "x": 890,
         "y": 48,
@@ -83,7 +83,7 @@
       }
     },
     "rat-front": {
-      "src": "./img/cutscenes/chars-front.png",
+      "src": "./img/cutscenes/chars-front.webp",
       "frame": {
         "x": 537,
         "y": 381,
@@ -92,7 +92,7 @@
       }
     },
     "rat-back": {
-      "src": "./img/cutscenes/chars-back.png",
+      "src": "./img/cutscenes/chars-back.webp",
       "frame": {
         "x": 535,
         "y": 363,
@@ -101,7 +101,7 @@
       }
     },
     "rat-right": {
-      "src": "./img/cutscenes/chars-right.png",
+      "src": "./img/cutscenes/chars-right.webp",
       "frame": {
         "x": 538,
         "y": 367,
@@ -110,7 +110,7 @@
       }
     },
     "rat-right-left": {
-      "src": "./img/cutscenes/chars-left.png",
+      "src": "./img/cutscenes/chars-left.webp",
       "frame": {
         "x": 564,
         "y": 367,
@@ -119,7 +119,7 @@
       }
     },
     "may-left": {
-      "src": "./img/cutscenes/chars-left.png",
+      "src": "./img/cutscenes/chars-left.webp",
       "frame": {
         "x": 872,
         "y": 50,
@@ -128,7 +128,7 @@
       }
     },
     "cortex-left": {
-      "src": "./img/cutscenes/chars-left.png",
+      "src": "./img/cutscenes/chars-left.webp",
       "frame": {
         "x": 553,
         "y": 48,
@@ -137,7 +137,7 @@
       }
     },
     "caddy-left": {
-      "src": "./img/cutscenes/chars-left.png",
+      "src": "./img/cutscenes/chars-left.webp",
       "frame": {
         "x": 201,
         "y": 44,
@@ -146,7 +146,7 @@
       }
     },
     "acolyte-back": {
-      "src": "./img/cutscenes/chars-back.png",
+      "src": "./img/cutscenes/chars-back.webp",
       "frame": {
         "x": 865,
         "y": 414,
@@ -155,7 +155,7 @@
       }
     },
     "acolyte-front": {
-      "src": "./img/cutscenes/chars-front.png",
+      "src": "./img/cutscenes/chars-front.webp",
       "frame": {
         "x": 884,
         "y": 378,
@@ -164,7 +164,7 @@
       }
     },
     "acolyte-left": {
-      "src": "./img/cutscenes/chars-left.png",
+      "src": "./img/cutscenes/chars-left.webp",
       "frame": {
         "x": 199,
         "y": 380,
@@ -173,7 +173,7 @@
       }
     },
     "acolyte-right": {
-      "src": "./img/cutscenes/chars-right.png",
+      "src": "./img/cutscenes/chars-right.webp",
       "frame": {
         "x": 875,
         "y": 380,
@@ -182,7 +182,7 @@
       }
     },
     "slicer-front": {
-      "src": "./img/cutscenes/chars-slicer.png",
+      "src": "./img/cutscenes/chars-slicer.webp",
       "frame": {
         "x": 539,
         "y": 544,
@@ -191,7 +191,7 @@
       }
     },
     "slicer-right": {
-      "src": "./img/cutscenes/chars-slicer.png",
+      "src": "./img/cutscenes/chars-slicer.webp",
       "frame": {
         "x": 558,
         "y": 58,
@@ -200,7 +200,7 @@
       }
     },
     "slicer-back": {
-      "src": "./img/cutscenes/chars-slicer.png",
+      "src": "./img/cutscenes/chars-slicer.webp",
       "frame": {
         "x": 71,
         "y": 60,
@@ -209,7 +209,7 @@
       }
     },
     "slicer-left": {
-      "src": "./img/cutscenes/chars-slicer.png",
+      "src": "./img/cutscenes/chars-slicer.webp",
       "frame": {
         "x": 84,
         "y": 549,
@@ -227,7 +227,7 @@
       }
     },
     "mod-liquifier": {
-      "src": "img/cutscenes/modifiers.png",
+      "src": "img/cutscenes/modifiers.webp",
       "frame": {
         "x": 171,
         "y": 12,
@@ -236,7 +236,7 @@
       }
     },
     "mod-rotator": {
-      "src": "img/cutscenes/modifiers.png",
+      "src": "img/cutscenes/modifiers.webp",
       "frame": {
         "x": 19,
         "y": 14,
@@ -245,7 +245,7 @@
       }
     },
     "mod-deflector": {
-      "src": "img/cutscenes/modifiers.png",
+      "src": "img/cutscenes/modifiers.webp",
       "frame": {
         "x": 11,
         "y": 106,
@@ -254,7 +254,7 @@
       }
     },
     "mod-amp": {
-      "src": "img/cutscenes/modifiers.png",
+      "src": "img/cutscenes/modifiers.webp",
       "frame": {
         "x": 165,
         "y": 103,
@@ -263,7 +263,7 @@
       }
     },
     "demon-front": {
-      "src": "./img/cutscenes/demon.png",
+      "src": "./img/cutscenes/demon.webp",
       "frame": {
         "x": 0,
         "y": 22,
@@ -272,7 +272,7 @@
       }
     },
     "demon-rear": {
-      "src": "./img/cutscenes/demon.png",
+      "src": "./img/cutscenes/demon.webp",
       "frame": {
         "x": 298,
         "y": 28,
@@ -281,7 +281,7 @@
       }
     },
     "demon-right": {
-      "src": "./img/cutscenes/demon.png",
+      "src": "./img/cutscenes/demon.webp",
       "frame": {
         "x": 153,
         "y": 25,
@@ -290,7 +290,7 @@
       }
     },
     "cortex-transform-1": {
-      "src": "./img/cutscenes/transform.png",
+      "src": "./img/cutscenes/transform.webp",
       "frame": {
         "x": 88,
         "y": 43,
@@ -299,7 +299,7 @@
       }
     },
     "cortex-transform-2": {
-      "src": "./img/cutscenes/transform.png",
+      "src": "./img/cutscenes/transform.webp",
       "frame": {
         "x": 396,
         "y": 45,
@@ -308,7 +308,7 @@
       }
     },
     "cortex-transform-3": {
-      "src": "./img/cutscenes/transform.png",
+      "src": "./img/cutscenes/transform.webp",
       "frame": {
         "x": 724,
         "y": 47,
@@ -317,7 +317,7 @@
       }
     },
     "portal-front": {
-      "src": "./img/cutscenes/portals.png",
+      "src": "./img/cutscenes/portals.webp",
       "frame": {
         "x": 0,
         "y": 0,
@@ -326,7 +326,7 @@
       }
     },
     "portal-open": {
-      "src": "./img/cutscenes/portals.png",
+      "src": "./img/cutscenes/portals.webp",
       "frame": {
         "x": 472,
         "y": 37,

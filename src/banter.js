@@ -15,8 +15,8 @@ export const TUTORIAL_BANTER_FILE = './src/tutorial-banter.json';
 export const BANTER_STATE_KEY = 'golfVectorField.banter.v1';
 
 export const SPEAKERS = {
-  may: { name: 'May', portrait: './img/cutscenes/portrait-may.png' },
-  caddy: { name: 'Caddy', portrait: './img/cutscenes/portrait-caddy.png' },
+  may: { name: 'May', portrait: './img/cutscenes/portrait-may.webp' },
+  caddy: { name: 'Caddy', portrait: './img/cutscenes/portrait-caddy.webp' },
 };
 
 export function resolveSpeaker(ref) {

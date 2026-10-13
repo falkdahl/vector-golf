@@ -29,28 +29,44 @@ import {
   drawWaterRipples,
   clearWaterRipples,
 } from "./render.js";
-import {
-  initWindOverlay,
-  updateWindUniforms,
-  setWindUniformsFromField,
-  setWindVisible,
-  toggleWind as toggleWindThree,
-  isWindVisible as isWindThreeVisible,
-  renderWind,
-  resizeWindOverlay,
-  getWindUniforms,
-  setFreeShotActive as setWindFreeShotActive,
-  setFreeShotBallActive as setWindFreeShotBallActive,
-  setFreeShotEdgeActive as setWindFreeShotEdgeActive,
-  updateFreeShotGlow,
-} from "./windThree.js";
+// Wind overlay (Three.js) loads lazily so the 1.3MB vendor bundle stays off
+// the boot path. These facades keep every call site unchanged: no-ops until
+// the module arrives, then delegate. Init + field sync re-run on arrival.
+let __windMod = null;
+function initWindOverlay(...args) { try { if (__windMod) return __windMod.initWindOverlay(...args); } catch {} }
+function updateWindUniforms(...args) { try { if (__windMod) return __windMod.updateWindUniforms(...args); } catch {} }
+function setWindUniformsFromField(...args) { try { if (__windMod) return __windMod.setWindUniformsFromField(...args); } catch {} }
+function setWindVisible(...args) { try { if (__windMod) return __windMod.setWindVisible(...args); } catch {} }
+function toggleWindThree(...args) { try { if (__windMod) return __windMod.toggleWind(...args); } catch {} }
+function isWindThreeVisible(...args) { try { if (__windMod) return __windMod.isWindVisible(...args); } catch {} return false; }
+function renderWind(...args) { try { if (__windMod) return __windMod.renderWind(...args); } catch {} }
+function resizeWindOverlay(...args) { try { if (__windMod) return __windMod.resizeWindOverlay(...args); } catch {} }
+function getWindUniforms(...args) { try { if (__windMod) return __windMod.getWindUniforms(...args); } catch {} return undefined; }
+function setWindFreeShotActive(...args) { try { if (__windMod) return __windMod.setFreeShotActive(...args); } catch {} }
+function setWindFreeShotBallActive(...args) { try { if (__windMod) return __windMod.setFreeShotBallActive(...args); } catch {} }
+function setWindFreeShotEdgeActive(...args) { try { if (__windMod) return __windMod.setFreeShotEdgeActive(...args); } catch {} }
+function updateFreeShotGlow(...args) { try { if (__windMod) return __windMod.updateFreeShotGlow(...args); } catch {} }
+if (typeof window !== 'undefined') {
+  try {
+    // Deferred (non-blocking): menu renders immediately; wind fades in when ready.
+    import('./windThree.js').then((m) => {
+      __windMod = m;
+      try {
+        const container = document.getElementById('game-container');
+        m.initWindOverlay(container);
+        try { syncWindFieldToShader(); } catch {}
+        m.resizeWindOverlay();
+      } catch (e) { console.warn('wind overlay init failed', e); }
+    }).catch((e) => { console.warn('wind overlay load failed', e); });
+  } catch {}
+}
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
 import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COINS_PER_ATTEMPT, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, LOADOUT_SLOT_COSTS, DEFAULT_UNLOCKED_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout, getUnlockedLoadoutSlots as getProgressionUnlockedSlots, getNextLoadoutSlotCost, canUnlockNextLoadoutSlot, unlockNextLoadoutSlot, setUnlockedLoadoutSlots, getRunsStarted, incrementRunsStarted } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip, playBanter as banterPlay, loadBanterFile as banterLoadFile } from "./banter.js";
 import { playLaunch as audioLaunch, playWater as audioWater, playHoleWin as audioHoleWin, playModifierActivated as audioModifier, playPointsCount as audioPointsCount, playNewRecord as audioNewRecord, setWindActive as audioSetWind, playChest as audioChest, playReward as audioReward, playOB as audioOB, playUIClick as audioUIClick, setMusicActive as audioSetMusic, setMenuMusicActive as audioSetMenuMusic } from "./audio.js";
-import { preloadAllAssets as preloadAllGameAssets } from "./preload.js";
+import { preloadMenuCritical as preloadMenuCriticalAssets, preloadMenuIdle as preloadMenuIdleAssets, preloadForCutscene as preloadCutsceneAssets, preloadForLevel as preloadLevelAssets } from "./preload.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -65,7 +81,7 @@ let bgCanvas;
 let bgCtx;
 // Background image for splash (main menu) - legacy fallback
 const splashImg = new Image();
-splashImg.src = './img/gfg-splash.png';
+splashImg.src = './img/gfg-splash.webp';
 
 // Parallax layered splash scene - may is closest, foreground almost as close, middleground bit further, background far
 let parallaxSceneEl = null;
@@ -102,14 +118,17 @@ function hideLoadingScreen() {
   const ls = document.getElementById('loading-screen');
   if (ls) ls.classList.add('hidden');
 }
-// First-load preload: every image + audio file, before the loading screen lifts.
+// First-load preload (tiered for fast menu): Tier 0 blocks the loading
+// screen (splash + menu theme only); Tier 1 streams right after.
 let assetsReady = false;
 let loadingHideRequested = false;
 if (typeof window !== 'undefined') {
   try {
-    preloadAllGameAssets().then(() => {
+    preloadMenuCriticalAssets().then(() => {
       assetsReady = true;
       if (loadingHideRequested) hideLoadingScreen();
+      // Tier 1: menu chrome in the background, menu already visible.
+      try { preloadMenuIdleAssets(); } catch {}
     }).catch(() => {
       assetsReady = true;
       if (loadingHideRequested) hideLoadingScreen();
@@ -1533,13 +1552,15 @@ function handleTutorialHole1To2Chain(){
     }catch{}
     try{ syncMainMenu(); }catch{}
     try{ redrawBottom(); }catch{}
-    cutsceneLoad('first-restock').then(data=>{
+    cutsceneLoad('first-restock').then(async (data)=>{
       if(!data){
         try{ cutsceneMarkSeen('first-restock'); }catch{}
         prepareHole2ThenBanter();
         startStackingBanter();
         return;
       }
+      // Tier 2: cutscene assets (incl. audio) ready before play.
+      try { await preloadCutsceneAssets(data); } catch {}
       const ok = playCutsceneWrapped(data, {onComplete:()=>{
          try{ cutsceneMarkSeen('first-restock'); }catch{}
          prepareHole2ThenBanter();
@@ -3033,7 +3054,7 @@ function handleCoursePlay(courseId) {
       // starts synchronously inside the first's onComplete (same call stack as
       // endCutscene), so there is no async fetch gap where menus/splash could flash.
       // Use cutsceneLoad to handle async correctly (cutscenePlay with string id returns false on async load and retries, which would cause fallback race)
-      Promise.all([cutsceneLoad('prologue'), cutsceneLoad('intro-3-hole')]).then(([data, preloadedIntro]) => {
+      Promise.all([cutsceneLoad('prologue'), cutsceneLoad('intro-3-hole')]).then(async ([data, preloadedIntro]) => {
         if (!data) {
           // Failed to load prologue.json — fallback to loadout so player isn't blocked
           console.warn('[prologue] failed to load prologue.json, skipping to loadout');
@@ -3041,6 +3062,10 @@ function handleCoursePlay(courseId) {
           syncProgressionDisplay();
           return;
         }
+        // Tier 2: both chained cutscenes' assets (incl. audio) ready before
+        // either plays — the chain stays synchronous with no menu flash.
+        try { await preloadCutsceneAssets(data); } catch {}
+        try { if (preloadedIntro) await preloadCutsceneAssets(preloadedIntro); } catch {}
         // Helper to start intro-3-hole synchronously (already preloaded) or fall back.
         const playIntroSync = () => {
           const introNotSeen = (()=>{ try{ return !cutsceneHasSeen('intro-3-hole'); }catch{ return true; }})();
@@ -3136,7 +3161,7 @@ function handleCoursePlay(courseId) {
       try { syncMainMenu(); } catch {}
       try { redrawBottom(); } catch {}
       try { syncParallaxVisibility(); } catch {}
-      cutsceneLoad('first-restock').then((data) => {
+      cutsceneLoad('first-restock').then(async (data) => {
         if (!data) {
           console.warn('[first-restock] failed to load first-restock.json, skipping to loadout');
           try { ensureFirstRestockStock(); } catch {}
@@ -3144,6 +3169,8 @@ function handleCoursePlay(courseId) {
           syncProgressionDisplay();
           return;
         }
+        // Tier 2: cutscene assets (incl. audio) ready before play.
+        try { await preloadCutsceneAssets(data); } catch {}
         const ok = playCutsceneWrapped(data, {
           onComplete: (completed) => {
             try { cutsceneMarkSeen('first-restock'); } catch {}
@@ -4945,6 +4972,8 @@ function setupCanvases() { return setupCanvas(); }
 
 function loadLevel(index) {
   currentHoleIndex = index;
+  // Tier 3: level theme + SFX + banter portraits stream in (cached after first).
+  try { preloadLevelAssets(); } catch {}
   // Journal: track the highest-numbered hole reached this run
   try { if (runJournalActive && runJournal && index > runJournal.maxHole) runJournal.maxHole = index; } catch {}
   // 14-cheat-mode: new hole cancels any ball drag.
@@ -5820,8 +5849,10 @@ function playEnd9HoleThenReturn() {
   const proceed = () => { try { cutsceneMarkSeen('end-9-hole'); } catch {} continueReturnToMainMenu(); };
   const fallback = () => { console.warn('[end-9-hole] failed to load, skipping to summary'); proceed(); };
   try {
-    cutsceneLoad('end-9-hole').then((loaded) => {
+    cutsceneLoad('end-9-hole').then(async (loaded) => {
       if (!loaded) { fallback(); return; }
+      // Tier 2: cutscene assets (incl. audio) ready before play.
+      try { await preloadCutsceneAssets(loaded); } catch {}
       let ok = false;
       try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
       if (!ok) fallback();
@@ -5838,8 +5869,10 @@ function playEnd18HoleThenReturn() {
   const proceed = () => { try { cutsceneMarkSeen('end-18-hole'); } catch {} continueReturnToMainMenu(); };
   const fallback = () => { console.warn('[end-18-hole] failed to load, skipping to summary'); try { continueReturnToMainMenu(); } catch {} };
   try {
-    cutsceneLoad('end-18-hole').then((loaded) => {
+    cutsceneLoad('end-18-hole').then(async (loaded) => {
       if (!loaded) { fallback(); return; }
+      // Tier 2: cutscene assets (incl. audio) ready before play.
+      try { await preloadCutsceneAssets(loaded); } catch {}
       let ok = false;
       try { ok = playCutsceneWrapped(loaded, { onComplete: () => { proceed(); } }); } catch (e) { ok = false; }
       if (!ok) fallback();

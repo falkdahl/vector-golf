@@ -3,7 +3,7 @@
     "title": "On the Way up Mt. Aeolus",
     "background": {
         "type": "image",
-        "src": "./img/cutscenes/bg-mountains.png",
+        "src": "./img/cutscenes/bg-mountains.webp",
         "color": "#1a1a1a"
     },
     "duration": 118400,
@@ -372,7 +372,7 @@
             "speaker": "May",
             "text": "Thanks for helping with this Caddy.",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-may.png",
+            "portrait": "./img/cutscenes/portrait-may.webp",
             "portraitSide": "left",
             "name": "may 1",
             "duration": 2000,
@@ -389,7 +389,7 @@
             "speaker": "Caddy",
             "text": "Save your breath, kid.",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portrait": "./img/cutscenes/portrait-caddy.webp",
             "portraitSide": "left",
             "texts": [
                 "Save your breath, kid.",
@@ -409,7 +409,7 @@
             "speaker": "May",
             "text": " I don't care how hard it is. I'm May. ",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-may.png",
+            "portrait": "./img/cutscenes/portrait-may.webp",
             "portraitSide": "left",
             "auto": true,
             "texts": [
@@ -426,7 +426,7 @@
             "speaker": "Caddy",
             "text": "Dream all you want kid.",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portrait": "./img/cutscenes/portrait-caddy.webp",
             "portraitSide": "left",
             "duration": 1000,
             "texts": [
@@ -449,7 +449,7 @@
             "speaker": "May",
             "text": "Who's there?!",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-may.png",
+            "portrait": "./img/cutscenes/portrait-may.webp",
             "portraitSide": "left",
             "duration": 1000
         },
@@ -458,7 +458,7 @@
             "speaker": "???",
             "text": "The wind up here does not just blow.\n",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portrait": "./img/cutscenes/portrait-rat.webp",
             "portraitSide": "left",
             "texts": [
                 "The wind up here does not just blow.\n",
@@ -480,7 +480,7 @@
             "speaker": "???",
             "text": "Take this.",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portrait": "./img/cutscenes/portrait-rat.webp",
             "portraitSide": "left",
             "duration": 1000,
             "texts": [
@@ -500,7 +500,7 @@
             "speaker": "May",
             "text": "Freely?",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-may.png",
+            "portrait": "./img/cutscenes/portrait-may.webp",
             "portraitSide": "left",
             "texts": [
                 "Freely?",
@@ -526,7 +526,7 @@
                 2000,
                 1000
             ],
-            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portrait": "./img/cutscenes/portrait-rat.webp",
             "portraitSide": "left"
         },
         {
@@ -534,7 +534,7 @@
             "speaker": "May",
             "text": "Uhmm... thanks, I guess",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-may.png",
+            "portrait": "./img/cutscenes/portrait-may.webp",
             "portraitSide": "left",
             "duration": 1000
         },
@@ -551,7 +551,7 @@
             "gaps": [
                 1500
             ],
-            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portrait": "./img/cutscenes/portrait-rat.webp",
             "portraitSide": "left"
         }
     ],

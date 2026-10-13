@@ -3,7 +3,7 @@
     "title": "Old Man's Cabin",
     "background": {
         "type": "image",
-        "src": "./img/cutscenes/bg-cottage.png",
+        "src": "./img/cutscenes/bg-cottage.webp",
         "color": "#1a1a1a"
     },
     "duration": 65000,
@@ -240,7 +240,7 @@
             "speaker": "Caddy",
             "text": "That Liquifier you gave us came in really clutch out there old man.",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portrait": "./img/cutscenes/portrait-caddy.webp",
             "portraitSide": "left",
             "texts": [
                 "That Liquifier you gave us came in really clutch out there old man.",
@@ -256,7 +256,7 @@
             "speaker": "???",
             "text": "It's not magic...",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portrait": "./img/cutscenes/portrait-rat.webp",
             "portraitSide": "left",
             "duration": 2000,
             "texts": [
@@ -279,7 +279,7 @@
             "speaker": "???",
             "text": "I call these the \"Deflector\", the \"Rotator\" and the \"Magnifier\".",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-rat.png",
+            "portrait": "./img/cutscenes/portrait-rat.webp",
             "portraitSide": "left",
             "duration": 1000,
             "texts": [
@@ -306,7 +306,7 @@
             "speaker": "Caddy",
             "text": "Name your price, mystery man.",
             "cps": 20,
-            "portrait": "./img/cutscenes/portrait-caddy.png",
+            "portrait": "./img/cutscenes/portrait-caddy.webp",
             "portraitSide": "left",
             "duration": 1000,
             "auto": true,

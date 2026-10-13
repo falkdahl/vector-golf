@@ -3,7 +3,7 @@
   "title": "Fall of the Grandmaster",
   "background": {
     "type": "image",
-    "src": "./img/cutscenes/bg-club-house-outside.jpg",
+    "src": "./img/cutscenes/bg-club-house-outside.webp",
     "color": "#1a1a1a"
   },
   "duration": 88000,
@@ -914,7 +914,7 @@
       "speaker": "May",
       "text": "Eighteen! EIGHTEEN HOLES! Did you see that last ace, Caddy? Straight through the gale, no fear, no mercy!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-may.png",
+      "portrait": "./img/cutscenes/portrait-may.webp",
       "portraitSide": "left",
       "duration": 2000
     },
@@ -923,7 +923,7 @@
       "speaker": "Caddy",
       "text": "Saw it, kid. Forty years lugging bags and I never seen anything like it. You made that wind carry you home.",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-caddy.png",
+      "portrait": "./img/cutscenes/portrait-caddy.webp",
       "portraitSide": "left",
       "auto": true,
       "duration": 2000
@@ -933,7 +933,7 @@
       "speaker": "Acolyte",
       "text": "She really did it... all eighteen... no one ever has... is this... a new Grandmaster?!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-acolyte.png",
+      "portrait": "./img/cutscenes/portrait-acolyte.webp",
       "portraitSide": "left",
       "auto": true,
       "duration": 1500
@@ -943,7 +943,7 @@
       "speaker": "???",
       "text": "Oh, they did it all right. Enjoy the applause while it lasts, heroes. The peak remembers everything.",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-rat.png",
+      "portrait": "./img/cutscenes/portrait-rat.webp",
       "portraitSide": "left",
       "auto": true,
       "duration": 2000
@@ -953,7 +953,7 @@
       "speaker": "Grandmaster Cortex",
       "text": "SILENCE! This is impossible! No one conquers all eighteen! No one shames ME before the Order!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portrait": "./img/cutscenes/portrait-cortex.webp",
       "portraitSide": "right",
       "auto": true,
       "duration": 2000
@@ -963,7 +963,7 @@
       "speaker": "Slicer",
       "text": "Outta my way, girlie. What's this? More pocket weather crimes? Hand 'em over, cheaters!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-slicer.png",
+      "portrait": "./img/cutscenes/portrait-slicer.webp",
       "portraitSide": "right",
       "auto": true,
       "duration": 2000
@@ -973,7 +973,7 @@
       "speaker": "May",
       "text": "Hey! Hands off! Do NOT call me a cheater. You want the gadgets, come take the shot yourself!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-may.png",
+      "portrait": "./img/cutscenes/portrait-may.webp",
       "portraitSide": "left",
       "auto": true,
       "duration": 2000
@@ -983,7 +983,7 @@
       "speaker": "Slicer",
       "text": "Funny. These look just like... wait. Boss, these are YOURS! Same serials as the lab stash! The underground techlab! Built for your so-called legendary 9-hole run!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-slicer.png",
+      "portrait": "./img/cutscenes/portrait-slicer.webp",
       "portraitSide": "right",
       "auto": true,
       "duration": 2500
@@ -993,7 +993,7 @@
       "speaker": "Ratko",
       "text": "And there it is. The Grandmaster's throne, wobbling at last. Tell them, Cortex. Tell them whose wind you really rode.",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-rat.png",
+      "portrait": "./img/cutscenes/portrait-rat.webp",
       "portraitSide": "left",
       "auto": true,
       "duration": 2000
@@ -1003,7 +1003,7 @@
       "speaker": "Acolyte",
       "text": "You... you cheated? The sacred nine... was lab tech? We renounce you! You are no Grandmaster of ours!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-acolyte.png",
+      "portrait": "./img/cutscenes/portrait-acolyte.webp",
       "portraitSide": "left",
       "auto": true,
       "duration": 2000
@@ -1013,7 +1013,7 @@
       "speaker": "Grandmaster Cortex",
       "text": "Fools! You dare shun ME? Then gaze upon what the wind truly serves. I am Cortex of Dimension-Y!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portrait": "./img/cutscenes/portrait-cortex.webp",
       "portraitSide": "right",
       "auto": true,
       "duration": 2000
@@ -1023,7 +1023,7 @@
       "speaker": "Grandmaster Cortex",
       "text": "You destroyed my reputation! Now I drag you screaming to my home world! Slicer, girl, bagman... INTO THE PORTAL!",
       "cps": 20,
-      "portrait": "./img/cutscenes/portrait-cortex.png",
+      "portrait": "./img/cutscenes/portrait-cortex.webp",
       "portraitSide": "right",
       "auto": true,
       "duration": 2500
