@@ -2357,6 +2357,13 @@ body {
   -webkit-backdrop-filter: none;
   background: rgba(0,0,0,0.55);
 }
+/* 12-mobile: no keyboard — hide all hotkey badges/key hints. */
+#game-container.mobile-mode .golfbag-hotkey,
+#game-container.mobile-mode .journal-hotkey,
+#game-container.mobile-mode .hotbar-hotkey,
+#game-container.mobile-mode .reward-button-key {
+  display: none !important;
+}
 #mobile-fullscreen-button { right: 12px; top: 36px; font-size: 18px; z-index: 15; }
 #mobile-menu-button.hidden,
 #mobile-reset-button.hidden,

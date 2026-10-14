@@ -4320,6 +4320,7 @@ function syncJournalUI() {
       journalContainerEl.classList.toggle("collapsed", !!isJournalCollapsed);
       journalContainerEl.setAttribute("aria-expanded", String(!isJournalCollapsed));
       journalContainerEl.title = isJournalCollapsed ? "Journal — click to open best-run journal (J)" : "Journal — click to close (J)";
+      try { if (isMobileMode()) journalContainerEl.title = journalContainerEl.title.replace(/ \(J\)$/, ''); } catch { }
     }
     if (journalPanelEl) {
       const show = !hidden && !isJournalCollapsed;
@@ -4539,6 +4540,17 @@ function maybeShowRewardMenu() {
   }
 }
 
+// 12-mobile: no keyboard — reward buttons omit key hints ([1]/[2]/[3] are
+// CSS-hidden; [R]/[Esc] suffixes are dropped from button text entirely).
+function rewardKeySuffix() { try { if (isMobileMode()) return ''; } catch { } return null; }
+function rerollButtonLabel(rerolled) {
+  if (rerolled) return 'Re-rolled';
+  return rewardKeySuffix() === '' ? '↻ Re-roll (1 attempt)' : '↻ Re-roll (1 attempt) [R]';
+}
+function skipButtonLabel() {
+  return rewardKeySuffix() === '' ? 'Skip (take nothing)' : 'Skip (take nothing) [Esc]';
+}
+
 // Reward discard UI: when the bag is full and a reward was chosen
 // (pendingRewardType), discard happens via the golfbag hotbar underneath
 // (occupied slots get .discard-target dotted highlight). No in-overlay bag
@@ -4568,7 +4580,7 @@ function syncRewardDiscardUI(overlay) {
       skipBtn = document.createElement('button');
       skipBtn.id = 'reward-skip-button';
       skipBtn.className = 'reward-skip-button';
-      skipBtn.textContent = 'Skip (take nothing) [Esc]';
+      skipBtn.textContent = skipButtonLabel();
       skipBtn.addEventListener('click', () => { closeRewardMenuWithoutReward(); });
       card.appendChild(skipBtn);
     }
@@ -4618,9 +4630,9 @@ function syncRewardOverlay() {
       if (rerollBtn.disabled !== shouldDisable) {
         rerollBtn.disabled = shouldDisable;
         rerollBtn.classList.toggle('disabled', shouldDisable);
-        rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
+        rerollBtn.textContent = (shouldDisable && rewardRerolled) ? 'Re-rolled' : rerollButtonLabel(false);
       } else if (shouldDisable) {
-        rerollBtn.textContent = rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
+        rerollBtn.textContent = rerollButtonLabel(rewardRerolled);
       }
     }
     try { syncRewardDiscardUI(overlay); } catch { }
@@ -4727,7 +4739,7 @@ function syncRewardOverlay() {
       const shouldDisable = isRerollDisabled();
       rerollBtn.disabled = shouldDisable;
       rerollBtn.classList.toggle('disabled', shouldDisable);
-      rerollBtn.textContent = shouldDisable && rewardRerolled ? 'Re-rolled' : '↻ Re-roll (1 attempt) [R]';
+      rerollBtn.textContent = (shouldDisable && rewardRerolled) ? 'Re-rolled' : rerollButtonLabel(false);
       rerollBtn.onclick = () => { if (!isRerollDisabled()) rerollReward(); };
     }
     // Skip + in-modal discard UI (bag-full flow)
@@ -5491,7 +5503,7 @@ function updateHotbarUI() {
             slot.style.cursor = 'default';
             slot.dataset.supply = '0';
             slot.dataset.count = '0';
-            slot.title = 'Empty slot (' + (i + 1) + ')';
+            try { slot.title = (isMobileMode() ? 'Empty slot' : 'Empty slot (' + (i + 1) + ')'); } catch { slot.title = 'Empty slot (' + (i + 1) + ')'; }
             const hk = document.createElement('span');
             hk.className = 'hotbar-hotkey hotbar-hotkey-empty';
             hk.textContent = String(i + 1);
