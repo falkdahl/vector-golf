@@ -1403,6 +1403,17 @@ function startCourseWithLoadout(courseId, slots) { return startCourseWithStartin
 
 function isTutorialCourseId(cid) { const c = findCourseById(cid); return isTutorialCourse(c); }
 
+// 12-mobile: tutorial banters that reference desktop controls have touch
+// variants in src/tutorial-banter-mobile.json ('<id>-mobile'). Plays the
+// mobile variant in mobile mode, falling back to the desktop id.
+function playTutorialBanter(baseId, opts) {
+  try {
+    if (isMobileMode()) {
+      try { if (banterPlay(baseId + '-mobile', opts)) return true; } catch { }
+    }
+  } catch { }
+  try { return banterPlay(baseId, opts); } catch { return false; }
+}
 function startTutorialCourse(courseId) {
   const course = findCourseById(courseId);
   if (!course || !isTutorialCourse(course)) return false;
@@ -1446,8 +1457,7 @@ function startTutorialCourse(courseId) {
   tutorialHole2RotatorShown = false;
   tutorialHole2GadgetsReminderShown = false;
   tutorialHole3RewardBanterShown = false;
-  loadLevel(0); gameState = 'AIMING';
-  holeStartAttempts = 0; holeRerolls = 0;
+  loadLevel(0); gameState = 'AIMING';  holeStartAttempts = 0; holeRerolls = 0;
   modifiersTraversedThisHole = new Set();
   holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
   if (winOverlay) winOverlay.classList.add('hidden'); if (gameoverOverlay) gameoverOverlay.classList.add('hidden');
@@ -1457,7 +1467,7 @@ function startTutorialCourse(courseId) {
   // Now play controls-first banter over the loaded hole, then show Hole 1 banner
   (async () => {
     try { await banterLoadFile(); } catch { }
-    const ok = banterPlay('controls-first', {
+    const ok = playTutorialBanter('controls-first', {
       onComplete: () => {
         try { syncBanterSkipButton(); } catch { }
         try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { }
@@ -1631,7 +1641,7 @@ function handleTutorialHole1To2Chain() {
     (async () => {
       try { await banterLoadFile(); } catch { }
       // Try new id first, fallback to legacy stacking-third
-      let ok = banterPlay('tutorial-field-modifiers', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { showHoleBanner(1, getTotalHoles()); } catch { } saveProgress(); } });
+      let ok = playTutorialBanter('tutorial-field-modifiers', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { showHoleBanner(1, getTotalHoles()); } catch { } saveProgress(); } });
       if (!ok) ok = banterPlay('stacking-third', { onComplete: () => { try { syncBanterSkipButton(); } catch { } try { showHoleBanner(1, getTotalHoles()); } catch { } saveProgress(); } });
       if (!ok) try { showHoleBanner(1, getTotalHoles()); } catch { }
       try { syncBanterSkipButton(); } catch { }
@@ -3759,6 +3769,7 @@ function syncHelpOverlay() {
   if (!hm) return;
   if (helpVisible) {
     hm.classList.remove('hidden');
+    try { syncHelpControls(); } catch { }
     // Hide other menu contents when help is visible (but keep overlays themselves to preserve backdrop)
     const mmc = document.querySelector('#main-menu-overlay .main-menu-content');
     const pc = document.querySelector('#pause-overlay .pause-content');
@@ -3771,6 +3782,29 @@ function syncHelpOverlay() {
     if (mmc && mainMenuVisible) mmc.classList.remove('hidden');
     if (pc && pauseMenuVisible) pc.classList.remove('hidden');
   }
+}
+// 12-mobile: touch controls list for the help overlay (no keyboard). The
+// desktop list is static HTML; stashed on first open and restored off-mobile.
+function syncHelpControls() {
+  const ul = document.querySelector('#help-overlay .help-controls');
+  if (!ul) return;
+  try {
+    if (ul.dataset.desktopHtml === undefined || ul.dataset.desktopHtml === '') ul.dataset.desktopHtml = ul.innerHTML;
+  } catch { return; }
+  let mobile = false;
+  try { mobile = isMobileMode(); } catch { }
+  if (!mobile) {
+    try { if (ul.dataset.desktopHtml) ul.innerHTML = ul.dataset.desktopHtml; } catch { }
+    return;
+  }
+  ul.innerHTML = ''
+    + '<li>Aim buttons (left / right) — Aim</li>'
+    + '<li>Launch button — Hold to charge power, release to shoot</li>'
+    + '<li>Drag item from bag onto course — Place item</li>'
+    + '<li>Double-tap item — Pick up item / Split stacked items</li>'
+    + '<li>Reset button — Reset ball</li>'
+    + '<li>Menu button — Pause</li>'
+    + '<li>Journal icon — Toggle best-run journal</li>';
 }
 function isMainMenuVisible() { return mainMenuVisible; }
 function startNewGameFromMain() {

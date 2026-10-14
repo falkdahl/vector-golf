@@ -12,6 +12,10 @@ export const BANTER_FILE = './src/banter.json';
 // Tutorial banters (fixed per-hole on The Proving Grounds) live in a separate
 // file so src/banter.json contains exactly the random rotation pool.
 export const TUTORIAL_BANTER_FILE = './src/tutorial-banter.json';
+// Mobile tutorial variants (touch controls) for the control-referencing
+// tutorial banters. Same schema; ids carry a -mobile suffix and are
+// tutorial-only like the desktop ones (never in the random rotation pool).
+export const MOBILE_TUTORIAL_BANTER_FILE = './src/tutorial-banter-mobile.json';
 export const BANTER_STATE_KEY = 'golfVectorField.banter.v1';
 
 export const SPEAKERS = {
@@ -83,9 +87,10 @@ export async function loadBanterFile() {
   if (banterPromise) return banterPromise;
   banterPromise = (async () => {
     try {
-      const [rotation, tutorial] = await Promise.all([
+      const [rotation, tutorial, mobileTutorial] = await Promise.all([
         fetchBanterJson(BANTER_FILE).catch(() => null),
         fetchBanterJson(TUTORIAL_BANTER_FILE).catch(() => null),
+        fetchBanterJson(MOBILE_TUTORIAL_BANTER_FILE).catch(() => null),
       ]);
       const merged = [];
       const seen = new Set();
@@ -100,6 +105,15 @@ export async function loadBanterFile() {
       }
       if (tutorial) {
         for (const b of tutorial.banters || []) {
+          if (!b) continue;
+          if (seen.has(b.id)) { console.warn(`[banter] duplicate id across files: ${b.id}`); continue; }
+          seen.add(b.id);
+          merged.push(b);
+          tutorialIds.push(b.id);
+        }
+      }
+      if (mobileTutorial) {
+        for (const b of mobileTutorial.banters || []) {
           if (!b) continue;
           if (seen.has(b.id)) { console.warn(`[banter] duplicate id across files: ${b.id}`); continue; }
           seen.add(b.id);
@@ -138,7 +152,8 @@ export function listBanterIds() {
     .filter((id) => !TUTORIAL_BANTER_IDS.includes(id));
 }
 
-// Tutorial banters = entries from src/tutorial-banter.json (fixed per-hole on
+// Tutorial banters = entries from src/tutorial-banter.json plus the mobile
+// touch variants in src/tutorial-banter-mobile.json (fixed per-hole on
 // The Proving Grounds, never in the random rotation).
 export function listTutorialBanterIds() {
   if (tutorialIds.length) return [...tutorialIds];
@@ -159,8 +174,10 @@ export function listAllBanterIds() {
 // bag, which draws from src/banter.json (the random rotation pool).
 export const TUTORIAL_BANTER_IDS = [
   'controls-first',
+  'controls-first-mobile',
   'attempts-fourth',
   'tutorial-field-modifiers',
+  'tutorial-field-modifiers-mobile',
   'stacking-third',
   'tutorial-rewards',
   'rewards-second',

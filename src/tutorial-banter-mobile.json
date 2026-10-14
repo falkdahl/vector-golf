@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "banters": [
+    {
+      "id": "controls-first-mobile",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Before you swing, rookie rules. I talk, you listen. Aim with the arrow buttons on your screen. Point her at the hole, not where the wind wants."
+        },
+        {
+          "speaker": "may",
+          "text": "Buttons to aim. Even I can manage that. Then what?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Hold the launch button to charge your shot, release to shoot. Longer hold, bigger swing. Do not get greedy in a gale."
+        },
+        {
+          "speaker": "may",
+          "text": "And these little weather gadgets?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Drag an item from your bag and drop it on the course to place it. Double-tap a placed gadget to pick it back up. And if it all goes sideways, tap the reset button to go back to the tee, or the menu button to pause."
+        }
+      ]
+    },
+    {
+      "id": "tutorial-field-modifiers-mobile",
+      "lines": [
+        {
+          "speaker": "caddy",
+          "text": "Listen up. When you have a good direction you want to keep, use a Liquifier — it nullifies the wind and preserves your line."
+        },
+        {
+          "speaker": "caddy",
+          "text": "If the wind is not blowing the way you need, use a Deflector to flip it 180 degrees or a Rotator to turn it 90 degrees."
+        },
+        {
+          "speaker": "caddy",
+          "text": "If you need more power, drop a Magnifier — it magnifies the wind five times."
+        },
+        {
+          "speaker": "caddy",
+          "text": "And remember: field modifiers can be placed on top of each other to combine their effects. Stack them wisely."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Drag one modifier right on top of another and they snap together into a stack — you will see the rim split into each gadget's color."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Changed your mind? Double-tap a stack to split it back apart, or double-tap a lone gadget to pick it back up."
+        }
+      ]
+    }
+  ]
+}

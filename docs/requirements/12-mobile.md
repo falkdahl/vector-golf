@@ -61,6 +61,7 @@
 - [ ] Touch drag moves placed bubbles/stacks with snap-on-release; bag→canvas touch drag places; bag tap arms/disarms like click/`1–3`; double-tap inside bubble splits/picks up/deselects exactly like right-click; single-tap places like click.
 - [ ] Fullscreen keeps the playfield 16:9 letterboxed (no stretch); menu splash stays full-bleed; exiting/re-entering fullscreen keeps DPR/input mapping correct.
 - [ ] Hamburger opens/closes exactly like `Escape` in every state (deselect, pause open/resume, dialog dismiss).
+- [ ] Tutorial banters + help show touch wording in mobile mode: `controls-first-mobile` / `tutorial-field-modifiers-mobile` from `src/tutorial-banter-mobile.json` (drag-drop place, double-tap pickup/split, on-screen aim/launch/reset) instead of the desktop ids; help Controls list shows the touch equivalents (desktop list restored off-mobile).
 
 ## File paths
 
