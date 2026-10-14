@@ -67,7 +67,7 @@
 
 ## 6. Loading screen
 
-- `#loading-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; color:#fff; font:600 18px system-ui,sans-serif; z-index:100 }`, text exactly `Loading...`. Visible while Tier 0 splash assets load; hidden after Tier 0 completes. Re-shown as content-load feedback (Play click → cutscene, hole-transition and finale cutscenes) until the content starts; never re-shown on resize.
+- `#loading-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; color:#fff; font:600 18px system-ui,sans-serif; z-index:100 }`, text exactly `Loading...`. Visible while Tier 0 splash assets load; hidden after Tier 0 completes. Re-shown as content-load feedback (Play click → cutscene, hole-transition and finale cutscenes, first-restock Hole-2 transition incl. cutscene Skip) until the content starts; never re-shown on resize. The first-restock transition additionally coalesces background repaints (suppressed intermediates, single final paint) and prebuilds the static-scenery cache under this cover.
 
 ## Acceptance
 

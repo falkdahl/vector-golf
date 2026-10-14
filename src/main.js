@@ -340,6 +340,10 @@ try {
 } catch { }
 function redrawBottom() {
   if (!bgCanvas || !bgCtx) return;
+  // Bulk-transition paint coalescing (first-restock skip path): while held,
+  // intermediate repaints are skipped; the owner releases and paints once.
+  // Depth-counted and always released in try/finally by the holder.
+  if (redrawSuppressDepth > 0) return;
   // Must match the backing store from setupCanvas (capped on mobile) — a raw
   // devicePixelRatio here draws terrain 2x oversized/clipped on DPR-3 phones.
   const dpr = effectiveDPR();
@@ -394,6 +398,11 @@ function redrawBottom() {
     }
     bgCtx.restore();
   } catch { };
+}
+let redrawSuppressDepth = 0;
+function holdRedrawBottom() { try { redrawSuppressDepth++; } catch {} }
+function releaseRedrawBottom() {
+  try { redrawSuppressDepth = Math.max(0, redrawSuppressDepth - 1); } catch {}
 }
 let gameState = "AIMING"; // AIMING, CHARGING, FLYING, WIN, GAME_OVER
 let accumulator = 0;
@@ -471,6 +480,32 @@ function getLevelTreasures(lvl) {
 }
 function getUncollectedTreasures(lvl) {
   return getLevelTreasures(lvl).filter(t => t && !t.isCollected);
+}
+// Static-scenery cache key (level identity + collect-state + DPR). Shared by
+// the per-frame render path and prebuildStaticScenery() so both agree.
+// NOTE: must include level identity, not just the hole index: tutorial hole
+// 1->2 sets currentHoleIndex=1 while level still points at hole 1 until the
+// first-restock transition completes. An index-only sig would cache hole-1
+// scenery under "1|..." and reuse it for hole 2.
+function computeStaticScenerySig(dpr) {
+  try {
+    const treasures = getLevelTreasures(level);
+    const lvlId = level ? [level.id, level.hole ? level.hole.x + ',' + level.hole.y + ',' + level.hole.radius : '', level.tee ? level.tee.x + ',' + level.tee.y : '', level.terrain ? (level.terrain.noiseSeed ?? '') : '', level.field ? (level.field.seed ?? '') : ''].join('|') : 'no-level';
+    return currentHoleIndex + '|' + lvlId + '|' + treasures.map(t => (t && t.isCollected) ? 1 : 0).join('') + '|' + dpr;
+  } catch { return null; }
+}
+// Pre-render the static scenery offscreen now (e.g. under a loading cover)
+// instead of paying for it on the first frame after a transition.
+function prebuildStaticScenery() {
+  try {
+    if (!level) return false;
+    const dpr = effectiveDPR();
+    const sig = computeStaticScenerySig(dpr);
+    if (sig == null) return false;
+    lastStaticSig = sig;
+    try { renderStaticScenery(level, getLevelTreasures(level), dpr); } catch {}
+    return true;
+  } catch { return false; }
 }
 // Tutorial reminder state
 let tutorialLiquifierReminderShown = false;
@@ -1543,21 +1578,53 @@ function maybeShowTutorialHole2GadgetsReminder() {
 
 function handleTutorialHole1To2Chain() {
   const needCutscene = (() => { try { return !cutsceneHasSeen('first-restock'); } catch { return true; } })();
+  // Heavy Hole-2 transition, deferred so the triggering click (cutscene Skip,
+  // or the Hole-1 win on replay) paints instantly. Loading cover is shown
+  // first, then two rAFs are awaited so it actually reaches the screen before
+  // the terrain paint + save + scenery prebuild run.
+  // Contract: the caller holds paint suppression (holdRedrawBottom) before
+  // invoking; this releases it exactly once after prepare.
+  const runHole2Transition = async () => {
+    try { showLoadingScreen(); } catch {}
+    try {
+      // Double rAF so the loading cover actually paints before the heavy
+      // work; setTimeout fallback guarantees progress if rAF stalls
+      // (e.g. background tab, where rAF stops firing).
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        try {
+          requestAnimationFrame(() => { try { requestAnimationFrame(finish); } catch { finish(); } });
+        } catch { finish(); }
+        try { setTimeout(finish, 250); } catch {}
+      });
+    } catch {}
+    try {
+      prepareHole2ThenBanter();
+    } catch (e) { console.warn('prepareHole2 failed', e); }
+    try { releaseRedrawBottom(); } catch {}
+    // Single final paint for the new hole (all intermediate repaints above
+    // were suppressed) + prebuilt static scenery (was next-frame jank).
+    try { redrawBottom(); } catch {}
+    try { prebuildStaticScenery(); } catch {}
+    try { hideLoadingScreen(); } catch {}
+    startStackingBanter();
+  };
   const prepareHole2ThenBanter = () => {
     try {
       // Load Hole 2 now (after cutscene, before banter, so no glimpse before cutscene)
       loadLevel(1);
       // suppress auto Hole banner — will show after banter
       holeBannerVisible = false; holeBannerTimer = 0;
-      // bag grant before banter (so banter sees correct bag)
+      // bag grant before banter (so banter sees correct bag; includes its save)
       grantTutorialHole2Modifiers();
       holeBannerVisible = false; holeBannerTimer = 0;
       gameState = 'AIMING';
       if (typeof winOverlay !== 'undefined' && winOverlay) winOverlay.classList.add('hidden');
       updateAttemptsUI(); updateHotbarUI();
-      saveProgress();
+      // No extra saveProgress here: the grant's save covers identical state.
+      // No explicit redrawBottom here: final paint happens once after release.
       try { syncMainMenu(); } catch { }
-      try { redrawBottom(); } catch { }
     } catch (e) { console.warn('prepareHole2 failed', e); }
   };
   const startStackingBanter = () => {
@@ -1576,6 +1643,9 @@ function handleTutorialHole1To2Chain() {
     // AIMING/CHARGING, so AIMING here would draw the orbit around the ball
     // inside the hole). prepareHole2ThenBanter sets AIMING after loadLevel(1).
     gameState = 'WIN';
+    // Paint suppression starts here (released after the Hole-2 transition):
+    // the pre-cutscene and post-skip sync paints are stale Hole-1 frames.
+    try { holdRedrawBottom(); } catch {}
     // Hide HUD etc for cutscene immediately
     try {
       const el = document.getElementById('main-menu-overlay');
@@ -1591,8 +1661,7 @@ function handleTutorialHole1To2Chain() {
       if (!data) {
         try { cutsceneMarkSeen('first-restock'); } catch { }
         try { hideLoadingScreen(); } catch { }
-        prepareHole2ThenBanter();
-        startStackingBanter();
+        runHole2Transition();
         return;
       }
       // Tier 2: cutscene assets (incl. audio) ready before play.
@@ -1601,26 +1670,24 @@ function handleTutorialHole1To2Chain() {
       const ok = playCutsceneWrapped(data, {
         onComplete: () => {
           try { cutsceneMarkSeen('first-restock'); } catch { }
-          prepareHole2ThenBanter();
-          startStackingBanter();
+          runHole2Transition();
         }
       });
       if (!ok) {
         try { cutsceneMarkSeen('first-restock'); } catch { }
         try { hideLoadingScreen(); } catch { }
-        prepareHole2ThenBanter();
-        startStackingBanter();
+        runHole2Transition();
       }
       try { syncMainMenu(); } catch { }
       try { redrawBottom(); } catch { }
     }).catch(() => {
       try { hideLoadingScreen(); } catch { }
-      prepareHole2ThenBanter();
-      startStackingBanter();
+      runHole2Transition();
     });
   } else {
-    prepareHole2ThenBanter();
-    startStackingBanter();
+    // Replay (cutscene seen): same suppression contract as the cutscene branch.
+    try { holdRedrawBottom(); } catch {}
+    runHole2Transition();
   }
 }
 function clearCoinSummaryAnimTimers() {
@@ -7369,14 +7436,8 @@ function render() {
   // of path/gradient/text ops every frame.
   try {
     const treasures = getLevelTreasures(level);
-    // Include level identity (hole/tee/terrain seed), not just the hole index:
-    // tutorial hole 1->2 sets currentHoleIndex=1 while level still points at
-    // hole 1 until the first-restock cutscene completes. An index-only sig
-    // caches hole-1 scenery under "1|..." and reuses it for hole 2 (hole drawn
-    // on the fairway while physics uses the green).
-    const lvlId = level ? [level.id, level.hole ? level.hole.x + ',' + level.hole.y + ',' + level.hole.radius : '', level.tee ? level.tee.x + ',' + level.tee.y : '', level.terrain ? (level.terrain.noiseSeed ?? '') : '', level.field ? (level.field.seed ?? '') : ''].join('|') : 'no-level';
-    const sig = currentHoleIndex + '|' + lvlId + '|' + treasures.map(t => (t && t.isCollected) ? 1 : 0).join('') + '|' + dpr;
-    if (sig !== lastStaticSig) {
+    const sig = computeStaticScenerySig(dpr);
+    if (sig != null && sig !== lastStaticSig) {
       lastStaticSig = sig;
       try { renderStaticScenery(level, treasures, dpr); } catch { }
     }
