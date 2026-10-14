@@ -29,10 +29,137 @@ function isMobileRender() {
 // Evaluated once at load; phones never pay canvas-shadow cost.
 const mobileShadowsOff = (function () { try { return isMobileRender(); } catch { return false; } })();
 
+// --- Course static buffer (single-canvas blit) ---
+// One opaque terrain-only image per hole in the active course (zone fills).
+// Trees/brick obstacles + hole/flag live in the hole overlay below so they
+// draw OVER modifier bubbles (bubbles sit under trees). Treasure is always
+// dynamic (collect-state flips mid-run; 1-3 chests are cheap). Built eagerly
+// for all holes on course start (see buildCourseStaticCache), blitted each
+// gameplay frame onto #game. This replaces per-frame two-canvas compositing
+// (bg-canvas + #game); #bg-canvas stays hidden during gameplay.
+let courseStaticImages = [];
+let courseStaticDpr = 0;
+let courseStaticKey = null;
+export function getCourseStaticKey() { return courseStaticKey; }
+export function getCourseStaticDpr() { return courseStaticDpr; }
+export function getCourseStaticCount() { return courseStaticImages.length; }
+export function getCourseStaticImage(index) {
+  if (!Number.isInteger(index) || index < 0 || index >= courseStaticImages.length) return null;
+  return courseStaticImages[index] || null;
+}
+export function invalidateCourseStaticCache() {
+  courseStaticImages = [];
+  courseStaticDpr = 0;
+  courseStaticKey = null;
+}
+export function buildCourseStaticCache(levels, dpr, key = null) {
+  const dd = Math.max(1, Number(dpr) || 1);
+  if (!Array.isArray(levels) || !levels.length) return 0;
+  const images = [];
+  for (const lvl of levels) {
+    let c = null;
+    try { c = document.createElement('canvas'); } catch { return images.length; }
+    try {
+      c.width = Math.round(canvasW * dd);
+      c.height = Math.round(canvasH * dd);
+      const sctx = c.getContext('2d');
+      sctx.setTransform(dd, 0, 0, dd, 0, 0);
+      try { drawTerrainZones(sctx, lvl, canvasW, canvasH); } catch {}
+      images.push(c);
+    } catch { try { images.push(c); } catch {} }
+  }
+  courseStaticImages = images;
+  courseStaticDpr = dd;
+  try {
+    courseStaticKey = (key != null) ? String(key) : (levels.length + '|' + dd);
+  } catch { courseStaticKey = levels.length + '|' + dd; }
+  return images.length;
+}
+export function ensureCourseStaticImage(index, level, dpr) {
+  const dd = Math.max(1, Number(dpr) || 1);
+  if (!level) return null;
+  try {
+    const existing = getCourseStaticImage(index);
+    if (existing && courseStaticDpr === dd) return existing;
+  } catch {}
+  // Lazy single-hole fallback (e.g. secret hole jump before a full rebuild).
+  let c = null;
+  try { c = document.createElement('canvas'); } catch { return null; }
+  try {
+    c.width = Math.round(canvasW * dd);
+    c.height = Math.round(canvasH * dd);
+    const sctx = c.getContext('2d');
+    sctx.setTransform(dd, 0, 0, dd, 0, 0);
+    try { drawTerrainZones(sctx, level, canvasW, canvasH); } catch {}
+  } catch {}
+  try {
+    while (courseStaticImages.length <= index) courseStaticImages.push(null);
+    courseStaticImages[index] = c;
+    courseStaticDpr = dd;
+  } catch {}
+  return c;
+}
+export function drawCourseStaticImage(ctx, index) {
+  const img = getCourseStaticImage(index);
+  if (!img || !img.width) return false;
+  try {
+    const dst = ctx && ctx.canvas;
+    const dw = (dst && dst.width) ? dst.width : img.width;
+    const dh = (dst && dst.height) ? dst.height : img.height;
+    ctx.save();
+    try { ctx.setTransform(1, 0, 0, 1, 0, 0); } catch {}
+    try { ctx.imageSmoothingEnabled = true; } catch {}
+    ctx.drawImage(img, 0, 0, dw, dh);
+    ctx.restore();
+    return true;
+  } catch { try { ctx.restore(); } catch {} return false; }
+}
+
+// --- Hole overlay (trees/bricks + hole/flag, transparent) ---
+// Blitted AFTER modifier bubbles so foliage covers bubble edges: bubbles sit
+// under trees. Single canvas for the current hole; re-rendered only when the
+// hole identity or DPR changes. Treasure is excluded (always dynamic).
+let holeOverlayCanvas = null;
+let holeOverlaySig = null;
+export function getHoleOverlaySig() { return holeOverlaySig; }
+export function invalidateHoleOverlay() { holeOverlaySig = null; }
+export function renderHoleOverlay(level, dpr, sig) {
+  const dd = Math.max(1, Number(dpr) || 1);
+  if (!level) return false;
+  if (!holeOverlayCanvas) {
+    try { holeOverlayCanvas = document.createElement('canvas'); } catch { return false; }
+  }
+  try {
+    holeOverlayCanvas.width = Math.round(canvasW * dd);
+    holeOverlayCanvas.height = Math.round(canvasH * dd);
+    const sctx = holeOverlayCanvas.getContext('2d');
+    sctx.setTransform(dd, 0, 0, dd, 0, 0);
+    sctx.clearRect(0, 0, canvasW, canvasH);
+    try { drawObstacles(sctx, (level && level.obstacles) || []); } catch {}
+    try { if (level && level.hole) drawHole(sctx, level.hole); } catch {}
+    try { holeOverlaySig = (sig != null) ? String(sig) : null; } catch {}
+    return true;
+  } catch { return false; }
+}
+export function drawHoleOverlay(ctx) {
+  if (!holeOverlayCanvas || !holeOverlayCanvas.width) return false;
+  try {
+    const dst = ctx && ctx.canvas;
+    const dw = (dst && dst.width) ? dst.width : holeOverlayCanvas.width;
+    const dh = (dst && dst.height) ? dst.height : holeOverlayCanvas.height;
+    ctx.save();
+    try { ctx.setTransform(1, 0, 0, 1, 0, 0); } catch {}
+    try { ctx.imageSmoothingEnabled = true; } catch {}
+    ctx.drawImage(holeOverlayCanvas, 0, 0, dw, dh);
+    ctx.restore();
+    return true;
+  } catch { try { ctx.restore(); } catch {} return false; }
+}
+
 // --- Static scenery cache (obstacles + hole + treasures) ---
-// These never move within a level (treasures only flip collected), yet cost
-// hundreds of path ops + gradients + text per frame. Pre-render once per
-// level/collect-state/DPR into an offscreen canvas; blit per frame.
+// Legacy per-level fallback used only when the terrain buffer AND the hole
+// overlay both miss (e.g. a level object not present in LEVELS). The hot path
+// is terrain blit → bubbles → hole-overlay blit → dynamic treasure.
 let staticCanvas = null;
 let staticSig = null;
 export function getStaticScenerySig() { return staticSig; }

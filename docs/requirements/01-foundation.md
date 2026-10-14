@@ -17,13 +17,13 @@
 - Strictly 16:9. `LOGICAL_W=1280`, `LOGICAL_H=720` (alternatives `1600×900`/`960×540` allowed if ratio is `16/9 ±0.01`). `900×600` is deprecated.
 - All physics, levels, `createField`, `tee`/`hole`, `getWindAt` bounds use this space. `LOGICAL_W`/`LOGICAL_H` exported from `src/main.js` or `src/render.js` (single source of truth).
 
-## 3. DOM (only canvases + overlays inside container)
+## 3. DOM (single gameplay canvas + blit; `bg-canvas` compat-only)
 
 ```html
 <body>
   <div id="game-container">
-    <canvas id="bg-canvas" width="1280" height="720"></canvas>  <!-- z1 opaque -->
-    <canvas id="game" width="1280" height="720"></canvas>       <!-- z2 transparent, input target -->
+    <canvas id="bg-canvas" width="1280" height="720"></canvas>  <!-- compat only: hidden (display:none) during gameplay, shown for menu fallback/cutscene -->
+    <canvas id="game" width="1280" height="720"></canvas>       <!-- gameplay surface (opaque during play), input target -->
     <canvas id="wind-canvas"></canvas>                          <!-- z3 Three.js, alpha, pointer-events:none -->
     <div id="hud">...</div>                                     <!-- z4, pointer-events:none -->
     <div id="bottom-bar">...</div>                              <!-- z6 -->
@@ -49,25 +49,26 @@
 ```
 
 - Outside `#game-container` only `#loading-screen` may exist. No `<h1>`, no `#instructions`, no other body children. No horizontal scroll.
+- Gameplay uses single-canvas blitting (mobile perf): at course start all holes are pre-rendered once into an offscreen terrain buffer (zone fills only; treasure excluded because collect-state flips mid-run, trees/hole excluded so bubbles draw under trees). Every gameplay frame `render()` blits the terrain image onto `#game` (`drawImage` scaled to the backing store), draws modifier bubbles + wind arrows, blits the hole overlay (trees/brick obstacles + hole/flag, current hole only), then draws dynamic elements on top (treasure, ball, aim, banners). This replaces per-frame two-canvas compositing (`bg-canvas` + `#game`); `#bg-canvas` is `display:none` during gameplay so the compositor skips the dead layer, and is only shown for menu splash fallback / cutscene background rendering. `#bg-canvas` is kept in the DOM for backward compat (never removed).
 - Stacking: `canvas,#wind-canvas { position:absolute; inset:0; width:100%; height:100% }`, `#bg-canvas{z-index:1}`, `#game{z-index:2}`, `#wind-canvas{z-index:3; pointer-events:none; background:transparent}`, `#hud{z-index:4; pointer-events:none}`; overlays `z-index 6–14` bounded to container (`getBoundingClientRect()` inside container); `#continue-overlay{z-index:60}` (boot gate, above game overlays, below `#loading-screen`). Scrollable children use `overflow-y:auto; overscroll-behavior:contain`.
-- Centering: `body { display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:0; background:#000; overflow:hidden; }`, `#game-container { position:relative; aspect-ratio:16/9; width:min(95vw, calc(95vh * 16/9)); height:min(95vh, calc(95vw * 9/16)); margin:auto; overflow:hidden; }`. Container ratio `1.777±0.02`; all three layers share identical `getBoundingClientRect()`.
+- Centering: `body { display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:0; background:#000; overflow:hidden; }`, `#game-container { position:relative; aspect-ratio:16/9; width:min(95vw, calc(95vh * 16/9)); height:min(95vh, calc(95vw * 9/16)); margin:auto; overflow:hidden; }`. Container ratio `1.777±0.02`; `#game` and `#wind-canvas` share identical `getBoundingClientRect()` during play (`#bg-canvas` has no box while hidden).
 
 ## 4. Game loop
 
 - `src/main.js`: `requestAnimationFrame` with `FIXED_DT=1/60` accumulator, `update(FIXED_DT)` then `render()` once, max 5 steps/frame, `dt` in seconds. No `setInterval`/`setTimeout` for the main loop.
-- Split: `bgCtx` drawn on demand (mode/resize/terrain change), `fgCtx` `clearRect` each frame, `windRenderer` own per-frame clear (`setClearColor(0x000000,0)`).
+- Split: gameplay `fgCtx` (`#game`) blits the course static buffer then draws dynamic elements each frame (no per-frame `clearRect` transparency cost — the blit is the clear), `windRenderer` own per-frame clear (`setClearColor(0x000000,0)`). `bgCtx` is gameplay-inert (hidden layer); it is only painted on demand for menu splash fallback and as the cutscene background plane.
 - Pausable (`visibilitychange`, `WIN`, `GAME_OVER`, `mainMenuVisible`, pause, banners, cutscene, banter); while paused `updateWind` visuals may run but `updateBall` is frozen.
 - Music auto-pause on tab hidden (`src/audio.js`): when the page becomes hidden (`document.hidden` via `visibilitychange`, `pagehide` for iOS Safari bfcache) both theme tracks (`main-theme.ogg`, `main-menu.ogg` `<audio>` elements) pause immediately (fades cancelled; `musicWanted`/`menuMusicWanted` intent flags preserved). When the page becomes visible again (`visibilitychange` visible + `pageshow`, guarded by `!document.hidden`) each wanted track fades back in. `setMusicActive/setMenuMusicActive(true)` and the gesture-unlock retry while hidden only set the intent flag and defer playback until visible. Visibility-only by design: window `blur`/`focus` is excluded, so a desktop tab that is still visible (e.g. side-by-side chat window) keeps playing; mobile app-switch/lock/Home always reports hidden so it still pauses there. Scope is music only (SFX/wind untouched). Must work on Chrome/Firefox/Safari, desktop + mobile.
 - Audio prefs (`AUDIO_PREFS_KEY="golfVectorField.audioPrefs.v1"`, defaults on, full spec in `08-campaign-and-menus.md` §6): `Music OFF` gates all music playback (stage/menu/cutscene scores); `SFX OFF` gates all synth SFX, the wind loop and cutscene SFX/type ticks. Menu toggles in pause menu + main-menu hamburger popup; persisted across page visits.
 
 ## 5. HiDPI & resize
 
-- `dpr = window.devicePixelRatio || 1`. 2D canvases: `canvas.width = LOGICAL_W*dpr`, `height = LOGICAL_H*dpr`, CSS stays `100%`, `ctx.setTransform(dpr,0,0,dpr,0,0)` after resize. Physics uses logical coords; `getCanvasMousePos(e)` maps via `rect=game.getBoundingClientRect(); x=(e.clientX-rect.left)*(LOGICAL_W/rect.width)`.
+- `dpr = window.devicePixelRatio || 1`. 2D canvases: `canvas.width = LOGICAL_W*effectiveDPR()`, `height = LOGICAL_H*effectiveDPR()` (`effectiveDPR()` caps at `1.5` on mobile, `1.0` after sustained `<45fps`), CSS stays `100%`, `ctx.setTransform(dpr,0,0,dpr,0,0)` after resize. Physics uses logical coords; `getCanvasMousePos(e)` maps via `rect=game.getBoundingClientRect(); x=(e.clientX-rect.left)*(LOGICAL_W/rect.width)`. The course static buffer is rasterized at `staticCacheDpr()` (`1` on mobile to bound memory, `effectiveDPR()` on desktop) and scaled on blit; a DPR/resize change rebuilds the buffer (no state reset).
 - Three.js: `renderer.setPixelRatio(dpr); renderer.setSize(W,H,false)`, update `uResolution` + orthographic camera. `window.resize` re-applies `setupCanvases()` for all layers (debounced 100–200ms), redraws background, no state reset. DPR changes handled via `resize`/`matchMedia`.
 
 ## 6. Loading screen
 
-- `#loading-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; color:#fff; font:600 18px system-ui,sans-serif; z-index:100 }`, text exactly `Loading...`. Visible while Tier 0 splash assets load; hidden after Tier 0 completes. Re-shown as content-load feedback (Play click → cutscene, hole-transition and finale cutscenes, first-restock Hole-2 transition incl. cutscene Skip) until the content starts; never re-shown on resize. The first-restock transition additionally coalesces background repaints (suppressed intermediates, single final paint) and prebuilds the static-scenery cache under this cover.
+- `#loading-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; color:#fff; font:600 18px system-ui,sans-serif; z-index:100 }`, text exactly `Loading...`. Visible while Tier 0 splash assets load; hidden after Tier 0 completes. Re-shown as content-load feedback (Play click → cutscene, hole-transition and finale cutscenes, first-restock Hole-2 transition incl. cutscene Skip) until the content starts; never re-shown on resize. The first-restock transition additionally coalesces background work (suppressed intermediates, single course-buffer rebuild) and prebuilds the static caches under this cover. Course-start builds the full course static buffer (all holes) under this cover when needed.
 
 ## Acceptance
 

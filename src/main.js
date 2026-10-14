@@ -30,6 +30,18 @@ import {
   clearWaterRipples,
   renderStaticScenery,
   drawStaticScenery,
+  buildCourseStaticCache,
+  getCourseStaticImage,
+  ensureCourseStaticImage,
+  drawCourseStaticImage,
+  getCourseStaticDpr,
+  getCourseStaticCount,
+  getCourseStaticKey,
+  invalidateCourseStaticCache,
+  renderHoleOverlay,
+  drawHoleOverlay,
+  getHoleOverlaySig,
+  invalidateHoleOverlay,
 } from "./render.js";
 // Wind overlay (Three.js) loads lazily so the 1.3MB vendor bundle stays off
 // the boot path. These facades keep every call site unchanged: no-ops until
@@ -340,6 +352,15 @@ try {
 } catch { }
 function redrawBottom() {
   if (!bgCanvas || !bgCtx) return;
+  try { syncBgCanvasVisibility(); } catch {}
+  try { syncParallaxVisibility(); } catch {}
+  // Single-canvas blit: during gameplay #bg-canvas is hidden and carries no
+  // terrain (the course static buffer on #game does). Skip the expensive
+  // zoned-terrain paint here; the buffer is (re)built instead.
+  try {
+    let __isCut = false; try { __isCut = cutsceneIsActive(); } catch {}
+    if (!mainMenuVisible && !__isCut) return;
+  } catch {}
   // Bulk-transition paint coalescing (first-restock skip path): while held,
   // intermediate repaints are skipped; the owner releases and paints once.
   // Depth-counted and always released in try/finally by the holder.
@@ -456,6 +477,50 @@ function setActiveCourse(course) {
       }
     } catch { };
   }
+  // Single-canvas blit: pre-render every hole once so gameplay frames are a
+  // single drawImage + dynamic draws (no bg-canvas compositing).
+  try { rebuildCourseStaticCache(); } catch {}
+}
+// Backing DPR for the course static buffer. Mobile uses 1x to bound memory
+// (~3.7MB/hole → 18 holes ≈ 66MB worst case); desktop uses display DPR for
+// crispness. The blit scales to the backing store, so visuals stay correct.
+function staticCacheDpr() {
+  try { if (typeof isMobileMode === 'function' && isMobileMode()) return 1; } catch {}
+  try { return effectiveDPR(); } catch {}
+  try { return window.devicePixelRatio || 1; } catch {}
+  return 1;
+}
+function rebuildCourseStaticCache() {
+  try {
+    if (!Array.isArray(LEVELS) || !LEVELS.length) return 0;
+    const dpr = staticCacheDpr();
+    const key = (activeCourseId || 'levels') + '|' + LEVELS.length + '|' + dpr;
+    try {
+      if (getCourseStaticCount() === LEVELS.length && getCourseStaticDpr() === dpr) {
+        let sameKey = false;
+        try { sameKey = (typeof getCourseStaticKey === 'function' && getCourseStaticKey() === key); } catch {}
+        if (sameKey) return LEVELS.length;
+      }
+    } catch {}
+    const n = buildCourseStaticCache(LEVELS, dpr, key);
+    try { lastStaticSig = null; } catch {}
+    return n;
+  } catch { return 0; }
+}
+// Show #bg-canvas only when it carries something (menu fallback / cutscene).
+// During gameplay it is display:none so the compositor skips a full-screen
+// dead layer — the terrain lives in the course static buffer instead.
+let lastBgHidden = null;
+function syncBgCanvasVisibility() {
+  try {
+    if (!bgCanvas) return;
+    let isCut = false;
+    try { isCut = cutsceneIsActive(); } catch {}
+    const hide = !mainMenuVisible && !isCut;
+    if (hide === lastBgHidden) return;
+    lastBgHidden = hide;
+    bgCanvas.style.display = hide ? 'none' : '';
+  } catch {}
 }
 function loadCourses() {
   try {
@@ -494,11 +559,25 @@ function computeStaticScenerySig(dpr) {
     return currentHoleIndex + '|' + lvlId + '|' + treasures.map(t => (t && t.isCollected) ? 1 : 0).join('') + '|' + dpr;
   } catch { return null; }
 }
+// Hole-overlay key: hole identity + overlay DPR only (trees + hole never move;
+// treasure excluded — always drawn dynamically, so collects never invalidate).
+// NOTE: same index-only pitfall as above — must include level identity for the
+// tutorial hole 1->2 transition window (see computeStaticScenerySig).
+function computeHoleOverlaySig(dpr) {
+  try {
+    const lvlId = level ? [level.id, level.hole ? level.hole.x + ',' + level.hole.y + ',' + level.hole.radius : '', level.tee ? level.tee.x + ',' + level.tee.y : '', level.terrain ? (level.terrain.noiseSeed ?? '') : '', level.field ? (level.field.seed ?? '') : ''].join('|') : 'no-level';
+    return currentHoleIndex + '|' + lvlId + '|' + dpr;
+  } catch { return null; }
+}
 // Pre-render the static scenery offscreen now (e.g. under a loading cover)
-// instead of paying for it on the first frame after a transition.
+// instead of paying for it on the first frame after a transition. Ensures the
+// terrain buffer (all holes) + the hole overlay (trees + hole) for the current
+// hole, plus the legacy per-level cache as fallback.
 function prebuildStaticScenery() {
   try {
+    try { rebuildCourseStaticCache(); } catch {}
     if (!level) return false;
+    try { renderHoleOverlay(level, staticCacheDpr(), computeHoleOverlaySig(staticCacheDpr())); } catch {}
     const dpr = effectiveDPR();
     const sig = computeStaticScenerySig(dpr);
     if (sig == null) return false;
@@ -5193,7 +5272,12 @@ function setupCanvas() {
   if (ctx) ctx.imageSmoothingEnabled = true;
   if (bgCtx) bgCtx.imageSmoothingEnabled = true;
   setCanvasSize(LOGICAL_W, LOGICAL_H);
-  // Redraw bottom layer for current mode after DPR change
+  // DPR change invalidates the pre-rendered holes; rebuild at the new
+  // static-cache DPR so the blit stays sharp without a state reset.
+  try { rebuildCourseStaticCache(); } catch {}
+  try { syncBgCanvasVisibility(); } catch {}
+  // Redraw bottom layer for current mode after DPR change (menu/cutscene only;
+  // gameplay is hidden and uses the course buffer — redrawBottom early-outs).
   redrawBottom();
 }
 function setupCanvases() { return setupCanvas(); }
@@ -5277,7 +5361,16 @@ function loadLevel(index) {
   ballInsideModifierIds = new Set();
   holeStartAttempts = holeAttempts; holeRerolls = 0;
   updateHotbarUI();
-  // Redraw terrain for new hole (zoned background per REQ-010/033)
+  // Single-canvas blit: ensure this hole's static image exists (course buffer
+  // covers all LEVELS; lazy-ensure handles foreign level objects), hide the
+  // dead bg layer, and skip the legacy per-hole terrain repaint.
+  try {
+    if (!getCourseStaticImage(index) || getCourseStaticDpr() !== staticCacheDpr()) {
+      if (getCourseStaticCount() !== LEVELS.length || getCourseStaticDpr() !== staticCacheDpr()) rebuildCourseStaticCache();
+      if (!getCourseStaticImage(index)) ensureCourseStaticImage(index, level, staticCacheDpr());
+    }
+  } catch {}
+  try { syncBgCanvasVisibility(); } catch {}
   try { redrawBottom(); } catch { };
   // 11-banners: show Hole N banner for 2s before reward (same dim, auto-transition)
   try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { };
@@ -7424,22 +7517,47 @@ function render() {
     }
   } catch { }
   // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
-  try { if (cutsceneIsActive()) { try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch { } return; } } catch { }
-  // Top canvas is transparent; clear every frame with DPR transform
+  try { if (cutsceneIsActive()) { try { syncBgCanvasVisibility(); } catch {} try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch { } return; } } catch { }
+  try { syncBgCanvasVisibility(); } catch {}
   const dpr = effectiveDPR();
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
 
   // Main menu: entry over splash (no field) vs in-level pause with backdrop (field visible behind dim)
   if (mainMenuVisible && !isInLevelPause) {
-    // Entry mode: no game elements drawn (bottom shows splash)
+    // Entry mode: game canvas transparent so the splash/parallax shows through
+    try {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+    } catch {}
     return;
   }
   // When isInLevelPause true, we fall through and draw the field so it is visible behind the backdrop
 
-  // Draw order on TOP canvas (transparent): obstacles -> hole -> ball -> aim -> HUD/force bar/modifiers
-  // Wind is rendered on separate transparent Three.js overlay (#wind-canvas) via fragment shader + particles, not here
-  // Background is on BOTTOM canvas (zoned terrain via redrawBottom), not drawn here
+  // Single-canvas blit: the terrain buffer IS the background — one drawImage
+  // replaces the dead bg-canvas layer and the per-frame clear. Modifier
+  // bubbles draw next (under trees), then the hole overlay (trees + hole),
+  // then dynamic treasure. Wind lives on the Three.js overlay (#wind-canvas).
+  let staticBlitted = false;
+  try {
+    let img = getCourseStaticImage(currentHoleIndex);
+    if ((!img || getCourseStaticDpr() !== staticCacheDpr()) && level) {
+      try {
+        if (getCourseStaticCount() !== LEVELS.length || getCourseStaticDpr() !== staticCacheDpr()) rebuildCourseStaticCache();
+        img = getCourseStaticImage(currentHoleIndex);
+        if (!img) img = ensureCourseStaticImage(currentHoleIndex, level, staticCacheDpr());
+      } catch {}
+    }
+    if (img) staticBlitted = drawCourseStaticImage(ctx, currentHoleIndex);
+  } catch {}
+  if (!staticBlitted) {
+    // Fallback (buffer miss): paint terrain directly then fall through to the
+    // legacy per-level static path below. Still single-canvas — bg stays hidden.
+    try {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawTerrainZones(ctx, level, LOGICAL_W, LOGICAL_H);
+    } catch {
+      try { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#3a9d23'; ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H); } catch {}
+    }
+  }
   drawModifiers(ctx, modifiers);
   // Per new requirement: show field direction and strength as arrows inside modifiers, no particles inside.
   // Stacking end-result preview: while the EM snap line shows, the arrows inside
@@ -7477,33 +7595,49 @@ function render() {
   } else {
     try { drawArrowsInModifiers(ctx, getWindAt, modifiers, cols, rows, cellW, cellH, null); } catch { };
   }
-  // Static scenery (trees/bricks + hole + chests) is pre-rendered offscreen per
-  // level/collect-state/DPR and blitted here — one GPU blit instead of hundreds
-  // of path/gradient/text ops every frame.
+  // Hole overlay (trees/bricks + hole) blitted OVER bubbles so foliage covers
+  // bubble edges. Re-rendered only on hole-identity/DPR change (treasure is
+  // excluded — always dynamic below). Falls back to direct draw, then to the
+  // legacy per-level static path when the terrain buffer missed too.
   try {
-    const treasures = getLevelTreasures(level);
-    const sig = computeStaticScenerySig(dpr);
-    if (sig != null && sig !== lastStaticSig) {
-      lastStaticSig = sig;
-      try { renderStaticScenery(level, treasures, dpr); } catch { }
+    const osig = computeHoleOverlaySig(staticCacheDpr());
+    if (osig == null || osig !== getHoleOverlaySig()) {
+      try { renderHoleOverlay(level, staticCacheDpr(), osig); } catch {}
     }
-    if (!drawStaticScenery(ctx)) {
-      // Fallback: direct draw if the offscreen blit is unavailable.
-      drawObstacles(ctx, level.obstacles);
-      drawHole(ctx, level.hole);
-      for (const tr of treasures) {
-        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch { }; }
-      }
+    if (!drawHoleOverlay(ctx)) {
+      try {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawObstacles(ctx, level.obstacles);
+        drawHole(ctx, level.hole);
+      } catch {}
     }
   } catch {
     try {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawObstacles(ctx, level.obstacles);
       drawHole(ctx, level.hole);
-      for (const tr of getLevelTreasures(level)) {
-        if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch { }; }
-      }
     } catch { }
   }
+  if (!staticBlitted) {
+    // Deep fallback: terrain buffer missed AND overlay path above already tried
+    // direct draw — legacy per-level blit as last resort (treasure included).
+    try {
+      const treasures = getLevelTreasures(level);
+      const sig = computeStaticScenerySig(dpr);
+      if (sig != null && sig !== lastStaticSig) {
+        lastStaticSig = sig;
+        try { renderStaticScenery(level, treasures, dpr); } catch { }
+      }
+      drawStaticScenery(ctx);
+    } catch {}
+  }
+  // Dynamic treasure above the overlay (collect-state flips mid-run).
+  try {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const tr of getLevelTreasures(level)) {
+      if (tr && !tr.isCollected) { try { drawTreasure(ctx, tr); } catch {} }
+    }
+  } catch {}
   drawBall(ctx, ball);
   try { drawWaterRipples(ctx, level && level.waterHazards); } catch { }
   // During the end screen (over the level) no aim/preview/force-bar/softlock chrome.
@@ -9446,6 +9580,11 @@ if (typeof window !== 'undefined') {
   window.__getCurrentHole = () => currentHoleIndex + 1;
   window.__getCurrentHoleIndex = () => currentHoleIndex;
   window.__getTotalHoles = () => LEVELS.length;
+  window.__getCourseStaticCount = () => { try { return getCourseStaticCount(); } catch { return 0; } };
+  window.__getCourseStaticImage = (i) => { try { return getCourseStaticImage(i); } catch { return null; } };
+  window.__rebuildCourseStaticCache = () => { try { return rebuildCourseStaticCache(); } catch { return 0; } };
+  window.__getHoleOverlaySig = () => { try { return getHoleOverlaySig(); } catch { return null; } };
+  window.__isBgHidden = () => { try { return !!(bgCanvas && bgCanvas.style.display === 'none'); } catch { return false; } };
   Object.defineProperty(window, 'maxAttempts', {
     get: () => maxAttempts,
     set: (v) => setMaxAttempts(v)

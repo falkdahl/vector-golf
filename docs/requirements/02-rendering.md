@@ -9,13 +9,14 @@
 
 ## 1. Layer responsibilities and draw order
 
-1. **`bgCtx` (`#bg-canvas`, z1, opaque), on demand** (mode switch, resize, terrain change; per-frame clear allowed if ≥55fps): zone fills `OB → Rough → Fairway → Green → Water` (§2), or splash cover in main menu (below).
-2. **`fgCtx` (`#game`, z2, transparent, `clearRect` each frame):** trees → hole+flag → treasure (gold chest `r 10–14`, hidden when collected) → ball+shadow → aim visuals (only `AIMING`/`CHARGING`, suppressed during reward/summary/cutscene/banter/transition — never around a ball sitting in a cleared hole) → modifier circles + preview + snap link → force bar (only `CHARGING`) → center banners → softlock banner → canvas pause/game-over dim (DOM overlays preferred).
+1. **Course terrain buffer (offscreen, built once per course/DPR):** one opaque image per hole — zone fills `OB → Rough → Fairway → Green → Water` (§2) only. Built eagerly for all holes on course start (`buildCourseStaticCache`) at `staticCacheDpr()` (`1` on mobile, display DPR on desktop); rebuilt on DPR/resize/course change; lazily ensured per hole as fallback.
+2. **Hole overlay (offscreen, one current-hole image):** trees/brick obstacles + hole+flag, transparent (`renderHoleOverlay`/`drawHoleOverlay`, keyed by hole identity + DPR, treasure excluded). Blitted after modifier bubbles so foliage covers bubble edges — bubbles sit **under** trees. Re-rendered only on hole/DPR change.
+3. **`fgCtx` (`#game`, z2, gameplay-opaque):** blit terrain (this is the clear — no transparent `clearRect` in gameplay) → modifier circles + wind arrows (under trees) → hole-overlay blit → treasure (gold chest `r 10–14`, hidden when collected) → ball+shadow → aim visuals (only `AIMING`/`CHARGING`, suppressed during reward/summary/cutscene/banter/transition — never around a ball sitting in a cleared hole) → preview + snap link (placement UI, above trees) → force bar (only `CHARGING`) → center banners → softlock banner → canvas pause/game-over dim (DOM overlays preferred). `bgCtx` (`#bg-canvas`, z1) is hidden during gameplay and carries no terrain; it renders only menu splash fallback and cutscene backgrounds.
 3. **`windRenderer` (`#wind-canvas`, z3, transparent):** Three.js streaks + Free Shot glow (see `04-levels-and-wind.md`, `05-modifiers-and-bag.md`).
 4. **HTML HUD (`#hud`, z4, `pointer-events:none`):** 28px strip `rgba(0,0,0,0.25)`, `14px system-ui` white with `3px` stroke; `#hud-hole` left `Hole: N/M`, `#hud-attempts` center `Attempts Left: X (+Y)` (`(+Y)` only when `Y>0`), `#hud-total` right **`Points: N`** (points only change on hole clear; see `07-rewards-and-economy.md`). Visible in `AIMING`/`CHARGING`/`FLYING`; dimmed/hidden behind `WIN`/`GAME_OVER`/menus; hidden entirely on the tutorial course. Legacy canvas `drawHUD` is deprecated and never called.
 5. **HTML overlays** (`#reward-overlay`, `#win-overlay`, `#gameover`, `#pause-overlay`, `#main-menu-overlay`, `#starting-items-overlay`, `#coin-summary-overlay` points summary, `#course-cleared-overlay` Course Cleared, `#cutscene-dialog`, skip buttons, `#toast`): `position:absolute`, `z-index 6–14`, bounded to container.
 
-API: `render(bgCtx, fgCtx, W, H)`, `drawBackground(bgCtx,W,H,mode)` with `mode ∈ {'terrain','splash'}`.
+API: `render(bgCtx, fgCtx, W, H)`, `drawBackground(bgCtx,W,H,mode)` with `mode ∈ {'terrain','splash'}` (menu/cutscene only — gameplay never calls it per frame), `buildCourseStaticCache(levels,dpr)` / `getCourseStaticImage(i)` / `drawCourseStaticImage(ctx,i)` (gameplay static blit; see `01-foundation.md` §3).
 
 ## 2. Terrain palette (normative, ±8 per channel; referenced by generation)
 
@@ -43,9 +44,9 @@ API: `render(bgCtx, fgCtx, W, H)`, `drawBackground(bgCtx,W,H,mode)` with `mode �
 
 ## Acceptance
 
-- [ ] Zone colors within tolerance, order `OB→Rough→Fairway→Green→Water`; trees/hole/treasure on top canvas in order.
-- [ ] Level mode = terrain; menu mode = splash aspect-covered.
-- [ ] Draw order `bg → game → wind → HUD → HTML overlays`; reward/summary are HTML, never canvas; no icon gradient behind reward icons.
+- [ ] Zone colors within tolerance, order `OB→Rough→Fairway→Green→Water`; terrain buffer + hole overlay hold terrain / trees+hole, bubbles under trees, treasure dynamic above overlay.
+- [ ] Level mode = static-buffer blit on `#game`; menu mode = splash aspect-covered (parallax DOM, `bg-canvas` fallback only).
+- [ ] Draw order `game(static blit → dynamic) → wind → HUD → HTML overlays` during play (`bg-canvas` hidden); reward/summary are HTML, never canvas; no icon gradient behind reward icons.
 - [ ] HUD is HTML `#hud-hole/#hud-attempts/#hud-total` (`Hole: N/M`, `Attempts Left: X (+Y)`, `Points: N`); force bar canvas-only while `CHARGING`.
 - [ ] Treasure gold `r 12±2`, above trees/hole, below ball, hidden when collected; softlock pill mid-screen above center, normal text `Stuck? Press R to reset`.
 
