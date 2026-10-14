@@ -56,6 +56,7 @@
 - `src/main.js`: `requestAnimationFrame` with `FIXED_DT=1/60` accumulator, `update(FIXED_DT)` then `render()` once, max 5 steps/frame, `dt` in seconds. No `setInterval`/`setTimeout` for the main loop.
 - Split: `bgCtx` drawn on demand (mode/resize/terrain change), `fgCtx` `clearRect` each frame, `windRenderer` own per-frame clear (`setClearColor(0x000000,0)`).
 - Pausable (`visibilitychange`, `WIN`, `GAME_OVER`, `mainMenuVisible`, pause, banners, cutscene, banter); while paused `updateWind` visuals may run but `updateBall` is frozen.
+- Music auto-pause on tab hidden (`src/audio.js`): when the page becomes hidden (`document.hidden` via `visibilitychange`, `pagehide` for iOS Safari bfcache) both theme tracks (`main-theme.ogg`, `main-menu.ogg` `<audio>` elements) pause immediately (fades cancelled; `musicWanted`/`menuMusicWanted` intent flags preserved). When the page becomes visible again (`visibilitychange` visible + `pageshow`, guarded by `!document.hidden`) each wanted track fades back in. `setMusicActive/setMenuMusicActive(true)` and the gesture-unlock retry while hidden only set the intent flag and defer playback until visible. Visibility-only by design: window `blur`/`focus` is excluded, so a desktop tab that is still visible (e.g. side-by-side chat window) keeps playing; mobile app-switch/lock/Home always reports hidden so it still pauses there. Scope is music only (SFX/wind untouched). Must work on Chrome/Firefox/Safari, desktop + mobile.
 
 ## 5. HiDPI & resize
 
@@ -72,7 +73,8 @@
 - [ ] DOM contains only `#game-container` (+ optional `#loading-screen`); no `h1`/`#instructions`; body `background:#000`, `padding:0`, `overflow:hidden`.
 - [ ] Container is centered 16:9 `min(95vw,95vh*16/9)`; all layers share rect; DPR=2 keeps physics identical; resize keeps ratio, alignment, input mapping.
 - [ ] Fixed timestep: 30/60fps ball travel over 2s varies <5%; no main-loop `setInterval`.
+- [ ] Music pauses on tab hide/`pagehide` and resumes wanted track(s) on visible/`pageshow` (Chrome/Firefox/Safari, desktop+mobile); still-visible window blur (desktop side-by-side chat) keeps playing; intent flags preserved across hide.
 
 ## File paths
 
-- `index.html:1`, `style.css:1`, `src/main.js:1` (loop, `setupCanvases`, `getCanvasMousePos`, loading hide), `src/windThree.js:1` (renderer resize), `README.md:1`
+- `index.html:1`, `style.css:1`, `src/main.js:1` (loop, `setupCanvases`, `getCanvasMousePos`, loading hide), `src/audio.js:1` (music auto-pause on hidden, visibility-only), `src/windThree.js:1` (renderer resize), `README.md:1`

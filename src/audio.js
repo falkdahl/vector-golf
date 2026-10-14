@@ -252,6 +252,7 @@ export function ensureMenuMusic() {
 
 function musicPlay(fadeMs = MUSIC_FADE_MS) {
   try {
+    if (isPageHidden()) return; // deferred: intent flag kept, resume on visible
     const el = ensureMusic();
     if (!el) return;
     fadeAudioTo(el, MUSIC_VOL, fadeMs, musicFade);
@@ -268,6 +269,7 @@ function musicPause(fadeMs = MUSIC_FADE_MS) {
 
 function menuMusicPlay(fadeMs = MUSIC_FADE_MS) {
   try {
+    if (isPageHidden()) return; // deferred: intent flag kept, resume on visible
     const el = ensureMenuMusic();
     if (!el) return;
     fadeAudioTo(el, MENU_MUSIC_VOL, fadeMs, menuFade);
@@ -309,6 +311,72 @@ export function setMenuMusicActive(on, fadeMs = MUSIC_FADE_MS) {
 }
 
 export function isMenuMusicActive() { return menuMusicWanted; }
+
+// --- Music auto-pause on tab hidden (Chrome/Firefox/Safari, desktop+mobile) ---
+// Intent flags (musicWanted/menuMusicWanted) are preserved across hides; the
+// <audio> elements pause immediately (fades cancelled — setInterval is
+// throttled in background tabs) and fade back in on return.
+// Visibility-only by design: window blur/focus is excluded so a desktop tab
+// that is still visible (e.g. side-by-side chat) keeps playing.
+export function isPageHidden() {
+  try {
+    if (typeof document !== 'undefined' && typeof document.hidden === 'boolean') return !!document.hidden;
+  } catch {}
+  return false;
+}
+
+function cancelFade(fadeState) {
+  try { fadeState.id = (fadeState.id || 0) + 1; } catch {}
+  try { if (fadeState.timer) clearInterval(fadeState.timer); } catch {}
+  try { fadeState.timer = null; } catch {}
+}
+
+function pauseAllMusicForHidden() {
+  try {
+    cancelFade(musicFade);
+    cancelFade(menuFade);
+    try { duckToken++; } catch {}
+    try { if (musicEl && !musicEl.paused) musicEl.pause(); } catch {}
+    try { if (menuMusicEl && !menuMusicEl.paused) menuMusicEl.pause(); } catch {}
+  } catch {}
+}
+
+function resumeWantedMusic() {
+  try {
+    if (isPageHidden()) return;
+    try { if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {}); } catch {}
+    if (musicWanted) { try { musicPlay(); } catch {} }
+    if (menuMusicWanted) { try { menuMusicPlay(); } catch {} }
+  } catch {}
+}
+
+function handleHiddenEvent() {
+  try { pauseAllMusicForHidden(); } catch {}
+}
+
+function handleVisibleEvent() {
+  try { resumeWantedMusic(); } catch {}
+}
+
+try {
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (isPageHidden()) handleHiddenEvent();
+        else handleVisibleEvent();
+      } catch {}
+    });
+  }
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    // pagehide/pageshow cover iOS Safari bfcache where visibilitychange is unreliable.
+    window.addEventListener('pagehide', handleHiddenEvent, { passive: true });
+    window.addEventListener('pageshow', handleVisibleEvent, { passive: true });
+    // NOTE: no blur/focus listeners by design — window focus loss with the tab
+    // still visible (e.g. side-by-side chat on desktop) keeps the music playing.
+    // Mobile app-switch / lock / Home always reports document.hidden=true, so
+    // visibilitychange (+ pagehide) already pauses there.
+  }
+} catch {}
 
 // Briefly dip the theme under a prominent SFX (hole win), then restore.
 export function duckMusic(ms = 800) {
@@ -459,6 +527,7 @@ if (typeof window !== 'undefined') {
       playChest, playReward, playOB, playUIClick,
       ensureMusic, setMusicActive, isMusicActive, duckMusic,
       ensureMenuMusic, setMenuMusicActive, isMenuMusicActive,
+      isPageHidden,
     };
   } catch {}
 }
