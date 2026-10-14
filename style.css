@@ -162,7 +162,11 @@ body {
 #game-container:has(#continue-overlay:not(.hidden)) #main-menu-overlay,
 #game-container:has(#continue-overlay:not(.hidden)) #bottom-bar,
 #game-container:has(#continue-overlay:not(.hidden)) #journal-wrapper,
-#game-container:has(#continue-overlay:not(.hidden)) #journal-panel {
+#game-container:has(#continue-overlay:not(.hidden)) #journal-panel,
+#game-container:has(#continue-overlay:not(.hidden)) #mobile-fullscreen-button,
+#game-container:has(#continue-overlay:not(.hidden)) #mobile-menu-button,
+#game-container:has(#continue-overlay:not(.hidden)) #mobile-reset-button,
+#game-container:has(#continue-overlay:not(.hidden)) #mobile-controls {
   display: none !important;
 }
 .continue-prompt {

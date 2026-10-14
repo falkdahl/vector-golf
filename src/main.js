@@ -5890,7 +5890,7 @@ function syncMobileUI() {
     }
     try { document.getElementById('game-container').classList.add('mobile-mode'); } catch { }
     if (controls) controls.classList.toggle('hidden', chromeHidden);
-    if (fsBtn) fsBtn.classList.toggle('hidden', isFullscreenActive());
+    if (fsBtn) fsBtn.classList.toggle('hidden', isFullscreenActive() || chromeHidden);
   } catch { }
 }
 // Touch-drag bookkeeping shared by canvas + bag touch handlers.
@@ -8290,6 +8290,17 @@ function init() {
   const mainEndRunBtnDom = document.getElementById("end-run-button");
   const pauseEndRunBtnDom = document.getElementById("pause-end-run-button");
   if (resumeBtnDom) resumeBtnDom.addEventListener("click", () => resumeGame());
+  if (pauseOverlayDom && !pauseOverlayDom._backdropBound) {
+    pauseOverlayDom._backdropBound = true;
+    pauseOverlayDom.addEventListener('click', (e) => {
+      // Click on the dimmed background (not the buttons) resumes, like Continue/Escape.
+      // Sub-overlays (Help, End Run confirm) have priority and stay open.
+      if (e.target !== pauseOverlayDom) return;
+      if (typeof endRunConfirmVisible !== 'undefined' && endRunConfirmVisible) return;
+      if (typeof helpVisible !== 'undefined' && helpVisible) return;
+      resumeGame();
+    });
+  }
   if (mainEndRunBtnDom) mainEndRunBtnDom.addEventListener("click", () => showEndRunConfirm());
   if (pauseEndRunBtnDom) pauseEndRunBtnDom.addEventListener("click", () => showEndRunConfirm());
   // Audio prefs toggles use the delegated document click handler (module scope);
