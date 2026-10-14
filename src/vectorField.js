@@ -486,7 +486,7 @@ function sampleBaseField(worldX, worldY) {
   const x0 = Math.max(0, Math.min(cols - 1, Math.floor(gx)));
   const y0 = Math.max(0, Math.min(rows - 1, Math.floor(gy)));
   const x1 = Math.max(0, Math.min(cols - 1, Math.ceil(gx)));
-  const y1 = Math.max(0, Math.min(cols - 1, Math.ceil(gy)));
+  const y1 = Math.max(0, Math.min(rows - 1, Math.ceil(gy)));
 
   const tx = gx - x0;
   const ty = gy - y0;
