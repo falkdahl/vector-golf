@@ -19,18 +19,18 @@
 
 ## 3. Attempts (canonical)
 
-- `currentHoleIndex` (0-based), `holeAttempts` (0..), `holeRerolls` (re-roll costs this hole, for points exclusion), `totalAttempts` (run total), `maxAttempts=10` static (legacy `>10` clamped), `attemptsLeft=max(0,maxAttempts-holeAttempts)`. **Attempts are consumed on launch and on reward re-roll only.** `holeAttempts` increments once per normal `handleLaunch` and once per re-roll (tracked separately in `holeRerolls`); failure resets (OB/water/edge, `R`/`Next Attempt` in `FLYING`) are free; `R` in `AIMING` costs nothing.
+- `currentHoleIndex` (0-based), `holeAttempts` (0..), `holeRerolls` (re-roll costs this hole, for points exclusion), `totalAttempts` (run total), `maxAttempts=10` static (legacy `>10` clamped), `attemptsLeft=max(0,maxAttempts-holeAttempts)`. **Attempts are consumed on launch and on reward re-roll only.** `holeAttempts` increments once per normal `handleLaunch` and once per re-roll (tracked separately in `holeRerolls`); failure resets (OB/water/edge, `R` in `FLYING`) are free; `R` in `AIMING` costs nothing.
 - Free launch (see `05-modifiers-and-bag.md` §5): armed + stock>0 → no increment, consume one charge, set `freeShotFlightActive`; reset after that flight only clears the flag. HUD `#hud-attempts` = `Attempts Left: X (+Y)` (`(+Y)` only when `Y>0`).
 - Launch branching: check pre-launch `attemptsLeft`; free if armed+stock, else counted (`holeAttempts++`, `totalAttempts++`, UI+save). Never show Game Over/banners at launch — triggers are post-reset so the last flight can win (below).
-- Post-reset evaluation (after a free reset): `attemptsLeft===0 && stock===0` → `showGameOver()` immediately; `attemptsLeft===1 && stock>0` → `Free Shot!` banner + auto-arm; `attemptsLeft===1 && stock===0` → Last Attempt state (banner once per hole via `lastAttemptsBannerValue`, hide pause `Next Attempt`, last-attempt softlock text, `R` disabled only during the actual last flight `FLYING && left===0 && stock===0 && !freeShotFlightActive`).
+- Post-reset evaluation (after a free reset): `attemptsLeft===0 && stock===0` → `showGameOver()` immediately; `attemptsLeft===1 && stock>0` → `Free Shot!` banner + auto-arm; `attemptsLeft===1 && stock===0` → Last Attempt state (banner once per hole via `lastAttemptsBannerValue`, last-attempt softlock text, `R` disabled only during the actual last flight `FLYING && left===0 && stock===0 && !freeShotFlightActive`).
 - Lifecycle: hole advance resets `holeAttempts=0` (keeps `totalAttempts`); `WIN`/`GAME_OVER → R/Continue` resets all + bag (see `07-rewards-and-economy.md`).
 
 ## 4. States & `R`
 
 - `AIMING` (at tee, aim/charge/place), `CHARGING` (force bar), `FLYING` (physics+wind+collision each tick; no aim/place), `WIN` (final-hole win frozen + Victory overlay), `GAME_OVER` (last-flight failure → `clearProgress()` path + overlay; free launches never trigger it; fallback `handleLaunch` at `≤0` also shows it). Transient `holeBannerVisible/attemptsBannerVisible/freeShotBannerVisible` block like reward.
 - `resetBall()` (idempotent): tee, `vel=0`, `AIMING`, clear charge/overlays (unless `WIN`/`GAME_OVER`); never touches `aimAngle`, counters, bag/passives, modifiers, treasure.
-- `R`: `AIMING` → `resetBall()` (free); `FLYING` → `resetBall()` (free) except actual last flight (must play out / End Run); `rewardMenuVisible` → re-roll (see `07-rewards-and-economy.md`); `WIN`/`GAME_OVER` → `clearProgress()` → menu; main menu → blocked; pause open → `R` blocked (use `Next Attempt` button, which closes pause then runs `R` logic).
-- Pause `Next Attempt` (`#pause-next-attempt-button`, legacy `#pause-reset-attempt-button`) sits `Continue → Next Attempt → Help → End Run`; hidden during Last Attempt state; same effect as `R`.
+- `R`: `AIMING` → `resetBall()` (free); `FLYING` → `resetBall()` (free) except actual last flight (must play out / End Run); `rewardMenuVisible` → re-roll (see `07-rewards-and-economy.md`); `WIN`/`GAME_OVER` → `clearProgress()` → menu; main menu → blocked; pause open → `R` blocked (Continue first, then `R`).
+- Pause menu holds no reset button (removed): `Continue → Music → SFX → Help → End Run` (see `08-campaign-and-menus.md` §6).
 - Hole progression: non-final win → auto-advance (clear board, `currentHoleIndex++`, `holeAttempts=0`, fresh treasure, `loadLevel`, `AIMING`); final win → `WIN` overlay → `R`/Continue → summary → menu (see `07-rewards-and-economy.md`).
 
 ## 5. Banners (transient, `1000ms ±100ms`, block input, wind animates)
@@ -47,7 +47,7 @@
 - [ ] Orbit 90–150°/s; `aimAngle` persists on death, resets per hole; tap/hold show 0%/50%/100%.
 - [ ] Counted launch decrements at launch; failures free; free launch consumes charge; HUD `X` vs `X (+Y)` correct.
 - [ ] Last flight can win (no immediate Game Over at launch); failure then shows `GAME_OVER`; `R`/Continue clears.
-- [ ] Hole banner then reward; Last Attempt/Free Shot once per hole post-reset; `Next Attempt` hidden + `R` disabled only on actual last flight.
+- [ ] Hole banner then reward; Last Attempt/Free Shot once per hole post-reset; `R` disabled only on actual last flight.
 - [ ] Softlock `<75px`/`6s` after `8s` shows correct variant, never blocks physics, clears on reset/win.
 
 ## File paths

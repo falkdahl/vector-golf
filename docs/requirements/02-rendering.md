@@ -37,7 +37,7 @@ API: `render(bgCtx, fgCtx, W, H)`, `drawBackground(bgCtx,W,H,mode)` with `mode �
 - **Force bar** (`drawForceBar`, only `CHARGING`): centered `ball.pos+(0,28)`, `60×8`, border `1px #222`, bg `rgba(0,0,0,0.35)`, fill `charge` green→yellow→red, label `78%`.
 - **Aim visuals** (`drawAim`, only `AIMING`/`CHARGING` and no blocking overlay): orbit `28–32px` dashed `rgba(0,0,0,0.2)`, line `30px` (`30+charge*50` charging), indicator dot.
 - **Center banners** (`drawCenterBanner`, transient `1000ms ±100ms`, full-canvas dim `rgba(0,0,0,0.55)`, `700 22px` white stroke `5px` centered): `Hole N`, `Last Attempt`, `Free Shot!`. Block input while visible; mutually exclusive with reward overlay. State/trigger canonical in `06-run-rules.md`.
-- **Softlock banner** (`drawSoftlockBanner`, non-blocking pill `y~H/2-60,h~28`, `rgba(0,0,0,0.65)`, `700 13px` white stroke `4px`): normal `Stuck? Press R to reset — or use Next Attempt in pause menu`; last-attempt variant exactly `Stuck on last attempt? End Run in pause menu (Escape)`. Rendered after force bar when `softlockBannerVisible`; never a full dim; hidden during `WIN`/`GAME_OVER`/reward/pause/main-menu.
+- **Softlock banner** (`drawSoftlockBanner`, non-blocking pill `y~H/2-60,h~28`, `rgba(0,0,0,0.65)`, `700 13px` white stroke `4px`): normal `Stuck? Press R to reset`; last-attempt variant exactly `Stuck on last attempt? End Run in pause menu (Escape)`. Rendered after force bar when `softlockBannerVisible`; never a full dim; hidden during `WIN`/`GAME_OVER`/reward/pause/main-menu.
 - **Victory / Game Over overlays** (DOM): dim `rgba(0,0,0,0.55)`, title `700 22px` white stroke `5px` (`Course Completed!` legacy + `★★★ 72px #FFD700` + `Total/Points` + green `Continue #145a32`, resp. `Game Over` + green `Continue`); `Press R to continue`. Final wins use Hole Complete + Course Cleared instead of Victory (see `07-rewards-and-economy.md` §5b). Never shown on the tutorial course (banter + menu return instead; see `09-tutorial.md`).
 - **Course Cleared overlay** (DOM `#course-cleared-overlay`, z14): dim `rgba(0,0,0,0.55)`, title `Course Cleared` `700 22px` white stroke `5px`, big `+N points` `700 36px #FFD700`, `New Record` `800 22px #FFD700` with per-letter `recordDance` bounce when record, green `Continue #27ae60`.
 
@@ -47,7 +47,7 @@ API: `render(bgCtx, fgCtx, W, H)`, `drawBackground(bgCtx,W,H,mode)` with `mode �
 - [ ] Level mode = terrain; menu mode = splash aspect-covered.
 - [ ] Draw order `bg → game → wind → HUD → HTML overlays`; reward/summary are HTML, never canvas; no icon gradient behind reward icons.
 - [ ] HUD is HTML `#hud-hole/#hud-attempts/#hud-total` (`Hole: N/M`, `Attempts Left: X (+Y)`, `Points: N`); force bar canvas-only while `CHARGING`.
-- [ ] Treasure gold `r 12±2`, above trees/hole, below ball, hidden when collected; softlock pill mid-screen above center, correct variant text.
+- [ ] Treasure gold `r 12±2`, above trees/hole, below ball, hidden when collected; softlock pill mid-screen above center, normal text `Stuck? Press R to reset`.
 
 ## File paths
 

@@ -1,6 +1,6 @@
 // Cutscene engine — 11-cutscenes.md
 // Static bg on bg-canvas, characters on game canvas, dialog HTML overlay, synchronized pan/zoom, typewriter
-import { playTypeTick as audioTypeTick } from "./audio.js";
+import { playTypeTick as audioTypeTick, isMusicEnabled as audioIsMusicEnabled, isSfxEnabled as audioIsSfxEnabled } from "./audio.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -568,12 +568,16 @@ function startCutMusicCue(cue) {
     const isStop = !raw || raw.toLowerCase() === 'none';
     const vol = cue && Number.isFinite(cue.volume) ? Math.max(0, Math.min(1, cue.volume)) : 0.4;
     const fade = cue && Number.isFinite(cue.fadeMs) ? Math.max(0, Math.min(10000, cue.fadeMs)) : 800;
-    const loop = cue ? cue.loop !== false : true;
-    if (isStop) {
-      cutMusicSrc = null;
+    // User pref: music off behaves like a stop cue (existing music fades out,
+    // but the cue src is remembered so re-enabling resumes it via the tick).
+    let musicOff = false;
+    try { musicOff = !audioIsMusicEnabled(); } catch {}
+    if (isStop || musicOff) {
+      cutMusicSrc = musicOff && !isStop ? raw : null;
       if (cutMusicEl) cutFadeTo(cutMusicEl, 0, fade);
       return;
     }
+    const loop = cue ? cue.loop !== false : true;
     if (cutMusicSrc === raw && cutMusicEl && !cutMusicEl.paused) {
       try { cutMusicEl.volume = vol; } catch {}
       return;
@@ -593,6 +597,7 @@ function startCutMusicCue(cue) {
 }
 function fireCutSfxCue(cue) {
   try {
+    try { if (!audioIsSfxEnabled()) return; } catch {}
     const raw = cue.src.trim();
     if (!raw || raw.toLowerCase() === 'none') return;
     const vol = Number.isFinite(cue.volume) ? Math.max(0, Math.min(1, cue.volume)) : 0.8;
@@ -608,6 +613,17 @@ function fireCutSfxCue(cue) {
 function processCutsceneAudio() {
   if (!active) return;
   const ce = getCutContentElapsed();
+  // User prefs (toggled live from menus): music off silences the cutscene
+  // score; re-enabling resumes the current cue. SFX cues are gated at fire.
+  try {
+    if (!audioIsMusicEnabled()) {
+      if (cutMusicEl && !cutMusicEl.paused) cutFadeTo(cutMusicEl, 0, 300);
+    } else if (cutMusicSrc && cutMusicEl && cutMusicEl.paused && (active.musicIdx ?? -1) >= 0) {
+      const mc0 = sortedMusicCues();
+      const cue0 = mc0[active.musicIdx];
+      if (cue0) startCutMusicCue(cue0);
+    }
+  } catch {}
   // Music: advance to latest cue <= ce.
   const mc = sortedMusicCues();
   let wantIdx = -1;

@@ -112,7 +112,7 @@
       </div>
     </div>
     <div id="main-menu-overlay" class="hidden">
-      <button id="help-button" class="help-corner-button" title="Help">?</button>
+      <button id="help-button" class="help-corner-button" title="Menu" aria-label="Menu">☰</button>
       <div id="menu-title" class="menu-title" aria-hidden="true">
         <span class="title-line">Gale</span>
         <span class="title-line">Force</span>
@@ -158,6 +158,13 @@
           <button id="course-menu-back">Back</button>
         </div>
       </div>
+      <div id="menu-hamburger-menu" class="hidden">
+        <div class="menu-hamburger-card">
+          <button id="music-toggle-button-menu" class="audio-toggle" data-pref="music">Music: ON</button>
+          <button id="sfx-toggle-button-menu" class="audio-toggle" data-pref="sfx">SFX: ON</button>
+          <button id="menu-hamburger-help-button">Help</button>
+        </div>
+      </div>
     </div>
     <div id="campaign-edit-overlay" class="hidden">
       <div class="campaign-edit-card">
@@ -195,7 +202,8 @@
     <div id="pause-overlay" class="hidden">
       <div class="pause-content">
         <button id="resume-button" class="main-menu-button">Continue</button>
-        <button id="pause-reset-attempt-button" class="main-menu-button">Next Attempt</button>
+        <button id="music-toggle-button" class="main-menu-button audio-toggle" data-pref="music">Music: ON</button>
+        <button id="sfx-toggle-button" class="main-menu-button audio-toggle" data-pref="sfx">SFX: ON</button>
         <button id="pause-help-button" class="main-menu-button">Help</button>
         <button id="pause-end-run-button" class="main-menu-button">End Run</button>
       </div>

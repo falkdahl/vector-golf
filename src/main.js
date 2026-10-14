@@ -67,7 +67,7 @@ import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCourses
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COINS_PER_ATTEMPT, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, LOADOUT_SLOT_COSTS, DEFAULT_UNLOCKED_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout, getUnlockedLoadoutSlots as getProgressionUnlockedSlots, getNextLoadoutSlotCost, canUnlockNextLoadoutSlot, unlockNextLoadoutSlot, setUnlockedLoadoutSlots, getRunsStarted, incrementRunsStarted } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip, playBanter as banterPlay, loadBanterFile as banterLoadFile } from "./banter.js";
-import { playLaunch as audioLaunch, playWater as audioWater, playHoleWin as audioHoleWin, playModifierActivated as audioModifier, playPointsCount as audioPointsCount, playNewRecord as audioNewRecord, setWindActive as audioSetWind, playChest as audioChest, playReward as audioReward, playOB as audioOB, playUIClick as audioUIClick, setMusicActive as audioSetMusic, setMenuMusicActive as audioSetMenuMusic } from "./audio.js";
+import { playLaunch as audioLaunch, playWater as audioWater, playHoleWin as audioHoleWin, playModifierActivated as audioModifier, playPointsCount as audioPointsCount, playNewRecord as audioNewRecord, setWindActive as audioSetWind, playChest as audioChest, playReward as audioReward, playOB as audioOB, playUIClick as audioUIClick, setMusicActive as audioSetMusic, setMenuMusicActive as audioSetMenuMusic, isMusicEnabled as audioIsMusicEnabled, setMusicEnabled as audioSetMusicEnabled, isSfxEnabled as audioIsSfxEnabled, setSfxEnabled as audioSetSfxEnabled } from "./audio.js";
 import { preloadMenuCritical as preloadMenuCriticalAssets, preloadMenuIdle as preloadMenuIdleAssets, preloadForCutscene as preloadCutsceneAssets, preloadForLevel as preloadLevelAssets } from "./preload.js";
 
 const LOGICAL_W = 1280;
@@ -2556,6 +2556,70 @@ function clearAllStorageForSeedGeneration() {
 // Pause Menu per REQ-028 — Escape, Resume/New Game, reward stats xN
 let pauseMenuVisible = false;
 let pauseMenuHover = null;
+// Main-menu hamburger popup (Music / SFX / Help). Entry-menu only; closed by
+// backdrop click, Escape, Help, or leaving the main menu.
+let menuHamburgerVisible = false;
+let syncingMenuHamburger = false;
+let menuHamburgerShown = false;
+function isMenuHamburgerVisible() { return !!menuHamburgerVisible; }
+function openMenuHamburger() {
+  menuHamburgerVisible = true;
+  try { syncMenuHamburger(); } catch {}
+}
+function closeMenuHamburger() {
+  if (!menuHamburgerVisible) return;
+  menuHamburgerVisible = false;
+  try { syncMenuHamburger(); } catch {}
+}
+function syncMenuHamburger() {
+  try {
+    const el = document.getElementById('menu-hamburger-menu');
+    if (!el) return;
+    // Auto-reset when leaving the main menu so it never reopens stale.
+    if (!mainMenuVisible || isInLevelPause) menuHamburgerVisible = false;
+    let show = !!menuHamburgerVisible && !!mainMenuVisible && !isInLevelPause && !helpVisible;
+    try { if (cutsceneIsActive()) show = false; } catch {}
+    try { if (banterIsActive()) show = false; } catch {}
+    el.classList.toggle('hidden', !show);
+    const wasShown = menuHamburgerShown;
+    menuHamburgerShown = show;
+    if (show) {
+      // Hide the course buttons while the popup is open.
+      try {
+        const mmc = document.querySelector('#main-menu-overlay .main-menu-content');
+        if (mmc) mmc.classList.add('hidden');
+      } catch {}
+      try { syncAudioToggleUI(); } catch {}
+    } else if (wasShown && !helpVisible && !syncingMenuHamburger) {
+      // Open→close transition: restore the course buttons via the normal menu
+      // sync (guarded against re-entry: syncMainMenu calls back into here).
+      syncingMenuHamburger = true;
+      try { syncMainMenu(); } catch {}
+      syncingMenuHamburger = false;
+    }
+  } catch {}
+}
+function wireMenuHamburger() {
+  try {
+    const wrap = document.getElementById('menu-hamburger-menu');
+    // Backdrop close: clicks on the wrapper background (not on menu buttons).
+    if (wrap && !wrap.__wired) {
+      wrap.__wired = true;
+      wrap.addEventListener('click', (e) => {
+        try { if (e.target === wrap) closeMenuHamburger(); } catch {}
+      });
+    }
+    const helpItem = document.getElementById('menu-hamburger-help-button');
+    if (helpItem && !helpItem.__wired) {
+      helpItem.__wired = true;
+      helpItem.addEventListener('click', () => {
+        try { closeMenuHamburger(); } catch {}
+        try { showHelpOverlay(); } catch {}
+        try { audioUIClick(); } catch {}
+      });
+    }
+  } catch {}
+}
 let endRunConfirmVisible = false;
 function isEndRunConfirmVisible() { return endRunConfirmVisible; }
 function showEndRunConfirm() {
@@ -2721,6 +2785,8 @@ function showCourseMenu() {
 function showHelpOverlay() {
   helpVisible = true;
   courseMenuVisible = false;
+  menuHamburgerVisible = false;
+  try { syncMenuHamburger(); } catch {}
   const hm = document.getElementById('help-overlay');
   if (hm) hm.classList.remove('hidden');
   // Hide main and pause contents but keep overlays for backdrop
@@ -3414,6 +3480,8 @@ function syncMainMenu() {
   try { const showWind2 = !mainMenuVisible && !isCutW; setWindVisible(showWind2 || pauseMenuVisible); } catch { };
   updateHotbarUI();
   try { updateAttemptsUI(); } catch { }
+  try { syncAudioToggleUI(); } catch { }
+  try { syncMenuHamburger(); } catch { }
 }
 
 let campaignEditVisible = false;
@@ -4721,7 +4789,7 @@ function maybeShowFreeShotBanner() {
 }
 
 // Softlock detection — non-blocking banner when ball stuck without progress
-const SOFTLOCK_TEXT_NORMAL = "Stuck? Press R to reset — or use Next Attempt in pause menu";
+const SOFTLOCK_TEXT_NORMAL = "Stuck? Press R to reset";
 const SOFTLOCK_TEXT_LAST = "Stuck on last attempt? End Run in pause menu (Escape)";
 let softlockBannerVisible = false;
 let softlockBannerText = SOFTLOCK_TEXT_NORMAL;
@@ -5544,6 +5612,53 @@ function syncWindFieldToShader() {
   } catch { };
 }
 
+// Audio prefs toggles (pause menu + main-menu hamburger popup). Labels are the
+// state: "Music: ON" / "SFX: ON" flip to "OFF" on click. Persisted via
+// audio.js localStorage; respected by music, SFX, wind and cutscene audio.
+function syncAudioToggleUI() {
+  try {
+    let musicOn = true, sfxOn = true;
+    try { musicOn = audioIsMusicEnabled(); } catch {}
+    try { sfxOn = audioIsSfxEnabled(); } catch {}
+    const btns = document.querySelectorAll('.audio-toggle[data-pref]');
+    for (const btn of btns) {
+      try {
+        const pref = btn.getAttribute('data-pref');
+        if (pref === 'music') {
+          const label = 'Music: ' + (musicOn ? 'ON' : 'OFF');
+          if (btn.textContent !== label) btn.textContent = label;
+          btn.setAttribute('aria-pressed', musicOn ? 'true' : 'false');
+        } else if (pref === 'sfx') {
+          const label = 'SFX: ' + (sfxOn ? 'ON' : 'OFF');
+          if (btn.textContent !== label) btn.textContent = label;
+          btn.setAttribute('aria-pressed', sfxOn ? 'true' : 'false');
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
+// Audio prefs toggles: single delegated document-level click handler (installed
+// once at module scope) so menu buttons always respond regardless of init
+// order or DOM rebuilds. Per-button listeners are intentionally NOT used.
+try {
+  if (typeof document !== 'undefined' && typeof window !== 'undefined' && !window.__audioToggleDelegated) {
+    window.__audioToggleDelegated = true;
+    document.addEventListener('click', (e) => {
+      try {
+        const t = e && e.target && e.target.closest ? e.target.closest('.audio-toggle[data-pref]') : null;
+        if (!t) return;
+        const pref = t.getAttribute('data-pref');
+        if (pref === 'music') { try { audioSetMusicEnabled(!audioIsMusicEnabled()); } catch {} }
+        else if (pref === 'sfx') { try { audioSetSfxEnabled(!audioIsSfxEnabled()); } catch {} }
+        else return;
+        try { syncAudioToggleUI(); } catch {}
+        try { audioUIClick(); } catch {}
+      } catch {}
+    });
+  }
+} catch {}
+
 function syncPauseOverlay() {
   const po = document.getElementById("pause-overlay");
   if (!po) return;
@@ -5556,20 +5671,7 @@ function syncPauseOverlay() {
       if (helpVisible) pc.classList.add('hidden');
       else pc.classList.remove('hidden');
     }
-    // Hide Next Attempt button on last attempt (cannot reset on last attempt) — handle both old and new IDs for backward compat
-    try {
-      const isLast = isLastAttemptForReset();
-      const btnNext = document.getElementById("pause-reset-attempt-button");
-      const btnReset = document.getElementById("pause-reset-attempt-button");
-      for (const btn of [btnNext, btnReset]) {
-        if (btn) {
-          btn.classList.toggle("hidden", isLast);
-          btn.style.display = isLast ? "none" : "";
-          // Ensure text is Next Attempt
-          if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
-        }
-      }
-    } catch { };
+    try { syncAudioToggleUI(); } catch { };
   } else {
     po.classList.add("hidden");
     po.classList.remove("with-backdrop");
@@ -6438,7 +6540,7 @@ function resetBall() {
   hideSoftlockBanner();
   resetSoftlockDetection();
   // Attempt counter is consumed on launch (see handleLaunch), not on reset.
-  // Failure resets (R / Next Attempt / OB-water-edge death) are free and only
+  // Failure resets (R / OB-water-edge death) are free and only
   // evaluate Last Attempt / Free Shot / Game Over triggers post-reset.
   // Only count as attempt if we were flying (had launched). R in AIMING does not consume attempt.
   if (wasFlying) {
@@ -6749,7 +6851,7 @@ function handleLaunch(angle, power) {
     updateAttemptsUI();
   } else {
     // Normal launch — counted attempt is consumed on launch (Attempts Left
-    // decreases immediately). Failure resets (R / Next Attempt / OB-water-edge
+    // decreases immediately). Failure resets (R / OB-water-edge
     // death) are free and must NOT increment again; Last Attempt / Free Shot /
     // Game Over triggers stay post-reset in resetBall() so the last flight can
     // still win (deferred Game Over).
@@ -7560,7 +7662,13 @@ function init() {
     newGameBtn.addEventListener('click', () => showCourseMenu());
   }
   if (helpBtn) {
-    helpBtn.addEventListener('click', () => showHelpOverlay());
+    // Main-menu hamburger (same ☰ icon as in-game): opens the Music/SFX/Help popup.
+    helpBtn.addEventListener('click', () => {
+      try {
+        if (menuHamburgerVisible) closeMenuHamburger();
+        else openMenuHamburger();
+      } catch {}
+    });
   }
   const pauseHelpBtn = document.getElementById('pause-help-button');
   if (pauseHelpBtn) {
@@ -8120,39 +8228,13 @@ function init() {
   const resumeBtnDom = document.getElementById("resume-button");
   const mainEndRunBtnDom = document.getElementById("end-run-button");
   const pauseEndRunBtnDom = document.getElementById("pause-end-run-button");
-  const pauseNextAttemptBtnDom = document.getElementById("pause-next-attempt-button");
-  const pauseResetAttemptBtnDom = document.getElementById("pause-reset-attempt-button");
-  // Single visible Next Attempt button (deleted duplicate green button). Ensure backward compat: both old and new IDs return same visible button.
-  let pauseNextBtn = pauseNextAttemptBtnDom || pauseResetAttemptBtnDom;
-  try {
-    if (pauseNextBtn) {
-      const origGetById = document.getElementById.bind(document);
-      const origQS = document.querySelector.bind(document);
-      const origQSA = document.querySelectorAll.bind(document);
-      document.getElementById = function (id) {
-        if (id === 'pause-next-attempt-button' || id === 'pause-reset-attempt-button') return pauseNextBtn;
-        return origGetById(id);
-      };
-      document.querySelector = function (sel) {
-        if (sel === '#pause-next-attempt-button' || sel === '#pause-reset-attempt-button') return pauseNextBtn;
-        return origQS(sel);
-      };
-      document.querySelectorAll = function (sel) {
-        if (sel === '#pause-next-attempt-button' || sel === '#pause-reset-attempt-button') return [pauseNextBtn];
-        return origQSA(sel);
-      };
-    }
-  } catch { };
-  // Ensure text is Next Attempt
-  for (const btn of [pauseNextAttemptBtnDom, pauseResetAttemptBtnDom].filter(Boolean)) {
-    if (btn.textContent.trim() !== "Next Attempt") btn.textContent = "Next Attempt";
-  }
-  if (pauseNextBtn && pauseNextBtn.textContent.trim() !== "Next Attempt") pauseNextBtn.textContent = "Next Attempt";
-  // Use single reference for event listeners
-  const pauseNextAttemptBtnDomFinal = pauseNextBtn;
   if (resumeBtnDom) resumeBtnDom.addEventListener("click", () => resumeGame());
   if (mainEndRunBtnDom) mainEndRunBtnDom.addEventListener("click", () => showEndRunConfirm());
   if (pauseEndRunBtnDom) pauseEndRunBtnDom.addEventListener("click", () => showEndRunConfirm());
+  // Audio prefs toggles use the delegated document click handler (module scope);
+  // just sync labels here. Main-menu hamburger popup wiring below.
+  try { syncAudioToggleUI(); } catch { }
+  wireMenuHamburger();
   // End Run confirmation overlay wiring
   const endRunConfirmOk = document.getElementById('end-run-confirm-ok');
   const endRunConfirmCancel = document.getElementById('end-run-confirm-cancel');
@@ -8162,7 +8244,8 @@ function init() {
   if (endRunConfirmOverlay) endRunConfirmOverlay.addEventListener('click', (e) => {
     if (e.target === endRunConfirmOverlay) hideEndRunConfirm();
   });
-  // Next Attempt in pause (renamed from Next Attempt) — same effect as hitting R hotkey, placed between Continue and End Run
+  // Reset-from-pause handler (Next Attempt button removed; kept for
+  // external callers). R stays blocked while pause is open — Continue first.
   function handlePauseResetAttempt() {
     // Replicate R hotkey logic (see initInput onReset) but allowed while pause is open:
     // close pause first, then perform R branching. Pause cannot be open during reward/WIN/GAME_OVER,
@@ -8201,8 +8284,6 @@ function init() {
     }
     resetBall();
   }
-  if (pauseResetAttemptBtnDom) pauseResetAttemptBtnDom.addEventListener("click", handlePauseResetAttempt);
-  if (pauseNextAttemptBtnDom) pauseNextAttemptBtnDom.addEventListener("click", handlePauseResetAttempt);
   // expose for tests / external callers
   if (typeof window !== 'undefined') {
     window.__handlePauseResetAttempt = handlePauseResetAttempt;
@@ -8364,7 +8445,12 @@ function init() {
           e.preventDefault();
           return;
         }
-        // Entry menu (no active run): Escape ignored
+        // Entry menu (no active run): hamburger popup closes on Escape, else ignored
+        if (menuHamburgerVisible && (e.code === "Escape" || e.code === "KeyP")) {
+          closeMenuHamburger();
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
         return;
       }

@@ -307,7 +307,6 @@ body {
   text-shadow: 0 1px 6px rgba(0,0,0,0.35);
 }
 #resume-button,
-#pause-reset-attempt-button,
 #pause-help-button,
 #end-run-button {
   width: 180px;
@@ -328,9 +327,33 @@ body {
   white-space: nowrap;
 }
 #resume-button:hover,
-#pause-reset-attempt-button:hover,
 #pause-help-button:hover,
 #end-run-button:hover { background: rgba(255,255,255,0.22); }
+/* Audio prefs toggles (pause menu + main-menu hamburger): same shape as the
+   Continue button but transparent — no background color. */
+#music-toggle-button,
+#sfx-toggle-button,
+#menu-hamburger-menu button {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
+  padding: 10px 24px;
+  font: 700 14px system-ui, sans-serif;
+  color: white;
+  background: transparent;
+  border: 2px solid rgba(255,255,255,0.85);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  -webkit-text-stroke: 2px rgba(0,0,0,0.65);
+  paint-order: stroke fill;
+  box-sizing: border-box;
+  text-align: center;
+  white-space: nowrap;
+}
+#music-toggle-button:hover,
+#sfx-toggle-button:hover,
+#menu-hamburger-menu button:hover { background: transparent; border-color: #ffffff; }
 #pause-end-run-button {
   width: 180px;
   min-width: 180px;
@@ -473,6 +496,47 @@ body {
 }
 .help-corner-button:hover { background: #0f3d1a; }
 .help-corner-button.hidden { display: none !important; }
+/* Main-menu hamburger: identical look to the in-game hamburger
+   (#mobile-menu-button): small square dark-translucent button. */
+#main-menu-overlay #help-button {
+  top: 12px;
+  left: 12px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  font: 700 20px/1 system-ui, sans-serif;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.35);
+  -webkit-text-stroke: 0;
+}
+#main-menu-overlay #help-button:hover { background: rgba(0,0,0,0.55); }
+/* Main-menu hamburger popup (Music / SFX / Help). Visually identical to the
+   in-game pause menu: transparent black backdrop, buttons centered. Clicks on
+   the backdrop (not on menu buttons) close it. */
+#menu-hamburger-menu {
+  position: absolute;
+  inset: 0;
+  z-index: 13;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  border-radius: 8px;
+}
+#menu-hamburger-menu.hidden { display: none !important; }
+.menu-hamburger-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: none;
+  padding: 24px 20px;
+}
 #end-run-button.hidden { display: none !important; }
 #main-menu-root #end-run-button {
   background: #e74c3c;

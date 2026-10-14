@@ -17,6 +17,7 @@
 - JSON: one file per cutscene `src/cutscenes/<id>.json` only (`id ^[a-z0-9][a-z0-9-_]{2,40}$`); `src/cutscenes.json`/`src/cutscene-data.json` deprecated (absent or `[]`, never fetched). Unknown fields ignored. `validateCutscene()` enforces ranges; `playCutscene` rejects invalid with `console.warn`.
 - API: `loadCutscene(id)` (folder only, cached), `listCutscenes()`/`loadCutscenesFromFolder()`, `playCutscene(idOrData,{onComplete})`, `isCutsceneActive()`, `getActiveCutsceneId()`, `getCutsceneTime()`, `updateCutscene(dt)`, `renderCutscene`, `handleCutsceneInput(e):bool`, `skipCutscene()`, `validateCutscene()`, seen helpers `hasSeenCutscene/markCutsceneSeen/loadSeenCutscenes` (`CUTSCENE_SEEN_KEY="golfVectorField.cutscenes.seen.v1" {version:1,seen:[]}`; cleared on storage clear/regeneration).
 - Skip: `#cutscene-skip-button` (`Skip »`, absolute `top:10 right:12` z14, pill `700 11px` on `rgba(0,0,0,0.55)`) visible iff active (synced on start/complete/every cutscene tick; `preventDefault`+`stopPropagation` → `skipCutscene()` → `onComplete`).
+- Audio prefs respected (see `08-campaign-and-menus.md` §6): `Music OFF` silences cutscene score cues (per-tick enforcement pauses an in-progress cue, re-enabling resumes the current cue); `SFX OFF` silences cutscene SFX cues and typewriter ticks.
 
 ## 2. Cutscene triggers (no shop/loadout)
 

@@ -9,6 +9,62 @@ let windNodes = null; // { src, filter, gain, lfo, lfoGain }
 let windActive = false;
 let lastTypeTickAt = 0;
 
+// --- User audio prefs (persisted): background music on/off, sound effects on/off ---
+// Separate localStorage key so run progress / campaign resets never wipe them
+// (only a full storage clear, e.g. campaign reseed, resets to defaults).
+export const AUDIO_PREFS_KEY = 'golfVectorField.audioPrefs.v1';
+const MASTER_VOL = 0.22;
+let musicEnabled = true;
+let sfxEnabled = true;
+function loadAudioPrefs() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const raw = localStorage.getItem(AUDIO_PREFS_KEY);
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    if (!p || typeof p !== 'object') return;
+    if (typeof p.music === 'boolean') musicEnabled = p.music;
+    if (typeof p.sfx === 'boolean') sfxEnabled = p.sfx;
+  } catch {}
+}
+function saveAudioPrefs() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(AUDIO_PREFS_KEY, JSON.stringify({ version: 1, music: !!musicEnabled, sfx: !!sfxEnabled }));
+  } catch {}
+}
+try { loadAudioPrefs(); } catch {}
+
+export function isMusicEnabled() { return !!musicEnabled; }
+
+export function setMusicEnabled(on) {
+  try {
+    musicEnabled = !!on;
+    saveAudioPrefs();
+    if (!musicEnabled) {
+      // Silence immediately (same path as tab-hide: fades cancelled).
+      try { pauseAllMusicForHidden(); } catch {}
+    } else {
+      try { resumeWantedMusic(); } catch {}
+    }
+  } catch {}
+  return musicEnabled;
+}
+
+export function isSfxEnabled() { return !!sfxEnabled; }
+
+export function setSfxEnabled(on) {
+  try {
+    sfxEnabled = !!on;
+    saveAudioPrefs();
+    // Mute the synth master immediately so in-flight SFX stop too; future
+    // SFX no-op via ac(). Wind intent is kept and re-applied on re-enable.
+    try { if (master) master.gain.value = sfxEnabled ? MASTER_VOL : 0.0; } catch {}
+    try { setWindActive(windActive); } catch {}
+  } catch {}
+  return sfxEnabled;
+}
+
 function now() {
   try { return ctx ? ctx.currentTime : 0; } catch { return 0; }
 }
@@ -20,7 +76,7 @@ export function ensureAudio() {
       if (!AC) return null;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = 0.22;
+      master.gain.value = sfxEnabled ? MASTER_VOL : 0.0;
       master.connect(ctx.destination);
       // Shared 1s white-noise buffer (noise channel).
       const len = Math.floor(ctx.sampleRate * 1);
@@ -37,7 +93,9 @@ export function ensureAudio() {
 
 function ac() {
   try {
+    if (!isSfxEnabled()) return null;
     if (!ctx) ensureAudio();
+    if (!isSfxEnabled()) return null;
     if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
     return ctx;
   } catch { return null; }
@@ -143,6 +201,11 @@ export function setWindActive(on) {
     ensureAudio();
     if (!ctx || !windNodes) return;
     if (ctx.state === 'suspended') { ctx.resume().catch(() => {}); return; }
+    if (!isSfxEnabled()) {
+      // Stay silent while SFX are off, but keep the intent for re-enable.
+      try { windNodes.gain.gain.setTargetAtTime(0.0, ctx.currentTime, 0.25); } catch {}
+      return;
+    }
     const t = ctx.currentTime;
     const g = windNodes.gain.gain;
     try { g.cancelScheduledValues(t); } catch {}
@@ -252,6 +315,7 @@ export function ensureMenuMusic() {
 
 function musicPlay(fadeMs = MUSIC_FADE_MS) {
   try {
+    if (!isMusicEnabled()) return; // user pref: music off
     if (isPageHidden()) return; // deferred: intent flag kept, resume on visible
     const el = ensureMusic();
     if (!el) return;
@@ -269,6 +333,7 @@ function musicPause(fadeMs = MUSIC_FADE_MS) {
 
 function menuMusicPlay(fadeMs = MUSIC_FADE_MS) {
   try {
+    if (!isMusicEnabled()) return; // user pref: music off
     if (isPageHidden()) return; // deferred: intent flag kept, resume on visible
     const el = ensureMenuMusic();
     if (!el) return;
@@ -527,7 +592,8 @@ if (typeof window !== 'undefined') {
       playChest, playReward, playOB, playUIClick,
       ensureMusic, setMusicActive, isMusicActive, duckMusic,
       ensureMenuMusic, setMenuMusicActive, isMenuMusicActive,
-      isPageHidden,
+      isPageHidden, AUDIO_PREFS_KEY,
+      isMusicEnabled, setMusicEnabled, isSfxEnabled, setSfxEnabled,
     };
   } catch {}
 }

@@ -34,6 +34,7 @@
     <div id="main-menu-overlay" class="hidden">...</div>
     <div id="pause-overlay" class="hidden">...</div>
     <div id="help-overlay" class="hidden">...</div>
+    <div id="menu-hamburger-menu" class="hidden">...</div>     <!-- main-menu ☰ popup: Music/SFX/Help -->
     <div id="starting-items-overlay" class="hidden">...</div>
     <div id="coin-summary-overlay" class="hidden">...</div>     <!-- points summary, id kept for compat -->
     <div id="course-cleared-overlay" class="hidden">...</div>   <!-- Course Cleared, after final Hole Complete -->
@@ -57,6 +58,7 @@
 - Split: `bgCtx` drawn on demand (mode/resize/terrain change), `fgCtx` `clearRect` each frame, `windRenderer` own per-frame clear (`setClearColor(0x000000,0)`).
 - Pausable (`visibilitychange`, `WIN`, `GAME_OVER`, `mainMenuVisible`, pause, banners, cutscene, banter); while paused `updateWind` visuals may run but `updateBall` is frozen.
 - Music auto-pause on tab hidden (`src/audio.js`): when the page becomes hidden (`document.hidden` via `visibilitychange`, `pagehide` for iOS Safari bfcache) both theme tracks (`main-theme.ogg`, `main-menu.ogg` `<audio>` elements) pause immediately (fades cancelled; `musicWanted`/`menuMusicWanted` intent flags preserved). When the page becomes visible again (`visibilitychange` visible + `pageshow`, guarded by `!document.hidden`) each wanted track fades back in. `setMusicActive/setMenuMusicActive(true)` and the gesture-unlock retry while hidden only set the intent flag and defer playback until visible. Visibility-only by design: window `blur`/`focus` is excluded, so a desktop tab that is still visible (e.g. side-by-side chat window) keeps playing; mobile app-switch/lock/Home always reports hidden so it still pauses there. Scope is music only (SFX/wind untouched). Must work on Chrome/Firefox/Safari, desktop + mobile.
+- Audio prefs (`AUDIO_PREFS_KEY="golfVectorField.audioPrefs.v1"`, defaults on, full spec in `08-campaign-and-menus.md` §6): `Music OFF` gates all music playback (stage/menu/cutscene scores); `SFX OFF` gates all synth SFX, the wind loop and cutscene SFX/type ticks. Menu toggles in pause menu + main-menu hamburger popup; persisted across page visits.
 
 ## 5. HiDPI & resize
 
@@ -74,6 +76,7 @@
 - [ ] Container is centered 16:9 `min(95vw,95vh*16/9)`; all layers share rect; DPR=2 keeps physics identical; resize keeps ratio, alignment, input mapping.
 - [ ] Fixed timestep: 30/60fps ball travel over 2s varies <5%; no main-loop `setInterval`.
 - [ ] Music pauses on tab hide/`pagehide` and resumes wanted track(s) on visible/`pageshow` (Chrome/Firefox/Safari, desktop+mobile); still-visible window blur (desktop side-by-side chat) keeps playing; intent flags preserved across hide.
+- [ ] Audio prefs toggles gate music vs SFX everywhere incl. cutscenes; state persists across page visits.
 
 ## File paths
 
