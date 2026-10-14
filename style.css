@@ -588,7 +588,7 @@ body {
 }
 .course-play-button {
   flex: 1;
-  min-width: 260px;
+  min-width: 240px;
   padding: 10px 16px;
   display: flex;
   flex-direction: column;
@@ -647,7 +647,6 @@ body {
 }
 #staged-course-list {
   overflow-x: visible;
-  padding-right: 52px;
 }
 .course-row.locked {
   opacity: 0.55;
