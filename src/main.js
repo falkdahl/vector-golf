@@ -8176,6 +8176,14 @@ function init() {
         try { maybeHideLoadingAfterSplash(); setTimeout(hideLoadingScreen, 400); } catch { };
         // Mark that we auto-resumed so main-menu block below is skipped
         window.__autoResumed = true;
+        // Reloading back into an ongoing run: drop the "click to continue"
+        // boot gate — the player is already mid-run. No audio unlock here
+        // (no gesture); music starts on the next user interaction instead.
+        try {
+          bootGateVisible = false;
+          const _gate = document.getElementById("continue-overlay");
+          if (_gate) _gate.classList.add("hidden");
+        } catch { }
       } else {
         throw new Error('loadProgress returned null');
       }

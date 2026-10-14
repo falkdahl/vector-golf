@@ -42,7 +42,7 @@
     <button id="cutscene-skip-button" class="hidden">Skip »</button>
     <button id="banter-skip-button" class="hidden">Skip »</button>
     <div id="toast" class="hidden">copied to clipboard</div>
-    <div id="continue-overlay">...</div>                   <!-- z60 boot gate: splash + Click to continue (audio-unlock gesture), visible until first click/key -->
+    <div id="continue-overlay">...</div>                   <!-- z60 boot gate: splash + Click to continue (audio-unlock gesture), visible until first click/key; skipped on auto-resume into a restorable save -->
   </div>
   <div id="loading-screen">Loading...</div>
 </body>
