@@ -1064,7 +1064,7 @@ body {
   will-change: transform;
 }
 #journal-container.collapsed {
-  transform: translateX(-51px);
+  transform: translateX(-45px);
 }
 #journal-container:focus-visible {
   outline: 2px solid rgba(255,255,255,0.9);
