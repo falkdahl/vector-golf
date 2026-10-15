@@ -29,6 +29,11 @@ export function setAimAngle(angle) {
   aimAngle = angle;
   // normalize to [0, 2pi)
   aimAngle = ((aimAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  // Keep the keyboard-step index in sync: updateInput() rewrites aimAngle from
+  // aimIndex every frame, so without this a loadLevel aim-at-hole would snap
+  // back to a stale index on the very next frame. Rounds to nearest step.
+  aimIndex = Math.round(aimAngle / STEP_SIZE) % TOTAL_DIRECTIONS;
+  if (aimIndex < 0) aimIndex += TOTAL_DIRECTIONS;
 }
 
 export function getAimAngle() {
