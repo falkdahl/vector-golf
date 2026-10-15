@@ -30,61 +30,109 @@ function isMobileRender() {
 const mobileShadowsOff = (function () { try { return isMobileRender(); } catch { return false; } })();
 
 // --- Course static buffer (single-canvas blit) ---
-// One opaque terrain-only image per hole in the active course (zone fills).
-// Trees/brick obstacles + hole/flag live in the hole overlay below so they
-// draw OVER modifier bubbles (bubbles sit under trees). Treasure is always
-// dynamic (collect-state flips mid-run; 1-3 chests are cheap).
-// Lazy + background: only the current hole is built synchronously on course
-// start / hole advance; remaining holes fill in via chunked background tasks
-// (see buildCourseStaticCacheAsync / warmCourseStaticHole) so an 18-hole
-// click never blocks the main thread for seconds. The per-frame path blits
-// whatever is ready and falls back to single-hole ensure + direct draw.
-let courseStaticImages = [];
+// Sliding window: at most 2 terrain bitmaps (current hole + next hole).
+// Play is strictly sequential (N -> N+1), so whole-course caching is pure
+// waste: 2 x 1280x720x4B ~= 7MB mobile (dpr 1), ~= 28MB desktop (dpr 2).
+// The next hole is prebuilt in the background while the current hole is
+// played; a speedrun that beats the prebuild pays one single-hole render
+// under the loading cover. The per-frame path blits whatever is ready and
+// falls back to single-hole ensure + direct draw on a miss.
+let courseStaticHoles = new Map(); // holeIndex -> canvas (insertion-ordered)
 let courseStaticDpr = 0;
-let courseStaticKey = null;
-// Per-course LRU so menu-idle warm can prebuild all unlocked courses without
-// re-rendering on every menu open. Key = courseId|count|dpr. Mobile caps at 2
-// courses (~2×18×3.7MB worst case); desktop keeps up to 4 (all stages).
-const staticCacheByKey = new Map(); // key -> { images, dpr, lastUsed }
-let staticCacheSerial = 0;
-function maxCachedCourses() { try { return isMobileRender() ? 2 : 4; } catch { return 2; } }
-function touchStaticCacheEntry(key) {
+let courseStaticKey = null; // active course identity: courseId|holeCount|dpr
+const COURSE_STATIC_WINDOW = 2;
+export function getCourseStaticKey() { return courseStaticKey; }
+export function getCourseStaticDpr() { return courseStaticDpr; }
+export function getCourseStaticCount() { try { return courseStaticHoles.size; } catch { return 0; } }
+export function getCourseStaticImage(index) {
   try {
-    const e = staticCacheByKey.get(key);
-    if (e) e.lastUsed = ++staticCacheSerial;
-    while (staticCacheByKey.size > maxCachedCourses()) {
+    if (!Number.isInteger(index) || index < 0) return null;
+    return courseStaticHoles.get(index) || null;
+  } catch { return null; }
+}
+export function getStaticCacheInfo() {
+  try { return { activeKey: courseStaticKey, holes: Array.from(courseStaticHoles.keys()), dpr: courseStaticDpr, firstHoles: Array.from(firstHoleCache.keys()) }; } catch { return null; }
+}
+export function invalidateCourseStaticCache() {
+  courseStaticHoles = new Map();
+  courseStaticDpr = 0;
+  courseStaticKey = null;
+  try { firstHoleCache = new Map(); } catch {}
+}
+// First-hole pre-warm cache: one terrain bitmap per course (hole 0 only),
+// rendered from the main menu so every course button starts instantly.
+// Bounded LRU (4 entries mobile ≈ 14MB, 2 desktop) — adopting into the window
+// shares the canvas by reference, so a played course costs no extra memory.
+let firstHoleCache = new Map(); // courseKey -> { canvas, dpr, lastUsed }
+let firstHoleSerial = 0;
+function firstHoleCacheMax() { try { return isMobileRender() ? 4 : 2; } catch { return 2; } }
+function touchFirstHole(key) {
+  try {
+    const e = firstHoleCache.get(key);
+    if (e) e.lastUsed = ++firstHoleSerial;
+    while (firstHoleCache.size > firstHoleCacheMax()) {
       let oldest = null, oldestT = Infinity;
-      for (const [k, v] of staticCacheByKey) {
+      for (const [k, v] of firstHoleCache) {
         if ((v && v.lastUsed || 0) < oldestT) { oldestT = v.lastUsed || 0; oldest = k; }
       }
       if (oldest == null) break;
-      try { staticCacheByKey.delete(oldest); } catch { break; }
+      try { firstHoleCache.delete(oldest); } catch { break; }
     }
   } catch {}
 }
-function snapshotActiveToCache() {
+export function peekFirstHole(courseKey, dpr) {
   try {
-    if (courseStaticKey == null || !courseStaticImages.length) return;
-    staticCacheByKey.set(String(courseStaticKey), { images: courseStaticImages.slice(), dpr: courseStaticDpr, lastUsed: ++staticCacheSerial });
-    touchStaticCacheEntry(String(courseStaticKey));
+    const e = firstHoleCache.get(String(courseKey));
+    if (e && e.canvas && Number(e.dpr) === Number(dpr)) { touchFirstHole(String(courseKey)); return e.canvas; }
   } catch {}
+  return null;
 }
-export function getStaticCacheInfo() {
-  try { return { activeKey: courseStaticKey, activeCount: courseStaticImages.length, cachedKeys: Array.from(staticCacheByKey.keys()) }; } catch { return null; }
-}
-export function clearStaleStaticCaches(keepKey) {
+export function renderFirstHoleForCache(courseKey, holeLevel, dpr) {
+  const dd = Math.max(1, Number(dpr) || 1);
+  if (!holeLevel) return null;
+  const k = String(courseKey);
   try {
-    snapshotActiveToCache();
-    for (const k of Array.from(staticCacheByKey.keys())) {
-      if (keepKey != null && k === String(keepKey)) continue;
-      // Drop entries whose DPR no longer matches (stale after resize); when
-      // keepKey is null (explicit DPR change) drop everything but active.
-      try { staticCacheByKey.delete(k); } catch {}
+    const hit = peekFirstHole(k, dd);
+    if (hit) return hit;
+    const c = renderHoleStaticCanvas(holeLevel, dd);
+    if (!c) return null;
+    firstHoleCache.set(k, { canvas: c, dpr: dd, lastUsed: ++firstHoleSerial });
+    touchFirstHole(k);
+    return c;
+  } catch { return null; }
+}
+// Adopt a prewarmed hole-0 into the window (zero-copy shared reference).
+// Call only right after prepareCourseStaticWindow(key) so stale holes from a
+// previous course can't linger under the new key. Returns true when adopted —
+// the caller must skip re-rendering hole 0.
+export function adoptFirstHoleAsHole0(courseKey, dpr) {
+  const dd = Math.max(1, Number(dpr) || 1);
+  const k = String(courseKey);
+  try {
+    const e = firstHoleCache.get(k);
+    if (!e || !e.canvas || Number(e.dpr) !== dd) return false;
+    courseStaticHoles.set(0, e.canvas);
+    courseStaticDpr = dd;
+    courseStaticKey = k;
+    touchFirstHole(k);
+    return true;
+  } catch { return false; }
+}
+// Reset the window when the course identity or DPR changes. Returns true on reset.
+export function prepareCourseStaticWindow(key, dpr) {
+  const dd = Math.max(1, Number(dpr) || 1);
+  const k = (key != null) ? String(key) : null;
+  try {
+    if (String(courseStaticKey) !== String(k) || Number(courseStaticDpr) !== dd) {
+      courseStaticHoles = new Map();
+      courseStaticDpr = dd;
+      courseStaticKey = k;
+      return true;
     }
   } catch {}
+  return false;
 }
-// Pure single-hole render with no cache side effects (used by both the active
-// fast path and background warm of non-active courses).
+// Pure single-hole render with no cache side effects.
 export function renderHoleStaticCanvas(level, dpr) {
   const dd = Math.max(1, Number(dpr) || 1);
   if (!level) return null;
@@ -99,183 +147,38 @@ export function renderHoleStaticCanvas(level, dpr) {
   } catch {}
   return c;
 }
-// Init the active set for a key without rendering (holes fill in progressively).
-export function initCourseStaticForKey(count, dpr, key) {
-  const dd = Math.max(1, Number(dpr) || 1);
-  try { snapshotActiveToCache(); } catch {}
-  courseStaticImages = new Array(Math.max(0, count | 0)).fill(null);
-  courseStaticDpr = dd;
-  try { courseStaticKey = (key != null) ? String(key) : (count + '|' + dd); } catch { courseStaticKey = count + '|' + dd; }
-  touchStaticCacheEntry(String(courseStaticKey));
-  return courseStaticImages.length;
-}
-// Restore active set from the per-course cache. Returns true on hit.
-export function restoreCourseStaticFromCache(key, dpr) {
-  try {
-    const k = String(key);
-    const e = staticCacheByKey.get(k);
-    if (!e || !Array.isArray(e.images) || !e.images.length) return false;
-    if (dpr != null && Number(e.dpr) !== Number(dpr)) return false;
-    try { snapshotActiveToCache(); } catch {}
-    courseStaticImages = e.images.slice();
-    courseStaticDpr = e.dpr;
-    courseStaticKey = k;
-    touchStaticCacheEntry(k);
-    return true;
-  } catch { return false; }
-}
-// Warm one hole of any course into the per-course cache without disturbing
-// the active set (unless it IS the active key, then it also fills active).
-export function warmCourseStaticHole(courseKey, index, level, dpr) {
-  const dd = Math.max(1, Number(dpr) || 1);
-  if (!level || !Number.isInteger(index) || index < 0) return null;
-  const k = String(courseKey);
-  try {
-    let e = staticCacheByKey.get(k);
-    if (!e) { e = { images: [], dpr: dd, lastUsed: ++staticCacheSerial }; staticCacheByKey.set(k, e); }
-    if (e.images[index]) { touchStaticCacheEntry(k); return e.images[index]; }
-    const c = renderHoleStaticCanvas(level, dd);
-    if (c) {
-      while (e.images.length <= index) e.images.push(null);
-      e.images[index] = c;
-      e.dpr = dd;
-      touchStaticCacheEntry(k);
-      // Mirror into active set when warming the active course.
-      try {
-        if (courseStaticKey != null && String(courseStaticKey) === k) {
-          while (courseStaticImages.length <= index) courseStaticImages.push(null);
-          if (!courseStaticImages[index]) courseStaticImages[index] = c;
-          courseStaticDpr = dd;
-        }
-      } catch {}
-      return c;
-    }
-  } catch {}
-  return null;
-}
-export function getWarmCourseStaticImage(courseKey, index) {
-  try {
-    const k = String(courseKey);
-    if (courseStaticKey != null && String(courseStaticKey) === k) return getCourseStaticImage(index);
-    const e = staticCacheByKey.get(k);
-    if (!e || !Array.isArray(e.images)) return null;
-    return e.images[index] || null;
-  } catch { return null; }
-}
-// Chunked async full build for the ACTIVE course. Yields between holes so the
-// loading cover paints and input stays alive. Cancellation via token: pass
-// the token from cancelCourseStaticBuild; a newer build aborts an older one.
-// onProgress(done, total) drives the loading counter.
-let courseStaticBuildToken = 0;
-export function cancelCourseStaticBuild() { try { courseStaticBuildToken++; } catch {} return courseStaticBuildToken; }
-function yieldToPaint() {
-  return new Promise((resolve) => {
-    let done = false;
-    const fin = () => { if (!done) { done = true; resolve(); } };
-    try {
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(() => { try { requestAnimationFrame(fin); } catch { fin(); } });
-      } else fin();
-    } catch { fin(); }
-    try { setTimeout(fin, 50); } catch {}
-  });
-}
-export async function buildCourseStaticCacheAsync(levels, dpr, key, onProgress, token) {
-  const dd = Math.max(1, Number(dpr) || 1);
-  if (!Array.isArray(levels) || !levels.length) return 0;
-  const myToken = (token != null) ? token : courseStaticBuildToken;
-  const k = (key != null) ? String(key) : (levels.length + '|' + dd);
-  // Reuse warm cache hits without re-rendering.
-  try {
-    const e = staticCacheByKey.get(k);
-    if (e && Array.isArray(e.images) && e.images.length === levels.length && Number(e.dpr) === dd && e.images.every(Boolean)) {
-      try { snapshotActiveToCache(); } catch {}
-      courseStaticImages = e.images.slice();
-      courseStaticDpr = dd;
-      courseStaticKey = k;
-      touchStaticCacheEntry(k);
-      try { if (typeof onProgress === 'function') onProgress(levels.length, levels.length); } catch {}
-      return courseStaticImages.length;
-    }
-  } catch {}
-  // Init progressive array if key/dpr changed; otherwise keep ready holes.
-  try {
-    if (String(courseStaticKey) !== k || Number(courseStaticDpr) !== dd || courseStaticImages.length !== levels.length) {
-      try { snapshotActiveToCache(); } catch {}
-      courseStaticImages = new Array(levels.length).fill(null);
-      courseStaticDpr = dd;
-      courseStaticKey = k;
-    }
-  } catch {}
-  let done = 0;
-  try { done = courseStaticImages.filter(Boolean).length; } catch {}
-  try { if (typeof onProgress === 'function') onProgress(done, levels.length); } catch {}
-  for (let i = 0; i < levels.length; i++) {
-    try { if (myToken !== courseStaticBuildToken) return done; } catch {}
-    try { if (courseStaticImages[i]) { done++; continue; } } catch {}
-    let c = null;
-    try { c = renderHoleStaticCanvas(levels[i], dd); } catch {}
-    try { if (myToken !== courseStaticBuildToken) return done; } catch {}
-    try {
-      courseStaticImages[i] = c;
-      if (c) done++;
-      snapshotActiveToCache();
-    } catch {}
-    try { if (typeof onProgress === 'function') onProgress(done, levels.length); } catch {}
-    if (i < levels.length - 1) { try { await yieldToPaint(); } catch {} }
-  }
-  try { snapshotActiveToCache(); } catch {}
-  return done;
-}
-export function getCourseStaticKey() { return courseStaticKey; }
-export function getCourseStaticDpr() { return courseStaticDpr; }
-export function getCourseStaticCount() { return courseStaticImages.length; }
-export function getCourseStaticImage(index) {
-  if (!Number.isInteger(index) || index < 0 || index >= courseStaticImages.length) return null;
-  return courseStaticImages[index] || null;
-}
-export function invalidateCourseStaticCache() {
-  courseStaticImages = [];
-  courseStaticDpr = 0;
-  courseStaticKey = null;
-}
-export function buildCourseStaticCache(levels, dpr, key = null) {
-  // Sync compat path (tests / fallback). Prefer buildCourseStaticCacheAsync.
-  const dd = Math.max(1, Number(dpr) || 1);
-  if (!Array.isArray(levels) || !levels.length) return 0;
-  const images = [];
-  for (const lvl of levels) {
-    let c = null;
-    try { c = renderHoleStaticCanvas(lvl, dd); } catch { c = null; }
-    try { images.push(c); } catch {}
-    if (!c) { try { c = document.createElement('canvas'); images.push(c); } catch {} }
-  }
-  try { snapshotActiveToCache(); } catch {}
-  courseStaticImages = images;
-  courseStaticDpr = dd;
-  try {
-    courseStaticKey = (key != null) ? String(key) : (levels.length + '|' + dd);
-  } catch { courseStaticKey = levels.length + '|' + dd; }
-  try { snapshotActiveToCache(); } catch {}
-  return images.length;
-}
 export function ensureCourseStaticImage(index, level, dpr) {
   const dd = Math.max(1, Number(dpr) || 1);
-  if (!level) return null;
+  if (!level || !Number.isInteger(index) || index < 0) return null;
   try {
-    const existing = getCourseStaticImage(index);
-    if (existing && courseStaticDpr === dd) return existing;
+    const existing = courseStaticHoles.get(index);
+    if (existing && Number(courseStaticDpr) === dd) return existing;
   } catch {}
-  // Lazy single-hole fallback (hole advance before background build finishes).
+  // Single-hole render (hole advance before the background prebuild finishes,
+  // or a debug jump outside the window).
   let c = null;
   try { c = renderHoleStaticCanvas(level, dd); } catch {}
+  if (!c) return null;
   try {
-    while (courseStaticImages.length <= index) courseStaticImages.push(null);
-    courseStaticImages[index] = c;
+    courseStaticHoles.set(index, c);
     courseStaticDpr = dd;
-    try { snapshotActiveToCache(); } catch {}
+    // Hard bound even if callers forget to evict: drop oldest-inserted.
+    while (courseStaticHoles.size > COURSE_STATIC_WINDOW + 1) {
+      const oldest = courseStaticHoles.keys().next().value;
+      courseStaticHoles.delete(oldest);
+    }
   } catch {}
   return c;
+}
+// Drop every buffered hole except the given indices (call after hole advance
+// so the previous hole's bitmap is freed; the window keeps current + next).
+export function evictCourseHolesExcept(keep) {
+  try {
+    const keepSet = new Set(Array.isArray(keep) ? keep : [keep]);
+    for (const k of Array.from(courseStaticHoles.keys())) {
+      if (!keepSet.has(k)) { try { courseStaticHoles.delete(k); } catch {} }
+    }
+  } catch {}
 }
 export function drawCourseStaticImage(ctx, index) {
   const img = getCourseStaticImage(index);

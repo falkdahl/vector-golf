@@ -30,7 +30,6 @@ import {
   clearWaterRipples,
   renderStaticScenery,
   drawStaticScenery,
-  buildCourseStaticCache,
   getCourseStaticImage,
   ensureCourseStaticImage,
   drawCourseStaticImage,
@@ -38,13 +37,11 @@ import {
   getCourseStaticCount,
   getCourseStaticKey,
   invalidateCourseStaticCache,
-  initCourseStaticForKey,
-  restoreCourseStaticFromCache,
-  warmCourseStaticHole,
-  getWarmCourseStaticImage,
-  buildCourseStaticCacheAsync,
-  cancelCourseStaticBuild,
-  clearStaleStaticCaches,
+  prepareCourseStaticWindow,
+  evictCourseHolesExcept,
+  peekFirstHole,
+  renderFirstHoleForCache,
+  adoptFirstHoleAsHole0,
   getStaticCacheInfo,
   renderHoleOverlay,
   drawHoleOverlay,
@@ -140,10 +137,8 @@ function hideLoadingScreen() {
   if (ls) ls.classList.add('hidden');
 }
 function showLoadingScreen(msg) {
-  // Content-load feedback (Play click → cutscene etc.). No-op while the
-  // boot loading screen is still up; safe to call from any flow.
-  // Optional progress text: "Loading..." default, or "Loading holes 5/18..."
-  // during chunked static-buffer builds so mobile taps get instant feedback.
+  // Content-load feedback (Play click → cutscene etc.). Text is `Loading...`
+  // unless a caller passes progress detail.
   try {
     const ls = document.getElementById('loading-screen');
     if (ls) {
@@ -154,16 +149,6 @@ function showLoadingScreen(msg) {
       } catch {}
     }
   } catch { }
-}
-function setLoadingProgress(done, total) {
-  try {
-    const ls = document.getElementById('loading-screen');
-    if (!ls || ls.classList.contains('hidden')) return;
-    const t = (typeof total === 'number' && total > 0) ? total : 0;
-    const d = (typeof done === 'number' && done >= 0) ? done : 0;
-    const text = t > 0 ? `Loading holes ${Math.min(d + 1, t)}/${t}...` : 'Loading...';
-    if (ls.textContent !== text) ls.textContent = text;
-  } catch {}
 }
 // Yield until the loading cover has painted (double-rAF + timeout fallback
 // so background-tab stalls still progress). Must be awaited AFTER
@@ -208,9 +193,8 @@ if (typeof window !== 'undefined') {
       if (loadingHideRequested) hideLoadingScreen();
       // Tier 1: menu chrome in the background, menu already visible.
       try { preloadMenuIdleAssets(); } catch { }
-      // Menu-idle warm: prebuild all unlocked courses in the background while
-      // the player browses (active holes first, then others, 1 hole/task).
-      try { scheduleMenuIdleWarm(1200); } catch { }
+      // Pre-warm hole 0 of every staged course while the player browses.
+      try { queueFirstHolePrewarm(1500); } catch { }
     }).catch(() => {
       assetsReady = true;
       if (loadingHideRequested) hideLoadingScreen();
@@ -494,14 +478,15 @@ function courseStaticKeyFor(course, dpr) {
     return id + '|' + n + '|' + dpr;
   } catch { return (activeCourseId || 'levels') + '|' + LEVELS.length + '|' + dpr; }
 }
-// Background static-buffer pump: builds missing holes 1/task (active course
-// first) so clicks stay instant. Cancellation via token bump on course switch
-// or DPR change. Driven by setTimeout(0) — cheap, no rAF starvation risk.
+// Background prebuild of the NEXT hole only (sliding window). One hole per
+// task via setTimeout(0) so input never blocks. Cancellable via token bump on
+// course switch. Play is sequential, so the window (current + next) covers
+// every real transition; a speedrun that beats the prebuild pays one
+// single-hole render under the loading cover on advance.
 let staticBuildToken = 0;
 let staticBuildScheduled = false;
 function cancelStaticBuilds() {
   try { staticBuildToken++; } catch {}
-  try { cancelCourseStaticBuild(); } catch {}
   staticBuildScheduled = false;
 }
 function queueBackgroundStaticBuild() {
@@ -511,60 +496,55 @@ function queueBackgroundStaticBuild() {
   const pump = () => {
     try {
       // Stale pump (cancelled by a newer course switch): exit WITHOUT clearing
-      // the flag — the newer pump owns it. Clearing here could orphan the new
-      // pump's guard and allow duplicate pumps.
+      // the flag — the newer pump owns it.
       if (myToken !== staticBuildToken) return;
-      // 1) Active course: next missing hole.
-      let didWork = false;
       try {
         const dpr = staticCacheDpr();
-        const key = courseStaticKeyFor(activeCourse, dpr);
-        if (String(getCourseStaticKey()) !== String(key) || Number(getCourseStaticDpr()) !== Number(dpr)) {
-          // Key drift (course switch mid-build): re-init progressively, keep ready holes.
-          try { initCourseStaticForKey(LEVELS.length, dpr, key); } catch {}
-        }
-        for (let i = 0; i < LEVELS.length; i++) {
-          if (!getCourseStaticImage(i)) {
-            try {
-              if (String(getCourseStaticKey()) === String(key)) ensureCourseStaticImage(i, LEVELS[i], dpr);
-              else warmCourseStaticHole(key, i, LEVELS[i], dpr);
-            } catch {}
-            didWork = true;
-            break;
-          }
+        const next = (typeof currentHoleIndex === 'number' ? currentHoleIndex : 0) + 1;
+        if (next < LEVELS.length && LEVELS[next] && !getCourseStaticImage(next) &&
+            String(getCourseStaticKey()) === String(courseStaticKeyFor(activeCourse, dpr)) &&
+            Number(getCourseStaticDpr()) === Number(dpr)) {
+          ensureCourseStaticImage(next, LEVELS[next], dpr);
         }
       } catch {}
-      if (didWork) { try { setTimeout(pump, 0); } catch { if (myToken === staticBuildToken) staticBuildScheduled = false; } return; }
-      // 2) Other unlocked courses (menu-idle warm): one hole per tick into LRU.
-      try {
-        const dpr = staticCacheDpr();
-        for (const c of (courses || [])) {
-          if (!c || c.id === activeCourseId || !Array.isArray(c.holes)) continue;
-          const ck = courseStaticKeyFor(c, dpr);
-          for (let i = 0; i < c.holes.length; i++) {
-            try { if (getWarmCourseStaticImage(ck, i)) continue; } catch { continue; }
-            try { warmCourseStaticHole(ck, i, c.holes[i], dpr); } catch {}
-            didWork = true;
-            break;
-          }
-          if (didWork) break;
-        }
-      } catch {}
-      if (didWork) { try { setTimeout(pump, 0); } catch { if (myToken === staticBuildToken) staticBuildScheduled = false; } return; }
       if (myToken === staticBuildToken) staticBuildScheduled = false;
     } catch { try { if (myToken === staticBuildToken) staticBuildScheduled = false; } catch {} }
   };
   try { setTimeout(pump, 0); } catch { staticBuildScheduled = false; }
 }
-// Menu-idle warm for all courses: opportunistic background prebuild while the
-// player sits in the menu (after Tier-0) or after unlock/menu-return. The pump
-// builds active-course holes first, then other unlocked courses one hole per
-// task into the LRU — safe to call often (guarded, cancellable on Play).
-function scheduleMenuIdleWarm(delayMs) {
+// First-hole pre-warm: render hole 0 of every staged course while the player
+// browses the main menu, so every course button starts instantly (adopted,
+// not re-rendered). One hole per task, largest courses first so a tight LRU
+// keeps the expensive clicks warm. Stops when leaving the menu or on course
+// start/DPR change (shared token with the next-hole pump).
+let prewarmRunning = false;
+function queueFirstHolePrewarm(delayMs) {
+  if (prewarmRunning) return;
+  prewarmRunning = true;
   try {
-    const d = (typeof delayMs === 'number' && delayMs >= 0) ? delayMs : 800;
-    setTimeout(() => { try { queueBackgroundStaticBuild(); } catch {} }, d);
-  } catch {}
+    const d = (typeof delayMs === 'number' && delayMs >= 0) ? delayMs : 1500;
+    const myToken = staticBuildToken;
+    setTimeout(function warmNext() {
+      try {
+        if (myToken !== staticBuildToken) { prewarmRunning = false; return; }
+        if (!mainMenuVisible) { prewarmRunning = false; return; }
+        const dpr = staticCacheDpr();
+        let list = [];
+        try { list = [...(courses || [])].sort((a, b) => (((b && b.holes && b.holes.length) || 0) - ((a && a.holes && a.holes.length) || 0))); } catch {}
+        for (const c of list) {
+          if (!c || !Array.isArray(c.holes) || !c.holes.length) continue;
+          const ck = courseStaticKeyFor(c, dpr);
+          let have = false;
+          try { have = !!peekFirstHole(ck, dpr); } catch {}
+          if (have) continue;
+          try { renderFirstHoleForCache(ck, c.holes[0], dpr); } catch {}
+          try { setTimeout(warmNext, 0); } catch { prewarmRunning = false; }
+          return;
+        }
+        prewarmRunning = false;
+      } catch { try { prewarmRunning = false; } catch {} }
+    }, d);
+  } catch { try { prewarmRunning = false; } catch {} }
 }
 function setActiveCourse(course) {
   activeCourse = course;
@@ -601,29 +581,33 @@ function setActiveCourse(course) {
       }
     } catch { };
   }
-  // Lazy + background: restore from warm cache on hit (instant); otherwise
-  // build hole 0 synchronously only and queue the rest. A full 18-hole sync
-  // here froze mobile for seconds with no paint — never do that again.
+  // Sliding window: reset to this course, cover hole 0. Hole 0's bitmap
+  // is treasure-independent, so a same-key preview (hole 0 already buffered)
+  // is reused instead of re-rendered; otherwise adopt the menu pre-warm when
+  // available (zero-copy), else render once. Next hole prebuilds in background.
   try {
     cancelStaticBuilds();
     const dpr = staticCacheDpr();
     const key = courseStaticKeyFor(course, dpr);
-    let hit = false;
-    try { hit = restoreCourseStaticFromCache(key, dpr); } catch {}
-    if (hit && getCourseStaticCount() === LEVELS.length) {
-      try { lastStaticSig = null; } catch {}
-      queueBackgroundStaticBuild();
-      return;
+    let sameWindow = false;
+    try {
+      sameWindow = String(getCourseStaticKey()) === String(key) &&
+        Number(getCourseStaticDpr()) === Number(dpr) && !!getCourseStaticImage(0);
+    } catch {}
+    if (!sameWindow) {
+      try { prepareCourseStaticWindow(key, dpr); } catch {}
+      let adopted = false;
+      try { adopted = adoptFirstHoleAsHole0(key, dpr); } catch {}
+      if (!adopted) { try { if (LEVELS[0]) ensureCourseStaticImage(0, LEVELS[0], dpr); } catch {} }
     }
-    try { initCourseStaticForKey(LEVELS.length, dpr, key); } catch {}
-    try { if (LEVELS[0]) ensureCourseStaticImage(0, LEVELS[0], dpr); } catch {}
     try { lastStaticSig = null; } catch {}
     queueBackgroundStaticBuild();
   } catch {}
 }
 // Backing DPR for the course static buffer. Mobile uses 1x to bound memory
-// (~3.7MB/hole → 18 holes ≈ 66MB worst case); desktop uses display DPR for
-// crispness. The blit scales to the backing store, so visuals stay correct.
+// (sliding window: 2 holes ≈ 7MB worst case); desktop uses display DPR for
+// crispness (≈ 28MB at dpr 2). The blit scales to the backing store, so
+// visuals stay correct.
 function staticCacheDpr() {
   try { if (typeof isMobileMode === 'function' && isMobileMode()) return 1; } catch {}
   try { return effectiveDPR(); } catch {}
@@ -631,56 +615,35 @@ function staticCacheDpr() {
   return 1;
 }
 function rebuildCourseStaticCache() {
-  // Fast path: never sync-build all holes (that froze 18-hole clicks on
-  // mobile). Ensure the current hole only; the background pump fills the rest.
+  // Fast path: reset the window on course/DPR change, ensure the current hole
+  // only (at most 1 hole rendered here); the background pump prebuilds next.
   try {
     if (!Array.isArray(LEVELS) || !LEVELS.length) return 0;
     const dpr = staticCacheDpr();
     const key = courseStaticKeyFor(activeCourse, dpr);
+    try { prepareCourseStaticWindow(key, dpr); } catch {}
     try {
-      if (getCourseStaticCount() === LEVELS.length && getCourseStaticDpr() === dpr) {
-        let sameKey = false;
-        try { sameKey = (typeof getCourseStaticKey === 'function' && getCourseStaticKey() === key); } catch {}
-        if (sameKey) {
-          let allReady = true;
-          try { for (let i = 0; i < LEVELS.length; i++) { if (!getCourseStaticImage(i)) { allReady = false; break; } } } catch { allReady = false; }
-          if (allReady) return LEVELS.length;
-        }
-      }
-    } catch {}
-    // Keep key/count/dpr in sync without rendering everything.
-    try {
-      if (String(getCourseStaticKey()) !== String(key) || Number(getCourseStaticDpr()) !== Number(dpr) || getCourseStaticCount() !== LEVELS.length) {
-        const keepIdx = (typeof currentHoleIndex === 'number') ? currentHoleIndex : 0;
-        try { initCourseStaticForKey(LEVELS.length, dpr, key); } catch {}
-        try { if (LEVELS[keepIdx]) ensureCourseStaticImage(keepIdx, LEVELS[keepIdx], dpr); } catch {}
-        try { if (LEVELS[0] && keepIdx !== 0) ensureCourseStaticImage(0, LEVELS[0], dpr); } catch {}
-      } else {
-        try {
-          const keepIdx = (typeof currentHoleIndex === 'number') ? currentHoleIndex : 0;
-          if (!getCourseStaticImage(keepIdx) && LEVELS[keepIdx]) ensureCourseStaticImage(keepIdx, LEVELS[keepIdx], dpr);
-        } catch {}
-      }
+      const idx = (typeof currentHoleIndex === 'number') ? currentHoleIndex : 0;
+      if (!getCourseStaticImage(idx) && LEVELS[idx]) ensureCourseStaticImage(idx, LEVELS[idx], dpr);
     } catch {}
     try { lastStaticSig = null; } catch {}
     try { queueBackgroundStaticBuild(); } catch {}
-    try {
-      let ready = 0;
-      for (let i = 0; i < LEVELS.length; i++) { try { if (getCourseStaticImage(i)) ready++; } catch {} }
-      return ready;
-    } catch { return 0; }
+    try { return getCourseStaticCount(); } catch { return 0; }
   } catch { return 0; }
 }
-// Explicit sync full build (tests / fallback only). Never called on click.
-function rebuildCourseStaticCacheSync() {
+// Ensure the window covers the current hole (at most 1 hole rendered here):
+// used by loadLevel and by resume paths, which restore currentHoleIndex > 0
+// while the window may only hold hole 0.
+function ensureWindowForCurrentHole() {
   try {
-    if (!Array.isArray(LEVELS) || !LEVELS.length) return 0;
     const dpr = staticCacheDpr();
-    const key = courseStaticKeyFor(activeCourse, dpr);
-    const n = buildCourseStaticCache(LEVELS, dpr, key);
-    try { lastStaticSig = null; } catch {}
-    return n;
-  } catch { return 0; }
+    try { prepareCourseStaticWindow(courseStaticKeyFor(activeCourse, dpr), dpr); } catch {}
+    if (!getCourseStaticImage(currentHoleIndex) && LEVELS[currentHoleIndex]) {
+      ensureCourseStaticImage(currentHoleIndex, LEVELS[currentHoleIndex], dpr);
+    }
+    try { evictCourseHolesExcept([currentHoleIndex, currentHoleIndex + 1]); } catch {}
+    try { queueBackgroundStaticBuild(); } catch {}
+  } catch {}
 }
 // Show #bg-canvas only when it carries something (menu fallback / cutscene).
 // During gameplay it is display:none so the compositor skips a full-screen
@@ -3164,6 +3127,8 @@ function handleContinue() {
     createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
     syncModifiersToField();
     createBall(level.tee);
+    // Sliding window holds hole 0 after loadProgress; cover the resumed hole now.
+    try { ensureWindowForCurrentHole(); } catch {}
     // Restore freeShot glow after ball created (ball at tee, AIMING follows)
     try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch { };
     gameState = "AIMING";
@@ -3241,8 +3206,8 @@ function maybeUpdateHighScore() {
       // A new staged course was generated by this run's clear.
       runUnlockedNewCourse = true;
       try { renderCourseList(); } catch { };
-      // Warm the newly unlocked course in the background for next menu visit.
-      try { scheduleMenuIdleWarm(600); } catch {}
+      // Warm the newly unlocked course's first hole for next menu visit.
+      try { queueFirstHolePrewarm(800); } catch {}
     } else if (updated) {
       // still re-render to show unlock
       try { renderCourseList(); } catch { };
@@ -3468,24 +3433,22 @@ function handleCoursePlay(courseId) {
   // New flow: show loadout before first hole (10-progression.md §2) — pre-load last saved or random
   if (hasRestorableSave()) return;
   // Feedback: content (cutscene JSON + assets, or loadout) loads async below.
-  // Show instantly so the 18-hole tap never looks dead; the heavy terrain
-  // build below is hole-0-only + background (never a sync 18-hole loop).
+  // Show instantly so the 18-hole tap never looks dead; the terrain work
+  // below is a single hole-0 render (never a sync multi-hole loop).
   try { showLoadingScreen('Loading...'); } catch { }
   const _tutCourse = findCourseById(courseId);
   const _isTut = isTutorialCourse(_tutCourse);
   try { loadProgression(); } catch { }
   const _afterPrologue = async (opts) => {
-    try {
-      // Let the loading cover paint before the hole-0 terrain render so the
-      // tap gets visible feedback even on slow phones.
-      try {
-        const _c = findCourseById(courseId);
-        const _n = (_c && Array.isArray(_c.holes)) ? _c.holes.length : 0;
-        showLoadingScreen(_n > 0 ? `Loading holes 1/${_n}...` : 'Loading...');
-      } catch { try { showLoadingScreen('Loading...'); } catch {} }
-      try { await awaitLoadingPaint(); } catch {}
-    } catch {}
-    try { hideLoadingScreen(); } catch { }; if (_isTut) { startTutorialCourse(courseId); } else { playBanterThenShowStartingOverlay(courseId, opts); } };
+    // Keep the loading cover up THROUGH the hole-0 terrain render: hiding it
+    // first leaves the last-painted (black loading) frame on screen for the
+    // whole synchronous render, since the hide needs a frame that can't paint
+    // until the block ends. Render under cover, then hide, so terrain + hide
+    // paint together on the next frame.
+    try { showLoadingScreen('Loading...'); } catch {}
+    try { await awaitLoadingPaint(); } catch {}
+    if (_isTut) { startTutorialCourse(courseId); } else { playBanterThenShowStartingOverlay(courseId, opts); }
+    try { hideLoadingScreen(); } catch { } };
   // 11-cutscenes §11: first time player clicks 3-hole course, show prologue.json before next state (loadout / tutorial)
   // For 3-hole Trial tutorial, prologue/intro still play when not yet seen, but after they complete we start the tutorial (controls-first banter), not the generic Starting Items overlay.
   try {
@@ -4160,8 +4123,8 @@ function finishReturnToMainMenu() {
   if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
   syncPauseOverlay(); syncMainMenu();
   updateAttemptsUI(); updateHotbarUI(); updateForceBar();
-  // Menu return: warm all unlocked courses in the background for next click.
-  try { scheduleMenuIdleWarm(600); } catch {}
+  // Menu return: re-warm first holes (a played course may have been evicted).
+  try { queueFirstHolePrewarm(800); } catch {}
 }
 
 function selectHole(n) {
@@ -5464,16 +5427,15 @@ function setupCanvas() {
   if (ctx) ctx.imageSmoothingEnabled = true;
   if (bgCtx) bgCtx.imageSmoothingEnabled = true;
   setCanvasSize(LOGICAL_W, LOGICAL_H);
-  // DPR change invalidates the pre-rendered holes; fast-rebuild current hole
-  // at the new static-cache DPR (background fills the rest, no state reset).
-  // Drop stale DPR entries so an 18-hole buffer doesn't linger twice in RAM.
+  // DPR change shifts the window key (courseId|count|dpr), so the rebuild
+  // below resets the window automatically — at most 1 hole renders, no state
+  // reset. Abort any stale next-hole prebuild first.
   try {
     const ndpr = staticCacheDpr();
     if (typeof setupCanvas._lastStaticDpr === 'undefined') setupCanvas._lastStaticDpr = ndpr;
     if (setupCanvas._lastStaticDpr !== ndpr) {
       setupCanvas._lastStaticDpr = ndpr;
       try { cancelStaticBuilds(); } catch {}
-      try { clearStaleStaticCaches(courseStaticKeyFor(activeCourse, ndpr)); } catch {}
     }
   } catch {}
   try { rebuildCourseStaticCache(); } catch {}
@@ -5563,18 +5525,17 @@ function loadLevel(index) {
   ballInsideModifierIds = new Set();
   holeStartAttempts = holeAttempts; holeRerolls = 0;
   updateHotbarUI();
-  // Single-canvas blit: ensure this hole's static image exists. Background pump
-  // fills the rest; never sync-build all holes here (hole-transition hitch).
-  try {
-    if (!getCourseStaticImage(index) || getCourseStaticDpr() !== staticCacheDpr()) {
-      if (!getCourseStaticImage(index) && level) ensureCourseStaticImage(index, level, staticCacheDpr());
-      try { queueBackgroundStaticBuild(); } catch {}
-    }
-  } catch {}
+  // Sliding window: ensure this hole (prebuilt hit in the common case, one
+  // single-hole render on a speedrun miss), keep it + next, free the rest.
+  try { ensureWindowForCurrentHole(); } catch {}
   try { syncBgCanvasVisibility(); } catch {}
   try { redrawBottom(); } catch { };
   // 11-banners: show Hole N banner for 2s before reward (same dim, auto-transition)
   try { showHoleBanner(currentHoleIndex, getTotalHoles()); } catch { };
+  // Pre-paint one frame synchronously so the canvas already holds terrain
+  // before the loading cover lifts — the first rAF paint after unblock must
+  // never be load-bearing (a late first frame used to show a black canvas).
+  try { render(); } catch (e) { recordFrameError('loadlevel-prepaint', e); }
 }
 
 function initLevel() {
@@ -7742,8 +7703,9 @@ function render() {
     let img = getCourseStaticImage(currentHoleIndex);
     if ((!img || getCourseStaticDpr() !== staticCacheDpr()) && level) {
       try {
-        // Never full-rebuild inside a frame (would hitch); single-hole ensure
-        // + background pump instead. Direct-draw fallback below covers the miss.
+        // Never render more than 1 hole inside a frame (would hitch);
+        // single-hole ensure + next-hole pump instead. Direct-draw fallback
+        // below covers the miss.
         img = getCourseStaticImage(currentHoleIndex);
         if (!img) img = ensureCourseStaticImage(currentHoleIndex, level, staticCacheDpr());
         try { queueBackgroundStaticBuild(); } catch {}
@@ -7917,6 +7879,21 @@ function render() {
   try { renderWind(); } catch { };
 }
 
+// Frame-loop resilience: the next rAF is always scheduled BEFORE frame work,
+// so a transient throw can never freeze the game on a stale (black) canvas.
+// Throws are recorded (and console.error'd) for diagnosis instead of killing
+// the loop. Surfaced via window.__diag().frameError.
+let frameErrorCount = 0;
+let lastFrameError = null;
+function recordFrameError(where, e) {
+  try {
+    frameErrorCount++;
+    let msg = '';
+    try { msg = String((e && (e.stack || e.message)) || e); } catch { msg = 'unknown'; }
+    lastFrameError = { where: String(where), msg: msg.slice(0, 600), at: Date.now(), n: frameErrorCount };
+    try { console.error('[frame]', where, e); } catch {}
+  } catch {}
+}
 function loop(now) {
   if (document.hidden) {
     lastTime = now;
@@ -7930,6 +7907,10 @@ function loop(now) {
     //   wind via updateWindUniforms),
     // - end-9-hole cutscene (camera/dialog via cutsceneUpdate, wind visuals).
     // Without these ticks both would be frozen (same root cause).
+    // Schedule first: nothing below may kill the frame loop (a transient
+    // throw used to freeze the game on a black canvas while wind/banter
+    // carried on with their own loops/DOM).
+    try { requestAnimationFrame(loop); } catch {}
     try {
       if (cutsceneIsActive()) {
         const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
@@ -7942,21 +7923,24 @@ function loop(now) {
         try { banterUpdate(dt); } catch { }
         try { syncBanterSkipButton(); } catch { }
       }
-    } catch { }
-    render();
-    requestAnimationFrame(loop);
+    } catch (e) { recordFrameError('loop-win-tick', e); }
+    try { render(); } catch (e) { recordFrameError('loop-win-render', e); }
     lastTime = now;
     return;
   }
   const frameTime = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
   accumulator += frameTime;
-  let steps = 0;
-  while (accumulator >= FIXED_DT && steps < 5) {
-    update(FIXED_DT);
-    accumulator -= FIXED_DT;
-    steps++;
-  }
+  // Schedule first: update()/render() must never kill the frame loop.
+  try { requestAnimationFrame(loop); } catch {}
+  try {
+    let steps = 0;
+    while (accumulator >= FIXED_DT && steps < 5) {
+      update(FIXED_DT);
+      accumulator -= FIXED_DT;
+      steps++;
+    }
+  } catch (e) { recordFrameError('loop-update', e); }
   // Wind visuals + queued hotbar DOM sync run once per frame (never per step).
   try { tickWindVisual(frameTime); } catch { }
   if (needHotbarSync) {
@@ -7982,8 +7966,7 @@ function loop(now) {
       }
     }
   } catch { }
-  render();
-  requestAnimationFrame(loop);
+  try { render(); } catch (e) { recordFrameError('loop-render', e); }
 }
 
 function init() {
@@ -8502,6 +8485,8 @@ function init() {
         createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
         syncModifiersToField();
         createBall(level.tee);
+        // Sliding window holds hole 0 after loadProgress; cover the resumed hole now.
+        try { ensureWindowForCurrentHole(); } catch {}
         try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch { };
         // Handle GAME_OVER save: show Game Over screen directly
         if (data.gameState === 'GAME_OVER') {
@@ -9786,8 +9771,8 @@ if (typeof window !== 'undefined') {
   window.__getCourseStaticCount = () => { try { return getCourseStaticCount(); } catch { return 0; } };
   window.__getCourseStaticImage = (i) => { try { return getCourseStaticImage(i); } catch { return null; } };
   window.__rebuildCourseStaticCache = () => { try { return rebuildCourseStaticCache(); } catch { return 0; } };
-  window.__rebuildCourseStaticCacheSync = () => { try { return rebuildCourseStaticCacheSync(); } catch { return 0; } };
   window.__staticBuildInfo = () => { try { return getStaticCacheInfo(); } catch { return null; } };
+  window.__diag = () => { try { return { mainMenuVisible, currentHoleIndex, hasLevel: !!level, ball: (ball && ball.pos) ? { x: Math.round(ball.pos.x), y: Math.round(ball.pos.y) } : null, gameState, rewardMenuVisible, banter: banterIsActive(), cutscene: cutsceneIsActive(), starting: isStartingOverlayVisible(), frameErrors: frameErrorCount, frameError: lastFrameError }; } catch (e) { return { error: String((e && e.message) || e) }; } };
   window.__queueStaticBuild = () => { try { queueBackgroundStaticBuild(); return true; } catch { return false; } };
   window.__getHoleOverlaySig = () => { try { return getHoleOverlaySig(); } catch { return null; } };
   window.__isBgHidden = () => { try { return !!(bgCanvas && bgCanvas.style.display === 'none'); } catch { return false; } };
