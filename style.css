@@ -166,6 +166,7 @@ body {
 #game-container:has(#continue-overlay:not(.hidden)) #mobile-fullscreen-button,
 #game-container:has(#continue-overlay:not(.hidden)) #mobile-menu-button,
 #game-container:has(#continue-overlay:not(.hidden)) #mobile-reset-button,
+#game-container:has(#continue-overlay:not(.hidden)) #mobile-rotate-overlay,
 #game-container:has(#continue-overlay:not(.hidden)) #mobile-controls {
   display: none !important;
 }
@@ -2368,6 +2369,38 @@ body {
 #mobile-menu-button.hidden,
 #mobile-reset-button.hidden,
 #mobile-fullscreen-button.hidden { display: none !important; }
+/* 12-mobile landscape-only: portrait rotate guard. Shown in mobile mode while
+   the viewport is portrait (orientation lock is best-effort — unsupported on
+   iOS — so this overlay is the hard guarantee). Covers the container so all
+   touch input is blocked until the device is landscape. Above game overlays
+   and skip buttons, below the boot gate and loading screen. */
+#mobile-rotate-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.88);
+  z-index: 50;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+#mobile-rotate-overlay.hidden { display: none !important; }
+.rotate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 32px;
+}
+.rotate-icon { font-size: 48px; line-height: 1; animation: rotateHint 1.6s ease-in-out infinite; }
+.rotate-text { font: 700 18px system-ui, sans-serif; color: #fff; }
+@keyframes rotateHint {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+}
 #mobile-controls {
   position: absolute;
   bottom: 12px;

@@ -27,6 +27,7 @@
     <canvas id="wind-canvas"></canvas>                          <!-- z3 Three.js, alpha, pointer-events:none -->
     <div id="hud">...</div>                                     <!-- z4, pointer-events:none -->
     <div id="bottom-bar">...</div>                              <!-- z6 -->
+    <div id="mobile-rotate-overlay" class="hidden">...</div>     <!-- z50 portrait rotate guard (mobile only) -->
     <div id="journal-wrapper">...</div>
     <div id="journal-panel" class="hidden">...</div>
     <div id="reward-overlay" class="hidden">...</div>            <!-- z10 -->

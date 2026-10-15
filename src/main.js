@@ -3430,7 +3430,9 @@ function renderCourseList() {
 function handleCoursePlay(courseId) {
   // Click blip (gesture — also unlocks AudioContext).
   try { audioUIClick(); } catch { }
-  // New flow: show loadout before first hole (10-progression.md §2) — pre-load last saved or random
+  // 12-mobile landscape-only: Play is a user gesture — (re-)assert
+  // fullscreen + landscape lock before any cutscene/level starts.
+  try { requestMobileFullscreen(); } catch { }
   if (hasRestorableSave()) return;
   // Feedback: content (cutscene JSON + assets, or loadout) loads async below.
   // Show instantly so the 18-hole tap never looks dead; the terrain work
@@ -6090,18 +6092,54 @@ function isFullscreenActive() {
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   } catch { return false; }
 }
+// 12-mobile landscape-only: request the orientation lock. Must be called AFTER
+// fullscreen engages — screen.orientation.lock() issued in the same task as
+// requestFullscreen() rejects (no fullscreen element yet), which previously
+// left the game unlocked so phones could sit in portrait (e.g. after skipping
+// the first cutscene). Mobile-only: desktop browsers reject outside
+// fullscreen, so never attempt there. Best-effort (no-op on iOS where the
+// API is missing); the portrait rotate guard below is the hard guarantee.
+function lockLandscapeOrientation() {
+  try {
+    if (!isMobileMode()) return;
+    if (screen.orientation && screen.orientation.lock) {
+      const r = screen.orientation.lock('landscape');
+      if (r && r.catch) r.catch(() => { });
+    }
+  } catch { }
+}
 function requestMobileFullscreen() {
   try {
+    if (!isMobileMode()) return;
     const el = document.getElementById('game-container') || document.documentElement;
     let p = null;
     if (el.requestFullscreen) p = el.requestFullscreen();
     else if (el.webkitRequestFullscreen) p = el.webkitRequestFullscreen();
     else if (document.documentElement.requestFullscreen) p = document.documentElement.requestFullscreen();
-    if (p && p.catch) p.catch(() => { });
-  } catch { }
+    // Chain the lock onto fullscreen engagement; fall back to a direct
+    // attempt when the request API returns no promise.
+    if (p && p.then) p.then(lockLandscapeOrientation, () => { });
+    else lockLandscapeOrientation();
+  } catch { lockLandscapeOrientation(); }
+}
+// 12-mobile landscape-only: portrait rotate guard. Visible in mobile mode
+// while the viewport is portrait; the overlay covers the container so touch
+// input is blocked, and launch/reset key paths check isRotateGuardVisible().
+let rotateGuardVisible = false;
+function isRotateGuardVisible() { return rotateGuardVisible; }
+function syncRotateOverlay() {
   try {
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => { });
+    const el = document.getElementById('mobile-rotate-overlay');
+    const show = (() => {
+      try {
+        if (!isMobileMode()) return false;
+        return window.innerHeight > window.innerWidth;
+      } catch { return false; }
+    })();
+    rotateGuardVisible = show;
+    if (el) {
+      el.classList.toggle('hidden', !show);
+      el.setAttribute('aria-hidden', show ? 'false' : 'true');
     }
   } catch { }
 }
@@ -6192,6 +6230,7 @@ function syncMobileUI() {
     try { document.getElementById('game-container').classList.add('mobile-mode'); } catch { }
     if (controls) controls.classList.toggle('hidden', chromeHidden);
     if (fsBtn) fsBtn.classList.toggle('hidden', isFullscreenActive() || chromeHidden);
+    try { syncRotateOverlay(); } catch { }
   } catch { }
 }
 // Touch-drag bookkeeping shared by canvas + bag touch handlers.
@@ -6306,35 +6345,43 @@ function startBoardDragAt(idx, pos) {
 
 function initMobileControls() {
   // Hamburger (Escape equivalent) + reset (R equivalent) + fullscreen re-entry. Always wired; visibility gated by syncMobileUI.
+  // 12-mobile: fire on touchend as well as click. While the launch button is
+  // held (CHARGING) a second-finger tap on reset/menu must register — click
+  // synthesis is unreliable with another touch active, so touchend (with
+  // preventDefault to suppress the emulated click, same pattern as bag taps)
+  // is primary on touch and click remains the mouse fallback. The dispatched
+  // synthetic Escape/KeyR paths are unchanged so behavior can never diverge.
+  const bindTap = (el, fn) => {
+    if (!el || el._tapBound) return;
+    el._tapBound = true;
+    // Suppress the emulated click that may follow touchend on some browsers:
+    // without this a single tap would dispatch twice (e.g. pause opens then
+    // instantly closes again).
+    let lastTouchDispatch = 0;
+    el.addEventListener('touchend', (e) => {
+      try { if (e.cancelable) e.preventDefault(); } catch { }
+      try { if (el.blur) el.blur(); } catch { }
+      try { lastTouchDispatch = Date.now(); } catch { }
+      fn();
+    }, { passive: false });
+    el.addEventListener('touchcancel', () => { try { if (el.blur) el.blur(); } catch { } });
+    el.addEventListener('click', (e) => {
+      try { if (Date.now() - lastTouchDispatch < 600) return; } catch { }
+      try { e.preventDefault(); } catch { }
+      try { if (el.blur) el.blur(); } catch { }
+      fn();
+    });
+  };
   try {
     const menuBtn = document.getElementById('mobile-menu-button');
-    if (menuBtn && !menuBtn._mobileBound) {
-      menuBtn._mobileBound = true;
-      menuBtn.addEventListener('click', (e) => {
-        try { e.preventDefault(); } catch { }
-        try { if (menuBtn.blur) menuBtn.blur(); } catch { }
-        dispatchEscapeKey();
-      });
-    }
+    bindTap(menuBtn, () => { dispatchEscapeKey(); });
     const resetBtn = document.getElementById('mobile-reset-button');
-    if (resetBtn && !resetBtn._mobileBound) {
-      resetBtn._mobileBound = true;
-      resetBtn.addEventListener('click', (e) => {
-        try { e.preventDefault(); } catch { }
-        try { if (resetBtn.blur) resetBtn.blur(); } catch { }
-        dispatchResetKey();
-      });
-    }
+    bindTap(resetBtn, () => { dispatchResetKey(); });
     const fsBtn = document.getElementById('mobile-fullscreen-button');
-    if (fsBtn && !fsBtn._mobileBound) {
-      fsBtn._mobileBound = true;
-      fsBtn.addEventListener('click', (e) => {
-        try { e.preventDefault(); } catch { }
-        try { if (fsBtn.blur) fsBtn.blur(); } catch { }
-        requestMobileFullscreen();
-        try { setTimeout(syncMobileUI, 300); } catch { }
-      });
-    }
+    bindTap(fsBtn, () => {
+      requestMobileFullscreen();
+      try { setTimeout(syncMobileUI, 300); } catch { }
+    });
   } catch { }
   // First-gesture fullscreen on mobile: boot gate + Play buttons.
   try {
@@ -6342,9 +6389,27 @@ function initMobileControls() {
       initMobileControls._fsGestureBound = true;
       const gate = document.getElementById('continue-overlay');
       if (gate) gate.addEventListener('click', () => { try { requestMobileFullscreen(); } catch { } }, { passive: true });
-      const onFsChange = () => { try { setupCanvas(); } catch { } try { resizeWindOverlay(); } catch { } try { syncMobileUI(); } catch { } };
+      const onFsChange = () => {
+        try {
+          // Entering fullscreen drops no state, but the orientation lock is
+          // tied to the fullscreen session — re-assert landscape on change.
+          if (isFullscreenActive()) lockLandscapeOrientation();
+        } catch { }
+        try { setupCanvas(); } catch { } try { resizeWindOverlay(); } catch { } try { syncMobileUI(); } catch { } try { syncRotateOverlay(); } catch { }
+      };
       document.addEventListener('fullscreenchange', onFsChange);
       document.addEventListener('webkitfullscreenchange', onFsChange);
+      // Device rotated (or desktop test window resized): re-assert the lock
+      // and re-evaluate the portrait guard.
+      const onOrientationChange = () => {
+        try { if (isFullscreenActive()) lockLandscapeOrientation(); } catch { }
+        try { syncMobileUI(); } catch { } try { syncRotateOverlay(); } catch { }
+      };
+      try {
+        if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', onOrientationChange);
+      } catch { }
+      window.addEventListener('orientationchange', onOrientationChange);
+      window.addEventListener('resize', () => { try { syncRotateOverlay(); } catch { } });
     }
   } catch { }
   // Touch overlay buttons: hold left/right = arrows, hold launch = Space.
@@ -8399,6 +8464,10 @@ function init() {
       e.stopPropagation();
       try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch { }
       try { if (cutsceneIsActive()) cutsceneSkip(); } catch { }
+      // 12-mobile landscape-only: skipping is a user gesture — re-assert
+      // fullscreen + landscape lock so leaving the cutscene can never drop
+      // the phone into portrait.
+      try { requestMobileFullscreen(); } catch { }
     });
   }
   // 12-banter §6: Skip button top-right, same pill design — ends the active banter at once.
@@ -8411,6 +8480,7 @@ function init() {
       try { if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); } catch { }
       try { if (banterIsActive()) banterSkip(); } catch { }
       try { syncBanterSkipButton(); } catch { }
+      try { requestMobileFullscreen(); } catch { }
     });
   }
 
@@ -8607,12 +8677,16 @@ function init() {
   });
 
   initInput(
-    () => bootGateVisible ? "BOOT" : rewardMenuVisible ? "REWARD" : banterIsActive() ? "BANTER" : gameState,
+    // 12-mobile landscape-only: while the portrait rotate guard is up, report
+    // a non-playable state so touch/keyboard charge can never start (a
+    // release then cancels instead of launching).
+    () => isRotateGuardVisible() ? "ROTATE" : bootGateVisible ? "BOOT" : rewardMenuVisible ? "REWARD" : banterIsActive() ? "BANTER" : gameState,
     {
       onLaunch: handleLaunch,
       onReset: () => {
         // REQ-021: block R while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners: block on last attempt
         if (bootGateVisible) return;
+        if (isRotateGuardVisible()) return;
         if (rewardMenuVisible) return;
         if (banterIsActive()) return;
         if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
@@ -9279,6 +9353,11 @@ function init() {
   });
   canvas.addEventListener("mouseleave", () => { mousePos = null; rewardMenuHover = null; rewardRerollHover = false; pauseMenuHover = null; mainMenuHover = null; canvas.style.cursor = "default"; });
   canvas.addEventListener("mousedown", (e) => {
+    // 12-mobile landscape-only: no placement/drag starts while portrait.
+    if (isRotateGuardVisible()) {
+      e.preventDefault();
+      return;
+    }
     if (mainMenuVisible) {
       e.preventDefault();
       return;
@@ -10146,6 +10225,9 @@ if (typeof window !== 'undefined') {
   window.__isMobileMode = isMobileMode;
   window.__isFullscreenActive = isFullscreenActive;
   window.__requestMobileFullscreen = requestMobileFullscreen;
+  window.__lockLandscapeOrientation = lockLandscapeOrientation;
+  window.__isRotateGuardVisible = isRotateGuardVisible;
+  window.__syncRotateOverlay = syncRotateOverlay;
   window.__syncMobileUI = syncMobileUI;
   window.__dispatchEscapeKey = dispatchEscapeKey;
   window.__dispatchResetKey = dispatchResetKey;
@@ -10241,7 +10323,7 @@ try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneW
 
 export {
   init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall, isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, syncMobileUI, dispatchEscapeKey, dispatchResetKey, handleRightClickAt, getCanvasTouchPos
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall, isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, lockLandscapeOrientation, isRotateGuardVisible, syncRotateOverlay, syncMobileUI, dispatchEscapeKey, dispatchResetKey, handleRightClickAt, getCanvasTouchPos
 };
 
 // Auto-init when loaded as module via script tag
