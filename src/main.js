@@ -65,6 +65,7 @@ function setWindFreeShotActive(...args) { try { if (__windMod) return __windMod.
 function setWindFreeShotBallActive(...args) { try { if (__windMod) return __windMod.setFreeShotBallActive(...args); } catch { } }
 function setWindFreeShotEdgeActive(...args) { try { if (__windMod) return __windMod.setFreeShotEdgeActive(...args); } catch { } }
 function updateFreeShotGlow(...args) { try { if (__windMod) return __windMod.updateFreeShotGlow(...args); } catch { } }
+function resetWindStreaks(...args) { try { if (__windMod && typeof __windMod.resetWindStreaks === 'function') return __windMod.resetWindStreaks(...args); } catch { } return false; }
 if (typeof window !== 'undefined') {
   try {
     // Deferred (non-blocking): menu renders immediately; wind fades in when ready.
@@ -3130,6 +3131,7 @@ function handleContinue() {
     windStrength = level.field.strength ?? WIND_STRENGTH;
     createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
     syncModifiersToField();
+    try { resetWindStreaks(); } catch { }
     createBall(level.tee);
     // Sliding window holds hole 0 after loadProgress; cover the resumed hole now.
     try { ensureWindowForCurrentHole(); } catch {}
@@ -5469,6 +5471,9 @@ function loadLevel(index) {
   // REQ-020: supply persists across hole advances, do NOT reset supply here
   modifiers = [];
   syncModifiersToField();
+  // Reseed wind streaks to the new field (pre-rolled + fading in) so the
+  // lines never visibly snap from the previous hole's shape.
+  try { resetWindStreaks(); } catch { }
   try { clearWaterRipples(); } catch { }
   // Keep canvas size consistent per REQ-010 16:9 (1280×720); if varying, would re-setup canvas
   // Wind particles now handled by Three.js overlay (REQ-004), not canvas initParticles
@@ -8558,6 +8563,7 @@ function init() {
         windStrength = level.field.strength ?? WIND_STRENGTH;
         createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
         syncModifiersToField();
+        try { resetWindStreaks(); } catch { }
         createBall(level.tee);
         // Sliding window holds hole 0 after loadProgress; cover the resumed hole now.
         try { ensureWindowForCurrentHole(); } catch {}
@@ -8641,6 +8647,7 @@ function init() {
       windStrength = level.field.strength ?? WIND_STRENGTH;
       createField(level.field.cols, level.field.rows, windStrength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
       modifiers = []; syncModifiersToField();
+      try { resetWindStreaks(); } catch { }
       createBall(level.tee);
       const dx0 = level.hole.x - level.tee.x;
       const dy0 = level.hole.y - level.tee.y;
@@ -8649,6 +8656,7 @@ function init() {
       level = { field: { cols: 32, rows: 18, strength: 80, seed: 0, sources: 1, sinks: 1, doublets: 0, vortexes: 0 }, tee: { x: 80, y: 360 }, hole: { x: 1200, y: 360, radius: 14 }, obstacles: [], canvas: { width: LOGICAL_W, height: LOGICAL_H } };
       createField(level.field.cols, level.field.rows, level.field.strength, level.field.seed, LOGICAL_W, LOGICAL_H, level.field);
       modifiers = []; syncModifiersToField();
+      try { resetWindStreaks(); } catch { }
       createBall(level.tee);
       setAimAngle(0);
     }

@@ -557,6 +557,64 @@ export function setWindVisible(v) {
 export function isWindVisible() { return showWind; }
 export function toggleWind() { setWindVisible(!showWind); return showWind; }
 
+// Reseed all streaks for a freshly loaded hole so the lines never visibly
+// snap: each trail is pre-rolled backwards along the NEW base field (already
+// curved correctly on its first visible frame) and starts at a near-zero age
+// so alpha fades in over ~0.35s instead of cutting. Call after createField.
+export function resetWindStreaks() {
+  if (!streakData.length || !streakGeometry) return false;
+  const BACKSTEP = 11; // px per history node when pre-rolling the trail
+  const totalCells = SPREAD_COLS * SPREAD_ROWS;
+  const sampler = (typeof getBaseWindAt === 'function') ? getBaseWindAt : null;
+  for (let i = 0; i < streakData.length; i++) {
+    const s = streakData[i];
+    // Even coverage: round-robin across spread cells; retry a few cells so the
+    // head avoids spawning inside a placed modifier bubble when possible.
+    let p = posInCell(i % totalCells);
+    for (let attempt = 0; attempt < 4 && isInsideAnyModifier(p.x, p.y); attempt++) {
+      p = posInCell((i + attempt + 1) % totalCells);
+    }
+    let dx = 1, dy = 0;
+    try {
+      if (sampler) {
+        const w = sampler(p.x, p.y);
+        const m = Math.hypot(w.x, w.y);
+        if (m > 1e-4) { dx = w.x / m; dy = w.y / m; }
+      }
+    } catch {}
+    s.hx = p.x; s.hy = p.y;
+    s.dx = dx; s.dy = dy;
+    s.nodes[0] = p.x; s.nodes[1] = p.y;
+    let bx = p.x, by = p.y;
+    let bdx = dx, bdy = dy;
+    for (let n = 1; n < activeStreakNodes; n++) {
+      try {
+        if (sampler) {
+          const w = sampler(bx, by);
+          const m = Math.hypot(w.x, w.y);
+          if (m > 1e-4) { bdx = w.x / m; bdy = w.y / m; }
+        }
+      } catch {}
+      bx -= bdx * BACKSTEP;
+      by -= bdy * BACKSTEP;
+      if (bx < -STREAK_SPAWN_MARGIN) bx = -STREAK_SPAWN_MARGIN;
+      else if (bx > LOGICAL_W + STREAK_SPAWN_MARGIN) bx = LOGICAL_W + STREAK_SPAWN_MARGIN;
+      if (by < -STREAK_SPAWN_MARGIN) by = -STREAK_SPAWN_MARGIN;
+      else if (by > LOGICAL_H + STREAK_SPAWN_MARGIN) by = LOGICAL_H + STREAK_SPAWN_MARGIN;
+      s.nodes[n * 2] = bx;
+      s.nodes[n * 2 + 1] = by;
+    }
+    // Near-zero staggered age: trails are already the right shape, alpha
+    // ramps in via the existing age fade (full in ~0.35s) — no cut, no pop.
+    s.age = Math.random() * 0.25;
+    s.maxAge = STREAK_MIN_AGE + Math.random() * (STREAK_MAX_AGE - STREAK_MIN_AGE);
+    s.jitter = 0.85 + Math.random() * 0.3;
+    s.width = STREAK_MIN_WIDTH + Math.random() * (STREAK_MAX_WIDTH - STREAK_MIN_WIDTH);
+  }
+  try { updateStreakGeometry(); } catch {}
+  return true;
+}
+
 export function renderWind() {
   if (!renderer || !scene || !camera) return;
   if (!showWind && !freeShotEdgeActive && !freeShotBallActive) return;
