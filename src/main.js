@@ -2342,7 +2342,11 @@ function hideCoinSummary() {
       try {
         try { consumePlacedModifiersFromSupply(); } catch { }
         clearFreeShotGlow();
-        currentHoleIndex = 1;
+        // NOTE: currentHoleIndex stays 0 until loadLevel(1) runs AFTER the
+        // first-restock cutscene. render() blits the static terrain by
+        // currentHoleIndex, and hole 2 is already prebuilt in the background —
+        // bumping the index here would paint hole-2 terrain behind the
+        // cutscene/loading cover (the reported flash). loadLevel(1) sets it.
         holeAttempts = 0;
         holeStartAttempts = 0; holeRerolls = 0;
         modifiersTraversedThisHole = new Set();
