@@ -5,7 +5,7 @@ export let holdTime = 0;
 
 export const ROTATION_SPEED = 1.6; // rad/s (~91 deg/s)
 
-const TOTAL_DIRECTIONS = 64; // Number of steps per full circle
+const TOTAL_DIRECTIONS = 128; // Number of steps per full circle
 const STEP_SIZE = (Math.PI * 2) / TOTAL_DIRECTIONS;
 let aimIndex = 0;
 
