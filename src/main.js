@@ -5024,6 +5024,18 @@ function syncRewardOverlay() {
 // 11-banners API
 function isHoleBannerVisible() { return holeBannerVisible; }
 function getHoleBannerText() { return holeBannerText; }
+// 11-banners: Hole N banner renders as a DOM overlay (#hole-banner-overlay) so
+// its translucent backdrop dims the whole site instead of only the 16:9 canvas
+// box. Called every frame from render(); change-guarded to avoid DOM churn.
+function syncHoleBannerOverlay() {
+  const overlay = document.getElementById('hole-banner-overlay');
+  if (!overlay) return;
+  const textEl = document.getElementById('hole-banner-text');
+  if (textEl && holeBannerText && textEl.textContent !== holeBannerText) {
+    textEl.textContent = holeBannerText;
+  }
+  overlay.classList.toggle('hidden', !holeBannerVisible);
+}
 function showHoleBanner(index, total) {
   if (pauseMenuVisible || mainMenuVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
   const n = Math.max(1, Math.floor(index) + 1);
@@ -7807,6 +7819,9 @@ function render() {
       try { audioSetMenuMusic(shouldMenuAudio); } catch { }
     }
   } catch { }
+  // 11-banners: keep the Hole N DOM overlay in sync every frame, before any
+  // early-return path (menu/cutscene) so a stale banner can never linger.
+  try { syncHoleBannerOverlay(); } catch { }
   // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
   try { if (cutsceneIsActive()) { try { syncBgCanvasVisibility(); } catch {} try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch { } return; } } catch { }
   try { syncBgCanvasVisibility(); } catch {}
@@ -7993,10 +8008,9 @@ function render() {
     try { drawSoftlockBanner(ctx, LOGICAL_W, LOGICAL_H, softlockBannerText); } catch { };
   }
   // HTML reward overlay (sync handled on state change, not per-frame to avoid thrashing)
-  // 11-banners: hole/attempts/freeShot banners share reward backdrop/style, auto-hide 1s; hole banner transitions to reward
-  if (holeBannerVisible) {
-    try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, holeBannerText); } catch { };
-  } else if (attemptsBannerVisible) {
+  // 11-banners: the Hole N banner is a DOM overlay now (synced at render start,
+  // so its backdrop covers the whole site); attempts/freeShot stay canvas-drawn.
+  if (attemptsBannerVisible) {
     try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, attemptsBannerText); } catch { };
   } else if (freeShotBannerVisible) {
     try { drawCenterBanner(ctx, LOGICAL_W, LOGICAL_H, freeShotBannerText); } catch { };

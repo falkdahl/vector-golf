@@ -1554,6 +1554,26 @@ body {
   padding-bottom: 100px;
 }
 #reward-overlay.hidden { display: none !important; }
+/* Hole N banner: DOM overlay so the translucent backdrop dims the whole
+   site (full viewport), not just the centred 16:9 canvas box. */
+#hole-banner-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  z-index: 8;
+  pointer-events: none;
+}
+#hole-banner-overlay.hidden { display: none !important; }
+#hole-banner-text {
+  font: 700 22px var(--ui-font);
+  color: white;
+  -webkit-text-stroke: 5px rgba(0,0,0,0.75);
+  paint-order: stroke fill;
+  text-align: center;
+}
 .reward-card {
   display: flex;
   flex-direction: column;
