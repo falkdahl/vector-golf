@@ -1,3 +1,13 @@
+:root {
+  /* UI font stack: list concrete, widely-available Latin fonts BEFORE the
+     `system-ui` generic. On some phones `system-ui` resolves to a font whose
+     Latin glyphs render as boxes/tofu (and `sans-serif` may alias to the same
+     face), so preferring real named faces (Roboto on Android, Helvetica/SF on
+     iOS, Segoe UI on Windows, Arial/Liberation/Noto elsewhere) guarantees a
+     readable fallback. */
+  --ui-font: "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", system-ui, -apple-system, sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -6,7 +16,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--ui-font);
   background: #000;
   color: #eee;
   margin: 0;
@@ -141,7 +151,7 @@ body {
   padding: 0 12px;
   background: rgba(0,0,0,0.25);
   color: white;
-  font: 14px system-ui, sans-serif;
+  font: 14px var(--ui-font);
   -webkit-text-stroke: 3px rgba(0,0,0,0.7);
   paint-order: stroke fill;
   line-height: 28px;
@@ -163,7 +173,7 @@ body {
   justify-content: center;
   background: #000;
   color: #fff;
-  font: 600 18px system-ui, sans-serif;
+  font: 600 18px var(--ui-font);
   z-index: 100;
 }
 #loading-screen.hidden { display: none !important; }
@@ -196,15 +206,18 @@ body {
   display: none !important;
 }
 .continue-prompt {
-  font: 700 30px system-ui, sans-serif;
+  font: 700 30px var(--ui-font);
   color: #fff;
   -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+  paint-order: stroke fill;
   text-shadow: 0 2px 8px rgba(0,0,0,0.8);
   animation: continuePulse 1.6s ease-in-out infinite;
 }
 @keyframes continuePulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.65; transform: scale(0.985); }
+  /* Opacity-only: animating `transform: scale()` re-rasterizes the glyphs every
+     frame and can look blocky/overlapping on some phone GPUs. */
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
 }
 
 #win-overlay {
@@ -248,7 +261,7 @@ body {
 
 .win-content p {
   margin: 6px 0;
-  font: 600 14px system-ui, sans-serif;
+  font: 600 14px var(--ui-font);
   color: white;
   -webkit-text-stroke: 3px rgba(0,0,0,0.65);
   paint-order: stroke fill;
@@ -257,7 +270,7 @@ body {
 
 .win-content h2 {
   margin: 0 0 8px;
-  font: 700 22px system-ui, sans-serif;
+  font: 700 22px var(--ui-font);
   color: white;
   -webkit-text-stroke: 5px rgba(0,0,0,0.75);
   paint-order: stroke fill;
@@ -330,7 +343,7 @@ body {
 }
 .pause-content h2 {
   margin: 0 0 4px;
-  font: 700 22px system-ui, sans-serif;
+  font: 700 22px var(--ui-font);
   color: white;
   -webkit-text-stroke: 5px rgba(0,0,0,0.75);
   paint-order: stroke fill;
@@ -343,7 +356,7 @@ body {
   min-width: 180px;
   max-width: 180px;
   padding: 10px 24px;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
   background: rgba(255,255,255,0.12);
   border: 2px solid rgba(255,255,255,0.85);
@@ -368,7 +381,7 @@ body {
   min-width: 180px;
   max-width: 180px;
   padding: 10px 24px;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
   background: transparent;
   border: 2px solid rgba(255,255,255,0.85);
@@ -389,7 +402,7 @@ body {
   min-width: 180px;
   max-width: 180px;
   padding: 10px 24px;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
   background: #e74c3c;
   border: 2px solid #c0392b;
@@ -443,7 +456,7 @@ body {
   transform-origin: top right;
 }
 .title-line {
-  font-family: Impact, "Anton", "Arial Black", system-ui, -apple-system, sans-serif;
+  font-family: Impact, "Anton", "Arial Black", var(--ui-font);
   font-weight: 900;
   font-style: italic;
   font-size: clamp(26px, 4.2vw, 52px);
@@ -494,7 +507,7 @@ body {
 .main-menu-button {
   min-width: 180px;
   padding: 12px 28px;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
   background: #145a32;
   border: 2px solid #0f3d1a;
@@ -513,7 +526,7 @@ body {
   min-width: 72px;
   padding: 0;
   border-radius: 50%;
-  font: 700 36px system-ui, sans-serif;
+  font: 700 36px var(--ui-font);
   color: white;
   background: #145a32;
   border: 2px solid #0f3d1a;
@@ -537,7 +550,7 @@ body {
   min-height: 44px;
   padding: 0;
   border-radius: 8px;
-  font: 700 20px/1 system-ui, sans-serif;
+  font: 700 20px/1 var(--ui-font);
   color: #fff;
   background: rgba(0,0,0,0.55);
   border: 1px solid rgba(255,255,255,0.35);
@@ -636,7 +649,7 @@ body {
 }
 .course-play-button:hover { background: #0f3d1a; }
 .course-name {
-  font: 700 13px system-ui, sans-serif;
+  font: 700 13px var(--ui-font);
   line-height: 1.2;
   white-space: nowrap;
   overflow: visible;
@@ -646,7 +659,7 @@ body {
   paint-order: stroke fill;
 }
 .course-meta {
-  font: 500 11px system-ui, sans-serif;
+  font: 500 11px var(--ui-font);
   line-height: 1.2;
   white-space: nowrap;
   overflow: visible;
@@ -657,7 +670,7 @@ body {
 .course-export-button {
   flex: 0 0 auto;
   padding: 6px 10px;
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: white;
   background: rgba(255,255,255,0.10);
   border: 1px solid rgba(255,255,255,0.25);
@@ -671,7 +684,7 @@ body {
 .course-edit-button:hover,
 .course-refresh-button:hover { background: #2980b9; }
 .course-refresh-button {
-  font: 700 18px system-ui, sans-serif;
+  font: 700 18px var(--ui-font);
   line-height: 1;
   padding: 6px 12px;
 }
@@ -695,7 +708,7 @@ body {
 .course-import-button {
   flex: 1 1 auto;
   padding: 6px 10px;
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: white;
   background: #145a32;
   border: 1px solid #0f3d1a;
@@ -730,7 +743,7 @@ body {
 #new-course-button, #import-course-button {
   flex: 1;
   padding: 10px 14px;
-  font: 700 12px system-ui, sans-serif;
+  font: 700 12px var(--ui-font);
   color: white;
   background: #145a32;
   border: 2px solid #0f3d1a;
@@ -744,7 +757,7 @@ body {
 
 #course-menu-back, #help-back-button {
   padding: 8px 16px;
-  font: 700 12px system-ui, sans-serif;
+  font: 700 12px var(--ui-font);
   color: white;
   background: #145a32;
   border: 2px solid #0f3d1a;
@@ -767,7 +780,7 @@ body {
 #new-course-choices button, #new-course-choices-difficulty button, #import-area button {
   width: 100%;
   padding: 8px 12px;
-  font: 600 12px system-ui, sans-serif;
+  font: 600 12px var(--ui-font);
   color: white;
   background: #145a32;
   border: 2px solid #0f3d1a;
@@ -792,7 +805,7 @@ body {
 }
 .import-help {
   margin: 0;
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: rgba(255,255,255,0.9);
   -webkit-text-stroke: 1.5px rgba(0,0,0,0.55);
   paint-order: stroke fill;
@@ -800,7 +813,7 @@ body {
 }
 #import-error {
   margin: 0;
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: #ff8a8a;
   -webkit-text-stroke: 1px rgba(0,0,0,0.6);
   paint-order: stroke fill;
@@ -841,19 +854,19 @@ body {
 }
 .help-card h3, .help-card h4 {
   margin: 0;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
 }
 .help-rules {
   margin: 0;
-  font: 500 12px system-ui, sans-serif;
+  font: 500 12px var(--ui-font);
   line-height: 1.4;
   color: rgba(255,255,255,0.92);
 }
 .help-controls {
   margin: 0;
   padding-left: 18px;
-  font: 500 11px system-ui, sans-serif;
+  font: 500 11px var(--ui-font);
   line-height: 1.5;
   color: rgba(255,255,255,0.92);
 }
@@ -897,7 +910,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 700 22px system-ui, sans-serif;
+  font: 700 22px var(--ui-font);
   color: #FFD700;
   -webkit-text-stroke: 1.5px rgba(0,0,0,0.6);
   paint-order: stroke fill;
@@ -914,14 +927,14 @@ body {
   min-width: 0;
 }
 .help-item-name {
-  font: 700 11px system-ui, sans-serif;
+  font: 700 11px var(--ui-font);
   color: white;
   -webkit-text-stroke: 1px rgba(0,0,0,0.5);
   paint-order: stroke fill;
   line-height: 1.2;
 }
 .help-item-desc {
-  font: 500 10px system-ui, sans-serif;
+  font: 500 10px var(--ui-font);
   color: rgba(255,255,255,0.88);
   line-height: 1.35;
   word-break: break-word;
@@ -942,7 +955,7 @@ body {
   color: white;
   padding: 8px 14px;
   border-radius: 6px;
-  font: 600 12px system-ui, sans-serif;
+  font: 600 12px var(--ui-font);
   z-index: 20;
   pointer-events: none;
   max-width: min(90%, 460px);
@@ -967,7 +980,7 @@ body {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.18);
   border-radius: 6px;
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: white;
   -webkit-text-stroke: 2px rgba(0,0,0,0.65);
   paint-order: stroke fill;
@@ -980,7 +993,7 @@ body {
 .reward-stats [data-type="deflector"] .icon { color: #9b59b6; }
 .reward-stats [data-type="rotator"] .icon { color: #e74c3c; }
 /* legacy */
-.reward-stats .count { font: 700 12px system-ui, sans-serif; margin-left: 6px; }
+.reward-stats .count { font: 700 12px var(--ui-font); margin-left: 6px; }
 
 #bottom-bar {
   position: absolute;
@@ -1127,7 +1140,7 @@ body {
   background: rgba(0,0,0,0.38);
   border: 1px solid rgba(255,255,255,0.35);
   color: rgba(255,255,255,0.78);
-  font: 600 10px system-ui, sans-serif;
+  font: 600 10px var(--ui-font);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1154,30 +1167,30 @@ body {
   border: 1px solid rgba(255,255,255,0.15);
   border-radius: 10px;
   padding: 12px 14px;
-  font: 400 12px system-ui, sans-serif;
+  font: 400 12px var(--ui-font);
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
 .journal-card h3 {
   margin: 0 0 4px;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: #FFD700;
 }
 .journal-starting {
   margin: 0 0 8px;
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: rgba(255,255,255,0.85);
 }
 .journal-starting:empty { display: none; }
 .journal-empty {
   color: rgba(255,255,255,0.7);
-  font: 400 12px system-ui, sans-serif;
+  font: 400 12px var(--ui-font);
 }
 .journal-hole {
   border-top: 1px solid rgba(255,255,255,0.12);
   padding: 6px 0;
 }
 .journal-hole-title {
-  font: 700 12px system-ui, sans-serif;
+  font: 700 12px var(--ui-font);
   margin-bottom: 2px;
 }
 .journal-hole-title .journal-points {
@@ -1346,9 +1359,9 @@ body {
 .hotbar-slot[data-type="freeShot"] { background: rgba(241,196,15,0.28); border-color: rgba(241,196,15,0.9); }
 .hotbar-slot.discard-target { outline: 2px dashed rgba(255,215,0,0.9); outline-offset: 2px; cursor: pointer; }
 .hotbar-slot.discard-target:hover { transform: scale(1.10); filter: brightness(1.12); }
-.reward-skip-button { margin-top: 10px; padding: 8px 16px; font: 700 12px system-ui, sans-serif; color: white; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.35); border-radius: 8px; cursor: pointer; }
+.reward-skip-button { margin-top: 10px; padding: 8px 16px; font: 700 12px var(--ui-font); color: white; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.35); border-radius: 8px; cursor: pointer; }
 .reward-skip-button:hover { background: rgba(255,255,255,0.2); }
-.reward-discard-hint { margin-top: 8px; font: 600 11px system-ui, sans-serif; color: #FFD700; text-align: center; max-width: 420px; }
+.reward-discard-hint { margin-top: 8px; font: 600 11px var(--ui-font); color: #FFD700; text-align: center; max-width: 420px; }
 .reward-button.pending { outline: 2px solid #FFD700; outline-offset: 2px; }
 .hotbar-slot.passive { cursor: default; }
 .hotbar-slot.passive:hover { filter: brightness(1.05); }
@@ -1419,7 +1432,7 @@ body {
   transform: translateX(-50%);
   background: rgba(0,0,0,0.85);
   color: white;
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   padding: 4px 8px;
   border-radius: 6px;
   white-space: nowrap;
@@ -1436,7 +1449,7 @@ body {
   position: absolute;
   right: -6px;
   bottom: -6px;
-  font: 800 11px system-ui, sans-serif;
+  font: 800 11px var(--ui-font);
   color: white;
   background: rgba(0,0,0,0.92);
   border: 1.5px solid rgba(255,255,255,0.98);
@@ -1459,7 +1472,7 @@ body {
   background: rgba(0,0,0,0.38);
   border: 1px solid rgba(255,255,255,0.35);
   color: rgba(255,255,255,0.78);
-  font: 600 9px system-ui, sans-serif;
+  font: 600 9px var(--ui-font);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1478,7 +1491,7 @@ body {
   background: rgba(0,0,0,0.38);
   border: 1px solid rgba(255,255,255,0.35);
   color: rgba(255,255,255,0.78);
-  font: 600 10px system-ui, sans-serif;
+  font: 600 10px var(--ui-font);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1551,7 +1564,7 @@ body {
 }
 .reward-title {
   margin: 0 0 4px;
-  font: 700 22px system-ui, sans-serif;
+  font: 700 22px var(--ui-font);
   color: white;
   -webkit-text-stroke: 5px rgba(0,0,0,0.75);
   paint-order: stroke fill;
@@ -1611,7 +1624,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 700 36px system-ui, sans-serif;
+  font: 700 36px var(--ui-font);
   color: white;
   -webkit-text-stroke: 3px rgba(0,0,0,0.65);
   paint-order: stroke fill;
@@ -1621,7 +1634,7 @@ body {
 }
 .reward-button-label {
   margin-top: 4px;
-  font: 700 13px system-ui, sans-serif;
+  font: 700 13px var(--ui-font);
   color: white;
   -webkit-text-stroke: 4px rgba(0,0,0,0.75);
   paint-order: stroke fill;
@@ -1629,14 +1642,14 @@ body {
   pointer-events: none;
 }
 .reward-button-hint {
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: rgba(255,255,255,0.95);
   -webkit-text-stroke: 3px rgba(0,0,0,0.6);
   paint-order: stroke fill;
   pointer-events: none;
 }
 .reward-button-key {
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: rgba(255,255,255,0.85);
   -webkit-text-stroke: 3px rgba(0,0,0,0.6);
   paint-order: stroke fill;
@@ -1654,7 +1667,7 @@ body {
   border: 1.5px solid rgba(255,255,255,0.85);
   background: rgba(255,255,255,0.12);
   color: white;
-  font: 700 12px system-ui, sans-serif;
+  font: 700 12px var(--ui-font);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1685,7 +1698,7 @@ body {
 }
 #campaign-seed-wrapper.hidden { display: none !important; }
 #campaign-seed-display {
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: rgba(255,255,255,0.92);
   background: rgba(0,0,0,0.35);
   padding: 4px 8px;
@@ -1702,7 +1715,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
   background: rgba(0,0,0,0.35);
   border: 1px solid rgba(255,255,255,0.35);
@@ -1743,12 +1756,12 @@ body {
 }
 .campaign-edit-card h3 {
   margin: 0;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
 }
 .campaign-edit-help {
   margin: 0;
-  font: 500 11px system-ui, sans-serif;
+  font: 500 11px var(--ui-font);
   color: rgba(255,255,255,0.85);
 }
 #campaign-edit-row {
@@ -1762,7 +1775,7 @@ body {
   flex: 1;
   min-width: 120px;
   padding: 6px 8px;
-  font: 500 12px system-ui, sans-serif;
+  font: 500 12px var(--ui-font);
   color: #111;
   background: rgba(255,255,255,0.92);
   border: 1px solid rgba(0,0,0,0.2);
@@ -1778,7 +1791,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 700 16px system-ui, sans-serif;
+  font: 700 16px var(--ui-font);
   line-height: 1;
   color: white;
   background: rgba(255,255,255,0.12);
@@ -1802,7 +1815,7 @@ body {
 #campaign-regenerate-button,
 #campaign-edit-close {
   padding: 6px 12px;
-  font: 700 11px system-ui, sans-serif;
+  font: 700 11px var(--ui-font);
   color: white;
   background: #3498db;
   border: 1px solid #2980b9;
@@ -1836,7 +1849,7 @@ body {
 #campaign-seed-apply.hidden,
 #campaign-regenerate-button.hidden { display: none !important; }
 #campaign-edit-error {
-  font: 600 11px system-ui, sans-serif;
+  font: 600 11px var(--ui-font);
   color: #ff8a8a;
   background: rgba(255,0,0,0.12);
   border: 1px solid rgba(255,0,0,0.25);
@@ -1875,12 +1888,12 @@ body {
 }
 .campaign-confirm-card h3 {
   margin: 0;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
 }
 .campaign-confirm-text {
   margin: 0;
-  font: 500 12px system-ui, sans-serif;
+  font: 500 12px var(--ui-font);
   line-height: 1.4;
   color: rgba(255,255,255,0.9);
 }
@@ -1894,7 +1907,7 @@ body {
   flex: 1;
   max-width: 120px;
   padding: 8px 16px;
-  font: 700 11px system-ui, sans-serif;
+  font: 700 11px var(--ui-font);
   color: white;
   background: #e74c3c;
   border: 1px solid #c0392b;
@@ -1906,7 +1919,7 @@ body {
   flex: 1;
   max-width: 120px;
   padding: 8px 16px;
-  font: 700 11px system-ui, sans-serif;
+  font: 700 11px var(--ui-font);
   color: white;
   background: rgba(255,255,255,0.12);
   border: 1px solid rgba(255,255,255,0.35);
@@ -1942,12 +1955,12 @@ body {
 }
 .end-run-confirm-card h3 {
   margin: 0;
-  font: 700 14px system-ui, sans-serif;
+  font: 700 14px var(--ui-font);
   color: white;
 }
 .end-run-confirm-text {
   margin: 0;
-  font: 500 12px system-ui, sans-serif;
+  font: 500 12px var(--ui-font);
   line-height: 1.4;
   color: rgba(255,255,255,0.9);
 }
@@ -1961,7 +1974,7 @@ body {
   flex: 1;
   max-width: 120px;
   padding: 8px 16px;
-  font: 700 11px system-ui, sans-serif;
+  font: 700 11px var(--ui-font);
   color: white;
   background: #e74c3c;
   border: 1px solid #c0392b;
@@ -1973,7 +1986,7 @@ body {
   flex: 1;
   max-width: 120px;
   padding: 8px 16px;
-  font: 700 11px system-ui, sans-serif;
+  font: 700 11px var(--ui-font);
   color: white;
   background: rgba(255,255,255,0.12);
   border: 1px solid rgba(255,255,255,0.35);
@@ -2012,7 +2025,7 @@ body {
 }
 .coin-summary-card h3 {
   margin: 0 0 4px;
-  font: 700 22px system-ui, sans-serif;
+  font: 700 22px var(--ui-font);
   color: white;
   -webkit-text-stroke: 5px rgba(0,0,0,0.75);
   paint-order: stroke fill;
@@ -2031,13 +2044,13 @@ body {
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
 }
 #coin-summary-amount {
-  font: 700 36px system-ui, sans-serif;
+  font: 700 36px var(--ui-font);
   color: #FFD700;
   -webkit-text-stroke: 4px rgba(0,0,0,0.65);
   paint-order: stroke fill;
   text-shadow: 0 1px 6px rgba(0,0,0,0.35);
 }
-#coin-summary-text { margin: 0; font: 600 13px system-ui, sans-serif; color: white; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; }
+#coin-summary-text { margin: 0; font: 600 13px var(--ui-font); color: white; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; }
 #coin-summary-text.hidden, .coin-breakdown.hidden { display: none !important; }
 .coin-details-rows {
   display: flex;
@@ -2049,7 +2062,7 @@ body {
   margin: 0 auto;
 }
 .coin-detail-row {
-  font: 500 12px system-ui, sans-serif;
+  font: 500 12px var(--ui-font);
   color: rgba(255,255,255,0.92);
   -webkit-text-stroke: 2px rgba(0,0,0,0.55);
   paint-order: stroke fill;
@@ -2086,17 +2099,17 @@ body {
   justify-self: start;
   white-space: nowrap;
 }
-.coin-breakdown { margin: 0; font: 500 11px system-ui, sans-serif; color: rgba(255,255,255,0.85); -webkit-text-stroke: 2px rgba(0,0,0,0.5); paint-order: stroke fill; }
-.coin-unlock-info { margin: 0; font: 800 15px system-ui, sans-serif; color: #FFD700; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; text-align: center; line-height: 1.3; text-shadow: 0 0 12px rgba(255,215,0,0.65), 0 2px 6px rgba(0,0,0,0.5); }
+.coin-breakdown { margin: 0; font: 500 11px var(--ui-font); color: rgba(255,255,255,0.85); -webkit-text-stroke: 2px rgba(0,0,0,0.5); paint-order: stroke fill; }
+.coin-unlock-info { margin: 0; font: 800 15px var(--ui-font); color: #FFD700; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; text-align: center; line-height: 1.3; text-shadow: 0 0 12px rgba(255,215,0,0.65), 0 2px 6px rgba(0,0,0,0.5); }
 .coin-unlock-info:empty { display: none; }
-.coin-shop-info { margin: 0; font: 800 15px system-ui, sans-serif; color: #FFD700; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; text-align: center; line-height: 1.3; text-shadow: 0 0 12px rgba(255,215,0,0.65), 0 2px 6px rgba(0,0,0,0.5); }
+.coin-shop-info { margin: 0; font: 800 15px var(--ui-font); color: #FFD700; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; text-align: center; line-height: 1.3; text-shadow: 0 0 12px rgba(255,215,0,0.65), 0 2px 6px rgba(0,0,0,0.5); }
 .coin-shop-info:empty { display: none; }
-.coin-course-info { margin: 0; font: 800 15px system-ui, sans-serif; color: #FFD700; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; text-align: center; line-height: 1.3; text-shadow: 0 0 12px rgba(255,215,0,0.65), 0 2px 6px rgba(0,0,0,0.5); }
+.coin-course-info { margin: 0; font: 800 15px var(--ui-font); color: #FFD700; -webkit-text-stroke: 3px rgba(0,0,0,0.6); paint-order: stroke fill; text-align: center; line-height: 1.3; text-shadow: 0 0 12px rgba(255,215,0,0.65), 0 2px 6px rgba(0,0,0,0.5); }
 .coin-course-info:empty { display: none; }
 #coin-summary-ok {
   margin-top: 6px;
   padding: 8px 20px;
-  font: 700 12px system-ui, sans-serif;
+  font: 700 12px var(--ui-font);
   color: white;
   background: #27ae60;
   border: 1px solid #1e8449;
@@ -2183,7 +2196,7 @@ body {
 }
 .cutscene-hint {
   margin-top: 8px;
-  font: 600 9px system-ui, sans-serif;
+  font: 600 9px var(--ui-font);
   color: rgba(255,255,255,0.65);
   text-align: right;
   letter-spacing: 0.04em;
@@ -2209,7 +2222,7 @@ body {
 #cutscene-overlay.hidden { display: none !important; }
 .cutscene-title-text,
 #cutscene-title-text {
-  font: 700 28px system-ui, -apple-system, sans-serif;
+  font: 700 28px var(--ui-font);
   color: #fff;
   text-align: center;
   max-width: 80%;
@@ -2235,7 +2248,7 @@ body {
   top: 10px;
   right: 12px;
   z-index: 14;
-  font: 700 11px system-ui, sans-serif;
+  font: 700 11px var(--ui-font);
   color: #fff;
   background: rgba(0,0,0,0.55);
   border: 1px solid rgba(255,255,255,0.35);
@@ -2279,7 +2292,7 @@ body {
 }
 .course-cleared-card h3 {
   margin: 0;
-  font: 700 22px system-ui, sans-serif;
+  font: 700 22px var(--ui-font);
   color: white;
   -webkit-text-stroke: 5px rgba(0,0,0,0.75);
   paint-order: stroke fill;
@@ -2292,14 +2305,14 @@ body {
   line-height: 1;
 }
 #course-cleared-amount {
-  font: 700 36px system-ui, sans-serif;
+  font: 700 36px var(--ui-font);
   color: #FFD700;
   -webkit-text-stroke: 4px rgba(0,0,0,0.65);
   paint-order: stroke fill;
   text-shadow: 0 1px 6px rgba(0,0,0,0.35);
 }
 .course-cleared-record {
-  font: 800 22px system-ui, sans-serif;
+  font: 800 22px var(--ui-font);
   color: #FFD700;
   -webkit-text-stroke: 3px rgba(0,0,0,0.6);
   paint-order: stroke fill;
@@ -2321,7 +2334,7 @@ body {
 #course-cleared-ok {
   margin-top: 6px;
   padding: 8px 20px;
-  font: 700 12px system-ui, sans-serif;
+  font: 700 12px var(--ui-font);
   color: white;
   background: #27ae60;
   border: 1px solid #1e8449;
@@ -2353,7 +2366,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 700 20px system-ui, sans-serif;
+  font: 700 20px var(--ui-font);
   color: #fff;
   background: rgba(0,0,0,0.55);
   border: 1px solid rgba(255,255,255,0.35);
@@ -2413,7 +2426,7 @@ body {
   padding: 24px 32px;
 }
 .rotate-icon { font-size: 48px; line-height: 1; animation: rotateHint 1.6s ease-in-out infinite; }
-.rotate-text { font: 700 18px system-ui, sans-serif; color: #fff; }
+.rotate-text { font: 700 18px var(--ui-font); color: #fff; }
 @keyframes rotateHint {
   0%, 100% { transform: rotate(0deg); }
   50% { transform: rotate(90deg); }
@@ -2437,7 +2450,7 @@ body {
   min-width: 56px;
   min-height: 56px;
   border-radius: 50%;
-  font: 700 20px system-ui, sans-serif;
+  font: 700 20px var(--ui-font);
   color: #fff;
   background: rgba(0,0,0,0.55);
   border: 2px solid rgba(255,255,255,0.45);

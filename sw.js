@@ -3,7 +3,7 @@
 // registered worker with a fetch handler satisfies the Chromium install
 // criteria and gives offline support).
 // No build step: bump CACHE_VERSION to invalidate old caches on deploy.
-const CACHE_VERSION = "gale-force-golf-v4";
+const CACHE_VERSION = "gale-force-golf-v5";
 
 // App shell precached on install. Optional entries fail silently.
 const PRECACHE_URLS = [
