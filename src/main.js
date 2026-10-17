@@ -182,6 +182,9 @@ function continueFromBootGate() {
   // gate click itself also trips the audio.js gesture listeners; this makes
   // the menu theme start deterministically on continue.
   try { audioUIClick(); } catch { }
+  // Re-evaluate mobile chrome now that the boot gate is gone (the main-menu
+  // fullscreen button is gated on the gate, so it must appear immediately).
+  try { syncMobileUI(); } catch { }
 }
 // First-load preload (tiered for fast menu): Tier 0 blocks the loading
 // screen (splash + menu theme only); Tier 1 streams right after.
@@ -6238,7 +6241,11 @@ function syncMobileUI() {
     }
     try { document.getElementById('game-container').classList.add('mobile-mode'); } catch { }
     if (controls) controls.classList.toggle('hidden', chromeHidden);
-    if (fsBtn) fsBtn.classList.toggle('hidden', isFullscreenActive() || chromeHidden);
+    // Fullscreen re-entry stays available on the main menu (so phones can enter
+    // fullscreen before starting), but is kept off the boot gate's "click to
+    // continue" screen and every other blocking state.
+    const fsHidden = isFullscreenActive() || isBootGateVisible() || (chromeHidden && !mainMenuVisible);
+    if (fsBtn) fsBtn.classList.toggle('hidden', fsHidden);
     try { syncRotateOverlay(); } catch { }
   } catch { }
 }
@@ -8620,6 +8627,9 @@ function init() {
           const _gate = document.getElementById("continue-overlay");
           if (_gate) _gate.classList.add("hidden");
         } catch { }
+        // Refresh mobile chrome now that the boot gate is gone (fullscreen
+        // re-entry button is gated on it).
+        try { syncMobileUI(); } catch { }
       } else {
         throw new Error('loadProgress returned null');
       }
