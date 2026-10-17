@@ -27,7 +27,7 @@
 ## 4. Load & resume (auto-resume, no Continue)
 
 - `init()` checks `hasRestorableSave()`: if true, auto-restores immediately (no menu, no Continue); else shows main menu (splash + staged list + Help). There is never a `#continue-button` on the main menu.
-- Restore: `LEVELS=course.holes`, all persisted fields, `createField` + `setModifiers`, glow if armed, ball at tee `AIMING` (or `GAME_OVER` overlay), pending reward menu re-shown after restore.
+- Restore: `LEVELS=course.holes`, all persisted fields, `createField` + `setModifiers`, edge glow if armed, ball at tee `AIMING` (or `GAME_OVER` overlay), pending reward menu re-shown after restore.
 - `clearProgress()` removes `STORAGE_KEY` only and resets run state (`holeAttempts/totalAttempts/totalPoints=0`, empty bag/passives, `modifiers=[]`, no glow/pending). Called on Victory/`Game Over` return, `endRun`, and new-course start. Preserves `COURSES_KEY`/journal/seen/banter.
 
 ## 5. Seed UI (edit popup only)

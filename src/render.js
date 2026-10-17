@@ -1304,6 +1304,42 @@ export function drawAttemptsBanner(ctx, width, height, attemptsLeft) {
   return drawCenterBanner(ctx, width, height, txt);
 }
 
+// Free Shot edge glow (REQ 05 §5): a subtle gold frame drawn on the gameplay
+// canvas. Replaces the old full-screen DOM `#free-shot-edge-glow` box-shadow
+// overlay, whose two large inset blurs composited over the WebGL wind layer
+// every frame and tanked mobile framerate. Four cheap edge gradients + one
+// rounded-rect stroke, no shadowBlur.
+export function drawFreeShotEdgeGlow(ctx, width, height) {
+  ctx.save();
+  const depth = Math.max(24, Math.round(Math.min(width, height) * 0.09));
+  const edge = "rgba(241,196,15,0.22)";
+  const mid = "rgba(241,196,15,0.11)";
+  const fade = "rgba(241,196,15,0)";
+  let g = ctx.createLinearGradient(0, 0, 0, depth);
+  g.addColorStop(0, edge); g.addColorStop(0.5, mid); g.addColorStop(1, fade);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, width, depth);
+  g = ctx.createLinearGradient(0, height, 0, height - depth);
+  g.addColorStop(0, edge); g.addColorStop(0.5, mid); g.addColorStop(1, fade);
+  ctx.fillStyle = g; ctx.fillRect(0, height - depth, width, depth);
+  g = ctx.createLinearGradient(0, 0, depth, 0);
+  g.addColorStop(0, edge); g.addColorStop(0.5, mid); g.addColorStop(1, fade);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, depth, height);
+  g = ctx.createLinearGradient(width, 0, width - depth, 0);
+  g.addColorStop(0, edge); g.addColorStop(0.5, mid); g.addColorStop(1, fade);
+  ctx.fillStyle = g; ctx.fillRect(width - depth, 0, depth, height);
+  // Crisp gold border on top of the soft inset glow.
+  ctx.strokeStyle = "rgba(241,196,15,0.38)";
+  ctx.lineWidth = 2;
+  if (typeof ctx.roundRect === "function") {
+    ctx.beginPath();
+    ctx.roundRect(1, 1, width - 2, height - 2, 8);
+    ctx.stroke();
+  } else {
+    ctx.strokeRect(1, 1, width - 2, height - 2);
+  }
+  ctx.restore();
+}
+
 export function drawSoftlockBanner(ctx, width, height, text) {
   const msg = text || "Stuck? Press R to reset — or use Reset Attempt in pause menu";
   ctx.save();

@@ -60,4 +60,4 @@
 
 ## File paths
 
-- `src/main.js:1` (win/advance, `reward*`, `claimReward`, `rerollReward`, points, summary, journal), `src/render.js:1` (`drawTreasure`), `src/windThree.js:1` (glow), `src/levels.js:1`, `src/terrain.js:1`, `index.html:1`, `style.css:1`
+- `src/main.js:1` (win/advance, `reward*`, `claimReward`, `rerollReward`, points, summary, journal), `src/render.js:1` (`drawTreasure`, `drawFreeShotEdgeGlow`), `src/levels.js:1`, `src/terrain.js:1`, `index.html:1`, `style.css:1`

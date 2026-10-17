@@ -75,12 +75,6 @@ function isInsideAnyModifier(x, y) {
 }
 let containerEl = null;
 let canvasEl = null;
-let freeShotGlow = null;
-let freeShotActive = false;
-let freeShotBallActive = false;
-let freeShotEdgeActive = false;
-let freeShotTime = 0;
-let freeShotEdgeEl = null;
 
 function getRespawnPositionPreferInside() {
   // Spread control: respawn into the emptiest map region so streaks stay
@@ -342,60 +336,6 @@ export function initWindOverlay(container) {
   streakGeometry = st.geo;
   streakMesh = st.mesh;
   scene.add(streakMesh);
-  // Free Shot golden glow (REQ 07 §5.2 / REQ 06) — centered on ball when isFreeShotActive
-  try {
-    const glowCanvas = document.createElement('canvas');
-    glowCanvas.width = 64;
-    glowCanvas.height = 64;
-    const gctx = glowCanvas.getContext('2d');
-    const grad = gctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, 'rgba(241,196,15,1)');
-    grad.addColorStop(0.22, 'rgba(241,196,15,0.85)');
-    grad.addColorStop(0.42, 'rgba(241,196,15,0.45)');
-    grad.addColorStop(0.65, 'rgba(241,196,15,0.12)');
-    grad.addColorStop(1, 'rgba(241,196,15,0)');
-    gctx.fillStyle = grad;
-    gctx.fillRect(0, 0, 64, 64);
-    const tex = new THREE.CanvasTexture(glowCanvas);
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    const spriteMat = new THREE.SpriteMaterial({
-      map: tex,
-      color: 0xf1c40f,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      depthTest: false,
-    });
-    freeShotGlow = new THREE.Sprite(spriteMat);
-    freeShotGlow.visible = false;
-    // scale: ~36px logical diameter -> NDC: 36/640 = 0.05625 * aspect? Use 0.08 for visibility
-    freeShotGlow.scale.set(0.09, 0.09 * (LOGICAL_W / LOGICAL_H), 1);
-    freeShotGlow.position.set(0, 0, 0.1);
-    scene.add(freeShotGlow);
-  } catch {}
-  // Subtle edge glow for free shots (DOM overlay, subtle gold border)
-  try {
-    const existing = document.getElementById('free-shot-edge-glow');
-    if (existing) freeShotEdgeEl = existing;
-    else {
-      freeShotEdgeEl = document.createElement('div');
-      freeShotEdgeEl.id = 'free-shot-edge-glow';
-      Object.assign(freeShotEdgeEl.style, {
-        position: 'absolute',
-        inset: '0',
-        pointerEvents: 'none',
-        borderRadius: '8px',
-        border: '2px solid rgba(241,196,15,0.38)',
-        boxShadow: 'inset 0 0 36px rgba(241,196,15,0.22), inset 0 0 70px rgba(241,196,15,0.12), 0 0 18px rgba(241,196,15,0.28)',
-        opacity: '0',
-        transition: 'opacity 260ms ease',
-        zIndex: '4',
-      });
-      container.appendChild(freeShotEdgeEl);
-    }
-  } catch {}
   resizeWindOverlay();
   return { renderer, scene, camera, uniforms };
 }
@@ -415,68 +355,7 @@ export function resizeWindOverlay() {
   }
 }
 
-export function setFreeShotActive(active) {
-  // For backward compat: single arg sets both ball and edge (armed case)
-  freeShotEdgeActive = !!active;
-  freeShotBallActive = !!active;
-  freeShotActive = !!active; // keep for canvas visibility check
-  if (freeShotGlow) {
-    freeShotGlow.visible = freeShotBallActive;
-    if (freeShotBallActive) freeShotTime = 0;
-  }
-  if (freeShotEdgeEl) {
-    freeShotEdgeEl.style.opacity = freeShotEdgeActive ? '1' : '0';
-  }
-  // keep canvas visible if edge glow active even when wind hidden (edge must remain)
-  if (canvasEl) canvasEl.style.display = (showWind || freeShotEdgeActive || freeShotBallActive) ? 'block' : 'none';
-  // also keep renderer rendering (handled in renderWind)
-}
-export function setFreeShotBallActive(active) {
-  freeShotBallActive = !!active;
-  if (freeShotGlow) {
-    freeShotGlow.visible = freeShotBallActive;
-    if (freeShotBallActive) freeShotTime = 0;
-  }
-  // keep canvas visible if ball glow active even when wind hidden
-  if (canvasEl) canvasEl.style.display = (showWind || freeShotEdgeActive || freeShotBallActive) ? 'block' : 'none';
-}
-export function setFreeShotEdgeActive(active) {
-  freeShotEdgeActive = !!active;
-  freeShotActive = !!active; // for backward compat canvas check
-  if (freeShotEdgeEl) {
-    freeShotEdgeEl.style.opacity = freeShotEdgeActive ? '1' : '0';
-  }
-  if (canvasEl) canvasEl.style.display = (showWind || freeShotEdgeActive || freeShotBallActive) ? 'block' : 'none';
-}
-export function updateFreeShotGlow(ballPos, dt) {
-  if (!freeShotGlow) return;
-  freeShotTime += dt || 0.016;
-  if (freeShotBallActive && ballPos) {
-    const ndcX = (ballPos.x / LOGICAL_W) * 2 - 1;
-    const ndcY = 1 - (ballPos.y / LOGICAL_H) * 2;
-    freeShotGlow.position.set(ndcX, ndcY, 0.1);
-    // pulsation scale 1.0 + 0.15*sin(time*3), opacity 0.55-0.85
-    const pulse = 1.0 + 0.15 * Math.sin(freeShotTime * 3);
-    const base = 0.09;
-    const aspect = LOGICAL_W / LOGICAL_H;
-    freeShotGlow.scale.set(base * pulse, base * pulse * aspect, 1);
-    freeShotGlow.material.opacity = 0.65 + 0.15 * Math.sin(freeShotTime * 4);
-    freeShotGlow.visible = true;
-  } else {
-    freeShotGlow.visible = false;
-  }
-}
-export function isFreeShotGlowVisible() { return !!freeShotActive && !!freeShotGlow && freeShotGlow.visible; }
 export function updateWindUniforms(dt, getWindAt) {
-  // update free shot glow position each tick if ball exists globally (fallback) — ball glow only when armed
-  try {
-    let bp = null;
-    if (typeof window !== 'undefined' && window.ball && window.ball.pos) bp = window.ball.pos;
-    // otherwise expect caller to call updateFreeShotGlow explicitly
-    if (freeShotBallActive && bp) updateFreeShotGlow(bp, dt);
-    else if (freeShotBallActive) { freeShotTime += dt; const pulse = 1.0 + 0.15 * Math.sin(freeShotTime * 3); if (freeShotGlow) { freeShotGlow.scale.set(0.09*pulse, 0.09*pulse*(LOGICAL_W/LOGICAL_H),1); } }
-    // edge glow does not need per-frame ball update
-  } catch {}
   const step = Math.max(0, Math.min(0.05, Number(dt) || 0));
   gustTime += step;
   if (uniforms) {
@@ -547,11 +426,8 @@ export function setWindUniformsFromField(components, modifiers, windStrength) {
 export function setWindVisible(v) {
   showWind = !!v;
   if (uniforms) uniforms.uShowWind.value = showWind ? 1 : 0;
-  // keep canvasEl displayed even when wind hidden if freeShot edge glow is active (edge must remain)
-  if (canvasEl) canvasEl.style.display = (showWind || freeShotEdgeActive || freeShotBallActive) ? 'block' : 'none';
+  if (canvasEl) canvasEl.style.display = showWind ? 'block' : 'none';
   if (streakMesh) streakMesh.visible = showWind;
-  if (freeShotGlow) freeShotGlow.visible = !!freeShotBallActive;
-  if (freeShotEdgeEl) freeShotEdgeEl.style.opacity = freeShotEdgeActive ? '1' : '0';
 }
 
 export function isWindVisible() { return showWind; }
@@ -617,7 +493,7 @@ export function resetWindStreaks() {
 
 export function renderWind() {
   if (!renderer || !scene || !camera) return;
-  if (!showWind && !freeShotEdgeActive && !freeShotBallActive) return;
+  if (!showWind) return;
   renderer.render(scene, camera);
 }
 

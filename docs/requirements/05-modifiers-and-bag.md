@@ -36,7 +36,7 @@
 ## 5. Free Shot (passive charges)
 
 - Stock in `passiveCounts.freeShot`; HUD `Attempts Left: X (+Y)`. Each free launch consumes one charge on launch; `isFreeShotActive` stays armed while stock remains. Auto-arm when `!armed && stock>0 && attemptsLeft<=1`. Manual arm/disarm by clicking the filled Free Shots slot (`toggleFreeShot()`).
-- At launch (see `06-run-rules.md`): armed free launch consumes no counted attempt. Visuals: ball gold glow only while armed pre-launch (never during `FLYING`), edge glow while armed or `freeShotFlightActive`. Three.js `0xf1c40f/0xFFD700 14–22px` additive + `#free-shot-edge-glow`; canvas gold ring fallback.
+- At launch (see `06-run-rules.md`): armed free launch consumes no counted attempt. Visuals: a gold edge glow while `isFreeShotActive || freeShotFlightActive`, drawn on the gameplay canvas by `drawFreeShotEdgeGlow(ctx,W,H)` (`src/render.js`, called from `render()`): four soft gold edge gradients + a `2px` rounded-rect gold border, no `shadowBlur`, no DOM overlay, no ball-centred sprite.
 
 ## 6. Placement, stacking, drag & drop
 
@@ -54,4 +54,4 @@
 
 ## File paths
 
-- `src/main.js:1` (bag, `modifiers`, `placeModifier`, `canPlace`, stacking/drag, `getEffectiveModifierRadius`, hotbar toggle), `src/vectorField.js:1`, `src/render.js:1` (`drawModifiers`, `drawModifierPreview`, `drawSnapLink`), `src/input.js:1` (`1–3`, `I`/`Tab`), `index.html:1`, `style.css:1`
+- `src/main.js:1` (bag, `modifiers`, `placeModifier`, `canPlace`, stacking/drag, `getEffectiveModifierRadius`, hotbar toggle), `src/vectorField.js:1`, `src/render.js:1` (`drawModifiers`, `drawModifierPreview`, `drawSnapLink`, `drawFreeShotEdgeGlow`), `src/input.js:1` (`1–3`, `I`/`Tab`), `index.html:1`, `style.css:1`

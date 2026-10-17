@@ -60,7 +60,7 @@
 
 ## 6. Wind visualization (Three.js Wind Waker streaks)
 
-- `#wind-canvas` transparent (`alpha:true`, clear `0x000000,0`), `z-index:3`, `pointer-events:none`. `STREAK_COUNT=48` camera-facing ribbons (`STREAK_NODES=24`, ~2k tris), width `4–7px`, additive near-white shader with core boost + edge/end fades. Advected by **base field only** (`getBaseWindAt`; bubbles never bend streaks, no ribbons inside bubbles) at `~90–300 px/s` (`STREAK_SPEED=200 px/s` per unit, clamp `60–450`) with gust swell `0.55–1.3×` + jitter. Spread: round-robin `8×5` init, respawn to emptiest of 6 candidates; knot (net `<24px` after `1.2s`) / OOB / age `2.5–4.5s` respawns. `H` toggles streaks (physics unaffected; glow stays). ≥55fps at `1280×720`. Resize updates pixel ratio/`uResolution`/camera.
+- `#wind-canvas` transparent (`alpha:true`, clear `0x000000,0`), `z-index:3`, `pointer-events:none`. `STREAK_COUNT=48` camera-facing ribbons (`STREAK_NODES=24`, ~2k tris), width `4–7px`, additive near-white shader with core boost + edge/end fades. Advected by **base field only** (`getBaseWindAt`; bubbles never bend streaks, no ribbons inside bubbles) at `~90–300 px/s` (`STREAK_SPEED=200 px/s` per unit, clamp `60–450`) with gust swell `0.55–1.3×` + jitter. Spread: round-robin `8×5` init, respawn to emptiest of 6 candidates; knot (net `<24px` after `1.2s`) / OOB / age `2.5–4.5s` respawns. `H` toggles streaks (physics unaffected; the Free Shot edge glow lives on the gameplay canvas and is unaffected). ≥55fps at `1280×720`. Resize updates pixel ratio/`uResolution`/camera.
 
 ## Acceptance
 

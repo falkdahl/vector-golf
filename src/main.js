@@ -24,6 +24,7 @@ import {
   drawHoleBanner,
   drawAttemptsBanner,
   drawSoftlockBanner,
+  drawFreeShotEdgeGlow,
   spawnWaterRipple,
   updateWaterRipples,
   drawWaterRipples,
@@ -61,10 +62,6 @@ function isWindThreeVisible(...args) { try { if (__windMod) return __windMod.isW
 function renderWind(...args) { try { if (__windMod) return __windMod.renderWind(...args); } catch { } }
 function resizeWindOverlay(...args) { try { if (__windMod) return __windMod.resizeWindOverlay(...args); } catch { } }
 function getWindUniforms(...args) { try { if (__windMod) return __windMod.getWindUniforms(...args); } catch { } return undefined; }
-function setWindFreeShotActive(...args) { try { if (__windMod) return __windMod.setFreeShotActive(...args); } catch { } }
-function setWindFreeShotBallActive(...args) { try { if (__windMod) return __windMod.setFreeShotBallActive(...args); } catch { } }
-function setWindFreeShotEdgeActive(...args) { try { if (__windMod) return __windMod.setFreeShotEdgeActive(...args); } catch { } }
-function updateFreeShotGlow(...args) { try { if (__windMod) return __windMod.updateFreeShotGlow(...args); } catch { } }
 function resetWindStreaks(...args) { try { if (__windMod && typeof __windMod.resetWindStreaks === 'function') return __windMod.resetWindStreaks(...args); } catch { } return false; }
 if (typeof window !== 'undefined') {
   try {
@@ -1199,23 +1196,11 @@ let freeShotFlightActive = false;
 function isFreeShotActiveState() { return isFreeShotActive; }
 function isFreeShotFlightActiveState() { return freeShotFlightActive; }
 function canActivateFreeShot() { return golfbagTotalFreeShots() > 0; }
-function syncFreeShotGlow() {
-  const edgeActive = isFreeShotActive || freeShotFlightActive;
-  // Ball sprite only while armed BEFORE launch: never during flight, even when
-  // still armed for the next shot (charges remain). Otherwise a re-sync would
-  // re-light the sprite at its last position (the tee) mid-flight.
-  const ballActive = isFreeShotActive && !freeShotFlightActive && gameState !== 'FLYING';
-  try {
-    setWindFreeShotActive(edgeActive);
-    try { setWindFreeShotBallActive(ballActive); } catch { };
-    try { setWindFreeShotEdgeActive(edgeActive); } catch { };
-    if (ballActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0);
-    else if (!ballActive) {
-      // ensure ball glow hidden when not armed (edge may still be visible)
-      try { setWindFreeShotBallActive(false); } catch { };
-    }
-  } catch { };
-}
+// Free Shot visuals are purely derived in render() from isFreeShotActive /
+// freeShotFlightActive (edge glow drawn on the gameplay canvas via
+// drawFreeShotEdgeGlow). Kept as a no-op so the many state-transition call
+// sites stay harmless.
+function syncFreeShotGlow() {}
 function setFreeShotActive(v) {
   if (!v) {
     isFreeShotActive = false;
@@ -1255,9 +1240,6 @@ function toggleFreeShot() {
 function clearFreeShotGlow() {
   isFreeShotActive = false;
   freeShotFlightActive = false;
-  try { setWindFreeShotActive(false); } catch { };
-  try { setWindFreeShotBallActive(false); } catch { };
-  try { setWindFreeShotEdgeActive(false); } catch { };
 }
 function clearFreeShotFlightGlow() {
   freeShotFlightActive = false;
@@ -2693,7 +2675,6 @@ function loadProgress() {
     } catch { setBagFromTypeList(['liquifier']); }
     isFreeShotActive = !!d.isFreeShotActive && canActivateFreeShot();
     isTutorialRun = !!d.isTutorialRun;
-    try { setWindFreeShotActive(isFreeShotActive); } catch { };
     // Field Extender / Power Cell: golfbag is source of truth when present; only use legacy
     // counts when no golfbag was stored (already handled above via setBagFromTypeList).
     if (!Array.isArray(d.golfbag) || !d.golfbag.length) {
@@ -3138,8 +3119,6 @@ function handleContinue() {
     createBall(level.tee);
     // Sliding window holds hole 0 after loadProgress; cover the resumed hole now.
     try { ensureWindowForCurrentHole(); } catch {}
-    // Restore freeShot glow after ball created (ball at tee, AIMING follows)
-    try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch { };
     gameState = "AIMING";
     if (winOverlay) winOverlay.classList.add("hidden"); if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
     resetHotbarCollapsed();
@@ -7465,7 +7444,6 @@ function tickWindVisual(frameDt) {
   if (step <= 0) return;
   try { updateWindUniforms(step, getWindAt); }
   catch (e) { try { if (!window.__windLastError) window.__windLastError = String((e && e.stack) || e); } catch { } }
-  try { if ((isFreeShotActive || freeShotFlightActive) && ball && ball.pos) updateFreeShotGlow(ball.pos, step); } catch { }
 }
 
 function update(dt) {
@@ -7956,6 +7934,15 @@ function render() {
     // Reward is HTML overlay #reward-overlay; no canvas draw (icon background removed)
   }
   // REQ-028: pause menu is DOM-only (#pause-overlay) to avoid duplicate rendering; canvas pause draw disabled
+  // Free Shot edge glow (REQ 05 §5): drawn on the gameplay canvas, not a
+  // full-screen DOM box-shadow overlay (that blur composited over the WebGL
+  // wind layer every frame and caused severe mobile jank while free shot armed).
+  try {
+    if (isFreeShotActive || freeShotFlightActive) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawFreeShotEdgeGlow(ctx, LOGICAL_W, LOGICAL_H);
+    }
+  } catch {}
   // Render wind overlay (Three.js shader lines + particles) on top of game canvas, transparent
   try { renderWind(); } catch { };
 }
@@ -8574,7 +8561,6 @@ function init() {
         createBall(level.tee);
         // Sliding window holds hole 0 after loadProgress; cover the resumed hole now.
         try { ensureWindowForCurrentHole(); } catch {}
-        try { syncFreeShotGlow(); if (isFreeShotActive && ball && ball.pos) updateFreeShotGlow(ball.pos, 0); } catch { };
         // Handle GAME_OVER save: show Game Over screen directly
         if (data.gameState === 'GAME_OVER') {
           gameState = 'GAME_OVER';
