@@ -5437,6 +5437,8 @@ function setupCanvases() { return setupCanvas(); }
 
 function loadLevel(index) {
   currentHoleIndex = index;
+  // 12-mobile: re-assert the landscape lock across the hole/level transition.
+  try { ensureMobileLandscape(); } catch { }
   // Tier 3: level theme + SFX + banter portraits stream in (cached after first).
   try { preloadLevelAssets(); } catch { }
   // Journal: track the highest-numbered hole reached this run
@@ -6108,6 +6110,8 @@ let mobileDPRCap = 1.5;
 let mobileDegraded = false;
 let fpsAccumTime = 0;
 let fpsAccumFrames = 0;
+// Last time the landscape lock was re-asserted by the frame-loop watchdog.
+let lastMobileLockAssert = 0;
 // Shared with cutscene.js (no import to avoid a cycle): the current cap value.
 try { window.__mobileDPRCapValue = mobileDPRCap; } catch { }
 function effectiveDPR() {
@@ -6136,9 +6140,29 @@ function lockLandscapeOrientation() {
     }
   } catch { }
 }
+// Re-assert the landscape lock while the app is running fullscreen on a phone.
+// Safe/idempotent to call at any time (the lock call resolves to a no-op while
+// it already holds). Skipped on iOS (no lock API; the rotate guard covers it)
+// and standalone PWA (the manifest orientation covers it).
+function ensureMobileLandscape() {
+  try {
+    if (!isMobileMode()) return;
+    if (isIOS()) return;
+    if (isStandalonePWA()) return;
+    if (!isFullscreenActive()) return;
+    lockLandscapeOrientation();
+  } catch { }
+}
 function requestMobileFullscreen() {
   try {
     if (!isMobileMode()) return;
+    if (isIOS() || isStandalonePWA()) return;
+    // Already fullscreen: only re-assert the lock. Calling requestFullscreen
+    // again on the live fullscreen element silently releases
+    // screen.orientation.lock() on some Android builds without firing a
+    // fullscreenchange, so the phone was free to rotate back to portrait
+    // across transitions (main menu → cutscene → level). Never re-request.
+    if (isFullscreenActive()) { lockLandscapeOrientation(); return; }
     const el = document.getElementById('game-container') || document.documentElement;
     let p = null;
     if (el.requestFullscreen) p = el.requestFullscreen();
@@ -6169,6 +6193,9 @@ function syncRotateOverlay() {
       el.classList.toggle('hidden', !show);
       el.setAttribute('aria-hidden', show ? 'false' : 'true');
     }
+    // The moment the viewport goes portrait while fullscreen, try to snap the
+    // device back to landscape (idempotent; no-op when the lock already holds).
+    if (show) { try { ensureMobileLandscape(); } catch { } }
   } catch { }
 }
 function dispatchEscapeKey() {
@@ -8011,6 +8038,16 @@ function loop(now) {
     requestAnimationFrame(loop);
     return;
   }
+  // Landscape watchdog (12-mobile): some Android browsers silently release
+  // screen.orientation.lock() across transitions. When the viewport ends up
+  // portrait while fullscreen, re-assert the lock (idempotent) so a run can
+  // never stay flipped. Only fires on the actual failure (portrait), throttled.
+  try {
+    if (window.innerHeight > window.innerWidth && now - lastMobileLockAssert > 500) {
+      lastMobileLockAssert = now;
+      ensureMobileLandscape();
+    }
+  } catch { }
   if (gameState === "WIN") {
     // Still render even when paused. Exception: overlays that play while WIN
     // need their updates ticked here, since update() is otherwise skipped:
@@ -10281,6 +10318,7 @@ if (typeof window !== 'undefined') {
   window.__isFullscreenActive = isFullscreenActive;
   window.__requestMobileFullscreen = requestMobileFullscreen;
   window.__lockLandscapeOrientation = lockLandscapeOrientation;
+  window.__ensureMobileLandscape = ensureMobileLandscape;
   window.__isRotateGuardVisible = isRotateGuardVisible;
   window.__syncRotateOverlay = syncRotateOverlay;
   window.__syncMobileUI = syncMobileUI;
@@ -10331,6 +10369,9 @@ function syncBanterSkipButton() {
   } catch { }
 }
 function playCutsceneWrapped(idOrData, opts) {
+  // 12-mobile: cutscene transitions are a common point for the browser to drop
+  // the landscape lock — re-assert it on entry and exit.
+  try { ensureMobileLandscape(); } catch { }
   // hide wind, hud etc will be synced via isCut check; also pause any banners
   const ok = cutscenePlay(idOrData, {
     onComplete: (completed) => {
@@ -10340,6 +10381,7 @@ function playCutsceneWrapped(idOrData, opts) {
       try { redrawBottom(); } catch { }
       try { syncParallaxVisibility(); } catch { }
       try { syncCutsceneSkipButton(); } catch { }
+      try { ensureMobileLandscape(); } catch { }
       if (opts && opts.onComplete) try { opts.onComplete(completed); } catch { }
     }
   });

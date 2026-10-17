@@ -76,7 +76,7 @@
 
 - [ ] `index.html` uses relative paths; only `three` is third-party; no `node_modules/`; static server loads with no 404s.
 - [ ] DOM contains only `#game-container` (+ optional `#loading-screen`); no `h1`/`#instructions`; body `background:#000`, `padding:0`, `overflow:hidden`.
-- [ ] Container is centered 16:9 `min(95vw,95vh*16/9)`; all layers share rect; DPR=2 keeps physics identical; resize keeps ratio, alignment, input mapping.
+- [ ] Container fills the viewport (windowed/F11/mobile ⛶/PWA) with OB `#2E2E2E` background; each canvas is a centered 16:9 contain box (whole level visible, no stretch); DPR=2 keeps physics identical; resize keeps ratio, alignment, input mapping.
 - [ ] Fixed timestep: 30/60fps ball travel over 2s varies <5%; no main-loop `setInterval`.
 - [ ] Music pauses on tab hide/`pagehide` and resumes wanted track(s) on visible/`pageshow` (Chrome/Firefox/Safari, desktop+mobile); still-visible window blur (desktop side-by-side chat) keeps playing; intent flags preserved across hide.
 - [ ] Audio prefs toggles gate music vs SFX everywhere incl. cutscenes; state persists across page visits.

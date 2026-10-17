@@ -75,6 +75,7 @@ function isInsideAnyModifier(x, y) {
 }
 let containerEl = null;
 let canvasEl = null;
+let canvasResizeObserver = null;
 
 function getRespawnPositionPreferInside() {
   // Spread control: respawn into the emptiest map region so streaks stay
@@ -334,6 +335,21 @@ export function initWindOverlay(container) {
   streakMesh = st.mesh;
   scene.add(streakMesh);
   resizeWindOverlay();
+  // Keep the WebGL buffer matched to the wind canvas's displayed 16:9 box
+  // whenever it changes (entering/leaving fullscreen, orientation, resize).
+  // The one-shot fullscreenchange resize can measure a stale/zero box mid
+  // transition, which left the buffer wrong until the next fullscreen toggle;
+  // observing the element itself settles it once the layout is final.
+  try {
+    if (typeof ResizeObserver !== 'undefined' && canvasEl) {
+      if (canvasResizeObserver) canvasResizeObserver.disconnect();
+      canvasResizeObserver = new ResizeObserver(() => {
+        try { requestAnimationFrame(() => { try { resizeWindOverlay(); } catch {} }); }
+        catch { try { resizeWindOverlay(); } catch {} }
+      });
+      canvasResizeObserver.observe(canvasEl);
+    }
+  } catch {}
   return { renderer, scene, camera, uniforms };
 }
 
@@ -347,6 +363,10 @@ export function resizeWindOverlay() {
   const target = canvasEl || containerEl || document.getElementById('game-container');
   if (!target || !renderer) return;
   const rect = target.getBoundingClientRect();
+  // Never collapse the backing store to 0x0: a hidden/mid-transition element
+  // reports an empty rect, and a 0-size buffer renders nothing (observed as
+  // "wind missing on initial fullscreen"). Keep the last good size instead.
+  if (!(rect.width > 0) || !(rect.height > 0)) return;
   renderer.setSize(rect.width, rect.height, false);
   renderer.setPixelRatio(dpr);
   if (uniforms) {

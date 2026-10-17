@@ -55,11 +55,20 @@ body {
 }
 
 #parallax-scene {
+  /* Menu splash: centered box whose aspect ratio is clamped to the 16:9–20:9
+     range (covers=16:9 for the height cap, 20:9 for the width cap). The art is
+     object-fit:cover so it never distorts; it fills the window width on wide
+     phones (up to 20:9) but never gets taller than 16:9, and ultra-wide screens
+     are capped at 20:9 with the OB grey container background around it. */
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
+  top: 50%;
+  left: 50%;
+  width: min(100vw, calc(100vh * 20 / 9));
+  width: min(100dvw, calc(100dvh * 20 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  height: min(100dvh, calc(100dvw * 9 / 16));
+  transform: translate(-50%, -50%);
+  border-radius: 0;
   overflow: hidden;
   z-index: 1;
   pointer-events: none;
