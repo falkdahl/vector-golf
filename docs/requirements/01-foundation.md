@@ -7,7 +7,8 @@
 ## 1. Static hosting
 
 - Zero-dependency static site: HTML5 + CSS + vanilla JS ES modules. No build step, no bundler, no `node_modules/`, no npm packages required to run.
-- `index.html` at repo root loads everything via relative paths (`style.css`, `src/main.js` via `<script type="module">`). No CDN scripts: native import maps only (no `es-module-shims`). Static images only under `img/` via `./img/...`: painted backgrounds/splash/character art as `.webp` (q80), `golfbag.png`, `logo.webp`, modifier icons `magnifier-icon.png`, `liquifier-icon.png`, `deflector-icon.png`, `rotator-icon.png`, `field-extender-icon.png`, `power-cell-icon.png` (legacy `amplify/nullify/flip/rotate-icon.png` map to the new names). Audio under `audio/` via `./audio/...`: themes as `.ogg`, short SFX as `.wav`. No other image/audio assets.
+- `index.html` at repo root loads everything via relative paths (`style.css`, `src/main.js` via `<script type="module">`). No CDN scripts: native import maps only (no `es-module-shims`). Static images only under `img/` via `./img/...`: painted backgrounds/splash/character art as `.webp` (q80), `golfbag.png`, `logo.webp`, modifier icons `magnifier-icon.png`, `liquifier-icon.png`, `deflector-icon.png`, `rotator-icon.png`, `field-extender-icon.png`, `power-cell-icon.png` (legacy `amplify/nullify/flip/rotate-icon.png` map to the new names), and PWA icons `icon-192.png`/`icon-512.png`. Audio under `audio/` via `./audio/...`: themes as `.ogg`, short SFX as `.wav`. No other image/audio assets.
+- PWA (see `13-pwa.md`): `manifest.webmanifest` and `sw.js` at repo root, linked/registered via relative `./` paths; no build step. iOS/theme meta tags and icon links live in `index.html` `<head>`, adding no body children.
 - Exactly one third-party import allowed: `three` via import map (local `vendor/three.module.js`; `unpkg`/`jsdelivr` `three@0.160.0/build/three.module.js` permitted as fallback). `import * as THREE from 'three'` is the only third-party import. No other CDN/`https://` script imports. `three` loads lazily via dynamic `import()` on first level entry so boot stays fast; `windThree.js` facades in `src/main.js` no-op until it arrives.
 - Serving: `python3 -m http.server 8000` (or `npx serve .`, or GitHub Pages) from repo root serves `index.html` with no 404s. `file://` ESM CORS is unsupported; docs recommend http serving.
 - `README.md` documents run/deploy instructions.
@@ -82,4 +83,4 @@
 
 ## File paths
 
-- `index.html:1`, `style.css:1`, `src/main.js:1` (loop, `setupCanvases`, `getCanvasMousePos`, loading hide), `src/audio.js:1` (music auto-pause on hidden, visibility-only), `src/windThree.js:1` (renderer resize), `README.md:1`
+- `index.html:1`, `style.css:1`, `src/main.js:1` (loop, `setupCanvases`, `getCanvasMousePos`, loading hide), `src/audio.js:1` (music auto-pause on hidden, visibility-only), `src/windThree.js:1` (renderer resize), `manifest.webmanifest:1` + `sw.js:1` (PWA, see `13-pwa.md`), `README.md:1`

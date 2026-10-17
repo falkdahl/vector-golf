@@ -35,6 +35,8 @@ export const IMAGE_ASSETS = [
   "./img/flip-icon.png",
   "./img/gfg-splash.webp",
   "./img/golfbag.png",
+  "./img/icon-192.png",
+  "./img/icon-512.png",
   "./img/journal.png",
   "./img/liquifier-icon.png",
   "./img/logo.webp",

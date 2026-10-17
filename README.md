@@ -28,6 +28,15 @@ npx serve .
 
 Copy repo contents to any static host (GitHub Pages, Netlify). No build needed. Set publish directory to repo root.
 
+## Progressive Web App
+
+The game is installable and runs fullscreen landscape when installed.
+
+- **Android:** open the site over HTTPS (or `localhost`) and use the browser's automatic "Install app" prompt. This requires the `manifest.webmanifest` and the registered service worker (`sw.js`).
+- **iOS:** the Fullscreen API is unavailable in iOS browsers. Tap **Share → Add to Home Screen** to install it; launching from the Home Screen runs fullscreen. Tapping the in-game fullscreen button shows a reminder with these steps.
+
+`sw.js` caches the app shell and static assets for offline play. Bump `CACHE_VERSION` in `sw.js` when deploying changes to invalidate old caches.
+
 ## Controls
 
 - **Left / Right Arrow** (or A/D): rotate aim around ball

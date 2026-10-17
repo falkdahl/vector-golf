@@ -6066,6 +6066,44 @@ function isMobilePhone() {
   return false;
 }
 function isMobileMode() { return isMobilePhone(); }
+// 13-pwa: iOS browsers do not implement the element Fullscreen API (only
+// video). Detect iOS so the fullscreen button can show an install hint
+// instead of silently doing nothing. iPadOS 13+ masquerades as desktop Mac.
+function isIOS() {
+  try {
+    const ua = navigator.userAgent || '';
+    if (/iPad|iPhone|iPod/.test(ua)) return true;
+    if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+  } catch { }
+  return false;
+}
+// 13-pwa: true when the game is launched as an installed PWA / added-to-home-
+// screen app. In that mode the browser chrome is already gone, so the
+// fullscreen button is pointless and the game is already landscape-locked by
+// the manifest.
+function isStandalonePWA() {
+  try {
+    if (window.matchMedia) {
+      if (window.matchMedia('(display-mode: standalone)').matches) return true;
+      if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
+      if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+    }
+  } catch { }
+  try { if (navigator.standalone === true) return true; } catch { }
+  return false;
+}
+const IOS_FULLSCREEN_TOAST = "Fullscreen isn't supported in iOS browsers. Tap Share → Add to Home Screen to play fullscreen.";
+// 13-pwa: register the service worker so the site is installable (Android
+// install prompt / iOS Add to Home Screen) and playable offline. Best-effort:
+// no-op on file:// or unsupported/ insecure contexts.
+function registerServiceWorker() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const proto = location.protocol;
+    if (proto !== 'https:' && proto !== 'http:') return;
+    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => { });
+  } catch { }
+}
 // Mobile perf: cap backing-store DPR (phones report 2-3x, quadrupling fill rate).
 let mobileDPRCap = 1.5;
 let mobileDegraded = false;
@@ -6223,7 +6261,7 @@ function syncMobileUI() {
     // Fullscreen re-entry stays available on the main menu (so phones can enter
     // fullscreen before starting), but is kept off the boot gate's "click to
     // continue" screen and every other blocking state.
-    const fsHidden = isFullscreenActive() || isBootGateVisible() || (chromeHidden && !mainMenuVisible);
+    const fsHidden = isFullscreenActive() || isStandalonePWA() || isBootGateVisible() || (chromeHidden && !mainMenuVisible);
     if (fsBtn) fsBtn.classList.toggle('hidden', fsHidden);
     try { syncRotateOverlay(); } catch { }
   } catch { }
@@ -6374,6 +6412,12 @@ function initMobileControls() {
     bindTap(resetBtn, () => { dispatchResetKey(); });
     const fsBtn = document.getElementById('mobile-fullscreen-button');
     bindTap(fsBtn, () => {
+      // 13-pwa: iOS has no element Fullscreen API — point the player at
+      // Add to Home Screen (which launches fullscreen landscape).
+      if (isIOS()) {
+        try { showToast(IOS_FULLSCREEN_TOAST); } catch { }
+        return;
+      }
       requestMobileFullscreen();
       try { setTimeout(syncMobileUI, 300); } catch { }
     });
@@ -8044,6 +8088,8 @@ function init() {
     console.error("Canvas #game or #bg-canvas not found");
     return;
   }
+  // 13-pwa: installable/offline support (best-effort, never blocks boot).
+  try { registerServiceWorker(); } catch { }
   // Boot gate: splash + "click to continue" (audio-unlock gesture).
   try {
     const gate = document.getElementById("continue-overlay");
@@ -10231,6 +10277,8 @@ if (typeof window !== 'undefined') {
   // 12-mobile hooks
   window.__isMobilePhone = isMobilePhone;
   window.__isMobileMode = isMobileMode;
+  window.__isIOS = isIOS;
+  window.__isStandalonePWA = isStandalonePWA;
   window.__isFullscreenActive = isFullscreenActive;
   window.__requestMobileFullscreen = requestMobileFullscreen;
   window.__lockLandscapeOrientation = lockLandscapeOrientation;
@@ -10331,7 +10379,7 @@ try { if (typeof window !== 'undefined') { window.__playCutscene = playCutsceneW
 
 export {
   init, resetBall, gameState, attempts, supply, getSupply, setSupply, addToSupply, canPlace, resetSupply, golfbag, getGolfbag, golfbagUsedCount, golfbagHasEmpty, golfbagTotalFreeShots, addItemToBag, removeBagSlot, selectBagSlot, selectedBagIndex, pendingRewardType, getPendingRewardType, closeRewardMenuWithoutReward, discardBagSlotAndClaimReward, setBagFromTypeList, GOLFBAG_SIZE, FREE_SHOT_CHARGES_PER_ITEM, isPickupDiscardActive, getPendingPickup, enterPickupDiscard, cancelPickupDiscard, discardBagSlotForPickup, syncBanterSkipButton, getModifiers, getSelectedModifier, modifiers, selectedModifier, rewardMenuVisible, rewardClaimedFor, rewardMenuHover, rewardOffered, REWARD_POOL, maybeShowRewardMenu, claimReward, isRewardMenuVisible, getRewardClaimedFor, getRewardMenuState, setRewardClaimedFor, setRewardMenuVisible, getRewardOffered, setRewardOffered, maxAttempts, getMaxAttempts, setMaxAttempts, getAttemptsLeft, areaUpgradeCount, fieldExtenderCount, powerCellCount, getAreaUpgradeCount, getFieldExtenderCount, getPowerCellCount, getAreaMultiplier, getEffectiveModifierRadius, getPowerMultiplier, getEffectiveModifierStrength, addAreaUpgrade, addFieldExtender, addPowerCell, isPassiveEnabled, setPassiveEnabled, togglePassive, getPassiveEnabled, getEffectiveFieldExtenderCount, getEffectivePowerCellCount, applyPassiveEffects, toggleJournal, isJournalOpen, canToggleJournal, syncJournalUI, renderJournalPanel, getJournalBest, commitRunJournal, journalStartRun, JOURNAL_KEY, BASE_MODIFIER_RADIUS, BASE_MODIFIER_STRENGTH, bounceBall, rewardPending, rewardRerolled, rewardRerollHover, getRewardRerolled, rerollReward, totalAttempts, holeAttempts, currentHoleIndex, STORAGE_KEY, getSavePayload, saveProgress, loadProgress, clearProgress, pauseMenuVisible, pauseMenuHover, rewardChosenCounts, getRewardChosenCounts, getRewardChosenCount, setRewardChosenCounts, resumeGame, startNewGame, isPauseMenuVisible, mainMenuVisible, mainMenuHover, HIGH_SCORE_KEY, getHighScore, setHighScore, clearHighScore, maybeUpdateHighScore, syncMainMenu, isMainMenuVisible, startNewGameFromMain, endRun, isHotbarCollapsed, isHotbarCollapsedState, toggleHotbar, resetHotbarCollapsed, syncHotbarCollapsedUI, returnToMainMenu, resetGameAfterWin, showGameOver, hideGameOver, handleGameOverReturn, isFreeShotActive, isFreeShotActiveState, canActivateFreeShot, setFreeShotActive, toggleFreeShot, clearFreeShotGlow, holeBannerVisible, attemptsBannerVisible, freeShotBannerVisible, holeBannerText, attemptsBannerText, freeShotBannerText, isHoleBannerVisible, getHoleBannerText, showHoleBanner, hideHoleBanner, isAttemptsBannerVisible, getAttemptsBannerText, showAttemptsBanner, hideAttemptsBanner, maybeShowAttemptsBanner, isFreeShotBannerVisible, getFreeShotBannerText, showFreeShotBanner, hideFreeShotBanner, maybeShowFreeShotBanner, getRewardSeedCounter, setRewardSeedCounter, softlockBannerVisible, softlockBannerText, isSoftlockBannerVisible, getSoftlockBannerText, showSoftlockBanner, hideSoftlockBanner, resetSoftlockDetection, updateSoftlockDetection, isLastAttemptForSoftlock, isLastAttemptForReset, getSoftlockTextForCurrentState, SOFTLOCK_TEXT_NORMAL, SOFTLOCK_TEXT_LAST,
-  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall, isMobilePhone, isMobileMode, isFullscreenActive, requestMobileFullscreen, lockLandscapeOrientation, isRotateGuardVisible, syncRotateOverlay, syncMobileUI, dispatchEscapeKey, dispatchResetKey, handleRightClickAt, getCanvasTouchPos
+  totalPoints, getTotalPoints, passiveCounts, getPassiveCounts, passiveEnabled, runJournal, isStartingItemsVisible, getStartingRemaining, showStartingItems, hideStartingItems, handleStartingPick, showPerHoleSummary, showCourseClearedOverlay, hideCourseCleared, isCourseClearedVisible, modifiersTraversedThisHole, pendingHoleAdvance, findSnapTarget, getSnapPreviewTarget, splitStackAtIndex, getStackIndicesFor, stackIndicesAtPos, cancelBagDrag, isSpatialBagType, isPlacementOutOfBounds, isCheatMode, isCheatDraggingBall, activateCheatMode, deactivateCheatMode, toggleCheatMode, tryCheatGrabBall, dropCheatBall, isMobilePhone, isMobileMode, isIOS, isStandalonePWA, isFullscreenActive, requestMobileFullscreen, lockLandscapeOrientation, isRotateGuardVisible, syncRotateOverlay, syncMobileUI, dispatchEscapeKey, dispatchResetKey, handleRightClickAt, getCanvasTouchPos
 };
 
 // Auto-init when loaded as module via script tag

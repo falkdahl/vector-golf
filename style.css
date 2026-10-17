@@ -925,7 +925,10 @@ body {
   font: 600 12px system-ui, sans-serif;
   z-index: 20;
   pointer-events: none;
-  white-space: nowrap;
+  max-width: min(90%, 460px);
+  text-align: center;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .reward-stats {
