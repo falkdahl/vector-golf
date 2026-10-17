@@ -5407,9 +5407,8 @@ function setupCanvas() {
   for (const c of [bgCanvas, canvas].filter(Boolean)) {
     c.width = LOGICAL_W * dpr;
     c.height = LOGICAL_H * dpr;
-    // CSS size is 100% of the 16:9 container (style.css handles width/height via 100%)
-    c.style.width = '100%';
-    c.style.height = '100%';
+    // Displayed size is owned by style.css (centered 16:9 contain box); do not
+    // force inline CSS sizing here.
     const cctx = c.getContext('2d');
     cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cctx.imageSmoothingEnabled = true;

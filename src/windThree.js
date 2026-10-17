@@ -298,9 +298,6 @@ export function initWindOverlay(container) {
   }
   Object.assign(canvasEl.style, {
     position: 'absolute',
-    inset: '0',
-    width: '100%',
-    height: '100%',
     pointerEvents: 'none',
     background: 'transparent',
     zIndex: '4',
@@ -345,9 +342,11 @@ export function resizeWindOverlay() {
     containerEl = document.getElementById('game-container');
   }
   const dpr = effectiveWindDPR();
-  const container = containerEl || document.getElementById('game-container');
-  if (!container || !renderer) return;
-  const rect = container.getBoundingClientRect();
+  // Size the WebGL buffer to the wind canvas's own (centered 16:9) displayed
+  // box, not the full-viewport container, so streaks are never stretched.
+  const target = canvasEl || containerEl || document.getElementById('game-container');
+  if (!target || !renderer) return;
+  const rect = target.getBoundingClientRect();
   renderer.setSize(rect.width, rect.height, false);
   renderer.setPixelRatio(dpr);
   if (uniforms) {

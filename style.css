@@ -18,29 +18,40 @@ body {
 
 #game-container {
   position: relative;
-  /* vh fallback for older browsers, then dvh so the full height stays visible
-     under mobile browser chrome (address bar / nav bar) when not fullscreen. */
-  width: min(95vw, calc(95vh * 16 / 9));
-  width: min(95vw, calc(95dvh * 16 / 9));
-  height: min(95vh, calc(95vw * 9 / 16));
-  height: min(95dvh, calc(95vw * 9 / 16));
-  aspect-ratio: 16 / 9;
-  margin: auto;
+  /* Fill the viewport in every mode (windowed, F11, mobile ⛶, installed PWA).
+     vh fallback first, then dvh so the full height stays visible under mobile
+     browser chrome (address bar / nav bar) when not fullscreen. The playable
+     16:9 area is a centered contain box drawn by the canvases; the surrounding
+     area is painted the out-of-bounds (OB) grey so the level blends seamlessly
+     instead of showing black letterbox bars. */
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  aspect-ratio: auto;
+  margin: 0;
   display: block;
   flex-shrink: 0;
   overflow: hidden;
+  background: #2E2E2E;
 }
 
 #game-container canvas {
+  /* Centered 16:9 "contain" box: the whole logical level is always visible and
+     undistorted; leftover space is the OB-coloured container background. */
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  border: 3px solid #222;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  top: 50%;
+  left: 50%;
+  width: min(100vw, calc(100vh * 16 / 9));
+  width: min(100dvw, calc(100dvh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  height: min(100dvh, calc(100dvw * 9 / 16));
   max-width: none;
+  transform: translate(-50%, -50%);
+  display: block;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 #parallax-scene {
@@ -2313,25 +2324,14 @@ body {
 /* 12-mobile — phone landscape + touch controls (hidden on desktop) */
 #game-container { touch-action: none; }
 #game-container canvas { touch-action: none; }
-/* Fullscreen keeps the SAME 16:9 box as normal mode, centered on black —
-   canvases/HUD/overlays/input mapping are therefore identical in both modes.
-   Only the menu splash breaks out full-bleed (see #parallax-scene rule below). */
+/* The base layout already fills the viewport, so fullscreen needs no
+   fullscreen-specific sizing (F11, mobile ⛶ and installed PWA all just use the
+   normal viewport size). Keep only a safety reset for the top-layer element. */
 #game-container:fullscreen {
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
-  aspect-ratio: 16 / 9;
-  inset: 0;
-  margin: auto;
   border-radius: 0;
-  background: #000;
+  background: #2E2E2E;
 }
-#game-container:fullscreen::backdrop { background: #000; }
-#game-container:fullscreen canvas { border-radius: 0; }
-/* NOTE: the menu splash deliberately stays container-relative (same 16:9 box as
-   the game). Breaking it out full-viewport would require moving it out of
-   #game-container: fixed-position descendants of a fullscreen element are
-   still contained/clipped by that element on mobile browsers, which risks a
-   zoomed/cropped splash. Pillarbox bars in the menu match desktop behavior. */
+#game-container:fullscreen::backdrop { background: #2E2E2E; }
 #mobile-menu-button,
 #mobile-reset-button,
 #mobile-fullscreen-button {
