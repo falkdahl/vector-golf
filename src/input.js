@@ -9,11 +9,24 @@ const TOTAL_DIRECTIONS = 128; // Number of steps per full circle
 const STEP_SIZE = (Math.PI * 2) / TOTAL_DIRECTIONS;
 let aimIndex = 0;
 
-// Auto-repeat timing configuration
+// Hold-to-rotate acceleration. A tap steps exactly once; holding starts slowly
+// and smoothly ramps up to a fast sweep. Speeds are discrete steps per second
+// (TOTAL_DIRECTIONS steps make a full turn).
 let holdTimer = 0;
-const INITIAL_DELAY = 0.15;    // Time (seconds) before auto-repeat kicks in after the first tap
-const REPEAT_INTERVAL = 0.005;  // Time (seconds) between each step while holding the key down
+const INITIAL_DELAY = 0.15;       // Time (seconds) after the first tap before auto-rotate starts
+const HOLD_START_SPEED = 9;       // steps/s (~25 deg/s) at the start of the ramp
+const HOLD_MAX_SPEED = 100;       // steps/s (~281 deg/s) at full hold
+const HOLD_ACCEL_TIME = 1.1;      // Time (seconds) to ramp from start to max speed
 let lastDir = 0;
+let holdElapsed = 0;              // Time (seconds) spent rotating while held
+let stepAccumulator = 0;          // Fractional steps carried between fixed updates
+
+function resetHoldRotation() {
+  holdTimer = 0;
+  holdElapsed = 0;
+  stepAccumulator = 0;
+  lastDir = 0;
+}
 
 export const keys = {
   ArrowLeft: false,
@@ -34,6 +47,7 @@ export function setAimAngle(angle) {
   // back to a stale index on the very next frame. Rounds to nearest step.
   aimIndex = Math.round(aimAngle / STEP_SIZE) % TOTAL_DIRECTIONS;
   if (aimIndex < 0) aimIndex += TOTAL_DIRECTIONS;
+  resetHoldRotation();
 }
 
 export function getAimAngle() {
@@ -158,6 +172,7 @@ export function updateInput(dt, gameState) {
       const MAX_CHARGE_TIME = 1.5;
       charge = Math.min(holdTime / MAX_CHARGE_TIME, 1.0);
     }
+    resetHoldRotation();
     return;
   }
 
@@ -168,32 +183,45 @@ export function updateInput(dt, gameState) {
     charge = Math.min(holdTime / MAX_CHARGE_TIME, 1.0);
   }
 
-  // Rotation - allow during AIMING and CHARGING? spec says lock during charging for MVP.
-  // We'll lock during charging to simplify, but allow very slight? We'll lock.
-  if (charging) return;
+  // Rotation is locked while charging; clear any in-progress ramp so the next
+  // aiming state starts fresh.
+  if (charging) {
+    resetHoldRotation();
+    return;
+  }
 
   let dir = 0;
   if (keys.ArrowLeft || keys.KeyA) dir -= 1;
   if (keys.ArrowRight || keys.KeyD) dir += 1;
 
   if (dir !== 0) {
-    // If it's a fresh press OR the user switched directions, step immediately
-    if (dir !== lastDir || holdTimer === 0 && lastDir === 0) {
+    // A fresh press or a direction change steps immediately (tap behaviour)
+    // and restarts the acceleration ramp from slow.
+    if (dir !== lastDir) {
       aimIndex = (aimIndex + dir + TOTAL_DIRECTIONS) % TOTAL_DIRECTIONS;
-      holdTimer = INITIAL_DELAY; // Start the delay timer for continuous holding
+      holdTimer = INITIAL_DELAY;
+      holdElapsed = 0;
+      stepAccumulator = 0;
       lastDir = dir;
-    } else {
-      // While holding, count down the timer using delta time (dt)
+    } else if (holdTimer > 0) {
+      // Short pause after the first step so quick taps stay single-step.
       holdTimer -= dt;
-      if (holdTimer <= 0) {
+    } else {
+      // Continuous hold: ramp speed smoothly from slow to fast, accumulating
+      // fractional steps so the sweep can exceed one step per fixed update.
+      holdElapsed += dt;
+      const t = Math.min(holdElapsed / HOLD_ACCEL_TIME, 1);
+      const eased = t * t * (3 - 2 * t);
+      const speed = HOLD_START_SPEED + (HOLD_MAX_SPEED - HOLD_START_SPEED) * eased;
+      stepAccumulator += speed * dt;
+      while (stepAccumulator >= 1) {
+        stepAccumulator -= 1;
         aimIndex = (aimIndex + dir + TOTAL_DIRECTIONS) % TOTAL_DIRECTIONS;
-        holdTimer = REPEAT_INTERVAL; // Reset to a faster interval for subsequent steps
       }
     }
   } else {
     // Key released, reset everything
-    lastDir = 0;
-    holdTimer = 0;
+    resetHoldRotation();
   }
 
   // Convert current index back to radians

@@ -14,7 +14,7 @@
 
 ## 2. Aim & charge
 
-- Aim only in `AIMING`/`CHARGING` and no blocking overlay (reward/summary/cutscene/banter/banners/pause/menus/`WIN`/`GAME_OVER`). `ArrowLeft/Right` (or `A`/`D`) rotate `1.6 rad/s`, wrap `[0,2π)`. `aimAngle` persists across death; only `loadLevel` aims at the hole. `resetBall()` never touches `aimAngle`.
+- Aim only in `AIMING`/`CHARGING` and no blocking overlay (reward/summary/cutscene/banter/banners/pause/menus/`WIN`/`GAME_OVER`). `ArrowLeft/Right` (or `A`/`D`) rotate through **128 discrete steps** (`STEP_SIZE = 2π/128 ≈ 2.81°`), wrapping `[0,2π)`. A tap (fresh press or direction reversal) moves exactly one step immediately. Holding first pauses `INITIAL_DELAY=0.15s`, then rotates with smooth acceleration: it starts at `HOLD_START_SPEED=9` steps/s (~25°/s) and ramps over `HOLD_ACCEL_TIME=1.1s` to `HOLD_MAX_SPEED=100` steps/s (~281°/s, faster than the old constant sweep). Rotation is locked while `CHARGING`; the ramp resets on release, direction change, aim set, and non-aiming states. `aimAngle` persists across death; only `loadLevel` aims at the hole. `resetBall()` never touches `aimAngle`.
 - `Space` first `keydown` in `AIMING` → `CHARGING` (`charge=0,holdTime=0`); `charge=min(holdTime/1.5,1)`; `keyup` → `power=50+charge*550`, `launchBall`, back to `FLYING`. Tap ≈5–10%, 1.5s = 100%. Launch ignored while moving/blocked.
 
 ## 3. Attempts (canonical)
@@ -44,7 +44,7 @@
 
 ## Acceptance
 
-- [ ] Orbit 90–150°/s; `aimAngle` persists on death, resets per hole; tap/hold show 0%/50%/100%.
+- [ ] Rotation uses 128 discrete steps (~2.81°); a tap/reversal moves exactly one step; holding ramps smoothly from ~25°/s to ~281°/s over ~1.1s (final faster than the old sweep); `aimAngle` persists on death, resets per hole; tap/hold show 0%/50%/100%.
 - [ ] Counted launch decrements at launch; failures free; free launch consumes charge; HUD `X` vs `X (+Y)` correct.
 - [ ] Last flight can win (no immediate Game Over at launch); failure then shows `GAME_OVER`; `R`/Continue clears.
 - [ ] Hole banner then reward; Last Attempt/Free Shot once per hole post-reset; `R` disabled only on actual last flight.
