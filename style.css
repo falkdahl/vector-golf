@@ -440,6 +440,22 @@ body {
 }
 #main-menu-overlay.hidden { display: none; }
 
+/* Frame matching the centered 16:9 game canvas so main-menu chrome
+   (hamburger, logo, seed box) stays inside the canvas borders instead of
+   spilling into the OB letterbox area on non-16:9 viewports. */
+#main-menu-canvas-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(100vw, calc(100vh * 16 / 9));
+  width: min(100dvw, calc(100dvh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  height: min(100dvh, calc(100dvw * 9 / 16));
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+#main-menu-canvas-frame > * { pointer-events: auto; }
+
 #menu-title {
   position: absolute;
   top: 14px;
