@@ -55,24 +55,15 @@ export const BOSS_STAGE_1 = {
 
   minions: {
     initial: 2,
-    max: 6,
+    max: 12,
     radius: 12,
-    steps: 6,
+    steps: 3, // Higher number = slower movement, lower number = faster movement
     spawns: [
       { x: 1092, y: 168 },
       { x: 1110, y: 356 },
       { x: 1090, y: 540 },
       { x: 900, y: 118 },
       { x: 900, y: 602 }
-    ],
-    path: [
-      { x: 980, y: 320 },
-      { x: 850, y: 300 },
-      { x: 720, y: 330 },
-      { x: 580, y: 360 },
-      { x: 440, y: 360 },
-      { x: 300, y: 360 },
-      { x: 178, y: 360 }
     ]
   },
 
@@ -91,9 +82,9 @@ export const BOSS_STAGE_1 = {
   },
 
   projectiles: {
-    count: 4,
-    speed: 150,
-    spread: 0.62,
+    count: 64,
+    speed: 250,
+    spread: 6,
     radius: 9,
     windScale: 0.72,
     life: 10

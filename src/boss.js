@@ -656,15 +656,20 @@ function updateProjectiles(dt) {
 }
 
 function spawnMinions(n, initial, spawnsOverride = null) {
-  if (!state) return;
+  if (!state || !stage.tee) return;
   const count = clampInt(n, 0, stage.minions.max, 0);
   for (let i = 0; i < count; i++) {
     if (state.minions.length >= stage.minions.max) break;
     const spawn = spawnsOverride && spawnsOverride.length
       ? spawnsOverride[i % spawnsOverride.length]
       : stage.minions.spawns[Math.floor(Math.random() * stage.minions.spawns.length)];
-    const points = [{ x: spawn.x, y: spawn.y }];
-    for (const p of stage.minions.path) points.push({ x: p.x, y: p.y });
+
+    // Create a direct 2-point straight line path from spawn to the tee (player)
+    const points = [
+      { x: spawn.x, y: spawn.y },
+      { x: stage.tee.x, y: stage.tee.y }
+    ];
+
     state.minions.push({
       id: nextId++,
       points,
@@ -680,10 +685,16 @@ function spawnMinions(n, initial, spawnsOverride = null) {
 function advanceMinion(id) {
   const m = state.minions.find((x) => x.id === id);
   if (!m) return;
+
+  // Advance progress linearly along the straight-line path
   m.progress = Math.min(1, m.progress + 1 / Math.max(1, stage.minions.steps));
+
+  // Update position using the engine's built-in path interpolator
   const pos = pointOnPath(m.points, m.progress);
   m.x = pos.x;
   m.y = pos.y;
+
+  // Check if minion reached the tee (progress reaches 1)
   if (m.progress >= 1 - 1e-6) {
     state.minions = state.minions.filter((x) => x !== m);
     addEffect("tee-hit", stage.tee.x, stage.tee.y, 0.5);
