@@ -49,6 +49,7 @@ import {
   getHoleOverlaySig,
   invalidateHoleOverlay,
 } from "./render.js";
+import { initBoss, updateBoss, renderBoss, bossHandleLaunch, bossHandleResetKey, bossEndPlayerPhase, bossShutdown } from "./boss.js";
 // Wind overlay (Three.js) loads lazily so the 1.3MB vendor bundle stays off
 // the boot path. These facades keep every call site unchanged: no-ops until
 // the module arrives, then delegate. Init + field sync re-run on arrival.
@@ -728,6 +729,10 @@ function prebuildStaticScenery() {
 // Tutorial reminder state
 let tutorialLiquifierReminderShown = false;
 let tutorialHole3RewardBanterShown = false;
+
+// Dimension-Y boss prototype (docs/14). Isolated from campaign progress.
+let bossModeActive = false;
+let bossLaunchParams = null;
 
 // Modifier system per REQ-015 + REQ-020 (supply-limited) + transparent/collapsible per REQ-012/015/020
 let modifiers = [];
@@ -2575,6 +2580,8 @@ function getSavePayload() {
   };
 }
 function saveProgress() {
+  // Boss prototype must never overwrite or delete campaign progress.
+  if (bossModeActive) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(getSavePayload()));
   } catch (e) { }
@@ -4117,7 +4124,225 @@ function finishReturnToMainMenu() {
   try { queueFirstHolePrewarm(800); } catch {}
 }
 
+// --- Dimension-Y boss prototype glue (docs/14-dimension-y-boss-prototype-plan.md) ---
+function getBossLaunchParams() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("boss")) return null;
+    const raw = String(params.get("boss") ?? "1").toLowerCase();
+    if (raw === "0" || raw === "false" || raw === "off") return null;
+    const itemsRaw = params.get("items") || params.get("bag") || "";
+    const items = itemsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+    return {
+      lives: parseInt(params.get("lives"), 10),
+      bossLives: parseInt(params.get("bosslives") ?? params.get("bossLives"), 10),
+      items,
+      debug: params.get("debug") === "1" || params.get("debug") === "true"
+    };
+  } catch {
+    return null;
+  }
+}
+
+function startBossMode(params) {
+  bossModeActive = true;
+  bossLaunchParams = params || {};
+
+  // Skip boot gate and loading cover: ?boss=1 is a direct debug jump.
+  bootGateVisible = false;
+  try {
+    const gate = document.getElementById("continue-overlay");
+    if (gate) gate.classList.add("hidden");
+  } catch { }
+
+  mainMenuVisible = false;
+  courseMenuVisible = false;
+  helpVisible = false;
+  pauseMenuVisible = false;
+  pauseMenuHover = null;
+  isInLevelPause = false;
+  rewardPending = false;
+  rewardMenuVisible = false;
+  rewardOffered = [];
+  pendingRewardType = null;
+  pendingPickup = null;
+  coinSummaryVisible = false;
+  loadoutVisible = false;
+  startingItemsVisible = false;
+  courseClearedVisible = false;
+  holeBannerVisible = false;
+  attemptsBannerVisible = false;
+  freeShotBannerVisible = false;
+  softlockBannerVisible = false;
+  pendingHoleAdvance = false;
+  isFreeShotActive = false;
+  freeShotFlightActive = false;
+  try { clearFreeShotGlow(); } catch { }
+
+  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch { }
+  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch { }
+  try { if (hudEl) hudEl.classList.add("hidden"); } catch { }
+  try {
+    const bossHud = document.getElementById("boss-hud");
+    if (bossHud) bossHud.classList.remove("hidden");
+    const endBtn = document.getElementById("boss-end-turn");
+    if (endBtn) endBtn.classList.add("hidden");
+  } catch { }
+
+  // Starting bag (debug override via ?items=deflector,rotator,...).
+  const items = Array.isArray(params.items) && params.items.length ? params.items : ["deflector", "rotator"];
+  try { setBagFromTypeList(items); } catch { }
+
+  const bridge = {
+    setLevel(lvl) {
+      level = lvl;
+      windStrength = lvl.field.strength ?? WIND_STRENGTH;
+      createField(lvl.field.cols, lvl.field.rows, windStrength, lvl.field.seed, LOGICAL_W, LOGICAL_H, lvl.field);
+      modifiers = [];
+      syncModifiersToField();
+      createBall(lvl.tee);
+      try { resetWindStreaks(); } catch { }
+      try { clearWaterRipples(); } catch { }
+      try { syncWindFieldToShader(); } catch { }
+    },
+    setAimAngle(angle) { try { setAimAngle(angle); } catch { } },
+    getGameState() { return gameState; },
+    setGameState(next) { gameState = next; },
+    getModifiers() { return modifiers; },
+    getBagInfo() {
+      return {
+        bag: golfbag.map((e) => (e ? { ...e } : null)),
+        passives: { ...passiveCounts },
+        passiveEnabled: { ...passiveEnabled }
+      };
+    },
+    clearModifiers() {
+      modifiers = [];
+      selectedModifier = null;
+      selectedBagIndex = -1;
+      try { syncModifiersToField(); } catch { }
+      try { updateHotbarUI(); } catch { }
+    },
+    isRewardVisible() { return !!rewardMenuVisible; },
+    openReward(offer) {
+      rewardOffered = Array.isArray(offer) ? offer.slice(0, 3) : [];
+      if (!rewardOffered.length) return;
+      rewardPending = false;
+      rewardMenuVisible = true;
+      pendingRewardType = null;
+      pendingPickup = null;
+      rewardSource = "chest";
+      journalChestPending = false;
+      rewardMenuHover = null;
+      rewardRerollHover = false;
+      rewardRerolled = false;
+      rewardClaimedFor = null;
+      try { syncRewardOverlay(); } catch { }
+      try { updateHotbarUI(); } catch { }
+    },
+    getFreeShots() { return golfbagTotalFreeShots(); },
+    consumeFreeShot() { return consumeFreeShotCharge(); },
+    addToBag(type) { return addItemToBag(type); },
+    drawPlacementPreview(ctx) { try { drawBossPlacementOverlay(ctx); } catch (e) { recordFrameError("boss-preview", e); } },
+    showGameOver() { try { showGameOver(); } catch (e) { recordFrameError("boss-gameover", e); } },
+    showVictory(info) { try { showBossVictory(info); } catch (e) { recordFrameError("boss-victory", e); } },
+    returnToMenu() { bossReturnToMainMenu(); },
+    log(...args) { try { console.log("[boss]", ...args); } catch { } }
+  };
+
+  try { initBoss(bridge, params); } catch (e) { recordFrameError("boss-init", e); try { console.error(e); } catch { } }
+
+  try { syncPauseOverlay(); } catch { }
+  try { syncMainMenu(); } catch { }
+  try { syncBgCanvasVisibility(); } catch { }
+  try { updateHotbarUI(); } catch { }
+  try { syncMobileUI(); } catch { }
+  try { hideLoadingScreen(); } catch { }
+  try { setTimeout(hideLoadingScreen, 80); } catch { }
+}
+
+function showBossVictory(info) {
+  gameState = "WIN";
+  try {
+    if (winTitle) winTitle.textContent = "Stage Cleared!";
+    if (winTotalValue) winTotalValue.textContent = String(info && info.rounds ? info.rounds : 0);
+    if (winAttemptsValue) winAttemptsValue.textContent = String(info && info.playerLives != null ? info.playerLives : 0);
+    if (winHoleValue) winHoleValue.textContent = "1";
+    if (winHoleTotal) winHoleTotal.textContent = "1";
+    if (nextHoleButton) nextHoleButton.classList.add("hidden");
+    if (continueButton) {
+      continueButton.classList.remove("hidden");
+      continueButton.textContent = "Continue";
+    }
+    if (winOverlay) winOverlay.classList.remove("hidden");
+    if (gameoverOverlay) gameoverOverlay.classList.add("hidden");
+  } catch { }
+}
+
+function bossReturnToMainMenu() {
+  if (!bossModeActive && !bossLaunchParams) return;
+  bossModeActive = false;
+  bossLaunchParams = null;
+  try { bossShutdown(); } catch { }
+
+  try { if (winOverlay) winOverlay.classList.add("hidden"); } catch { }
+  try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch { }
+  try {
+    const bossHud = document.getElementById("boss-hud");
+    if (bossHud) bossHud.classList.add("hidden");
+    const endBtn = document.getElementById("boss-end-turn");
+    if (endBtn) endBtn.classList.add("hidden");
+  } catch { }
+
+  // IMPORTANT: no clearProgress() here — the campaign save must survive.
+  isTutorialRun = false;
+  deferredMenuReturn = false;
+  currentHoleIndex = 0;
+  holeAttempts = 0;
+  totalAttempts = 0;
+  attempts = 0;
+  maxAttempts = 10;
+  areaUpgradeCount = 0;
+  fieldExtenderCount = 0;
+  powerCellCount = 0;
+  passiveEnabled = { fieldExtender: true, powerCell: true };
+  try { setFieldPowerCellCount(0); } catch { }
+  try { setBagFromTypeList(["liquifier"]); } catch { }
+  modifiers = [];
+  try { syncModifiersToField(); } catch { }
+  selectedModifier = null;
+  selectedBagIndex = -1;
+  rewardPending = false;
+  rewardMenuVisible = false;
+  rewardOffered = [];
+  rewardRerolled = false;
+  rewardRerollHover = false;
+  rewardMenuHover = null;
+  rewardClaimedFor = null;
+  pendingRewardType = null;
+  pendingPickup = null;
+  pauseMenuVisible = false;
+  pauseMenuHover = null;
+  mainMenuVisible = true;
+  courseMenuVisible = false;
+  helpVisible = false;
+  isInLevelPause = false;
+  gameState = "AIMING";
+  if (LEVELS.length) {
+    try { level = LEVELS[0]; } catch { }
+  }
+  try { resetHotbarCollapsed(); } catch { }
+  try { syncRewardOverlay(); } catch { }
+  try { syncPauseOverlay(); } catch { }
+  try { syncMainMenu(); } catch { }
+  try { updateHotbarUI(); } catch { }
+  try { syncMobileUI(); } catch { }
+  try { redrawBottom(); } catch { }
+  try { hideLoadingScreen(); } catch { }
+}
+
 function selectHole(n) {
+  if (bossModeActive) return false;
   // Secret: 1-indexed hole number (1..LEVELS.length)
   const idx = Math.floor(Number(n)) - 1;
   if (!Number.isFinite(idx) || idx < 0 || idx >= LEVELS.length) return false;
@@ -4333,6 +4558,7 @@ function isTutorialHole3MandatoryReward() {
   } catch { return false; }
 }
 function isRerollDisabled() {
+  if (bossModeActive) return true;
   if (rewardRerolled) return true;
   // Tutorial hole 3 chests (deflector/rotator/magnifier) are mandatory: no re-roll, must pick one.
   if (isTutorialHole3MandatoryReward()) return true;
@@ -5448,6 +5674,8 @@ function setupCanvas() {
 function setupCanvases() { return setupCanvas(); }
 
 function loadLevel(index) {
+  // Dimension-Y boss mode owns `level`; never let a stale campaign path replace it.
+  if (bossModeActive) return;
   currentHoleIndex = index;
   // 12-mobile: re-assert the landscape lock across the hole/level transition.
   try { ensureMobileLandscape(); } catch { }
@@ -5648,7 +5876,7 @@ function updateAttemptsUI() {
     if (hudEl) {
       let isCut2 = false; try { isCut2 = cutsceneIsActive(); } catch { }
       let isBanter = false; try { isBanter = banterIsActive(); } catch { }
-      const shouldHide = !!mainMenuVisible || isCut2 || isBanter || coinSummaryVisible || courseClearedVisible || startingItemsVisible;
+      const shouldHide = bossModeActive || !!mainMenuVisible || isCut2 || isBanter || coinSummaryVisible || courseClearedVisible || startingItemsVisible;
       hudEl.classList.toggle("hidden", shouldHide);
       if (gameState === "WIN" || gameState === "GAME_OVER") hudEl.style.opacity = "0.55";
       else hudEl.style.opacity = "";
@@ -5953,6 +6181,11 @@ function hideGameOver() {
 }
 
 function handleGameOverReturn() {
+  if (bossModeActive) {
+    hideGameOver();
+    bossReturnToMainMenu();
+    return;
+  }
   hideGameOver();
   // Journal: record this unfinished run as a best candidate before clearing
   try { commitRunJournal(false); } catch { }
@@ -7004,6 +7237,65 @@ function isPlacementOutOfBounds(x, y) {
   return false;
 }
 
+// Dimension-Y boss prototype: the campaign render path owns placement previews
+// and their live wind arrows. Boss mode has its own renderer, so reuse the same
+// pieces through this helper (called via the bridge every boss frame).
+function drawBossPlacementOverlay(ctx) {
+  if (!ctx) return;
+  if (rewardMenuVisible) return;
+  if (gameState !== "AIMING" && gameState !== "CHARGING") return;
+
+  let snap = null;
+  try { snap = getSnapPreviewTarget(); } catch { snap = null; }
+  let oobPreview = false;
+  try { oobPreview = !!(mousePos && selectedModifier && isPlacementOutOfBounds(mousePos.x, mousePos.y)); } catch { }
+
+  if (mousePos && selectedModifier) {
+    let placeableNow = false;
+    try { placeableNow = canPlace(selectedModifier); } catch { }
+    try {
+      if (placeableNow && !oobPreview) {
+        drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius());
+      } else {
+        drawModifierPreview(ctx, mousePos.x, mousePos.y, selectedModifier, getEffectiveModifierRadius(), true, placeableNow ? 'out of bounds' : null);
+      }
+    } catch { }
+  }
+
+  if (snap) {
+    let hypo = null;
+    try {
+      if (isDragging && draggingIdx >= 0 && draggingIdx < modifiers.length) {
+        const mateSet = new Set((draggingMates.length ? draggingMates : [draggingIdx]).filter((mi) => mi >= 0 && mi < modifiers.length));
+        hypo = modifiers.map((m, i) => (mateSet.has(i) ? { ...m, x: snap.toX, y: snap.toY } : m));
+      } else if (mousePos && selectedModifier && canPlace(selectedModifier)) {
+        hypo = [...modifiers, { id: 'snap-preview', type: selectedModifier, x: snap.toX, y: snap.toY, radius: getEffectiveModifierRadius() }];
+      }
+    } catch { hypo = null; }
+    if (hypo) {
+      try {
+        setModifiers(hypo);
+        try { drawArrowsInModifiers(ctx, getWindAt, hypo, cols, rows, cellW, cellH, null); }
+        finally { setModifiers(modifiers); }
+      } catch { try { setModifiers(modifiers); } catch { } }
+    }
+    try {
+      let nowMs = 0;
+      try { nowMs = performance.now(); } catch { try { nowMs = Date.now(); } catch { } }
+      drawSnapLink(ctx, snap.fromX, snap.fromY, snap.toX, snap.toY, nowMs);
+    } catch { }
+  } else if (!oobPreview && mousePos && selectedModifier && canPlace(selectedModifier)) {
+    try {
+      const hypoPlace = [...modifiers, { id: 'placement-preview', type: selectedModifier, x: mousePos.x, y: mousePos.y, radius: getEffectiveModifierRadius() }];
+      setModifiers(hypoPlace);
+      try {
+        drawArrowsInModifiers(ctx, getWindAt, [], cols, rows, cellW, cellH,
+          { x: mousePos.x, y: mousePos.y, radius: getEffectiveModifierRadius(), type: selectedModifier });
+      } finally { setModifiers(modifiers); }
+    } catch { try { setModifiers(modifiers); } catch { } }
+  }
+}
+
 function removeModifierAt(x, y) {
   const idx = modifiers.findIndex(m => Math.hypot(m.x - x, m.y - y) < m.radius);
   if (idx !== -1) {
@@ -7037,6 +7329,10 @@ function removeModifierAt(x, y) {
 }
 
 function resetBall() {
+  if (bossModeActive) {
+    try { bossHandleResetKey(); } catch (e) { recordFrameError("boss-reset", e); }
+    return;
+  }
   const wasFlying = gameState === "FLYING" || ball.isMoving;
   const wasFreeFlight = freeShotFlightActive;
   // 14-cheat-mode: a reset cancels any ball drag so the ball can't stick to the cursor.
@@ -7186,6 +7482,10 @@ function isEnd18HoleCutsceneDue() {
   } catch { return false; }
 }
 function returnToMainMenu() {
+  if (bossModeActive) {
+    bossReturnToMainMenu();
+    return;
+  }
   // REQ-009/011 final-hole: clear run, keep COURSES_KEY/bestTotal, show splash
   // Ensure per-course bestTotal already saved via maybeUpdateHighScore before calling
   // 11-cutscenes §11d: first 9-hole clear plays end-9-hole after victory, before summary.
@@ -7317,6 +7617,10 @@ function resetGameAfterWin() {
 }
 
 function handleLaunch(angle, power) {
+  if (bossModeActive) {
+    try { bossHandleLaunch(angle, power); } catch (e) { recordFrameError("boss-launch", e); }
+    return;
+  }
   // REQ-021: block launch while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners block
   if (loadoutVisible || coinSummaryVisible || courseClearedVisible) return;
   if (banterIsActive()) return;
@@ -7531,6 +7835,10 @@ function tickWindVisual(frameDt) {
 function update(dt) {
   // Water splash ripples animate on their own clock (even while physics is frozen).
   try { updateWaterRipples(dt); } catch { }
+  if (bossModeActive) {
+    try { updateBoss(dt); } catch (e) { recordFrameError("boss-update", e); }
+    return;
+  }
   // 11-cutscenes: when active, freeze game physics but advance cutscene (wind ticks per-frame in loop)
   try { if (cutsceneIsActive()) { cutsceneUpdate(dt); try { syncCutsceneSkipButton(); } catch { } return; } } catch { }
   // 12-banter: in-place dialog freezes physics/input like the Hole 1 banner but keeps terrain+wind visible
@@ -7822,6 +8130,12 @@ function render() {
   // 11-banners: keep the Hole N DOM overlay in sync every frame, before any
   // early-return path (menu/cutscene) so a stale banner can never linger.
   try { syncHoleBannerOverlay(); } catch { }
+  if (bossModeActive) {
+    try { syncBgCanvasVisibility(); } catch { }
+    try { renderBoss(ctx, LOGICAL_W, LOGICAL_H, effectiveDPR()); } catch (e) { recordFrameError("boss-render", e); }
+    try { renderWind(); } catch { }
+    return;
+  }
   // 11-cutscenes: synchronized pan/zoom across both canvases, bg vs character split
   try { if (cutsceneIsActive()) { try { syncBgCanvasVisibility(); } catch {} try { cutsceneRender(bgCtx, ctx, LOGICAL_W, LOGICAL_H); } catch (e) { console.warn('cutscene render failed', e); } try { renderWind(); } catch { } return; } } catch { }
   try { syncBgCanvasVisibility(); } catch {}
@@ -8138,20 +8452,27 @@ function init() {
     console.error("Canvas #game or #bg-canvas not found");
     return;
   }
+  // Dimension-Y boss debug jump (?boss=1) bypasses the campaign boot path.
+  const pendingBossParams = getBossLaunchParams();
   // 13-pwa: installable/offline support (best-effort, never blocks boot).
   try { registerServiceWorker(); } catch { }
   // Boot gate: splash + "click to continue" (audio-unlock gesture).
   try {
     const gate = document.getElementById("continue-overlay");
     if (gate) {
-      gate.classList.remove("hidden");
-      gate.addEventListener("click", () => { try { continueFromBootGate(); } catch { } });
-      gate.addEventListener("keydown", (e) => {
-        if (e.code === "Enter" || e.code === "Space") {
-          try { continueFromBootGate(); } catch { }
-          try { e.preventDefault(); } catch { }
-        }
-      });
+      if (pendingBossParams) {
+        bootGateVisible = false;
+        gate.classList.add("hidden");
+      } else {
+        gate.classList.remove("hidden");
+        gate.addEventListener("click", () => { try { continueFromBootGate(); } catch { } });
+        gate.addEventListener("keydown", (e) => {
+          if (e.code === "Enter" || e.code === "Space") {
+            try { continueFromBootGate(); } catch { }
+            try { e.preventDefault(); } catch { }
+          }
+        });
+      }
     }
   } catch { }
   ctx = canvas.getContext("2d");
@@ -8587,6 +8908,9 @@ function init() {
   try { initParallax(); } catch (e) { console.warn('parallax init failed', e); }
 
   setupCanvas();
+  if (pendingBossParams) {
+    try { startBossMode(pendingBossParams); } catch (e) { console.warn("boss start failed", e); }
+  }
   // REQ-031: load courses collection before progress (so courseId can be resolved)
   try { loadCourses(); } catch (e) { console.warn('loadCourses failed', e); }
   // Legacy migration (10-progression.md §1.6): detect saves persisted before
@@ -8623,7 +8947,7 @@ function init() {
     setActiveCourse(courses[0]);
   }
   // Migration: legacy HIGH_SCORE_KEY -> first course bestTotal
-  try {
+  if (!pendingBossParams) try {
     const legacy = getHighScore();
     if (legacy != null && courses.length && courses[0].bestTotal == null) {
       courses[0].bestTotal = legacy;
@@ -8639,7 +8963,7 @@ function init() {
     resizeWindOverlay();
   } catch (e) { console.warn('wind overlay init failed', e); }
   // Auto-resume: if valid save exists, load it directly — no Continue button (removed)
-  if (hasRestorableSave()) {
+  if (!pendingBossParams && hasRestorableSave()) {
     try {
       const _secretHole = getSecretHoleFromURL();
       if (_secretHole && _secretHole >= 1 && _secretHole <= LEVELS.length) {
@@ -8723,7 +9047,7 @@ function init() {
       }
     }
   }
-  if (!window.__autoResumed) {
+  if (!pendingBossParams && !window.__autoResumed) {
     // No save or failed — show main menu (no Continue button)
     // Secret: URL param ?hole=N or ?level=N or #hole-N allows direct hole select (hidden) — clear save and set hole behind menu
     const _secretHole = getSecretHoleFromURL();
@@ -8774,6 +9098,7 @@ function init() {
   }
   // Secret: react to hash changes for direct hole jumps (single listener)
   window.addEventListener("hashchange", () => {
+    if (bossModeActive) return;
     const h = getSecretHoleFromURL();
     if (h && h >= 1 && h <= LEVELS.length && h - 1 !== currentHoleIndex) {
       selectHole(h);
@@ -8791,6 +9116,10 @@ function init() {
         // REQ-021: block R while reward menu visible; REQ-028: block while pause visible; REQ-029: block while main menu visible; 11-banners: block on last attempt
         if (bootGateVisible) return;
         if (isRotateGuardVisible()) return;
+        if (bossModeActive && !rewardMenuVisible && gameState !== "GAME_OVER") {
+          try { bossHandleResetKey(); } catch (e) { recordFrameError("boss-reset-key", e); }
+          return;
+        }
         if (rewardMenuVisible) return;
         if (banterIsActive()) return;
         if (holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible) return;
@@ -8981,6 +9310,19 @@ function init() {
         handleGameOverReturn();
         e.preventDefault();
       }
+      return;
+    }
+    // Dimension-Y boss prototype: Escape/P must not open the campaign pause.
+    // Escape still clears an armed item, and reward menus get first refusal
+    // when one is open. Gameplay hotkeys (bag slots, delete) still fall through.
+    if (bossModeActive && !rewardMenuVisible && (e.code === "Escape" || e.code === "KeyP")) {
+      if (e.code === "Escape" && (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive)) {
+        selectedModifier = null; selectedBagIndex = -1;
+        try { cancelBagDrag(); } catch { }
+        if (isFreeShotActive) clearFreeShotGlow();
+        updateHotbarUI();
+      }
+      e.preventDefault();
       return;
     }
     // Campaign edit/confirm popup priority inside main menu
@@ -9243,7 +9585,7 @@ function init() {
     } else if (e.code === "Digit4" || e.code === "Digit5" || e.code === "Numpad4" || e.code === "Numpad5") {
       // No 4th slot — ignore (legacy 4/5-slot saves truncated to 3)
       e.preventDefault();
-    } else if ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH")) {
+    } else if (!bossModeActive && ((e.ctrlKey && e.shiftKey && (e.code === "KeyH" || e.code === "KeyG")) || (e.altKey && e.code === "KeyH"))) {
       // Secret: Ctrl+Shift+H / Ctrl+Shift+G / Alt+H → prompt for exact hole (hidden)
       e.preventDefault();
       const input = prompt(`Select hole (1-${LEVELS.length}):`, String(currentHoleIndex + 1));
@@ -9304,6 +9646,7 @@ function init() {
   // Secret: typing "hole" quickly opens hole selector (hidden)
   let _secretBuffer = "";
   window.addEventListener("keydown", (e) => {
+    if (bossModeActive) return;
     if (e.ctrlKey || e.altKey || e.metaKey || rewardMenuVisible) return;
     if (e.key.length === 1 && !e.repeat) {
       _secretBuffer = (_secretBuffer + e.key.toLowerCase()).slice(-10);
@@ -9325,6 +9668,7 @@ function init() {
   // Passive observer like the "hole" secret above — never consumes input.
   let _konamiProgress = 0;
   window.addEventListener("keydown", (e) => {
+    if (bossModeActive) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (e.repeat) return;
     try {

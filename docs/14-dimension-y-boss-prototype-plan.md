@@ -1,6 +1,6 @@
 # Dimension-Y Boss Prototype Plan
 
-Status: plan only. No prototype code yet.
+Status: Stage 1 prototype implemented (`?boss=1`). See "Prototype status" at the end.
 
 ## Goal
 
@@ -251,3 +251,23 @@ These are the values to tune during the prototype, not final design:
 - Should chests be collectible during the same shot that hits the boss?
 - Should minions spawn at the boss or at arena edges?
 - Should the pulse travel at a fixed speed or resolve instantly with an animation?
+
+## Prototype status
+
+Implemented in `src/boss.js` + `src/bossLevels.js`, with boss branches in `src/main.js` and HUD markup/styles in `index.html` + `style.css`.
+
+Entry: `?boss=1` (optional `&items=deflector,rotator,freeShot`, `&lives=N`, `&bosslives=N`, `&debug=1`). `window.__boss` exposes state/entity/life/action helpers.
+
+Verified in headless Chromium:
+
+- Direct boot with no campaign/menu/cutscene flash; no page or console errors.
+- Shot loop, boss hit + reposition, action countdown/execution, spawn-wait turn, minion advance + tee life loss, periodic chests, pulse cleanup, Free Shot bonus loop, reward claim (spatial + passives), game over and victory overlays returning to the menu.
+- Campaign `STORAGE_KEY` preserved; `?hole=` behavior unchanged.
+
+Known gaps / next steps:
+
+- `?boss=2` and `?boss=3` still start Stage 1.
+- No pause/menu exit during boss play (Escape is intentionally swallowed); use the game over/victory flow or reload.
+- Mobile controls/layout are not tuned (out of scope).
+- Laser gating and barrage/minion non-interaction are code-reviewed, not exhaustively exercised.
+- Chest collection was exercised through the reward flow; full ball-path pickup uses the same shared hit test.
