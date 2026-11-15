@@ -5,7 +5,8 @@ import {
   resetBall as physicsResetBall,
   updateBall,
   BALL_RADIUS,
-  isBallOverTreasure
+  isBallOverTreasure,
+  drawnBallCircle
 } from "./physics.js";
 import {
   getWindAt,
@@ -41,6 +42,8 @@ let active = false;
 let nextId = 1;
 let hud = null;
 let keyBound = false;
+let arenaCache = null;
+let arenaCacheKey = "";
 
 function clampInt(v, min, max, fallback) {
   const n = Math.floor(Number(v));
@@ -98,6 +101,7 @@ function makeState(params) {
     activeAction: null,
     actionsSinceLaser: 0,
     lastExecutedAction: null,
+    chestRespawnRound: 0,
     graceTimer: 0,
     teePulse: 0,
     bossHitFlash: 0,
@@ -131,6 +135,7 @@ export function initBoss(gameBridge, params = {}) {
   };
 
   try { bridge.setLevel(lvl); } catch (e) { bridge.log && bridge.log("setLevel failed", e); }
+  try { if (bridge.setWindDPRCap) bridge.setWindDPRCap(1); } catch { }
   try { bridge.setAimAngle(Math.atan2(stage.boss.y - stage.tee.y, stage.boss.x - stage.tee.x)); } catch { }
   try { bridge.setGameState("AIMING"); } catch { }
 
@@ -173,8 +178,6 @@ function cacheDom() {
   };
   hud = {
     root: byId("boss-hud"),
-    player: byId("boss-hud-player"),
-    boss: byId("boss-hud-boss"),
     action: byId("boss-hud-action"),
     minions: byId("boss-hud-minions"),
     chests: byId("boss-hud-chests"),
@@ -207,8 +210,6 @@ function updateHud() {
     if (el && el.textContent !== text) el.textContent = text;
   };
   const free = bridge ? bridge.getFreeShots() : 0;
-  set(hud.player, `Player: ${hearts(state.playerLives, state.maxPlayerLives)}`);
-  set(hud.boss, `${stage.bossName}: ${hearts(state.bossLives, state.maxBossLives)}`);
   let actionText = "Action: \u2014";
   if (state.activeAction) {
     actionText = `Action: ${state.activeAction.label} in ${Math.max(0, state.activeAction.roundsLeft)}`;
@@ -227,7 +228,7 @@ function updateHud() {
     hud.debug.classList.toggle("hidden", !state.debug);
     if (state.debug) {
       const bp = bossPos();
-      set(hud.debug, `round ${state.round} | ${state.phase} | ball (${ball.pos.x.toFixed(0)},${ball.pos.y.toFixed(0)}) z${ball.z.toFixed(1)} | boss (${Math.round(bp.x)},${Math.round(bp.y)}) | minions ${state.minions.length}/${stage.minions.max} | projectiles ${state.projectiles.length} | chests ${state.chests.length} | grace ${state.graceTimer.toFixed(2)} | laser ${state.actionsSinceLaser}/${stage.laser.minOtherActionsBetween}`);
+      set(hud.debug, `round ${state.round} | ${state.phase} | ball (${ball.pos.x.toFixed(0)},${ball.pos.y.toFixed(0)}) z${ball.z.toFixed(1)} | boss (${Math.round(bp.x)},${Math.round(bp.y)}) | minions ${state.minions.length}/${stage.minions.max} | projectiles ${state.projectiles.length} | chests ${state.chests.length} (next ${state.chestRespawnRound || "-"}) | grace ${state.graceTimer.toFixed(2)} | laser ${state.actionsSinceLaser}/${stage.laser.minOtherActionsBetween}`);
     }
   }
 }
@@ -359,6 +360,30 @@ function updateShot(dt) {
   try {
     updateBall(dt, getWindAt, stage.field.strength, stage.logicalW, stage.logicalH);
   } catch { }
+
+  // Floating asteroids deflect the ball. They sit in front of the boss so a
+  // straight tee->boss shot is always blocked.
+  const rocks = stage.obstacles || [];
+  for (const a of rocks) {
+    const dx = ball.pos.x - a.x;
+    const dy = ball.pos.y - a.y;
+    const minDist = a.radius + BALL_RADIUS;
+    const dist = Math.hypot(dx, dy);
+    if (dist >= minDist) continue;
+    const nx = dist > 0.001 ? dx / dist : 1;
+    const ny = dist > 0.001 ? dy / dist : 0;
+    ball.pos.x = a.x + nx * (minDist + 0.5);
+    ball.pos.y = a.y + ny * (minDist + 0.5);
+    const vn = ball.vel.x * nx + ball.vel.y * ny;
+    if (vn < 0) {
+      const bounce = Number(stage.obstacleBounce) || 0.72;
+      ball.vel.x -= (1 + bounce) * vn * nx;
+      ball.vel.y -= (1 + bounce) * vn * ny;
+    }
+    addEffect("rock-hit", a.x + nx * a.radius, a.y + ny * a.radius, 0.35);
+    message("Asteroid bounce", 0.8);
+    break;
+  }
 
   const bp = bossPos();
 
@@ -577,7 +602,9 @@ function executeBossAction(type, telegraph = null) {
     message("Slicer spawns minions!", 1.8);
   } else if (type === "pulse") {
     if (bridge && bridge.clearModifiers) bridge.clearModifiers();
+    const hadChests = state.chests.length > 0;
     state.chests = [];
+    if (hadChests) scheduleChestRespawn();
     addEffect("pulse", bossPos().x, bossPos().y, 0.85);
     message("Pulse destroys placed items and chests!", 2.2);
   }
@@ -684,9 +711,15 @@ function loseLife(reason, ignoreGrace = false) {
 
 function maybeSpawnChest() {
   if (!state) return;
+  if (state.chestRespawnRound <= 0) return;
+  if (state.round < state.chestRespawnRound) return;
   if (state.chests.length >= stage.chests.max) return;
-  if (state.round % stage.chests.everyRounds !== 0) return;
-  spawnChest();
+  if (spawnChest()) state.chestRespawnRound = 0;
+}
+
+function scheduleChestRespawn() {
+  if (!state) return;
+  state.chestRespawnRound = state.round + Math.max(1, Math.round(Number(stage.chests.respawnRounds) || 3));
 }
 
 function spawnChest() {
@@ -702,6 +735,7 @@ function spawnChest() {
 
 function collectChest(chest) {
   state.chests = state.chests.filter((c) => c !== chest);
+  scheduleChestRespawn();
   addEffect("chest", chest.x, chest.y, 0.6);
   message("Chest collected!", 1.4);
   if (bridge && bridge.openReward) bridge.openReward(rollChestOffer());
@@ -808,6 +842,7 @@ export function getBossState() {
     bossPos: { x: bp.x, y: bp.y },
     activeAction: state.activeAction ? { type: state.activeAction.type, roundsLeft: state.activeAction.roundsLeft } : null,
     actionsSinceLaser: state.actionsSinceLaser,
+    chestRespawnRound: state.chestRespawnRound,
     graceTimer: state.graceTimer,
     message: state.message,
     ball: { x: ball.pos.x, y: ball.pos.y, moving: ball.isMoving }
@@ -828,6 +863,7 @@ function exposeDebug() {
         minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress })),
         projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy })),
         chests: state.chests.map((c) => ({ id: c.id, x: c.x, y: c.y })),
+        obstacles: (stage.obstacles || []).map((a) => ({ x: a.x, y: a.y, radius: a.radius })),
         modifiers: (() => { try { return bridge && bridge.getModifiers ? bridge.getModifiers().map((m) => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })) : []; } catch { return []; } })(),
         bag: (() => { try { return bridge && bridge.getBagInfo ? bridge.getBagInfo() : null; } catch { return null; } })(),
         ball: { x: ball.pos.x, y: ball.pos.y, z: ball.z, moving: ball.isMoving }
@@ -892,6 +928,12 @@ function exposeDebug() {
       updateHud();
       return ok;
     },
+    collectChest: () => {
+      if (!state || !state.chests.length) return false;
+      collectChest(state.chests[0]);
+      updateHud();
+      return true;
+    },
     openChestReward: () => {
       if (!state || !bridge || !bridge.openReward) return false;
       bridge.openReward(rollChestOffer());
@@ -940,9 +982,13 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
   if (!active || !state || !ctx) return;
   const d = Number(dpr) || 1;
   ctx.setTransform(d, 0, 0, d, 0, 0);
-  ctx.clearRect(0, 0, width, height);
 
-  drawArena(ctx, width, height);
+  try {
+    ctx.drawImage(ensureArenaCache(width, height, d), 0, 0, width, height);
+  } catch {
+    ctx.clearRect(0, 0, width, height);
+    drawArena(ctx, width, height);
+  }
   drawTelegraph(ctx);
 
   let mods = [];
@@ -960,6 +1006,10 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
   drawTee(ctx);
 
   try { drawBall(ctx, ball); } catch { }
+  try {
+    const drawn = drawnBallCircle(ball);
+    drawHeartRow(ctx, drawn.x, drawn.y - drawn.r - 14, state.playerLives, state.maxPlayerLives, "#9dffc8");
+  } catch { }
   try { drawAim(ctx, ball, getAimAngle(), charge, bridge ? bridge.getGameState() : "AIMING"); } catch { }
   try { if (bridge && bridge.drawPlacementPreview) bridge.drawPlacementPreview(ctx); } catch { }
   try { drawForceBar(ctx, ball, charge); } catch { }
@@ -1011,6 +1061,13 @@ function drawDebugHitboxes(ctx) {
     ctx.stroke();
   }
 
+  ctx.strokeStyle = "rgba(190, 214, 240, 0.7)";
+  for (const a of stage.obstacles || []) {
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, a.radius + BALL_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.strokeStyle = "rgba(94, 224, 160, 0.85)";
   ctx.beginPath();
   ctx.arc(stage.tee.x, stage.tee.y, 18 + BALL_RADIUS, 0, Math.PI * 2);
@@ -1021,6 +1078,21 @@ function drawDebugHitboxes(ctx) {
   ctx.arc(ball.pos.x, ball.pos.y, BALL_RADIUS, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
+}
+
+function ensureArenaCache(width, height, dpr) {
+  const d = Math.max(1, Number(dpr) || 1);
+  const key = `${width}x${height}@${d.toFixed(2)}`;
+  if (arenaCache && arenaCacheKey === key) return arenaCache;
+  const off = document.createElement("canvas");
+  off.width = Math.max(1, Math.round(width * d));
+  off.height = Math.max(1, Math.round(height * d));
+  const offCtx = off.getContext("2d");
+  offCtx.setTransform(d, 0, 0, d, 0, 0);
+  drawArena(offCtx, width, height);
+  arenaCache = off;
+  arenaCacheKey = key;
+  return off;
 }
 
 function drawArena(ctx, width, height) {
@@ -1093,11 +1165,71 @@ function drawArena(ctx, width, height) {
   ctx.ellipse(a.cx, a.cy, a.rx - 14, a.ry - 14, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
+
+  drawAsteroids(ctx);
+}
+
+function drawAsteroids(ctx) {
+  const rocks = stage.obstacles || [];
+  for (let i = 0; i < rocks.length; i++) {
+    const a = rocks[i];
+    ctx.save();
+    ctx.translate(a.x, a.y);
+
+    const glow = ctx.createRadialGradient(0, 0, a.radius * 0.55, 0, 0, a.radius * 1.55);
+    glow.addColorStop(0, "rgba(130, 158, 190, 0.14)");
+    glow.addColorStop(1, "rgba(130, 158, 190, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, a.radius * 1.55, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.32)";
+    ctx.beginPath();
+    ctx.ellipse(5, 7, a.radius * 0.98, a.radius * 0.72, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const body = ctx.createRadialGradient(-a.radius * 0.38, -a.radius * 0.42, a.radius * 0.12, 0, 0, a.radius);
+    body.addColorStop(0, "#646c7c");
+    body.addColorStop(0.52, "#3c4350");
+    body.addColorStop(1, "#171a22");
+    ctx.fillStyle = body;
+    ctx.strokeStyle = "rgba(9, 11, 16, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const sides = 9;
+    for (let k = 0; k < sides; k++) {
+      const ang = (k / sides) * Math.PI * 2;
+      const rr = a.radius * (0.88 + 0.12 * Math.sin(i * 7.3 + k * 2.1));
+      const px = Math.cos(ang) * rr;
+      const py = Math.sin(ang) * rr;
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(12, 14, 20, 0.55)";
+    for (let k = 0; k < 3; k++) {
+      const ang = i * 1.7 + k * 2.4;
+      const rr = a.radius * (0.14 + 0.3 * ((k + 1) / 4));
+      ctx.beginPath();
+      ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr, a.radius * (0.09 + 0.05 * k), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = "rgba(190, 214, 240, 0.22)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, a.radius * 0.9, Math.PI * 1.05, Math.PI * 1.75);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawTee(ctx) {
   const t = stage.tee;
-  const now = performance.now() / 1000;
   ctx.save();
   ctx.translate(t.x, t.y);
 
@@ -1121,20 +1253,6 @@ function drawTee(ctx) {
   ctx.fillStyle = "#5ee0a0";
   ctx.beginPath();
   ctx.arc(0, 0, 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(217, 255, 241, 0.9)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, -16);
-  ctx.lineTo(0, -42);
-  ctx.stroke();
-  ctx.fillStyle = "#ff4d6d";
-  ctx.beginPath();
-  ctx.moveTo(0, -42);
-  ctx.lineTo(22 + Math.sin(now * 2) * 2, -36);
-  ctx.lineTo(0, -30);
-  ctx.closePath();
   ctx.fill();
   ctx.restore();
 }
@@ -1206,13 +1324,28 @@ function drawBossEntity(ctx) {
     ctx.stroke();
   }
 
-  // Name plate.
+  // Name below the boss; health sits directly above the entity.
+  drawHeartRow(ctx, 0, -r - 15, state.bossLives, state.maxBossLives, "#ff8fa8");
   ctx.fillStyle = "rgba(255, 230, 240, 0.9)";
   ctx.font = "700 12px " + uiFont();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(stage.bossName, 0, -r - 24);
+  ctx.fillText(stage.bossName, 0, r + 21);
 
+  ctx.restore();
+}
+
+function drawHeartRow(ctx, x, y, lives, max, color) {
+  const text = hearts(lives, max);
+  ctx.save();
+  ctx.font = "700 14px " + uiFont();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(4, 6, 12, 0.82)";
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
   ctx.restore();
 }
 
@@ -1393,9 +1526,9 @@ function drawEffects(ctx) {
       ctx.arc(e.x, e.y, 20 + p * 60, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
-    } else if (e.type === "minion-hit" || e.type === "chest" || e.type === "void") {
+    } else if (e.type === "minion-hit" || e.type === "chest" || e.type === "void" || e.type === "rock-hit") {
       ctx.save();
-      const color = e.type === "chest" ? "255, 215, 0" : e.type === "void" ? "150, 160, 210" : "255, 159, 28";
+      const color = e.type === "chest" ? "255, 215, 0" : e.type === "void" ? "150, 160, 210" : e.type === "rock-hit" ? "180, 200, 225" : "255, 159, 28";
       ctx.fillStyle = `rgba(${color}, ${0.8 * alpha})`;
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;

@@ -54,6 +54,7 @@ import { initBoss, updateBoss, renderBoss, bossHandleLaunch, bossHandleResetKey,
 // the boot path. These facades keep every call site unchanged: no-ops until
 // the module arrives, then delegate. Init + field sync re-run on arrival.
 let __windMod = null;
+let __windDPRCap = 0;
 function initWindOverlay(...args) { try { if (__windMod) return __windMod.initWindOverlay(...args); } catch { } }
 function updateWindUniforms(...args) { try { if (__windMod) return __windMod.updateWindUniforms(...args); } catch { } }
 function setWindUniformsFromField(...args) { try { if (__windMod) return __windMod.setWindUniformsFromField(...args); } catch { } }
@@ -62,6 +63,11 @@ function toggleWindThree(...args) { try { if (__windMod) return __windMod.toggle
 function isWindThreeVisible(...args) { try { if (__windMod) return __windMod.isWindVisible(...args); } catch { } return false; }
 function renderWind(...args) { try { if (__windMod) return __windMod.renderWind(...args); } catch { } }
 function resizeWindOverlay(...args) { try { if (__windMod) return __windMod.resizeWindOverlay(...args); } catch { } }
+function setWindDPRCap(...args) {
+  const cap = Math.max(0, Number(args[0]) || 0);
+  __windDPRCap = cap;
+  try { if (__windMod && typeof __windMod.setWindDPRCap === 'function') return __windMod.setWindDPRCap(cap); } catch { }
+}
 function getWindUniforms(...args) { try { if (__windMod) return __windMod.getWindUniforms(...args); } catch { } return undefined; }
 function resetWindStreaks(...args) { try { if (__windMod && typeof __windMod.resetWindStreaks === 'function') return __windMod.resetWindStreaks(...args); } catch { } return false; }
 if (typeof window !== 'undefined') {
@@ -72,6 +78,7 @@ if (typeof window !== 'undefined') {
       try {
         const container = document.getElementById('game-container');
         m.initWindOverlay(container);
+        try { if (__windDPRCap > 0 && typeof m.setWindDPRCap === 'function') m.setWindDPRCap(__windDPRCap); } catch { }
         try { syncWindFieldToShader(); } catch { }
         m.resizeWindOverlay();
       } catch (e) { console.warn('wind overlay init failed', e); }
@@ -4246,6 +4253,7 @@ function startBossMode(params) {
     drawPlacementPreview(ctx) { try { drawBossPlacementOverlay(ctx); } catch (e) { recordFrameError("boss-preview", e); } },
     showGameOver() { try { showGameOver(); } catch (e) { recordFrameError("boss-gameover", e); } },
     showVictory(info) { try { showBossVictory(info); } catch (e) { recordFrameError("boss-victory", e); } },
+    setWindDPRCap(cap) { try { setWindDPRCap(cap); resizeWindOverlay(); } catch { } },
     returnToMenu() { bossReturnToMainMenu(); },
     log(...args) { try { console.log("[boss]", ...args); } catch { } }
   };
@@ -4284,6 +4292,9 @@ function bossReturnToMainMenu() {
   bossModeActive = false;
   bossLaunchParams = null;
   try { bossShutdown(); } catch { }
+  // Boss mode caps the wind overlay DPR for performance; restore full quality
+  // for the campaign / menus once we leave.
+  try { setWindDPRCap(0); resizeWindOverlay(); } catch { }
 
   try { if (winOverlay) winOverlay.classList.add("hidden"); } catch { }
   try { if (gameoverOverlay) gameoverOverlay.classList.add("hidden"); } catch { }

@@ -191,8 +191,6 @@ body {
 }
 #boss-hud.hidden { display: none !important; }
 #boss-hud > span { overflow: hidden; text-overflow: ellipsis; }
-#boss-hud-player { color: #b8ffd9; }
-#boss-hud-boss { color: #ff9db2; }
 #boss-hud-action { color: #ffd166; flex: 1.5; text-align: center; }
 #boss-hud-message {
   position: absolute;

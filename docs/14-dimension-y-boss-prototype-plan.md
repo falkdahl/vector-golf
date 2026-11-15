@@ -22,9 +22,12 @@ Boss: Slicer.
   - Rare laser that removes one life.
 - Boss with 3 lives and repositioning after each hit.
 - Player with 3 lives.
+- Health is shown on the entities in the arena, not in the top HUD bar.
+- A floating asteroid barrier in front of the boss blocks straight tee-to-boss shots; curved shots can use the top/bottom gaps.
 - Regular game over screen that returns to the main menu.
 - Free Shot item remains in the reward pool and is usable before the enemy turn.
-- Periodic chest spawns.
+- Chests respawn a fixed number of rounds after the previous chest is collected or destroyed.
+- No tee flag; the tee is a plain launch ring so the ball and its health read clearly.
 - Debug entry: `?boss=1` starts Stage 1 directly, with no campaign, menus, cutscenes, or campaign save dependency.
 
 ## Not in this prototype

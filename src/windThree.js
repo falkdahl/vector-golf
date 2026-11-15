@@ -35,12 +35,16 @@ function isWindMobileMode() {
   } catch {}
   return false;
 }
+let windDPRCap = 0;
+export function setWindDPRCap(cap) { windDPRCap = Math.max(0, Number(cap) || 0); }
 function effectiveWindDPR() {
   const dpr = window.devicePixelRatio || 1;
+  let out = dpr;
   // Streaks are soft glowing lines: full-res backing buys nothing on phones,
   // while fullscreen transparent overdraw is the dominant mobile GPU cost.
-  try { if (isWindMobileMode()) return Math.min(dpr, 1.0); } catch {}
-  return dpr;
+  try { if (isWindMobileMode()) out = Math.min(out, 1.0); } catch {}
+  if (windDPRCap > 0) out = Math.min(out, windDPRCap);
+  return out;
 }
 const STREAK_SPEED = 200; // px/s per unit of wind magnitude (|wind| ~0.44..1.5+ -> ~90..300 px/s)
 const STREAK_MIN_SPEED = 60; // never stall completely
