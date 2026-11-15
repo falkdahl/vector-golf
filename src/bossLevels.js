@@ -57,7 +57,6 @@ export const BOSS_STAGE_1 = {
     initial: 2,
     max: 12,
     radius: 12,
-    steps: 3, // Higher number = slower movement, lower number = faster movement
     spawns: [
       { x: 1092, y: 168 },
       { x: 1110, y: 356 },

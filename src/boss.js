@@ -664,11 +664,13 @@ function spawnMinions(n, initial, spawnsOverride = null) {
       ? spawnsOverride[i % spawnsOverride.length]
       : stage.minions.spawns[Math.floor(Math.random() * stage.minions.spawns.length)];
 
-    // Create a direct 2-point straight line path from spawn to the tee (player)
     const points = [
       { x: spawn.x, y: spawn.y },
       { x: stage.tee.x, y: stage.tee.y }
     ];
+
+    // Pick a random whole number of steps between 3 and 5 inclusive (3, 4, or 5)
+    const randomSteps = Math.floor(Math.random() * (5 - 3 + 1)) + 3;
 
     state.minions.push({
       id: nextId++,
@@ -677,6 +679,7 @@ function spawnMinions(n, initial, spawnsOverride = null) {
       x: spawn.x,
       y: spawn.y,
       radius: stage.minions.radius,
+      steps: randomSteps, // Store unique step count per minion
       initial: !!initial
     });
   }
@@ -686,15 +689,13 @@ function advanceMinion(id) {
   const m = state.minions.find((x) => x.id === id);
   if (!m) return;
 
-  // Advance progress linearly along the straight-line path
-  m.progress = Math.min(1, m.progress + 1 / Math.max(1, stage.minions.steps));
+  // Advance progress using this specific minion's randomized step count
+  m.progress = Math.min(1, m.progress + 1 / Math.max(1, m.steps));
 
-  // Update position using the engine's built-in path interpolator
   const pos = pointOnPath(m.points, m.progress);
   m.x = pos.x;
   m.y = pos.y;
 
-  // Check if minion reached the tee (progress reaches 1)
   if (m.progress >= 1 - 1e-6) {
     state.minions = state.minions.filter((x) => x !== m);
     addEffect("tee-hit", stage.tee.x, stage.tee.y, 0.5);
