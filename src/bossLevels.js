@@ -17,7 +17,7 @@ export const BOSS_STAGE_1 = {
     x: 1012,
     y: 320,
     radius: 36,
-    lives: 3,
+    lives: 6,
     positions: [
       { x: 1012, y: 320 },
       { x: 1000, y: 176 },
@@ -91,8 +91,8 @@ export const BOSS_STAGE_1 = {
 
   actions: {
     barrage: { rounds: 2, label: "Projectile Barrage" },
-    spawn: { rounds: 2, label: "Spawn 2 Minions", count: 2 },
-    pulse: { rounds: 2, label: "Pulse" },
+    spawn: { rounds: 1, label: "Spawn 2 Minions", count: 2 },
+    pulse: { rounds: 1, label: "Pulse" },
     laser: { rounds: 3, label: "Laser" }
   },
 
