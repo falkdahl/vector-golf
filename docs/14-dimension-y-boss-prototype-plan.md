@@ -22,7 +22,7 @@ Boss: Slicer.
   - Rare laser that removes one life.
 - Boss with 6 lives. The boss relocates every enemy turn (eased motion), not on hit.
 - Player with 3 lives.
-- Health is shown on the entities in the arena, not in the top HUD bar.
+- Health and action countdowns are drawn on the entities in the arena. There is no top HUD bar and no boss name label.
 - A floating asteroid barrier in front of the boss blocks straight tee-to-boss shots; curved shots can use the top/bottom gaps.
 - Asteroids advance one short step per enemy turn at different speeds. They spawn just outside the canvas and keep moving in one direction until they leave, then despawn; replacements keep spawning so asteroids are always present between the player and the boss.
 - Regular game over screen that returns to the main menu.
@@ -208,18 +208,18 @@ These are the values to tune during the prototype, not final design:
 - `src/bossLevels.js`
   - Stage 1 arena data: tee, boss positions, minion paths, chest spawn points, boss action tuning.
 - `src/boss.js`
-  - Boss run state, player phase/enemy phase state machine, minions, projectiles, chests, boss actions, lives, HUD sync, rendering, debug helpers.
+  - Boss run state, player phase/enemy phase state machine, minions, projectiles, chests, boss actions, lives, message sync, rendering, debug helpers.
 
 ### Main integration
 
 - `src/main.js`
   - Parse `?boss=` early and initialize boss mode before campaign load.
   - Branch `loadLevel`, `update`, `render`, `handleLaunch`, and `resetBall` while boss mode is active.
-  - Hide campaign HUD; show boss HUD.
+  - Hide campaign HUD; no boss topbar.
   - Reuse the existing game over overlay and return-to-main-menu flow.
   - Keep campaign save untouched.
 - `index.html` / `style.css`
-  - Boss HUD: player lives, boss lives, active boss action + countdown, minion count, chest count.
+  - Boss overlay: transient center message only.
   - Optional debug readout.
 
 ### Reuse
@@ -302,6 +302,7 @@ Current changes on top of those commits:
 - Player hearts are pinned to the tee; pulses no longer destroy chests; boss hits trigger an instant pulse.
 - Every simultaneous damage source now costs a life instead of being absorbed by a grace window.
 - The laser charges for 2 rounds and is aborted when the boss is hit mid-charge.
+- Removed the boss name label and topbar; only transient center messages remain.
 
 Verified in headless Firefox:
 

@@ -248,30 +248,10 @@ function cacheDom() {
   };
   hud = {
     root: byId("boss-hud"),
-    action: byId("boss-hud-action"),
-    minions: byId("boss-hud-minions"),
-    chests: byId("boss-hud-chests"),
-    phase: byId("boss-hud-phase"),
-    free: byId("boss-hud-free"),
     message: byId("boss-hud-message"),
     debug: byId("boss-hud-debug"),
     endTurn: byId("boss-end-turn")
   };
-}
-
-function phaseLabel() {
-  if (!state) return "";
-  switch (state.phase) {
-    case "player": return "Player Turn";
-    case "bonus": return "Bonus Shot";
-    case "shot": return "Ball in Flight";
-    case "between": return "Resolving...";
-    case "enemy": return "Enemy Turn";
-    case "shift": return "Enemies Shifting";
-    case "victory": return "Stage Cleared";
-    case "gameover": return "Game Over";
-    default: return state.phase;
-  }
 }
 
 function updateHud() {
@@ -280,18 +260,6 @@ function updateHud() {
   const set = (el, text) => {
     if (el && el.textContent !== text) el.textContent = text;
   };
-  const free = bridge ? bridge.getFreeShots() : 0;
-  let actionText = "Action: \u2014";
-  if (state.activeAction) {
-    actionText = `Action: ${state.activeAction.label} in ${Math.max(0, state.activeAction.roundsLeft)}`;
-  } else if (state.phase === "enemy") {
-    actionText = "Action: choosing...";
-  }
-  set(hud.action, actionText);
-  set(hud.minions, `Minions: ${state.minions.length}`);
-  set(hud.chests, `Chests: ${state.chests.length}`);
-  set(hud.phase, phaseLabel());
-  set(hud.free, `Free Shots: ${free}`);
   set(hud.message, state.message || "");
   if (hud.endTurn) hud.endTurn.classList.toggle("hidden", state.phase !== "bonus");
 
@@ -1524,13 +1492,8 @@ function drawBossEntity(ctx) {
     ctx.stroke();
   }
 
-  // Name below the boss; health sits directly above the entity.
+  // Health sits directly above the entity.
   drawHeartRow(ctx, 0, -r - 15, state.bossLives, state.maxBossLives, "#ff8fa8");
-  ctx.fillStyle = "rgba(255, 230, 240, 0.9)";
-  ctx.font = "700 12px " + uiFont();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(stage.bossName, 0, r + 21);
 
   ctx.restore();
 }

@@ -4,7 +4,6 @@
 export const BOSS_STAGE_1 = {
   id: "dimension-y-stage-1",
   name: "Dimension Y - Stage 1",
-  bossName: "Slicer",
   logicalW: 1280,
   logicalH: 720,
 
