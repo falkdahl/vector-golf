@@ -526,13 +526,16 @@ function updateShot(dt) {
     state.bossLives = Math.max(0, state.bossLives - 1);
     state.bossHitFlash = 0.42;
     addEffect("boss-hit", bp.x, bp.y, 0.42);
+    const disrupted = abortLaserCharge();
     triggerPulse();
     if (state.bossLives <= 0) {
       message("Slicer destroyed!", 5);
       victory();
       return;
     }
-    message(`Slicer hit! Pulse! ${state.bossLives} lives left`, 2);
+    message(disrupted
+      ? `Slicer hit! Laser charge disrupted! ${state.bossLives} lives left`
+      : `Slicer hit! Pulse! ${state.bossLives} lives left`, 2.2);
     finishShot();
     return;
   }
@@ -771,6 +774,14 @@ function executeBossAction(type, telegraph = null) {
     triggerPulse();
     message("Pulse destroys placed items!", 2.2);
   }
+}
+
+function abortLaserCharge() {
+  if (!state || !state.activeAction) return false;
+  if (state.activeAction.type !== "laser" || state.activeAction.roundsLeft <= 0) return false;
+  state.activeAction = null;
+  state.lastExecutedAction = "laser";
+  return true;
 }
 
 function triggerPulse() {
@@ -1084,6 +1095,8 @@ function exposeDebug() {
     damageBoss: (n = 1) => {
       if (!state) return;
       state.bossLives = Math.max(0, state.bossLives - clampInt(n, 1, 99, 1));
+      const disrupted = abortLaserCharge();
+      if (disrupted) message("Laser charge disrupted!", 1.6);
       if (state.bossLives <= 0) victory();
       updateHud();
     },

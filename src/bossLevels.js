@@ -103,7 +103,7 @@ export const BOSS_STAGE_1 = {
     barrage: { rounds: 2, label: "Projectile Barrage" },
     spawn: { rounds: 1, label: "Spawn 2 Minions", count: 2 },
     pulse: { rounds: 1, label: "Pulse" },
-    laser: { rounds: 3, label: "Laser" }
+    laser: { rounds: 2, label: "Laser" }
   },
 
   laser: { minOtherActionsBetween: 2 },

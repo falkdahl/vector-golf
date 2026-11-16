@@ -115,10 +115,12 @@ Enemies act one by one, with visible sequential feedback.
 ### 4. Laser
 
 - Countdown telegraph shows a straight line from the boss to the tee.
+- The laser charges for 2 rounds before it fires.
 - On execution, the player instantly loses 1 life.
+- Hitting the boss while the laser is charging aborts the attack; the countdown is canceled and no life is lost.
 - The laser is rare and requires multiple other boss actions between two laser shots.
 - Proposed rule: at least 2 other boss actions must resolve before the laser is eligible again.
-- The laser cannot be blocked by modifiers. The player's counterplay is to kill the boss before it fires.
+- The laser cannot be blocked by modifiers. The player's counterplay is to interrupt the charge by hitting the boss.
 
 ## Boss lives, movement and animation
 
@@ -194,7 +196,7 @@ These are the values to tune during the prototype, not final design:
 - Asteroid target count (12), step range (22–64px per enemy turn), step duration (0.5s), lane x-jitter, and off-canvas spawn margin.
 - Chest spawn interval.
 - Maximum chests on the field.
-- Countdown rounds for each boss action (barrage 2; spawn 1; pulse 1; laser 3).
+- Countdown rounds for each boss action (barrage 2; spawn 1; pulse 1; laser 2).
 - Number of other boss actions required between lasers (currently 2).
 - Projectile count (64), speed (250), radius (6), and full-circle distribution for the barrage.
 - Free Shot charge count and availability.
@@ -257,7 +259,8 @@ These are the values to tune during the prototype, not final design:
 - [ ] Spawn action shows the number of minions and spawned minions wait one turn.
 - [ ] Pulse destroys placed modifiers but leaves chests intact.
 - [ ] Hitting the boss triggers an instant pulse that clears placed modifiers.
-- [ ] Laser removes 1 life and cannot occur again until the required number of other actions resolve.
+- [ ] Laser charges for 2 rounds, removes 1 life, and cannot occur again until the required number of other actions resolve.
+- [ ] Hitting the boss while the laser charges aborts it with no life lost.
 - [ ] Boss takes 6 hits to kill. A hit does not move it; it eases to a new preset position every enemy turn.
 - [ ] Asteroids spawn off-canvas, advance one short eased step per enemy turn in a fixed direction at varied speeds, despawn off the far edge, and keep respawning so the player/boss gap is populated.
 - [ ] Minions are larger (15px) and the boss is smaller (30px) than the original prototype.
@@ -298,6 +301,7 @@ Current changes on top of those commits:
 - Barrage spawns projectiles evenly around a full circle; projectiles are circular with no trail and radius 6.
 - Player hearts are pinned to the tee; pulses no longer destroy chests; boss hits trigger an instant pulse.
 - Every simultaneous damage source now costs a life instead of being absorbed by a grace window.
+- The laser charges for 2 rounds and is aborted when the boss is hit mid-charge.
 
 Verified in headless Firefox:
 
