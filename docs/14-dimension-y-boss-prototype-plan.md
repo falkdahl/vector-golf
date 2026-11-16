@@ -13,17 +13,18 @@ Boss: Slicer.
 - Stage 1 only.
 - One hand-authored arena: crescent platform over a void, tee at one end, boss at the other.
 - Player aim, charge, shoot loop using the existing ball/wind/modifier systems.
-- Minions that advance toward the tee after the player's shot is over.
+- Minions that advance toward the tee after the player's shot is over, easing between steps instead of teleporting.
 - Boss action queue with visible countdowns.
 - Four boss actions:
   - Projectile barrage.
   - Spawn minions.
   - Destroy all placed items and chests with a pulse.
   - Rare laser that removes one life.
-- Boss with 3 lives and repositioning after each hit.
+- Boss with 6 lives. The boss relocates every enemy turn (eased motion), not on hit.
 - Player with 3 lives.
 - Health is shown on the entities in the arena, not in the top HUD bar.
 - A floating asteroid barrier in front of the boss blocks straight tee-to-boss shots; curved shots can use the top/bottom gaps.
+- Asteroids drift up and down between the enemy and player phases (some up, some down per turn), animated with ease-in/ease-out.
 - Regular game over screen that returns to the main menu.
 - Free Shot item remains in the reward pool and is usable before the enemy turn.
 - Chests respawn a fixed number of rounds after the previous chest is collected or destroyed.
@@ -60,16 +61,19 @@ Minion hits do not have to end the shot. The ball can continue and chain kills u
 Enemies act one by one, with visible sequential feedback.
 
 1. **Minions act, one at a time.**
-   - Each minion advances one step toward the tee.
-   - If a minion reaches the tee, the player loses 1 life and that minion is destroyed.
+   - Each minion advances one step toward the tee with an ease-in/ease-out animation.
+   - If a minion reaches the tee, the player loses 1 life and that minion is destroyed after its final step animates in.
    - Continue resolving the remaining minions.
 2. **Boss acts.**
    - If the boss has no active action, it chooses the next action and starts its countdown.
    - If the boss already has an active action, advance the countdown.
    - When the countdown reaches 0, the action takes effect.
    - A newly chosen action does not advance on the same enemy turn.
-3. Check lives. At 0 lives, show the regular game over screen and return to the main menu.
-4. Return to the player phase.
+3. **Entities shift (after the enemy turn, before the player turn).**
+   - The boss eases to its next preset position every turn. A boss hit never teleports it.
+   - Asteroids ease up/down to their next drift positions. Asteroids alternate headings, so roughly half move up and half move down each shift.
+4. Check lives. At 0 lives, show the regular game over screen and return to the main menu.
+5. Return to the player phase.
 
 ### Boss action countdown
 
@@ -77,14 +81,15 @@ Enemies act one by one, with visible sequential feedback.
 - On selection: set the countdown, show the telegraph, do not advance it that turn.
 - On each later enemy turn: decrement the countdown.
 - At 0: execute the action, clear it, and choose again on a later enemy turn.
-- A boss hit does not cancel an ongoing action. The boss repositions and the countdown continues.
+- A boss hit does not cancel an ongoing action and does not move the boss. Poise changes only during the post-enemy shift, so the countdown continues from the same position.
 
 ## Boss actions
 
 ### 1. Projectile barrage
 
-- Countdown telegraph shows the number of projectiles and their initial directions.
-- On execution, launch multiple projectiles at different directions.
+- Countdown telegraph shows the projectiles' initial directions as a full ring around the boss.
+- On execution, launch projectiles evenly around the full circle (not just toward the tee).
+- Projectiles are rendered as simple circles with a subtle glow, no trailing streak, and a radius of 6px (down from 9).
 - Projectiles do not collide with or damage enemy minions.
 - Projectiles are wind-affected and can be deflected by placed modifiers.
 - A projectile reaching the tee costs 1 life and is destroyed.
@@ -114,13 +119,21 @@ Enemies act one by one, with visible sequential feedback.
 - Proposed rule: at least 2 other boss actions must resolve before the laser is eligible again.
 - The laser cannot be blocked by modifiers. The player's counterplay is to kill the boss before it fires.
 
-## Boss lives and repositioning
+## Boss lives, movement and animation
 
-- Boss has 3 lives.
-- A ball hit removes 1 boss life.
-- After each hit, the boss moves to a different preset position so the player cannot repeat the exact same shot.
-- Ongoing boss actions continue through a hit.
+- Boss has 6 lives.
+- A ball hit removes 1 boss life and flashes the boss, but does not move it.
+- After every enemy turn (and before the next player turn), the boss eases to the next preset position (ease-in/ease-out over ~0.7s). This keeps the player from repeating the exact same shot while making the relocation readable.
+- Boss radius is 30px (down from 36) so it is harder to hit.
+- Minion radius is 15px (up from 12) so minions are easier to hit; minion visuals scale with the radius.
+- Ongoing boss actions continue through a hit and through the shift.
 - At 0 boss lives, Stage 1 is cleared.
+
+## Asteroid motion
+
+- The asteroid barrier is no longer part of the static arena image; asteroids are drawn dynamically.
+- Each asteroid starts with an alternating up/down heading. During the shift phase after the enemy turn, every asteroid eases ±28px vertically (0.75s), reversing at the configured bounds (96–624) so some always move up and some down.
+- Collision uses the asteroids' live positions.
 
 ## Player lives and game over
 
@@ -169,15 +182,18 @@ Requirements:
 
 These are the values to tune during the prototype, not final design:
 
-- Initial minion count.
-- Minions spawned per spawn action.
-- Minion movement speed and turns-to-tee.
-- Maximum minions on the field.
+- Initial minion count (currently 2).
+- Minions spawned per spawn action (currently 2).
+- Minion turns-to-tee: randomized whole number of steps per minion, currently 3–5.
+- Minion movement duration (currently 0.34s per step) and radius (currently 15).
+- Maximum minions on the field (currently 12).
+- Boss lives (currently 6), radius (currently 30), and relocation duration (currently 0.7s).
+- Asteroid drift step (28px), duration (0.75s), and bounds (96–624).
 - Chest spawn interval.
 - Maximum chests on the field.
-- Countdown rounds for each boss action.
-- Number of other boss actions required between lasers.
-- Projectile count, speed, and spread for the barrage.
+- Countdown rounds for each boss action (barrage 2; spawn 1; pulse 1; laser 3).
+- Number of other boss actions required between lasers (currently 2).
+- Projectile count (64), speed (250), radius (6), and full-circle distribution for the barrage.
 - Post-hit grace duration.
 - Free Shot charge count and availability.
 
@@ -211,10 +227,11 @@ These are the values to tune during the prototype, not final design:
 
 ### Boss entities
 
-- **Minions:** path nodes, advance one step per enemy turn, killed by ball, tee contact costs a life.
-- **Barrage projectiles:** wind-affected, modifier-deflectable, ignore minions, tee contact costs a life.
+- **Minions:** straight two-point spawn→tee path, randomized 3–5 steps each, advance one stepped/eased move per enemy turn, killed by ball, tee contact costs a life.
+- **Barrage projectiles:** full-circle spawn, circular bodies, wind-affected, modifier-deflectable, ignore minions, tee contact costs a life.
 - **Chests:** periodic spawn, ball pickup, destroyed by pulse.
-- **Boss:** 3 lives, repositions after each hit, action countdowns.
+- **Boss:** 6 lives, relocates every enemy turn with eased motion, action countdowns.
+- **Asteroids:** live positions that drift up/down during the post-enemy shift.
 
 ### Shot resolution
 
@@ -230,15 +247,17 @@ These are the values to tune during the prototype, not final design:
 - [ ] Campaign save and `?hole=` behavior are untouched.
 - [ ] Player can aim, charge, and shoot from the tee.
 - [ ] Shot ends correctly and then enemies act.
-- [ ] Minions advance one by one after the shot and before the next player shot.
-- [ ] A minion reaching the tee costs 1 life and is destroyed.
+- [ ] Minions advance one by one after the shot and before the next player shot, easing between steps instead of teleporting.
+- [ ] A minion reaching the tee costs 1 life and is destroyed after its final step animates in.
 - [ ] Boss chooses an action and shows its countdown.
 - [ ] An ongoing boss action advances each enemy turn and executes at 0.
-- [ ] Barrage shows directions during countdown and launches projectiles that do not hurt minions.
+- [ ] Barrage shows a full-circle telegraph and launches circular projectiles evenly around the boss that do not hurt minions.
 - [ ] Spawn action shows the number of minions and spawned minions wait one turn.
 - [ ] Pulse destroys placed modifiers and uncollected chests.
 - [ ] Laser removes 1 life and cannot occur again until the required number of other actions resolve.
-- [ ] Boss takes 3 hits to kill and repositions after each hit.
+- [ ] Boss takes 6 hits to kill. A hit does not move it; it eases to a new preset position every enemy turn.
+- [ ] Asteroids drift up/down (some each way) with ease-in/ease-out after the enemy turn and before the player turn.
+- [ ] Minions are larger (15px) and the boss is smaller (30px) than the original prototype.
 - [ ] Player has 3 lives; hits destroy the attacker and the game continues.
 - [ ] Post-hit grace prevents multi-hit life drain.
 - [ ] Free Shot works before the enemy turn.
@@ -261,10 +280,25 @@ Implemented in `src/boss.js` + `src/bossLevels.js`, with boss branches in `src/m
 
 Entry: `?boss=1` (optional `&items=deflector,rotator,freeShot`, `&lives=N`, `&bosslives=N`, `&debug=1`). `window.__boss` exposes state/entity/life/action helpers.
 
-Verified in headless Chromium:
+Intervening commits (included here):
+
+- `cb3efd1` increased difficulty: minions now path straight from spawn to the tee, max raised to 12, and the barrage became a dense 64-projectile spread at speed 250.
+- `470c833` gave each minion a random 3–5 step lifetime so they do not all reach the tee together.
+- `a9ebfdb` raised boss lives to 6 and shortened spawn/pulse countdowns to 1 round.
+
+Current changes on top of those commits:
+
+- Boss and minions no longer teleport; all movement uses ease-in/ease-out.
+- Boss relocates every enemy turn instead of on hit; boss radius 30, minion radius 15.
+- Asteroids are dynamic and drift up/down during a post-enemy shift phase.
+- Barrage spawns projectiles evenly around a full circle; projectiles are circular with no trail and radius 6.
+
+Verified in headless Firefox:
 
 - Direct boot with no campaign/menu/cutscene flash; no page or console errors.
-- Shot loop, boss hit + reposition, action countdown/execution, spawn-wait turn, minion advance + tee life loss, periodic chests, pulse cleanup, Free Shot bonus loop, reward claim (spatial + passives), game over and victory overlays returning to the menu.
+- Boss relocates only during the shift phase and stays put on damage; asteroids alternate up/down and animate.
+- Minion steps interpolate between spawn and path nodes; tee arrival resolves after the final animation.
+- Barrage spawns evenly around the full circle (spawn angles verified; projectiles thin out quickly at speed 250, radius 6).
 - Campaign `STORAGE_KEY` preserved; `?hole=` behavior unchanged.
 
 Known gaps / next steps:

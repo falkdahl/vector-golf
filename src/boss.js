@@ -61,9 +61,32 @@ function hearts(n, max) {
 }
 
 function bossPos() {
-  if (!stage || !state) return { x: 0, y: 0 };
-  const list = stage.boss.positions;
-  return list[state.bossPosIndex % list.length] || { x: stage.boss.x, y: stage.boss.y };
+  if (!state || !state.boss) {
+    if (!stage) return { x: 0, y: 0 };
+    return { x: stage.boss.x, y: stage.boss.y };
+  }
+  return state.boss;
+}
+
+function easeInOut(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function settledEntity(x, y) {
+  return { x, y, fromX: x, fromY: y, toX: x, toY: y, t: 1, dur: 0.6 };
+}
+
+function stepEntity(e, dt) {
+  if (!e || e.t >= 1) return;
+  e.t = Math.min(1, e.t + dt / Math.max(0.0001, e.dur));
+  const k = easeInOut(e.t);
+  e.x = lerp(e.fromX, e.toX, k);
+  e.y = lerp(e.fromY, e.toY, k);
 }
 
 function insideArena(x, y) {
@@ -87,14 +110,26 @@ function pointOnPath(points, progress) {
 function makeState(params) {
   const maxPlayer = clampInt(params.lives, 1, 99, 3);
   const maxBoss = clampInt(params.bossLives, 1, 99, stage.boss.lives);
+  const start = stage.boss.positions[0] || { x: stage.boss.x, y: stage.boss.y };
   return {
     maxPlayerLives: maxPlayer,
     maxBossLives: maxBoss,
     playerLives: maxPlayer,
     bossLives: maxBoss,
     round: 1,
-    phase: "player", // player | shot | between | bonus | enemy | victory | gameover
+    phase: "player", // player | shot | between | bonus | enemy | shift | victory | gameover
     bossPosIndex: 0,
+    boss: settledEntity(start.x, start.y),
+    asteroids: (stage.obstacles || []).map((a, i) => ({
+      x: a.x,
+      y: a.y,
+      radius: a.radius,
+      dir: i % 2 === 0 ? -1 : 1,
+      fromY: a.y,
+      toY: a.y,
+      t: 1,
+      dur: 0.75
+    })),
     minions: [],
     projectiles: [],
     chests: [],
@@ -197,6 +232,7 @@ function phaseLabel() {
     case "shot": return "Ball in Flight";
     case "between": return "Resolving...";
     case "enemy": return "Enemy Turn";
+    case "shift": return "Enemies Shifting";
     case "victory": return "Stage Cleared";
     case "gameover": return "Game Over";
     default: return state.phase;
@@ -251,6 +287,30 @@ function addEffect(type, x, y, seconds, extra = null) {
   state.effects.push(e);
 }
 
+function updateEntityAnimations(dt) {
+  stepEntity(state.boss, dt);
+
+  for (const a of state.asteroids) {
+    if (a.t >= 1) continue;
+    a.t = Math.min(1, a.t + dt / Math.max(0.0001, a.dur));
+    a.y = lerp(a.fromY, a.toY, easeInOut(a.t));
+  }
+
+  for (const m of state.minions.slice()) {
+    if (m.t < 1) {
+      m.t = Math.min(1, m.t + dt / Math.max(0.0001, m.dur));
+      const k = easeInOut(m.t);
+      m.x = lerp(m.fromX, m.toX, k);
+      m.y = lerp(m.fromY, m.toY, k);
+    }
+    if (m.reachedTee && m.t >= 1) {
+      state.minions = state.minions.filter((x) => x !== m);
+      addEffect("tee-hit", stage.tee.x, stage.tee.y, 0.5);
+      loseLife("minion");
+    }
+  }
+}
+
 export function updateBoss(dt) {
   if (!active || !state) return;
   const step = Math.max(0, Math.min(0.1, Number(dt) || 0));
@@ -280,6 +340,12 @@ export function updateBoss(dt) {
     return;
   }
 
+  updateEntityAnimations(step);
+  if (state.phase === "victory" || state.phase === "gameover") {
+    updateHud();
+    return;
+  }
+
   if (state.postShotPending) {
     advancePostShot();
     if (state.phase === "victory" || state.phase === "gameover") {
@@ -296,6 +362,12 @@ export function updateBoss(dt) {
 
   if (state.phase === "enemy") {
     updateEnemy(step);
+    updateHud();
+    return;
+  }
+
+  if (state.phase === "shift") {
+    updateShift(step);
     updateHud();
     return;
   }
@@ -363,7 +435,7 @@ function updateShot(dt) {
 
   // Floating asteroids deflect the ball. They sit in front of the boss so a
   // straight tee->boss shot is always blocked.
-  const rocks = stage.obstacles || [];
+  const rocks = state.asteroids || [];
   for (const a of rocks) {
     const dx = ball.pos.x - a.x;
     const dy = ball.pos.y - a.y;
@@ -392,10 +464,6 @@ function updateShot(dt) {
     state.bossLives = Math.max(0, state.bossLives - 1);
     state.bossHitFlash = 0.42;
     addEffect("boss-hit", bp.x, bp.y, 0.42);
-    state.bossPosIndex = (state.bossPosIndex + 1) % stage.boss.positions.length;
-    if (state.activeAction && state.activeAction.type === "barrage") {
-      state.activeAction.telegraph = makeTelegraph("barrage");
-    }
     if (state.bossLives <= 0) {
       message("Slicer destroyed!", 5);
       victory();
@@ -490,25 +558,82 @@ function updateEnemy(dt) {
   if (e.timer > 0) return;
 
   if (e.index >= e.events.length) {
-    startPlayerPhase();
+    beginShiftPhase();
     return;
   }
 
   const ev = e.events[e.index++];
   if (ev.type === "minion") {
     advanceMinion(ev.id);
-    e.timer = 0.24;
+    e.timer = Math.max(0.2, Number(stage.minions.moveDuration) || 0.34);
   } else if (ev.type === "boss") {
     runBossStep();
     e.timer = 0.5;
   } else {
-    startPlayerPhase();
+    beginShiftPhase();
     return;
   }
 
   if (state.phase === "gameover" || state.phase === "victory") {
     e.timer = Infinity;
   }
+}
+
+function beginShiftPhase() {
+  if (!state || state.phase === "gameover" || state.phase === "victory") return;
+  state.phase = "shift";
+  state.enemy = null;
+  state.bonusAvailable = false;
+  state.postShotPending = false;
+
+  // The boss relocates every turn (never on hit) so repeating the same shot is
+  // not possible. It eases to the next preset position instead of snapping.
+  const positions = stage.boss.positions;
+  if (positions && positions.length) {
+    state.bossPosIndex = (state.bossPosIndex + 1) % positions.length;
+    const target = positions[state.bossPosIndex];
+    const b = state.boss;
+    b.fromX = b.x;
+    b.fromY = b.y;
+    b.toX = target.x;
+    b.toY = target.y;
+    b.t = 0;
+    b.dur = 0.7;
+  }
+
+  moveAsteroids();
+  if (bridge) bridge.setGameState("ENEMY");
+  message("Asteroids shift - boss relocates", 1.1);
+  updateHud();
+}
+
+function moveAsteroids() {
+  if (!stage.asteroidMotion) return;
+  const cfg = stage.asteroidMotion;
+  const minY = Number(cfg.minY) || 96;
+  const maxY = Number(cfg.maxY) || 624;
+  const step = Math.max(1, Number(cfg.step) || 24);
+  for (const a of state.asteroids) {
+    let next = a.y + a.dir * step;
+    if (next < minY || next > maxY) {
+      a.dir *= -1;
+      next = a.y + a.dir * step;
+    }
+    next = Math.max(minY, Math.min(maxY, next));
+    a.fromY = a.y;
+    a.toY = next;
+    a.t = 0;
+    a.dur = Math.max(0.05, Number(cfg.duration) || 0.75);
+  }
+}
+
+function updateShift() {
+  if (!state) return;
+  const bossMoving = state.boss && state.boss.t < 1;
+  const asteroidMoving = state.asteroids.some((a) => a.t < 1);
+  const minionMoving = state.minions.some((m) => m.t < 1);
+  if (bossMoving || asteroidMoving || minionMoving) return;
+  startPlayerPhase();
 }
 
 function startPlayerPhase() {
@@ -541,12 +666,11 @@ function chooseBossAction() {
 function makeTelegraph(type) {
   const bp = bossPos();
   if (type === "barrage") {
-    const base = Math.atan2(stage.tee.y - bp.y, stage.tee.x - bp.x);
-    const count = stage.projectiles.count;
+    const count = Math.max(1, Number(stage.projectiles.count) || 1);
+    const offset = Math.random() * Math.PI * 2;
     const angles = [];
     for (let i = 0; i < count; i++) {
-      const t = count === 1 ? 0 : (i / (count - 1)) - 0.5;
-      angles.push(base + t * stage.projectiles.spread);
+      angles.push(offset + (i / count) * Math.PI * 2);
     }
     return { angles };
   }
@@ -594,7 +718,7 @@ function executeBossAction(type, telegraph = null) {
   state.actionsSinceLaser += 1;
 
   if (type === "barrage") {
-    spawnProjectiles();
+    spawnProjectiles(telegraph);
     message("Projectile barrage!", 1.8);
   } else if (type === "spawn") {
     const spawns = telegraph && Array.isArray(telegraph.spawns) ? telegraph.spawns : null;
@@ -610,13 +734,17 @@ function executeBossAction(type, telegraph = null) {
   }
 }
 
-function spawnProjectiles() {
+function spawnProjectiles(telegraph = null) {
   const bp = bossPos();
-  const base = Math.atan2(stage.tee.y - bp.y, stage.tee.x - bp.x);
-  const count = stage.projectiles.count;
-  for (let i = 0; i < count; i++) {
-    const t = count === 1 ? 0 : (i / (count - 1)) - 0.5;
-    const angle = base + t * stage.projectiles.spread + (Math.random() - 0.5) * 0.06;
+  const count = Math.max(1, Number(stage.projectiles.count) || 1);
+  const jitter = Number(stage.projectiles.jitter) || 0;
+  let angles = telegraph && Array.isArray(telegraph.angles) ? telegraph.angles : null;
+  if (!angles || !angles.length) {
+    angles = [];
+    for (let i = 0; i < count; i++) angles.push((i / count) * Math.PI * 2);
+  }
+  for (let i = 0; i < angles.length; i++) {
+    const angle = angles[i] + (Math.random() - 0.5) * jitter;
     const speed = stage.projectiles.speed * (0.92 + Math.random() * 0.16);
     state.projectiles.push({
       id: nextId++,
@@ -669,8 +797,9 @@ function spawnMinions(n, initial, spawnsOverride = null) {
       { x: stage.tee.x, y: stage.tee.y }
     ];
 
-    // Pick a random whole number of steps between 3 and 5 inclusive (3, 4, or 5)
-    const randomSteps = Math.floor(Math.random() * (5 - 3 + 1)) + 3;
+    const minSteps = Math.max(1, Number(stage.minions.minSteps) || 3);
+    const maxSteps = Math.max(minSteps, Number(stage.minions.maxSteps) || 5);
+    const randomSteps = minSteps + Math.floor(Math.random() * (maxSteps - minSteps + 1));
 
     state.minions.push({
       id: nextId++,
@@ -678,8 +807,16 @@ function spawnMinions(n, initial, spawnsOverride = null) {
       progress: 0,
       x: spawn.x,
       y: spawn.y,
+      fromX: spawn.x,
+      fromY: spawn.y,
+      toX: spawn.x,
+      toY: spawn.y,
+      t: 1,
+      dur: Math.max(0.05, Number(stage.minions.moveDuration) || 0.34),
+      angle: Math.atan2(stage.tee.y - spawn.y, stage.tee.x - spawn.x),
       radius: stage.minions.radius,
       steps: randomSteps, // Store unique step count per minion
+      reachedTee: false,
       initial: !!initial
     });
   }
@@ -689,18 +826,17 @@ function advanceMinion(id) {
   const m = state.minions.find((x) => x.id === id);
   if (!m) return;
 
-  // Advance progress using this specific minion's randomized step count
   m.progress = Math.min(1, m.progress + 1 / Math.max(1, m.steps));
-
   const pos = pointOnPath(m.points, m.progress);
-  m.x = pos.x;
-  m.y = pos.y;
 
-  if (m.progress >= 1 - 1e-6) {
-    state.minions = state.minions.filter((x) => x !== m);
-    addEffect("tee-hit", stage.tee.x, stage.tee.y, 0.5);
-    loseLife("minion");
-  }
+  // Ease from the current visual position to the next path node. The final
+  // step still animates into the tee before the minion is removed.
+  m.fromX = m.x;
+  m.fromY = m.y;
+  m.toX = pos.x;
+  m.toY = pos.y;
+  m.t = 0;
+  if (m.progress >= 1 - 1e-6) m.reachedTee = true;
 }
 
 function loseLife(reason, ignoreGrace = false) {
@@ -873,9 +1009,9 @@ function exposeDebug() {
       return {
         boss: { x: bp.x, y: bp.y, radius: stage.boss.radius },
         minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress })),
-        projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy })),
+        projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy, radius: p.radius })),
         chests: state.chests.map((c) => ({ id: c.id, x: c.x, y: c.y })),
-        obstacles: (stage.obstacles || []).map((a) => ({ x: a.x, y: a.y, radius: a.radius })),
+        obstacles: (state.asteroids || []).map((a) => ({ x: a.x, y: a.y, radius: a.radius, dir: a.dir })),
         modifiers: (() => { try { return bridge && bridge.getModifiers ? bridge.getModifiers().map((m) => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })) : []; } catch { return []; } })(),
         bag: (() => { try { return bridge && bridge.getBagInfo ? bridge.getBagInfo() : null; } catch { return null; } })(),
         ball: { x: ball.pos.x, y: ball.pos.y, z: ball.z, moving: ball.isMoving }
@@ -1001,6 +1137,7 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
     ctx.clearRect(0, 0, width, height);
     drawArena(ctx, width, height);
   }
+  drawAsteroids(ctx);
   drawTelegraph(ctx);
 
   let mods = [];
@@ -1074,7 +1211,7 @@ function drawDebugHitboxes(ctx) {
   }
 
   ctx.strokeStyle = "rgba(190, 214, 240, 0.7)";
-  for (const a of stage.obstacles || []) {
+  for (const a of state.asteroids || []) {
     ctx.beginPath();
     ctx.arc(a.x, a.y, a.radius + BALL_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
@@ -1177,12 +1314,10 @@ function drawArena(ctx, width, height) {
   ctx.ellipse(a.cx, a.cy, a.rx - 14, a.ry - 14, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
-
-  drawAsteroids(ctx);
 }
 
 function drawAsteroids(ctx) {
-  const rocks = stage.obstacles || [];
+  const rocks = state.asteroids || [];
   for (let i = 0; i < rocks.length; i++) {
     const a = rocks[i];
     ctx.save();
@@ -1363,14 +1498,13 @@ function drawHeartRow(ctx, x, y, lives, max, color) {
 
 function drawMinions(ctx) {
   const now = performance.now() / 1000;
+  const s = Math.max(0.5, (Number(stage.minions.radius) || 12) / 12);
   for (const m of state.minions) {
-    const pos = pointOnPath(m.points, m.progress);
-    const next = pointOnPath(m.points, Math.min(1, m.progress + 0.02));
-    let angle = Math.atan2(next.y - pos.y, next.x - pos.x);
+    let angle = Number.isFinite(m.angle) ? m.angle : Math.atan2(m.toY - m.fromY, m.toX - m.fromX);
     if (!Number.isFinite(angle)) angle = Math.PI;
 
     ctx.save();
-    ctx.translate(pos.x, pos.y);
+    ctx.translate(m.x, m.y);
     ctx.rotate(angle);
     ctx.shadowColor = "#ff9f1c";
     ctx.shadowBlur = 10;
@@ -1378,17 +1512,17 @@ function drawMinions(ctx) {
     ctx.strokeStyle = "#2a0d02";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(13, 0);
-    ctx.lineTo(-8, 9);
-    ctx.lineTo(-4, 0);
-    ctx.lineTo(-8, -9);
+    ctx.moveTo(13 * s, 0);
+    ctx.lineTo(-8 * s, 9 * s);
+    ctx.lineTo(-4 * s, 0);
+    ctx.lineTo(-8 * s, -9 * s);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffe8c2";
     ctx.beginPath();
-    ctx.arc(2, 0, 2.4 + Math.sin(now * 5 + m.id) * 0.5, 0, Math.PI * 2);
+    ctx.arc(2 * s, 0, (2.4 + Math.sin(now * 5 + m.id) * 0.5) * s, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -1397,16 +1531,8 @@ function drawMinions(ctx) {
 function drawProjectiles(ctx) {
   for (const p of state.projectiles) {
     ctx.save();
-    ctx.strokeStyle = "rgba(255, 159, 28, 0.45)";
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(p.x - p.vx * 0.075, p.y - p.vy * 0.075);
-    ctx.lineTo(p.x, p.y);
-    ctx.stroke();
-
     ctx.shadowColor = "#ff7b00";
-    ctx.shadowBlur = 14;
+    ctx.shadowBlur = 10;
     ctx.fillStyle = "#ffb703";
     ctx.strokeStyle = "#7a2f00";
     ctx.lineWidth = 1.5;
@@ -1418,7 +1544,7 @@ function drawProjectiles(ctx) {
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#fff3c4";
     ctx.beginPath();
-    ctx.arc(p.x - 2, p.y - 2, p.radius * 0.36, 0, Math.PI * 2);
+    ctx.arc(p.x - p.radius * 0.25, p.y - p.radius * 0.25, p.radius * 0.36, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }

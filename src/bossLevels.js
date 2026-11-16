@@ -16,7 +16,7 @@ export const BOSS_STAGE_1 = {
   boss: {
     x: 1012,
     y: 320,
-    radius: 36,
+    radius: 30,
     lives: 6,
     positions: [
       { x: 1012, y: 320 },
@@ -42,6 +42,15 @@ export const BOSS_STAGE_1 = {
   ],
   obstacleBounce: 0.72,
 
+  // Asteroids drift up/down between the enemy and player phases. Each asteroid
+  // keeps its own heading and reverses when it reaches a bound.
+  asteroidMotion: {
+    step: 28,
+    duration: 0.75,
+    minY: 96,
+    maxY: 624
+  },
+
   field: {
     cols: 32,
     rows: 18,
@@ -56,7 +65,10 @@ export const BOSS_STAGE_1 = {
   minions: {
     initial: 2,
     max: 12,
-    radius: 12,
+    radius: 15,
+    minSteps: 3,
+    maxSteps: 5,
+    moveDuration: 0.34,
     spawns: [
       { x: 1092, y: 168 },
       { x: 1110, y: 356 },
@@ -83,10 +95,10 @@ export const BOSS_STAGE_1 = {
   projectiles: {
     count: 64,
     speed: 250,
-    spread: 6,
-    radius: 9,
+    radius: 6,
     windScale: 0.72,
-    life: 10
+    life: 10,
+    jitter: 0.03
   },
 
   actions: {
