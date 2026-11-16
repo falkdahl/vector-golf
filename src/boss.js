@@ -5,8 +5,7 @@ import {
   resetBall as physicsResetBall,
   updateBall,
   BALL_RADIUS,
-  isBallOverTreasure,
-  drawnBallCircle
+  isBallOverTreasure
 } from "./physics.js";
 import {
   getWindAt,
@@ -89,6 +88,52 @@ function stepEntity(e, dt) {
   e.y = lerp(e.fromY, e.toY, k);
 }
 
+function spawnAsteroidData(initial) {
+  const cfg = stage.asteroidField;
+  if (!cfg || !Array.isArray(cfg.lanes) || !cfg.lanes.length) return null;
+  const lane = cfg.lanes[Math.floor(Math.random() * cfg.lanes.length)];
+  const radius = Math.max(4, Number(lane.radius) || 28);
+  const dir = Math.random() < 0.5 ? -1 : 1;
+  const stepMin = Math.max(1, Number(cfg.stepMin) || 22);
+  const stepMax = Math.max(stepMin, Number(cfg.stepMax) || 64);
+  const step = stepMin + Math.random() * (stepMax - stepMin);
+  const jitter = Math.max(0, Number(cfg.xJitter) || 0);
+  const margin = Math.max(0, Number(cfg.spawnMargin) || 80);
+  const H = Number(stage.logicalH) || LOGICAL_H;
+  let y;
+  if (initial) {
+    y = Math.random() * H;
+  } else if (dir > 0) {
+    y = -radius - Math.random() * margin;
+  } else {
+    y = H + radius + Math.random() * margin;
+  }
+  return {
+    id: nextId++,
+    x: lane.x + (Math.random() - 0.5) * 2 * jitter,
+    y,
+    radius,
+    dir,
+    step,
+    fromY: y,
+    toY: y,
+    t: 1,
+    dur: Math.max(0.1, Number(cfg.duration) || 0.5)
+  };
+}
+
+function makeInitialAsteroids() {
+  const cfg = stage.asteroidField;
+  if (!cfg) return [];
+  const count = Math.max(0, Number(cfg.targetCount) || 0);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const a = spawnAsteroidData(true);
+    if (a) out.push(a);
+  }
+  return out;
+}
+
 function insideArena(x, y) {
   const a = stage.arena;
   const dx = (x - a.cx) / a.rx;
@@ -120,16 +165,7 @@ function makeState(params) {
     phase: "player", // player | shot | between | bonus | enemy | shift | victory | gameover
     bossPosIndex: 0,
     boss: settledEntity(start.x, start.y),
-    asteroids: (stage.obstacles || []).map((a, i) => ({
-      x: a.x,
-      y: a.y,
-      radius: a.radius,
-      dir: i % 2 === 0 ? -1 : 1,
-      fromY: a.y,
-      toY: a.y,
-      t: 1,
-      dur: 0.75
-    })),
+    asteroids: makeInitialAsteroids(),
     minions: [],
     projectiles: [],
     chests: [],
@@ -137,7 +173,6 @@ function makeState(params) {
     actionsSinceLaser: 0,
     lastExecutedAction: null,
     chestRespawnRound: 0,
-    graceTimer: 0,
     teePulse: 0,
     bossHitFlash: 0,
     shot: { active: false, elapsed: 0, isBonus: false },
@@ -264,7 +299,7 @@ function updateHud() {
     hud.debug.classList.toggle("hidden", !state.debug);
     if (state.debug) {
       const bp = bossPos();
-      set(hud.debug, `round ${state.round} | ${state.phase} | ball (${ball.pos.x.toFixed(0)},${ball.pos.y.toFixed(0)}) z${ball.z.toFixed(1)} | boss (${Math.round(bp.x)},${Math.round(bp.y)}) | minions ${state.minions.length}/${stage.minions.max} | projectiles ${state.projectiles.length} | chests ${state.chests.length} (next ${state.chestRespawnRound || "-"}) | grace ${state.graceTimer.toFixed(2)} | laser ${state.actionsSinceLaser}/${stage.laser.minOtherActionsBetween}`);
+      set(hud.debug, `round ${state.round} | ${state.phase} | ball (${ball.pos.x.toFixed(0)},${ball.pos.y.toFixed(0)}) z${ball.z.toFixed(1)} | boss (${Math.round(bp.x)},${Math.round(bp.y)}) | minions ${state.minions.length}/${stage.minions.max} | projectiles ${state.projectiles.length} | chests ${state.chests.length} (next ${state.chestRespawnRound || "-"}) | laser ${state.actionsSinceLaser}/${stage.laser.minOtherActionsBetween}`);
     }
   }
 }
@@ -285,6 +320,34 @@ function addEffect(type, x, y, seconds, extra = null) {
   const e = { type, x, y, t: seconds, max: seconds };
   if (extra) Object.assign(e, extra);
   state.effects.push(e);
+}
+
+function moveAsteroids() {
+  const cfg = stage.asteroidField;
+  if (!cfg) return;
+  const H = Number(stage.logicalH) || LOGICAL_H;
+  const edge = 24;
+
+  // Rocks that have fully left the canvas despawn; replacements enter from
+  // just outside it so the barrier never runs dry.
+  state.asteroids = state.asteroids.filter((a) => (
+    a.dir > 0 ? a.y - a.radius < H + edge : a.y + a.radius > -edge
+  ));
+  const target = Math.max(0, Number(cfg.targetCount) || 0);
+  while (state.asteroids.length < target) {
+    const a = spawnAsteroidData(false);
+    if (!a) break;
+    state.asteroids.push(a);
+  }
+
+  // Each enemy turn the whole field advances one short, eased step.
+  const dur = Math.max(0.1, Number(cfg.duration) || 0.5);
+  for (const a of state.asteroids) {
+    a.fromY = a.y;
+    a.toY = a.y + a.dir * a.step;
+    a.t = 0;
+    a.dur = dur;
+  }
 }
 
 function updateEntityAnimations(dt) {
@@ -317,7 +380,6 @@ export function updateBoss(dt) {
   if (step <= 0) return;
 
   updateEffects(step);
-  state.graceTimer = Math.max(0, state.graceTimer - step);
   state.teePulse = Math.max(0, state.teePulse - step);
   state.bossHitFlash = Math.max(0, state.bossHitFlash - step);
   if (state.messageTimer > 0) {
@@ -464,12 +526,13 @@ function updateShot(dt) {
     state.bossLives = Math.max(0, state.bossLives - 1);
     state.bossHitFlash = 0.42;
     addEffect("boss-hit", bp.x, bp.y, 0.42);
+    triggerPulse();
     if (state.bossLives <= 0) {
       message("Slicer destroyed!", 5);
       victory();
       return;
     }
-    message(`Slicer hit! ${state.bossLives} lives left`, 2);
+    message(`Slicer hit! Pulse! ${state.bossLives} lives left`, 2);
     finishShot();
     return;
   }
@@ -603,28 +666,8 @@ function beginShiftPhase() {
 
   moveAsteroids();
   if (bridge) bridge.setGameState("ENEMY");
-  message("Asteroids shift - boss relocates", 1.1);
+  message("Slicer relocates", 1.1);
   updateHud();
-}
-
-function moveAsteroids() {
-  if (!stage.asteroidMotion) return;
-  const cfg = stage.asteroidMotion;
-  const minY = Number(cfg.minY) || 96;
-  const maxY = Number(cfg.maxY) || 624;
-  const step = Math.max(1, Number(cfg.step) || 24);
-  for (const a of state.asteroids) {
-    let next = a.y + a.dir * step;
-    if (next < minY || next > maxY) {
-      a.dir *= -1;
-      next = a.y + a.dir * step;
-    }
-    next = Math.max(minY, Math.min(maxY, next));
-    a.fromY = a.y;
-    a.toY = next;
-    a.t = 0;
-    a.dur = Math.max(0.05, Number(cfg.duration) || 0.75);
-  }
 }
 
 function updateShift() {
@@ -711,7 +754,7 @@ function executeBossAction(type, telegraph = null) {
     state.actionsSinceLaser = 0;
     addEffect("laser", bossPos().x, bossPos().y, 0.55, { tx: stage.tee.x, ty: stage.tee.y });
     message("Slicer fires a life-removing laser!", 2.4);
-    loseLife("laser", true);
+    loseLife("laser");
     return;
   }
 
@@ -725,13 +768,16 @@ function executeBossAction(type, telegraph = null) {
     spawnMinions(stage.actions.spawn.count, false, spawns);
     message("Slicer spawns minions!", 1.8);
   } else if (type === "pulse") {
-    if (bridge && bridge.clearModifiers) bridge.clearModifiers();
-    const hadChests = state.chests.length > 0;
-    state.chests = [];
-    if (hadChests) scheduleChestRespawn();
-    addEffect("pulse", bossPos().x, bossPos().y, 0.85);
-    message("Pulse destroys placed items and chests!", 2.2);
+    triggerPulse();
+    message("Pulse destroys placed items!", 2.2);
   }
+}
+
+function triggerPulse() {
+  if (!state) return;
+  if (bridge && bridge.clearModifiers) bridge.clearModifiers();
+  const bp = bossPos();
+  addEffect("pulse", bp.x, bp.y, 0.85);
 }
 
 function spawnProjectiles(telegraph = null) {
@@ -839,14 +885,9 @@ function advanceMinion(id) {
   if (m.progress >= 1 - 1e-6) m.reachedTee = true;
 }
 
-function loseLife(reason, ignoreGrace = false) {
+function loseLife(reason) {
   if (!state || state.phase === "gameover" || state.phase === "victory") return false;
-  if (!ignoreGrace && state.graceTimer > 0) {
-    message("Grace window - no life lost", 0.8);
-    return false;
-  }
   state.playerLives = Math.max(0, state.playerLives - 1);
-  state.graceTimer = stage.graceSeconds;
   state.teePulse = 0.75;
   if (state.playerLives <= 0) {
     message("Dimension Y consumes you...", 5);
@@ -991,7 +1032,6 @@ export function getBossState() {
     activeAction: state.activeAction ? { type: state.activeAction.type, roundsLeft: state.activeAction.roundsLeft } : null,
     actionsSinceLaser: state.actionsSinceLaser,
     chestRespawnRound: state.chestRespawnRound,
-    graceTimer: state.graceTimer,
     message: state.message,
     ball: { x: ball.pos.x, y: ball.pos.y, moving: ball.isMoving }
   };
@@ -1011,7 +1051,7 @@ function exposeDebug() {
         minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress })),
         projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy, radius: p.radius })),
         chests: state.chests.map((c) => ({ id: c.id, x: c.x, y: c.y })),
-        obstacles: (state.asteroids || []).map((a) => ({ x: a.x, y: a.y, radius: a.radius, dir: a.dir })),
+        obstacles: (state.asteroids || []).map((a) => ({ id: a.id, x: a.x, y: a.y, radius: a.radius, step: a.step, dir: a.dir, fromY: a.fromY, toY: a.toY, t: a.t })),
         modifiers: (() => { try { return bridge && bridge.getModifiers ? bridge.getModifiers().map((m) => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })) : []; } catch { return []; } })(),
         bag: (() => { try { return bridge && bridge.getBagInfo ? bridge.getBagInfo() : null; } catch { return null; } })(),
         ball: { x: ball.pos.x, y: ball.pos.y, z: ball.z, moving: ball.isMoving }
@@ -1154,11 +1194,11 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
   drawEffects(ctx);
   drawTee(ctx);
 
-  try { drawBall(ctx, ball); } catch { }
+  // Player health stays pinned to the tee, never follows the ball.
   try {
-    const drawn = drawnBallCircle(ball);
-    drawHeartRow(ctx, drawn.x, drawn.y - drawn.r - 14, state.playerLives, state.maxPlayerLives, "#9dffc8");
+    drawHeartRow(ctx, stage.tee.x, stage.tee.y - 30, state.playerLives, state.maxPlayerLives, "#9dffc8");
   } catch { }
+  try { drawBall(ctx, ball); } catch { }
   try { drawAim(ctx, ball, getAimAngle(), charge, bridge ? bridge.getGameState() : "AIMING"); } catch { }
   try { if (bridge && bridge.drawPlacementPreview) bridge.drawPlacementPreview(ctx); } catch { }
   try { drawForceBar(ctx, ball, charge); } catch { }

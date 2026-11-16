@@ -18,16 +18,16 @@ Boss: Slicer.
 - Four boss actions:
   - Projectile barrage.
   - Spawn minions.
-  - Destroy all placed items and chests with a pulse.
+  - Destroy all placed items with a pulse (chests are unaffected).
   - Rare laser that removes one life.
 - Boss with 6 lives. The boss relocates every enemy turn (eased motion), not on hit.
 - Player with 3 lives.
 - Health is shown on the entities in the arena, not in the top HUD bar.
 - A floating asteroid barrier in front of the boss blocks straight tee-to-boss shots; curved shots can use the top/bottom gaps.
-- Asteroids drift up and down between the enemy and player phases (some up, some down per turn), animated with ease-in/ease-out.
+- Asteroids advance one short step per enemy turn at different speeds. They spawn just outside the canvas and keep moving in one direction until they leave, then despawn; replacements keep spawning so asteroids are always present between the player and the boss.
 - Regular game over screen that returns to the main menu.
 - Free Shot item remains in the reward pool and is usable before the enemy turn.
-- Chests respawn a fixed number of rounds after the previous chest is collected or destroyed.
+- Chests respawn a fixed number of rounds after the previous chest is collected.
 - No tee flag; the tee is a plain launch ring so the ball and its health read clearly.
 - Debug entry: `?boss=1` starts Stage 1 directly, with no campaign, menus, cutscenes, or campaign save dependency.
 
@@ -71,7 +71,7 @@ Enemies act one by one, with visible sequential feedback.
    - A newly chosen action does not advance on the same enemy turn.
 3. **Entities shift (after the enemy turn, before the player turn).**
    - The boss eases to its next preset position every turn. A boss hit never teleports it.
-   - Asteroids ease up/down to their next drift positions. Asteroids alternate headings, so roughly half move up and half move down each shift.
+   - Asteroids advance one short eased step (see "Asteroid motion").
 4. Check lives. At 0 lives, show the regular game over screen and return to the main menu.
 5. Return to the player phase.
 
@@ -107,7 +107,8 @@ Enemies act one by one, with visible sequential feedback.
 
 - Countdown telegraph shows the incoming pulse.
 - On execution, a large pulse travels across the field.
-- The pulse destroys all placed modifiers and all uncollected chests.
+- The pulse destroys all placed modifiers. It does not destroy chests.
+- Hitting the boss also triggers an instant pulse (it destroys placed modifiers immediately, without waiting for a boss action).
 - It does not destroy bag items, minions, projectiles, the boss, or the player.
 - Placed modifiers are lost; bag contents are unaffected.
 
@@ -122,7 +123,7 @@ Enemies act one by one, with visible sequential feedback.
 ## Boss lives, movement and animation
 
 - Boss has 6 lives.
-- A ball hit removes 1 boss life and flashes the boss, but does not move it.
+- A ball hit removes 1 boss life, flashes the boss, triggers an instant pulse (clears placed modifiers), and does not move the boss.
 - After every enemy turn (and before the next player turn), the boss eases to the next preset position (ease-in/ease-out over ~0.7s). This keeps the player from repeating the exact same shot while making the relocation readable.
 - Boss radius is 30px (down from 36) so it is harder to hit.
 - Minion radius is 15px (up from 12) so minions are easier to hit; minion visuals scale with the radius.
@@ -132,15 +133,17 @@ Enemies act one by one, with visible sequential feedback.
 ## Asteroid motion
 
 - The asteroid barrier is no longer part of the static arena image; asteroids are drawn dynamically.
-- Each asteroid starts with an alternating up/down heading. During the shift phase after the enemy turn, every asteroid eases ±28px vertically (0.75s), reversing at the configured bounds (96–624) so some always move up and some down.
-- Collision uses the asteroids' live positions.
+- Asteroids are spawned just outside the canvas in barrier lanes between the tee and the boss. Each picks a random direction (up or down) and a random step size, then advances one short eased step in that direction per enemy turn.
+- After an enemy turn, rocks that have fully left the canvas despawn and replacements spawn just outside it, keeping the active count at the target (12) so the space between the player and the boss is never empty.
+- Collision uses the asteroids' live positions, including mid-step animation.
 
 ## Player lives and game over
 
 - Player has 3 lives total for the battle.
+- Player hearts are drawn on the tee and never follow the ball.
 - Any minion or projectile reaching the tee costs 1 life and destroys that attacker.
+- Simultaneous damage sources each cost 1 life; two minions arriving together remove 2 lives, as do multiple barrage projectiles.
 - The game continues in place after a hit.
-- Add a short post-hit grace window (~1 second) so a multi-projectile volley cannot drain multiple lives at once.
 - At 0 lives, show the regular game over screen.
 - The regular game over screen returns the player to the main menu.
 - No boss-specific retry screen.
@@ -159,7 +162,7 @@ Enemies act one by one, with visible sequential feedback.
 - Spawn interval, cap, and locations are tuning values.
 - The player collects a chest by hitting it with the ball.
 - Chest rewards use the existing reward flow and can include Free Shot.
-- The boss pulse destroys uncollected chests.
+- Pulses (boss action or boss-hit) do not destroy chests.
 - No Extra Life reward in this prototype.
 
 ## Debug entry
@@ -188,13 +191,12 @@ These are the values to tune during the prototype, not final design:
 - Minion movement duration (currently 0.34s per step) and radius (currently 15).
 - Maximum minions on the field (currently 12).
 - Boss lives (currently 6), radius (currently 30), and relocation duration (currently 0.7s).
-- Asteroid drift step (28px), duration (0.75s), and bounds (96–624).
+- Asteroid target count (12), step range (22–64px per enemy turn), step duration (0.5s), lane x-jitter, and off-canvas spawn margin.
 - Chest spawn interval.
 - Maximum chests on the field.
 - Countdown rounds for each boss action (barrage 2; spawn 1; pulse 1; laser 3).
 - Number of other boss actions required between lasers (currently 2).
 - Projectile count (64), speed (250), radius (6), and full-circle distribution for the barrage.
-- Post-hit grace duration.
 - Free Shot charge count and availability.
 
 ## Technical plan
@@ -229,9 +231,9 @@ These are the values to tune during the prototype, not final design:
 
 - **Minions:** straight two-point spawn→tee path, randomized 3–5 steps each, advance one stepped/eased move per enemy turn, killed by ball, tee contact costs a life.
 - **Barrage projectiles:** full-circle spawn, circular bodies, wind-affected, modifier-deflectable, ignore minions, tee contact costs a life.
-- **Chests:** periodic spawn, ball pickup, destroyed by pulse.
-- **Boss:** 6 lives, relocates every enemy turn with eased motion, action countdowns.
-- **Asteroids:** live positions that drift up/down during the post-enemy shift.
+- **Chests:** periodic spawn, ball pickup, immune to pulses.
+- **Boss:** 6 lives, relocates every enemy turn with eased motion, action countdowns, instant pulse on hit.
+- **Asteroids:** advance one short eased step per enemy turn, respawn off-canvas, and use live positions for collision.
 
 ### Shot resolution
 
@@ -253,13 +255,15 @@ These are the values to tune during the prototype, not final design:
 - [ ] An ongoing boss action advances each enemy turn and executes at 0.
 - [ ] Barrage shows a full-circle telegraph and launches circular projectiles evenly around the boss that do not hurt minions.
 - [ ] Spawn action shows the number of minions and spawned minions wait one turn.
-- [ ] Pulse destroys placed modifiers and uncollected chests.
+- [ ] Pulse destroys placed modifiers but leaves chests intact.
+- [ ] Hitting the boss triggers an instant pulse that clears placed modifiers.
 - [ ] Laser removes 1 life and cannot occur again until the required number of other actions resolve.
 - [ ] Boss takes 6 hits to kill. A hit does not move it; it eases to a new preset position every enemy turn.
-- [ ] Asteroids drift up/down (some each way) with ease-in/ease-out after the enemy turn and before the player turn.
+- [ ] Asteroids spawn off-canvas, advance one short eased step per enemy turn in a fixed direction at varied speeds, despawn off the far edge, and keep respawning so the player/boss gap is populated.
 - [ ] Minions are larger (15px) and the boss is smaller (30px) than the original prototype.
+- [ ] Player hearts stay on the tee regardless of the ball position.
 - [ ] Player has 3 lives; hits destroy the attacker and the game continues.
-- [ ] Post-hit grace prevents multi-hit life drain.
+- [ ] Simultaneous hits (multiple minions or projectiles) each remove 1 life.
 - [ ] Free Shot works before the enemy turn.
 - [ ] At 0 player lives, the regular game over screen appears and returns to the main menu.
 - [ ] Chests spawn periodically and can be collected.
@@ -290,15 +294,19 @@ Current changes on top of those commits:
 
 - Boss and minions no longer teleport; all movement uses ease-in/ease-out.
 - Boss relocates every enemy turn instead of on hit; boss radius 30, minion radius 15.
-- Asteroids are dynamic and drift up/down during a post-enemy shift phase.
+- Asteroids advance one short eased step per enemy turn at varied speeds, spawn off-canvas, and despawn after leaving.
 - Barrage spawns projectiles evenly around a full circle; projectiles are circular with no trail and radius 6.
+- Player hearts are pinned to the tee; pulses no longer destroy chests; boss hits trigger an instant pulse.
+- Every simultaneous damage source now costs a life instead of being absorbed by a grace window.
 
 Verified in headless Firefox:
 
 - Direct boot with no campaign/menu/cutscene flash; no page or console errors.
-- Boss relocates only during the shift phase and stays put on damage; asteroids alternate up/down and animate.
+- Boss relocates during the shift phase and stays put on damage; its hit clears placed modifiers via an instant pulse.
+- Asteroids spawn off-canvas in barrier lanes, advance in one direction one step per enemy turn, despawn off the far edge, and replacements maintain the target count.
 - Minion steps interpolate between spawn and path nodes; tee arrival resolves after the final animation.
 - Barrage spawns evenly around the full circle (spawn angles verified; projectiles thin out quickly at speed 250, radius 6).
+- Player hearts remain at the tee while the ball flies; chests survive pulse actions.
 - Campaign `STORAGE_KEY` preserved; `?hole=` behavior unchanged.
 
 Known gaps / next steps:

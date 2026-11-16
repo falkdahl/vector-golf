@@ -25,31 +25,29 @@ export const BOSS_STAGE_1 = {
     ]
   },
 
-  // Floating asteroids block straight shots to the boss. The central chain
-  // covers every tee -> boss-position line; the top and bottom gaps are wide
-  // enough to curve a shot around the barrier.
-  obstacles: [
-    { x: 780, y: 176, radius: 34 },
-    { x: 772, y: 244, radius: 38 },
-    { x: 790, y: 316, radius: 36 },
-    { x: 772, y: 390, radius: 38 },
-    { x: 785, y: 462, radius: 34 },
-    { x: 778, y: 532, radius: 32 },
-    { x: 620, y: 180, radius: 24 },
-    { x: 620, y: 540, radius: 24 },
-    { x: 900, y: 150, radius: 26 },
-    { x: 900, y: 570, radius: 26 }
-  ],
-  obstacleBounce: 0.72,
-
-  // Asteroids drift up/down between the enemy and player phases. Each asteroid
-  // keeps its own heading and reverses when it reaches a bound.
-  asteroidMotion: {
-    step: 28,
-    duration: 0.75,
-    minY: 96,
-    maxY: 624
+  // Floating asteroids stream vertically across the arena and block straight
+  // shots to the boss. New rocks keep spawning just outside the canvas in
+  // these lanes so the barrier never runs dry. The central lanes cover every
+  // tee -> boss-position line; the top and bottom edges stay curveable.
+  asteroidField: {
+    lanes: [
+      { x: 780, radius: 34 },
+      { x: 772, radius: 38 },
+      { x: 790, radius: 36 },
+      { x: 772, radius: 38 },
+      { x: 785, radius: 34 },
+      { x: 778, radius: 32 },
+      { x: 620, radius: 24 },
+      { x: 900, radius: 26 }
+    ],
+    targetCount: 12,
+    stepMin: 22,
+    stepMax: 64,
+    duration: 0.5,
+    xJitter: 12,
+    spawnMargin: 80
   },
+  obstacleBounce: 0.72,
 
   field: {
     cols: 32,
@@ -110,7 +108,6 @@ export const BOSS_STAGE_1 = {
 
   laser: { minOtherActionsBetween: 2 },
 
-  graceSeconds: 1.0,
   shotTimeout: 8.0
 };
 
