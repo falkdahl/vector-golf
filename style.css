@@ -176,20 +176,6 @@ body {
   white-space: nowrap;
 }
 #boss-hud.hidden { display: none !important; }
-#boss-hud-message {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 90vw;
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: rgba(8, 2, 10, 0.66);
-  color: #fff3f7;
-  line-height: 18px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 #boss-hud-debug {
   position: absolute;
   bottom: 14px;

@@ -47,8 +47,8 @@ Boss: Slicer.
 1. Player aims and shoots.
 2. The shot resolves until it is over:
    - Ball hits the boss and is consumed.
-   - Ball leaves the arena and is consumed.
-   - Shot timeout/recall is reached.
+   - Ball lands outside the arena and is consumed.
+   - Airborne balls may fly over the void or past the canvas edge, matching campaign flight rules; the ball is never recalled mid-flight.
 3. If the player has Free Shot charges, the player may take another shot before the enemy turn.
    - A Free Shot is consumed per extra shot.
    - The enemy turn does not begin until the player has no Free Shots left or chooses to end the player phase.
@@ -208,7 +208,7 @@ These are the values to tune during the prototype, not final design:
 - `src/bossLevels.js`
   - Stage 1 arena data: tee, boss positions, minion paths, chest spawn points, boss action tuning.
 - `src/boss.js`
-  - Boss run state, player phase/enemy phase state machine, minions, projectiles, chests, boss actions, lives, message sync, rendering, debug helpers.
+  - Boss run state, player phase/enemy phase state machine, minions, projectiles, chests, boss actions, lives, rendering, debug helpers.
 
 ### Main integration
 
@@ -219,8 +219,7 @@ These are the values to tune during the prototype, not final design:
   - Reuse the existing game over overlay and return-to-main-menu flow.
   - Keep campaign save untouched.
 - `index.html` / `style.css`
-  - Boss overlay: transient center message only.
-  - Optional debug readout.
+  - Boss overlay: optional debug readout only.
 
 ### Reuse
 
@@ -239,7 +238,7 @@ These are the values to tune during the prototype, not final design:
 
 ### Shot resolution
 
-- The shot ends when the ball hits the boss, leaves the arena, or reaches the shot timeout/recall.
+- The shot ends when the ball hits the boss or lands outside the arena. The ball is not recalled or reset while it is still in flight.
 - Minion hits do not have to end the shot.
 - Free Shots can be used before the enemy phase.
 - Only after the player phase ends do minions and the boss act.
@@ -251,6 +250,8 @@ These are the values to tune during the prototype, not final design:
 - [ ] Campaign save and `?hole=` behavior are untouched.
 - [ ] Player can aim, charge, and shoot from the tee.
 - [ ] Shot ends correctly and then enemies act.
+- [ ] An airborne ball is never recalled or reset mid-flight; it may fly past the arena/canvas and only ends the shot after landing out.
+- [ ] No boss name label, topbar, or message toast is visible.
 - [ ] Minions advance one by one after the shot and before the next player shot, easing between steps instead of teleporting.
 - [ ] A minion reaching the tee costs 1 life and is destroyed after its final step animates in.
 - [ ] Boss chooses an action and shows its countdown.
@@ -302,7 +303,7 @@ Current changes on top of those commits:
 - Player hearts are pinned to the tee; pulses no longer destroy chests; boss hits trigger an instant pulse.
 - Every simultaneous damage source now costs a life instead of being absorbed by a grace window.
 - The laser charges for 2 rounds and is aborted when the boss is hit mid-charge.
-- Removed the boss name label and topbar; only transient center messages remain.
+- Removed the boss name label, topbar, and message toast; only the optional debug readout remains.
 
 Verified in headless Firefox:
 

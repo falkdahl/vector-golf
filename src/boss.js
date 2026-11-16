@@ -5,6 +5,7 @@ import {
   resetBall as physicsResetBall,
   updateBall,
   BALL_RADIUS,
+  isBallAirborne,
   isBallOverTreasure
 } from "./physics.js";
 import {
@@ -248,7 +249,6 @@ function cacheDom() {
   };
   hud = {
     root: byId("boss-hud"),
-    message: byId("boss-hud-message"),
     debug: byId("boss-hud-debug"),
     endTurn: byId("boss-end-turn")
   };
@@ -260,7 +260,6 @@ function updateHud() {
   const set = (el, text) => {
     if (el && el.textContent !== text) el.textContent = text;
   };
-  set(hud.message, state.message || "");
   if (hud.endTurn) hud.endTurn.classList.toggle("hidden", state.phase !== "bonus");
 
   if (hud.debug) {
@@ -447,7 +446,7 @@ export function bossHandleLaunch(angle, power) {
   }
 
   resetCharge();
-  state.shot = { active: true, elapsed: 0, isBonus };
+  state.shot = { active: true, isBonus };
   state.phase = "shot";
   state.bonusAvailable = false;
   try { launchBall(angle, power); } catch { }
@@ -457,8 +456,6 @@ export function bossHandleLaunch(angle, power) {
 }
 
 function updateShot(dt) {
-  state.shot.elapsed += dt;
-
   try {
     updateBall(dt, getWindAt, stage.field.strength, stage.logicalW, stage.logicalH);
   } catch { }
@@ -527,13 +524,11 @@ function updateShot(dt) {
     }
   }
 
-  if (!insideArena(ball.pos.x, ball.pos.y)) {
+  // Match campaign flight rules: an airborne ball may leave the platform or
+  // canvas, and only ends the shot once it lands outside the arena. The ball
+  // is never recalled or reset while it is still in flight.
+  if (!isBallAirborne(ball) && !insideArena(ball.pos.x, ball.pos.y)) {
     addEffect("void", ball.pos.x, ball.pos.y, 0.4);
-    finishShot();
-    return;
-  }
-  if (state.shot.elapsed >= stage.shotTimeout) {
-    message("Shot recalled", 1.1);
     finishShot();
   }
 }

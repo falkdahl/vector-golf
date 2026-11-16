@@ -105,9 +105,7 @@ export const BOSS_STAGE_1 = {
     laser: { rounds: 2, label: "Laser" }
   },
 
-  laser: { minOtherActionsBetween: 2 },
-
-  shotTimeout: 8.0
+  laser: { minOtherActionsBetween: 2 }
 };
 
 export function createBossStage1() {
