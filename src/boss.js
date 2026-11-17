@@ -87,7 +87,7 @@ function bossPos() {
   return state.boss;
 }
 
-// The boss uses an axis-aligned square hitbox that covers the whole sprite.
+// The sprite keeps its full visual size; the collision box is smaller.
 function bossHalf() {
   const size = Number(stage && stage.boss && stage.boss.size);
   if (Number.isFinite(size) && size > 0) return size / 2;
@@ -95,9 +95,15 @@ function bossHalf() {
   return r;
 }
 
+function bossHitHalf() {
+  const size = Number(stage && stage.boss && stage.boss.hitboxSize);
+  if (Number.isFinite(size) && size > 0) return size / 2;
+  return bossHalf() * 0.75;
+}
+
 function bossSquareHit(x, y, pad = 0) {
   const bp = bossPos();
-  const h = bossHalf() + pad;
+  const h = bossHitHalf() + pad;
   return Math.abs(x - bp.x) <= h && Math.abs(y - bp.y) <= h;
 }
 
@@ -570,7 +576,7 @@ function updateShot(dt) {
   const bp = bossPos();
 
   // Boss hit consumes the ball and costs Slicer one life. The hitbox is a
-  // square that covers the sprite.
+  // square inset inside the larger sprite.
   if (bossSquareHit(ball.pos.x, ball.pos.y, BALL_RADIUS)) {
     state.bossLives = Math.max(0, state.bossLives - 1);
     state.bossHitFlash = 0.42;
@@ -1235,7 +1241,7 @@ export function getBossState() {
     } : null,
     chests: state.chests.length,
     bossPos: { x: bp.x, y: bp.y },
-    bossSize: bossHalf() * 2,
+    bossSize: bossHitHalf() * 2,
     death: state.death ? {
       t: state.death.t,
       exploded: state.death.exploded,
@@ -1266,7 +1272,7 @@ function exposeDebug() {
       if (!state) return null;
       const bp = bossPos();
       return {
-        boss: { x: bp.x, y: bp.y, radius: bossHalf(), size: bossHalf() * 2 },
+        boss: { x: bp.x, y: bp.y, radius: bossHitHalf(), size: bossHitHalf() * 2, visualSize: bossHalf() * 2 },
         minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress })),
         projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy, radius: p.radius })),
         chests: state.chests.map((c) => ({ id: c.id, x: c.x, y: c.y })),
@@ -1457,7 +1463,7 @@ function drawDebugHitboxes(ctx) {
   ctx.textBaseline = "middle";
 
   ctx.strokeStyle = "rgba(255, 120, 150, 0.85)";
-  const bossBox = bossHalf() + BALL_RADIUS;
+  const bossBox = bossHitHalf() + BALL_RADIUS;
   ctx.strokeRect(bp.x - bossBox, bp.y - bossBox, bossBox * 2, bossBox * 2);
 
   ctx.strokeStyle = "rgba(255, 183, 3, 0.85)";
@@ -1716,7 +1722,6 @@ function drawBossEntity(ctx) {
   if (state.death) return;
   const bp = bossPos();
   const half = bossHalf();
-  const size = half * 2;
   ctx.save();
   ctx.translate(bp.x, bp.y);
 
@@ -1740,16 +1745,18 @@ function drawBossEntity(ctx) {
   }
   ctx.shadowBlur = 0;
 
-  // Corner brackets mark the square hitbox that covers the sprite.
+  // Corner brackets mark the inset square hitbox.
   ctx.strokeStyle = flashing ? "rgba(255,255,255,0.95)" : "rgba(94, 224, 160, 0.6)";
   ctx.lineWidth = 2;
-  const arm = Math.max(8, size * 0.12);
+  const hitHalf = bossHitHalf();
+  const hitSize = hitHalf * 2;
+  const arm = Math.max(8, hitSize * 0.12);
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(sx * half - sx * arm, sy * half);
-      ctx.lineTo(sx * half, sy * half);
-      ctx.lineTo(sx * half, sy * half - sy * arm);
+      ctx.moveTo(sx * hitHalf - sx * arm, sy * hitHalf);
+      ctx.lineTo(sx * hitHalf, sy * hitHalf);
+      ctx.lineTo(sx * hitHalf, sy * hitHalf - sy * arm);
       ctx.stroke();
     }
   }

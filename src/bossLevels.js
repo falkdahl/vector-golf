@@ -17,6 +17,7 @@ export const DIMENSION_Y_BOSS_LEVEL = {
     y: 320,
     radius: 30,
     size: 108,
+    hitboxSize: 81,
     lives: 6,
     positions: [
       { x: 1012, y: 320 },

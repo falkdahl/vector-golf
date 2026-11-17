@@ -131,7 +131,7 @@ Enemies act one by one, with visible sequential feedback.
 - Boss has 6 lives.
 - A ball hit removes 1 boss life, flashes the boss, cancels any active action countdown, triggers an instant pulse (clears placed modifiers), and does not move the boss.
 - After every enemy turn (and before the next player turn), the boss eases to the next preset position (ease-in/ease-out over ~0.7s). This keeps the player from repeating the exact same shot while making the relocation readable.
-- Boss uses the `img/hover-cab.webp` sprite. Its hitbox is an axis-aligned 108px square that covers the whole sprite (the old 30px circle radius remains only as a fallback value).
+- Boss uses the `img/hover-cab.webp` sprite at 108px. Its hitbox is an axis-aligned 81px square inset inside the sprite (25% smaller than the visual), with the old 30px circle radius retained only as a fallback value.
 - Minion radius is 15px (up from 12) so minions are easier to hit; minion visuals scale with the radius.
 - A boss hit cancels the ongoing action but does not interrupt the shift; the boss still relocates during the post-enemy shift.
 - At 0 boss lives, the boss enters a death sequence: pixel explosions pop across the sprite for ~1.8s, then it bursts into small square particles that are pushed by the live wind field for ~3.1s. Dimension-Y is cleared after the particles finish.
@@ -201,7 +201,7 @@ These are the values to tune during the prototype, not final design:
 - Minion turns-to-tee: randomized whole number of steps per minion, currently 3–5.
 - Minion movement duration (currently 0.34s per step) and radius (currently 15).
 - Maximum minions on the field (currently 12).
-- Boss lives (currently 6), square hitbox size (currently 108px), sprite source (`img/hover-cab.webp`), and relocation duration (currently 0.7s).
+- Boss lives (currently 6), visual sprite size (108px), square hitbox size (currently 81px), sprite source (`img/hover-cab.webp`), and relocation duration (currently 0.7s).
 - Asteroid target count (12), step range (22–64px per enemy turn), step duration (0.5s), lane x-jitter, and off-canvas spawn margin.
 - Chest spawn interval.
 - Maximum chests on the field.
@@ -275,7 +275,7 @@ These are the values to tune during the prototype, not final design:
 - [ ] Hitting the boss triggers an instant pulse that clears placed modifiers.
 - [ ] Laser charges for 2 rounds, removes 1 life, and cannot occur again until the required number of other actions resolve.
 - [ ] Hitting the boss while the laser charges aborts it with no life lost.
-- [ ] Boss takes 6 hits to kill. A hit does not move it; it eases to a new preset position every enemy turn. Its hitbox is a square covering the hover-cab sprite.
+- [ ] Boss takes 6 hits to kill. A hit does not move it; it eases to a new preset position every enemy turn. Its 81px hitbox is an inset square inside the larger hover-cab sprite.
 - [ ] At 0 boss lives, pixel explosions play across the boss for ~1.8s; it then breaks into small particles scattered by the wind before the victory screen.
 - [ ] Asteroids spawn off-canvas, advance one short eased step per enemy turn in a fixed direction at varied speeds, despawn off the far edge, and keep respawning so the player/boss gap is populated.
 - [ ] Wind-field elements stay fixed for the whole boss fight; placed modifiers remain local and do not move the field.
@@ -313,7 +313,7 @@ Intervening commits (included here):
 Current changes on top of those commits:
 
 - Boss and minions no longer teleport; all movement uses ease-in/ease-out.
-- Boss relocates every enemy turn instead of on hit; boss uses the hover-cab sprite with a 108px square hitbox, minion radius 15.
+- Boss relocates every enemy turn instead of on hit; boss uses the hover-cab sprite with an 81px square hitbox inset inside the visual, minion radius 15.
 - Asteroids advance one short eased step per enemy turn at varied speeds, spawn off-canvas, and despawn after leaving.
 - Barrage launches projectiles sequentially in a 2.5-turn spiral; projectiles are circular with no trail and radius 6.
 - Player hearts are pinned to the tee; pulses no longer destroy chests; boss hits trigger an instant pulse.
