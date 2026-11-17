@@ -49,7 +49,7 @@ import {
   getHoleOverlaySig,
   invalidateHoleOverlay,
 } from "./render.js";
-import { initBoss, updateBoss, renderBoss, bossHandleLaunch, bossHandleResetKey, bossEndPlayerPhase, bossShutdown } from "./boss.js";
+import { initBoss, updateBoss, renderBoss, bossHandleLaunch, bossHandleResetKey, bossEndPlayerPhase, bossCheatTryGrab, bossShutdown } from "./boss.js";
 // Wind overlay (Three.js) loads lazily so the 1.3MB vendor bundle stays off
 // the boot path. These facades keep every call site unchanged: no-ops until
 // the module arrives, then delegate. Init + field sync re-run on arrival.
@@ -837,6 +837,18 @@ function tryCheatGrabBall(pos) {
   if (cheatGrabBlocked()) return false;
   if (!pos || !ball || !ball.pos) return false;
   if (Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) > BALL_RADIUS + CHEAT_GRAB_RADIUS_PAD) return false;
+  if (bossModeActive) {
+    // Boss mode owns the turn state: the grab starts a boss shot (free-shot
+    // aware) without touching campaign attempts or saves.
+    if (!bossCheatTryGrab(pos)) return false;
+    const clamped = cheatClampPos(pos);
+    cheatMousePos = clamped;
+    cheatSuppressClick = false;
+    ball.pos.x = clamped.x; ball.pos.y = clamped.y;
+    ball.vel = { x: 0, y: 0 };
+    cheatDraggingBall = true;
+    return true;
+  }
   const clamped = cheatClampPos(pos);
   cheatMousePos = clamped;
   cheatSuppressClick = false;
@@ -4184,6 +4196,9 @@ function startBossMode(params) {
   pendingHoleAdvance = false;
   isFreeShotActive = false;
   freeShotFlightActive = false;
+  cheatDraggingBall = false;
+  cheatMousePos = null;
+  cheatSuppressClick = false;
   try { clearFreeShotGlow(); } catch { }
 
   try { if (winOverlay) winOverlay.classList.add("hidden"); } catch { }
@@ -4231,6 +4246,7 @@ function startBossMode(params) {
       try { updateHotbarUI(); } catch { }
     },
     isRewardVisible() { return !!rewardMenuVisible; },
+    isCheatDraggingBall() { return !!cheatDraggingBall; },
     openReward(offer) {
       rewardOffered = Array.isArray(offer) ? offer.slice(0, 3) : [];
       if (!rewardOffered.length) return;
@@ -4306,6 +4322,9 @@ function bossReturnToMainMenu() {
   } catch { }
 
   // IMPORTANT: no clearProgress() here — the campaign save must survive.
+  cheatDraggingBall = false;
+  cheatMousePos = null;
+  cheatSuppressClick = false;
   isTutorialRun = false;
   deferredMenuReturn = false;
   currentHoleIndex = 0;
@@ -9679,7 +9698,6 @@ function init() {
   // Passive observer like the "hole" secret above — never consumes input.
   let _konamiProgress = 0;
   window.addEventListener("keydown", (e) => {
-    if (bossModeActive) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (e.repeat) return;
     try {

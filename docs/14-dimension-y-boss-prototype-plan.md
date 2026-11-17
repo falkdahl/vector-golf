@@ -25,11 +25,13 @@ Boss: Slicer.
 - Health and action countdowns are drawn on the entities in the arena. There is no top HUD bar and no boss name label.
 - A floating asteroid barrier in front of the boss blocks straight tee-to-boss shots; curved shots can use the top/bottom gaps.
 - Asteroids advance one short step per enemy turn at different speeds. They spawn just outside the canvas and keep moving in one direction until they leave, then despawn; replacements keep spawning so asteroids are always present between the player and the boss.
+- The wind field is static during the fight. Sources, sinks, doublets, and vortexes keep their Stage 1 positions; only placed modifiers move.
+- A boss hit cancels any boss action that is still counting down (not just the laser) and always triggers the instant pulse.
 - Regular game over screen that returns to the main menu.
 - Free Shot item remains in the reward pool and is usable before the enemy turn.
 - Chests respawn a fixed number of rounds after the previous chest is collected.
 - No tee flag; the tee is a plain launch ring so the ball and its health read clearly.
-- Debug entry: `?boss=1` starts Stage 1 directly, with no campaign, menus, cutscenes, or campaign save dependency.
+- Debug entry: `?boss=1` starts Stage 1 directly, with no campaign, menus, cutscenes, or campaign save dependency. The Hashimoto Protocol cheat (ball drag & drop) also works in boss mode.
 
 ## Not in this prototype
 
@@ -81,14 +83,15 @@ Enemies act one by one, with visible sequential feedback.
 - On selection: set the countdown, show the telegraph, do not advance it that turn.
 - On each later enemy turn: decrement the countdown.
 - At 0: execute the action, clear it, and choose again on a later enemy turn.
-- A boss hit does not cancel an ongoing action and does not move the boss. Poise changes only during the post-enemy shift, so the countdown continues from the same position.
+- A boss hit cancels any active countdown (barrage, spawn, pulse, or laser) and does not move the boss. The hit also triggers an instant pulse. Poise changes only during the post-enemy shift.
 
 ## Boss actions
 
 ### 1. Projectile barrage
 
-- Countdown telegraph shows the projectiles' initial directions as a full ring around the boss.
-- On execution, launch projectiles evenly around the full circle (not just toward the tee).
+- Countdown telegraph samples the spiral's launch directions around the boss.
+- On execution, launch 128 projectiles one after another at ~18ms intervals. The launch angle rotates continuously over 2.5 turns, producing a spiral stream rather than a single full-circle burst. The enemy turn waits until the whole stream has launched.
+- Projectile speed is 375 (50% faster than the previous 250).
 - Projectiles are rendered as simple circles with a subtle glow, no trailing streak, and a radius of 6px (down from 9).
 - Projectiles do not collide with or damage enemy minions.
 - Projectiles are wind-affected and can be deflected by placed modifiers.
@@ -117,7 +120,7 @@ Enemies act one by one, with visible sequential feedback.
 - Countdown telegraph shows a straight line from the boss to the tee.
 - The laser charges for 2 rounds before it fires.
 - On execution, the player instantly loses 1 life.
-- Hitting the boss while the laser is charging aborts the attack; the countdown is canceled and no life is lost.
+- Hitting the boss while the laser is charging aborts the attack; the countdown is canceled and no life is lost (the general cancel rule applies to every boss action).
 - The laser is rare and requires multiple other boss actions between two laser shots.
 - Proposed rule: at least 2 other boss actions must resolve before the laser is eligible again.
 - The laser cannot be blocked by modifiers. The player's counterplay is to interrupt the charge by hitting the boss.
@@ -125,12 +128,12 @@ Enemies act one by one, with visible sequential feedback.
 ## Boss lives, movement and animation
 
 - Boss has 6 lives.
-- A ball hit removes 1 boss life, flashes the boss, triggers an instant pulse (clears placed modifiers), and does not move the boss.
+- A ball hit removes 1 boss life, flashes the boss, cancels any active action countdown, triggers an instant pulse (clears placed modifiers), and does not move the boss.
 - After every enemy turn (and before the next player turn), the boss eases to the next preset position (ease-in/ease-out over ~0.7s). This keeps the player from repeating the exact same shot while making the relocation readable.
-- Boss radius is 30px (down from 36) so it is harder to hit.
+- Boss uses the `img/hover-cab.webp` sprite. Its hitbox is an axis-aligned 108px square that covers the whole sprite (the old 30px circle radius remains only as a fallback value).
 - Minion radius is 15px (up from 12) so minions are easier to hit; minion visuals scale with the radius.
-- Ongoing boss actions continue through a hit and through the shift.
-- At 0 boss lives, Stage 1 is cleared.
+- A boss hit cancels the ongoing action but does not interrupt the shift; the boss still relocates during the post-enemy shift.
+- At 0 boss lives, the boss enters a death sequence: pixel explosions pop across the sprite for ~1.8s, then it bursts into small square particles that are pushed by the live wind field for ~3.1s. Stage 1 is cleared after the particles finish.
 
 ## Asteroid motion
 
@@ -138,6 +141,12 @@ Enemies act one by one, with visible sequential feedback.
 - Asteroids are spawned just outside the canvas in barrier lanes between the tee and the boss. Each picks a random direction (up or down) and a random step size, then advances one short eased step in that direction per enemy turn.
 - After an enemy turn, rocks that have fully left the canvas despawn and replacements spawn just outside it, keeping the active count at the target (12) so the space between the player and the boss is never empty.
 - Collision uses the asteroids' live positions, including mid-step animation.
+
+## Vector field
+
+- The wind field is static for the whole boss fight.
+- Sources, sinks, doublets, and vortexes keep the Stage 1 positions created when the fight starts.
+- Placed modifiers remain local and do not move the underlying field.
 
 ## Player lives and game over
 
@@ -192,13 +201,13 @@ These are the values to tune during the prototype, not final design:
 - Minion turns-to-tee: randomized whole number of steps per minion, currently 3–5.
 - Minion movement duration (currently 0.34s per step) and radius (currently 15).
 - Maximum minions on the field (currently 12).
-- Boss lives (currently 6), radius (currently 30), and relocation duration (currently 0.7s).
+- Boss lives (currently 6), square hitbox size (currently 108px), sprite source (`img/hover-cab.webp`), and relocation duration (currently 0.7s).
 - Asteroid target count (12), step range (22–64px per enemy turn), step duration (0.5s), lane x-jitter, and off-canvas spawn margin.
 - Chest spawn interval.
 - Maximum chests on the field.
 - Countdown rounds for each boss action (barrage 2; spawn 1; pulse 1; laser 2).
 - Number of other boss actions required between lasers (currently 2).
-- Projectile count (64), speed (250), radius (6), and full-circle distribution for the barrage.
+- Projectile count (128), speed (375), radius (6), launch interval (~18ms), and spiral turns (2.5) for the barrage.
 - Free Shot charge count and availability.
 
 ## Technical plan
@@ -231,7 +240,7 @@ These are the values to tune during the prototype, not final design:
 ### Boss entities
 
 - **Minions:** straight two-point spawn→tee path, randomized 3–5 steps each, advance one stepped/eased move per enemy turn, killed by ball, tee contact costs a life.
-- **Barrage projectiles:** full-circle spawn, circular bodies, wind-affected, modifier-deflectable, ignore minions, tee contact costs a life.
+- **Barrage projectiles:** sequential spiral spawn, circular bodies, wind-affected, modifier-deflectable, ignore minions, tee contact costs a life.
 - **Chests:** periodic spawn, ball pickup, immune to pulses.
 - **Boss:** 6 lives, relocates every enemy turn with eased motion, action countdowns, instant pulse on hit.
 - **Asteroids:** advance one short eased step per enemy turn, respawn off-canvas, and use live positions for collision.
@@ -256,15 +265,19 @@ These are the values to tune during the prototype, not final design:
 - [ ] A minion reaching the tee costs 1 life and is destroyed after its final step animates in.
 - [ ] Boss chooses an action and shows its countdown.
 - [ ] An ongoing boss action advances each enemy turn and executes at 0.
-- [ ] Barrage shows a full-circle telegraph and launches circular projectiles evenly around the boss that do not hurt minions.
+- [ ] Any boss hit cancels the active countdown (barrage, spawn, pulse, or laser) with no action taken.
+- [ ] Barrage telegraphs the spiral directions, then launches 128 circular projectiles one after another in a 2.5-turn spiral. Projectiles do not hurt minions.
 - [ ] Spawn action shows the number of minions and spawned minions wait one turn.
 - [ ] Pulse destroys placed modifiers but leaves chests intact.
 - [ ] Hitting the boss triggers an instant pulse that clears placed modifiers.
 - [ ] Laser charges for 2 rounds, removes 1 life, and cannot occur again until the required number of other actions resolve.
 - [ ] Hitting the boss while the laser charges aborts it with no life lost.
-- [ ] Boss takes 6 hits to kill. A hit does not move it; it eases to a new preset position every enemy turn.
+- [ ] Boss takes 6 hits to kill. A hit does not move it; it eases to a new preset position every enemy turn. Its hitbox is a square covering the hover-cab sprite.
+- [ ] At 0 boss lives, pixel explosions play across the boss for ~1.8s; it then breaks into small particles scattered by the wind before the victory screen.
 - [ ] Asteroids spawn off-canvas, advance one short eased step per enemy turn in a fixed direction at varied speeds, despawn off the far edge, and keep respawning so the player/boss gap is populated.
-- [ ] Minions are larger (15px) and the boss is smaller (30px) than the original prototype.
+- [ ] Wind-field elements stay fixed for the whole boss fight; placed modifiers remain local and do not move the field.
+- [ ] The Hashimoto Protocol cheat toggles and ball drag works in boss mode without touching campaign save or attempts.
+- [ ] Minions are larger (15px); the boss uses the hover-cab sprite with a square hitbox.
 - [ ] Player hearts stay on the tee regardless of the ball position.
 - [ ] Player has 3 lives; hits destroy the attacker and the game continues.
 - [ ] Simultaneous hits (multiple minions or projectiles) each remove 1 life.
@@ -277,7 +290,7 @@ These are the values to tune during the prototype, not final design:
 ## Open prototype questions
 
 - Should the ball be able to parry barrage projectiles, or only modifiers deflect them?
-- Should boss hits interrupt an ongoing action? Proposed: no.
+- Should boss hits interrupt an ongoing action? Decided: yes, any hit cancels the active countdown.
 - Should chests be collectible during the same shot that hits the boss?
 - Should minions spawn at the boss or at arena edges?
 - Should the pulse travel at a fixed speed or resolve instantly with an animation?
@@ -297,12 +310,15 @@ Intervening commits (included here):
 Current changes on top of those commits:
 
 - Boss and minions no longer teleport; all movement uses ease-in/ease-out.
-- Boss relocates every enemy turn instead of on hit; boss radius 30, minion radius 15.
+- Boss relocates every enemy turn instead of on hit; boss uses the hover-cab sprite with a 108px square hitbox, minion radius 15.
 - Asteroids advance one short eased step per enemy turn at varied speeds, spawn off-canvas, and despawn after leaving.
-- Barrage spawns projectiles evenly around a full circle; projectiles are circular with no trail and radius 6.
+- Barrage launches projectiles sequentially in a 2.5-turn spiral; projectiles are circular with no trail and radius 6.
 - Player hearts are pinned to the tee; pulses no longer destroy chests; boss hits trigger an instant pulse.
 - Every simultaneous damage source now costs a life instead of being absorbed by a grace window.
-- The laser charges for 2 rounds and is aborted when the boss is hit mid-charge.
+- A boss hit cancels any active action countdown (laser included) and fires the instant pulse.
+- Wind-field elements stay fixed for the whole boss fight; placed modifiers remain local and do not move the underlying field.
+- Boss death plays pixel explosions, then a wind-scattered particle burst, before the victory screen.
+- The Hashimoto Protocol cheat (Konami code + ball drag & drop) works in boss mode.
 - Removed the boss name label, topbar, and message toast; only the optional debug readout remains.
 
 Verified in headless Firefox:
@@ -311,7 +327,7 @@ Verified in headless Firefox:
 - Boss relocates during the shift phase and stays put on damage; its hit clears placed modifiers via an instant pulse.
 - Asteroids spawn off-canvas in barrier lanes, advance in one direction one step per enemy turn, despawn off the far edge, and replacements maintain the target count.
 - Minion steps interpolate between spawn and path nodes; tee arrival resolves after the final animation.
-- Barrage spawns evenly around the full circle (spawn angles verified; projectiles thin out quickly at speed 250, radius 6).
+- Barrage streams projectiles sequentially in a 2.5-turn spiral (128 total, speed 375, radius 6); the enemy turn waits for the stream to finish.
 - Player hearts remain at the tee while the ball flies; chests survive pulse actions.
 - Campaign `STORAGE_KEY` preserved; `?hole=` behavior unchanged.
 

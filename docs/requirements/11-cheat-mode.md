@@ -21,6 +21,7 @@ Hidden manual testing aid: Konami code toggles session-scoped ball drag & drop. 
 ## 4. Constraints
 
 Runtime-only (never `STORAGE_KEY`, never `bestTotal`/points/rewards/generation). No UI except the two toasts (~2s).
+Also available in the Dimension-Y boss debug level (`?boss=1`): the Konami toggle arms, and dragging/dropping the ball works in the boss player phase and mid-shot without touching campaign save data.
 
 ## Acceptance
 
@@ -28,6 +29,7 @@ Runtime-only (never `STORAGE_KEY`, never `bestTotal`/points/rewards/generation).
 - [ ] Repeat → `Disabled` popup, grab disabled, held ball dropped `vel=0`; third entry re-activates.
 - [ ] Grab in `AIMING` → `FLYING`, follows mouse `vel=0`, no wind/win/treasure while held; drop resumes physics (hole wins, water resets, counted attempt).
 - [ ] Post-drop click never places; modals block grabbing; `R` mid-drag resets; reload clears; saves contain no cheat state.
+- [ ] `?boss=1` supports the Konami toggle and ball drag in the player phase and mid-shot.
 
 ## File paths
 

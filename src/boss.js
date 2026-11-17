@@ -10,6 +10,8 @@ import {
 } from "./physics.js";
 import {
   getWindAt,
+  getBaseWindAt,
+  getFieldComponents,
   cols as fieldCols,
   rows as fieldRows,
   cellW as fieldCellW,
@@ -44,6 +46,23 @@ let hud = null;
 let keyBound = false;
 let arenaCache = null;
 let arenaCacheKey = "";
+let bossSprite = null;
+let bossSpriteBroken = false;
+
+function getBossSprite() {
+  if (bossSpriteBroken || typeof Image === "undefined") return null;
+  if (!bossSprite) {
+    try {
+      bossSprite = new Image();
+      bossSprite.decoding = "async";
+      bossSprite.src = new URL("../img/hover-cab.webp", import.meta.url).href;
+    } catch {
+      bossSpriteBroken = true;
+      return null;
+    }
+  }
+  return bossSprite;
+}
 
 function clampInt(v, min, max, fallback) {
   const n = Math.floor(Number(v));
@@ -66,6 +85,20 @@ function bossPos() {
     return { x: stage.boss.x, y: stage.boss.y };
   }
   return state.boss;
+}
+
+// The boss uses an axis-aligned square hitbox that covers the whole sprite.
+function bossHalf() {
+  const size = Number(stage && stage.boss && stage.boss.size);
+  if (Number.isFinite(size) && size > 0) return size / 2;
+  const r = Number(stage && stage.boss && stage.boss.radius) || 30;
+  return r;
+}
+
+function bossSquareHit(x, y, pad = 0) {
+  const bp = bossPos();
+  const h = bossHalf() + pad;
+  return Math.abs(x - bp.x) <= h && Math.abs(y - bp.y) <= h;
 }
 
 function easeInOut(t) {
@@ -169,6 +202,7 @@ function makeState(params) {
     asteroids: makeInitialAsteroids(),
     minions: [],
     projectiles: [],
+    barrage: null,
     chests: [],
     activeAction: null,
     actionsSinceLaser: 0,
@@ -181,6 +215,7 @@ function makeState(params) {
     bonusAvailable: false,
     enemy: null,
     effects: [],
+    death: null,
     message: "",
     messageTimer: 0,
     debug: !!params.debug,
@@ -199,7 +234,7 @@ export function initBoss(gameBridge, params = {}) {
     name: stage.name,
     field: stage.field,
     tee: stage.tee,
-    hole: { x: stage.boss.x, y: stage.boss.y, radius: stage.boss.radius },
+    hole: { x: stage.boss.x, y: stage.boss.y, radius: bossHalf() },
     obstacles: [],
     treasures: [],
     canvas: { width: LOGICAL_W, height: LOGICAL_H }
@@ -369,6 +404,12 @@ export function updateBoss(dt) {
     return;
   }
 
+  if (state.phase === "dying") {
+    updateDeath(step);
+    updateHud();
+    return;
+  }
+
   updateEntityAnimations(step);
   if (state.phase === "victory" || state.phase === "gameover") {
     updateHud();
@@ -383,6 +424,7 @@ export function updateBoss(dt) {
     }
   }
 
+  updateBarrage(step);
   updateProjectiles(step);
   if (state.phase === "victory" || state.phase === "gameover") {
     updateHud();
@@ -455,7 +497,48 @@ export function bossHandleLaunch(angle, power) {
   updateHud();
 }
 
+export function bossCheatTryGrab(pos) {
+  if (!active || !state || !bridge) return false;
+  if (!pos || !ball || !ball.pos) return false;
+  if (Math.hypot(ball.pos.x - pos.x, ball.pos.y - pos.y) > BALL_RADIUS + 10) return false;
+  // Mid-flight re-grab is allowed; the shot keeps its phase and accounting.
+  if (state.phase === "shot") return !!(state.shot && state.shot.active);
+  if (state.phase !== "player" && state.phase !== "bonus") return false;
+  if (state.postShotPending) return false;
+  if (bridge.isRewardVisible && bridge.isRewardVisible()) return false;
+
+  const isBonus = state.phase === "bonus";
+  if (isBonus) {
+    if (bridge.getFreeShots() <= 0) {
+      startEnemyPhase();
+      return false;
+    }
+    if (!bridge.consumeFreeShot()) {
+      startEnemyPhase();
+      return false;
+    }
+  }
+
+  resetCharge();
+  state.shot = { active: true, isBonus };
+  state.phase = "shot";
+  state.bonusAvailable = false;
+  ball.isMoving = true;
+  ball.vel.x = 0;
+  ball.vel.y = 0;
+  ball.z = 0;
+  ball.vz = 0;
+  try { bridge.setGameState("FLYING"); } catch { }
+  message("Hashimoto grab", 0.9);
+  updateHud();
+  return true;
+}
+
 function updateShot(dt) {
+  // 14-cheat-mode: while the Hashimoto grab holds the ball, physics and
+  // collisions are suspended; the ball resumes on release.
+  if (bridge && bridge.isCheatDraggingBall && bridge.isCheatDraggingBall()) return;
+
   try {
     updateBall(dt, getWindAt, stage.field.strength, stage.logicalW, stage.logicalH);
   } catch { }
@@ -486,20 +569,20 @@ function updateShot(dt) {
 
   const bp = bossPos();
 
-  // Boss hit consumes the ball and costs Slicer one life.
-  if (hitDist(ball.pos.x, ball.pos.y, bp.x, bp.y, stage.boss.radius + BALL_RADIUS)) {
+  // Boss hit consumes the ball and costs Slicer one life. The hitbox is a
+  // square that covers the sprite.
+  if (bossSquareHit(ball.pos.x, ball.pos.y, BALL_RADIUS)) {
     state.bossLives = Math.max(0, state.bossLives - 1);
     state.bossHitFlash = 0.42;
     addEffect("boss-hit", bp.x, bp.y, 0.42);
-    const disrupted = abortLaserCharge();
+    const disrupted = abortActiveCharge();
     triggerPulse();
     if (state.bossLives <= 0) {
-      message("Slicer destroyed!", 5);
-      victory();
+      startBossDeath();
       return;
     }
     message(disrupted
-      ? `Slicer hit! Laser charge disrupted! ${state.bossLives} lives left`
+      ? `Slicer hit! ${stage.actions[disrupted] ? stage.actions[disrupted].label : "Charge"} canceled! ${state.bossLives} lives left`
       : `Slicer hit! Pulse! ${state.bossLives} lives left`, 2.2);
     finishShot();
     return;
@@ -581,6 +664,13 @@ function updateEnemy(dt) {
   const e = state.enemy;
   if (!e) {
     startPlayerPhase();
+    return;
+  }
+  // A spiral barrage streams out over time; hold the rest of the enemy turn
+  // until every projectile has launched.
+  if (state.barrage) {
+    e.timer = 0.1;
+    updateHud();
     return;
   }
   e.timer -= dt;
@@ -672,16 +762,20 @@ function chooseBossAction() {
   message(`Slicer: ${cfg.label} in ${cfg.rounds}`, 2);
 }
 
+function buildBarrageAngles(count = stage.projectiles.count) {
+  const total = Math.max(1, Number(count) || 1);
+  const offset = Math.random() * Math.PI * 2;
+  const turns = Math.max(0.5, Number(stage.projectiles.spiralTurns) || 2.5);
+  const angles = [];
+  for (let i = 0; i < total; i++) {
+    angles.push(offset + (i / total) * Math.PI * 2 * turns);
+  }
+  return angles;
+}
+
 function makeTelegraph(type) {
-  const bp = bossPos();
   if (type === "barrage") {
-    const count = Math.max(1, Number(stage.projectiles.count) || 1);
-    const offset = Math.random() * Math.PI * 2;
-    const angles = [];
-    for (let i = 0; i < count; i++) {
-      angles.push(offset + (i / count) * Math.PI * 2);
-    }
-    return { angles };
+    return { angles: buildBarrageAngles() };
   }
   if (type === "spawn") {
     const pool = stage.minions.spawns.slice();
@@ -727,7 +821,7 @@ function executeBossAction(type, telegraph = null) {
   state.actionsSinceLaser += 1;
 
   if (type === "barrage") {
-    spawnProjectiles(telegraph);
+    startBarrage(telegraph);
     message("Projectile barrage!", 1.8);
   } else if (type === "spawn") {
     const spawns = telegraph && Array.isArray(telegraph.spawns) ? telegraph.spawns : null;
@@ -739,12 +833,13 @@ function executeBossAction(type, telegraph = null) {
   }
 }
 
-function abortLaserCharge() {
-  if (!state || !state.activeAction) return false;
-  if (state.activeAction.type !== "laser" || state.activeAction.roundsLeft <= 0) return false;
+function abortActiveCharge() {
+  if (!state || !state.activeAction) return null;
+  if (state.activeAction.roundsLeft <= 0) return null;
+  const type = state.activeAction.type;
   state.activeAction = null;
-  state.lastExecutedAction = "laser";
-  return true;
+  state.lastExecutedAction = type;
+  return type;
 }
 
 function triggerPulse() {
@@ -754,28 +849,50 @@ function triggerPulse() {
   addEffect("pulse", bp.x, bp.y, 0.85);
 }
 
-function spawnProjectiles(telegraph = null) {
+function spawnProjectile(angle) {
   const bp = bossPos();
-  const count = Math.max(1, Number(stage.projectiles.count) || 1);
   const jitter = Number(stage.projectiles.jitter) || 0;
-  let angles = telegraph && Array.isArray(telegraph.angles) ? telegraph.angles : null;
-  if (!angles || !angles.length) {
-    angles = [];
-    for (let i = 0; i < count; i++) angles.push((i / count) * Math.PI * 2);
+  const speed = stage.projectiles.speed * (0.92 + Math.random() * 0.16);
+  const a = angle + (Math.random() - 0.5) * jitter;
+  state.projectiles.push({
+    id: nextId++,
+    x: bp.x + Math.cos(a) * (bossHalf() + 10),
+    y: bp.y + Math.sin(a) * (bossHalf() + 10),
+    vx: Math.cos(a) * speed,
+    vy: Math.sin(a) * speed,
+    radius: stage.projectiles.radius,
+    life: stage.projectiles.life
+  });
+}
+
+function startBarrage(telegraph = null) {
+  const count = Math.max(1, Number(stage.projectiles.count) || 1);
+  let angles = telegraph && Array.isArray(telegraph.angles) ? telegraph.angles.slice() : null;
+  if (!angles || !angles.length) angles = buildBarrageAngles(count);
+  const interval = Math.max(0.001, Number(stage.projectiles.launchInterval) || 0.018);
+  spawnProjectile(angles[0]);
+  state.barrage = {
+    angles,
+    nextIndex: 1,
+    fired: 1,
+    total: angles.length,
+    interval,
+    timer: interval
+  };
+  if (state.barrage.nextIndex >= state.barrage.total) state.barrage = null;
+}
+
+function updateBarrage(dt) {
+  const b = state && state.barrage;
+  if (!b) return;
+  b.timer -= dt;
+  let guard = 0;
+  while (b.timer <= 0 && b.nextIndex < b.total && guard++ < 64) {
+    spawnProjectile(b.angles[b.nextIndex++]);
+    b.fired += 1;
+    b.timer += b.interval;
   }
-  for (let i = 0; i < angles.length; i++) {
-    const angle = angles[i] + (Math.random() - 0.5) * jitter;
-    const speed = stage.projectiles.speed * (0.92 + Math.random() * 0.16);
-    state.projectiles.push({
-      id: nextId++,
-      x: bp.x + Math.cos(angle) * (stage.boss.radius + 10),
-      y: bp.y + Math.sin(angle) * (stage.boss.radius + 10),
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      radius: stage.projectiles.radius,
-      life: stage.projectiles.life
-    });
-  }
+  if (b.nextIndex >= b.total) state.barrage = null;
 }
 
 function updateProjectiles(dt) {
@@ -948,6 +1065,116 @@ function victory() {
   }
 }
 
+const DEATH_BOOM_SECONDS = 1.8;
+const DEATH_PARTICLE_SECONDS = 3.1;
+const DEATH_COLORS = ["#ffffff", "#ffe066", "#ffb703", "#ff4d6d", "#5ee0a0", "#8ecae6"];
+
+function makePixelBurst(x, y, scale = 1) {
+  const blocks = [];
+  const count = 5 + Math.floor(Math.random() * 7);
+  for (let i = 0; i < count; i++) {
+    blocks.push({
+      dx: (Math.random() - 0.5) * 30 * scale,
+      dy: (Math.random() - 0.5) * 30 * scale,
+      size: 2 + Math.floor(Math.random() * 5),
+      color: DEATH_COLORS[Math.floor(Math.random() * DEATH_COLORS.length)]
+    });
+  }
+  return { x, y, t: 0, max: 0.22 + Math.random() * 0.32, blocks };
+}
+
+function startBossDeath() {
+  if (!state || state.death) return;
+  const bp = bossPos();
+  state.phase = "dying";
+  state.enemy = null;
+  state.activeAction = null;
+  state.bonusAvailable = false;
+  state.postShotPending = false;
+  state.projectiles = [];
+  state.minions = [];
+  state.shot = { active: false, isBonus: false };
+  state.death = { t: 0, exploded: false, booms: [], particles: [], nextBoom: 0 };
+  resetCharge();
+  try { ball.isMoving = false; ball.vel.x = 0; ball.vel.y = 0; ball.z = 0; ball.vz = 0; } catch { }
+  addEffect("boss-hit", bp.x, bp.y, 0.6);
+  message("Slicer destroyed!", 3);
+  updateHud();
+}
+
+function spawnDeathParticles() {
+  const d = state && state.death;
+  if (!d) return;
+  const bp = bossPos();
+  const half = bossHalf();
+  for (let i = 0; i < 96; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 50 + Math.random() * 240;
+    const life = 1.7 + Math.random() * 1.3;
+    d.particles.push({
+      x: bp.x + (Math.random() * 2 - 1) * half * 0.8,
+      y: bp.y + (Math.random() * 2 - 1) * half * 0.8,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 20,
+      size: 2 + Math.floor(Math.random() * 5),
+      life,
+      maxLife: life,
+      color: DEATH_COLORS[Math.floor(Math.random() * DEATH_COLORS.length)]
+    });
+  }
+}
+
+function updateDeath(dt) {
+  const d = state && state.death;
+  if (!d) {
+    victory();
+    return;
+  }
+  d.t += dt;
+
+  if (!d.exploded) {
+    d.nextBoom -= dt;
+    if (d.nextBoom <= 0) {
+      const bp = bossPos();
+      const half = bossHalf();
+      const bursts = Math.random() < 0.35 ? 2 : 1;
+      for (let i = 0; i < bursts; i++) {
+        d.booms.push(makePixelBurst(
+          bp.x + (Math.random() * 2 - 1) * half * 0.85,
+          bp.y + (Math.random() * 2 - 1) * half * 0.85
+        ));
+      }
+      d.nextBoom = 0.035 + Math.random() * 0.08;
+    }
+    for (const b of d.booms) b.t += dt;
+    d.booms = d.booms.filter((b) => b.t < b.max);
+    if (d.t >= DEATH_BOOM_SECONDS) {
+      d.exploded = true;
+      d.booms = [];
+      spawnDeathParticles();
+      addEffect("pulse", bossPos().x, bossPos().y, 0.8);
+      message("Slicer breaks apart in the wind!", 3);
+    }
+    return;
+  }
+
+  const windScale = ((Number(stage.field.strength) || 0) * 1.6);
+  for (const p of d.particles) {
+    p.life -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    let wind = { x: 0, y: 0 };
+    try { wind = getWindAt(p.x, p.y) || wind; } catch { }
+    p.vx += wind.x * windScale * dt;
+    p.vy += wind.y * windScale * dt;
+    p.vx *= Math.max(0, 1 - 0.55 * dt);
+    p.vy *= Math.max(0, 1 - 0.55 * dt);
+  }
+  d.particles = d.particles.filter((p) => p.life > 0);
+
+  if (d.t >= DEATH_BOOM_SECONDS + DEATH_PARTICLE_SECONDS) victory();
+}
+
 export function bossEndPlayerPhase() {
   if (!active || !state) return;
   if (state.phase !== "bonus") return;
@@ -1001,8 +1228,20 @@ export function getBossState() {
     freeShots: bridge ? bridge.getFreeShots() : 0,
     minions: state.minions.length,
     projectiles: state.projectiles.length,
+    barrage: state.barrage ? {
+      fired: state.barrage.fired,
+      total: state.barrage.total,
+      interval: state.barrage.interval
+    } : null,
     chests: state.chests.length,
     bossPos: { x: bp.x, y: bp.y },
+    bossSize: bossHalf() * 2,
+    death: state.death ? {
+      t: state.death.t,
+      exploded: state.death.exploded,
+      booms: state.death.booms.length,
+      particles: state.death.particles.length
+    } : null,
     activeAction: state.activeAction ? { type: state.activeAction.type, roundsLeft: state.activeAction.roundsLeft } : null,
     actionsSinceLaser: state.actionsSinceLaser,
     chestRespawnRound: state.chestRespawnRound,
@@ -1017,15 +1256,22 @@ function exposeDebug() {
     active: () => !!active,
     getState: () => getBossState(),
     getStage: () => stage,
+    windAt: (x, y) => {
+      try { return getWindAt(Number(x) || 0, Number(y) || 0); } catch { return null; }
+    },
+    baseWindAt: (x, y) => {
+      try { return getBaseWindAt(Number(x) || 0, Number(y) || 0); } catch { return null; }
+    },
     getEntities: () => {
       if (!state) return null;
       const bp = bossPos();
       return {
-        boss: { x: bp.x, y: bp.y, radius: stage.boss.radius },
+        boss: { x: bp.x, y: bp.y, radius: bossHalf(), size: bossHalf() * 2 },
         minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress })),
         projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy, radius: p.radius })),
         chests: state.chests.map((c) => ({ id: c.id, x: c.x, y: c.y })),
         obstacles: (state.asteroids || []).map((a) => ({ id: a.id, x: a.x, y: a.y, radius: a.radius, step: a.step, dir: a.dir, fromY: a.fromY, toY: a.toY, t: a.t })),
+        fieldComponents: (() => { try { return getFieldComponents(); } catch { return null; } })(),
         modifiers: (() => { try { return bridge && bridge.getModifiers ? bridge.getModifiers().map((m) => ({ type: m.type, x: m.x, y: m.y, radius: m.radius })) : []; } catch { return []; } })(),
         bag: (() => { try { return bridge && bridge.getBagInfo ? bridge.getBagInfo() : null; } catch { return null; } })(),
         ball: { x: ball.pos.x, y: ball.pos.y, z: ball.z, moving: ball.isMoving }
@@ -1058,9 +1304,9 @@ function exposeDebug() {
     damageBoss: (n = 1) => {
       if (!state) return;
       state.bossLives = Math.max(0, state.bossLives - clampInt(n, 1, 99, 1));
-      const disrupted = abortLaserCharge();
-      if (disrupted) message("Laser charge disrupted!", 1.6);
-      if (state.bossLives <= 0) victory();
+      const disrupted = abortActiveCharge();
+      if (disrupted) message(`${stage.actions[disrupted] ? stage.actions[disrupted].label : "Charge"} canceled!`, 1.6);
+      if (state.bossLives <= 0) startBossDeath();
       updateHud();
     },
     damagePlayer: (n = 1) => {
@@ -1163,10 +1409,13 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
     drawArrowsInModifiers(ctx, getWindAt, mods, fieldCols, fieldRows, fieldCellW, fieldCellH);
   } catch { }
 
-  drawChests(ctx);
-  drawMinions(ctx);
-  drawBossEntity(ctx);
-  drawProjectiles(ctx);
+  const dying = state.phase === "dying";
+  if (!dying) {
+    drawChests(ctx);
+    drawMinions(ctx);
+    drawBossEntity(ctx);
+    drawProjectiles(ctx);
+  }
   drawEffects(ctx);
   drawTee(ctx);
 
@@ -1174,6 +1423,15 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
   try {
     drawHeartRow(ctx, stage.tee.x, stage.tee.y - 30, state.playerLives, state.maxPlayerLives, "#9dffc8");
   } catch { }
+
+  if (dying) {
+    drawDeathEffects(ctx);
+    if (state.debug) {
+      try { drawDebugHitboxes(ctx); } catch { }
+    }
+    return;
+  }
+
   try { drawBall(ctx, ball); } catch { }
   try { drawAim(ctx, ball, getAimAngle(), charge, bridge ? bridge.getGameState() : "AIMING"); } catch { }
   try { if (bridge && bridge.drawPlacementPreview) bridge.drawPlacementPreview(ctx); } catch { }
@@ -1199,9 +1457,8 @@ function drawDebugHitboxes(ctx) {
   ctx.textBaseline = "middle";
 
   ctx.strokeStyle = "rgba(255, 120, 150, 0.85)";
-  ctx.beginPath();
-  ctx.arc(bp.x, bp.y, stage.boss.radius + BALL_RADIUS, 0, Math.PI * 2);
-  ctx.stroke();
+  const bossBox = bossHalf() + BALL_RADIUS;
+  ctx.strokeRect(bp.x - bossBox, bp.y - bossBox, bossBox * 2, bossBox * 2);
 
   ctx.strokeStyle = "rgba(255, 183, 3, 0.85)";
   for (const m of state.minions) {
@@ -1420,25 +1677,25 @@ function drawTee(ctx) {
   ctx.restore();
 }
 
-function drawBossEntity(ctx) {
-  const bp = bossPos();
-  const now = performance.now() / 1000;
-  const r = stage.boss.radius;
+function drawBossSprite(ctx, half, alpha = 1) {
+  const img = getBossSprite();
+  if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return false;
+  const h = half * 2;
+  const w = h * (img.naturalWidth / img.naturalHeight);
   ctx.save();
-  ctx.translate(bp.x, bp.y);
+  ctx.globalAlpha *= alpha;
+  try {
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  } catch {
+    ctx.restore();
+    return false;
+  }
+  ctx.restore();
+  return true;
+}
 
-  // Threat glow.
-  const glow = ctx.createRadialGradient(0, 0, 6, 0, 0, r * 2.2);
-  glow.addColorStop(0, "rgba(255, 77, 109, 0.35)");
-  glow.addColorStop(1, "rgba(255, 77, 109, 0)");
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
-  ctx.fill();
-
-  const flashing = state.bossHitFlash > 0;
-
-  // Outer saucer.
+function drawBossFallback(ctx, half, flashing) {
+  const r = half * 0.62;
   ctx.fillStyle = flashing ? "#ffffff" : "#230913";
   ctx.strokeStyle = flashing ? "#ffffff" : "#ff4d6d";
   ctx.lineWidth = 3;
@@ -1448,48 +1705,115 @@ function drawBossEntity(ctx) {
   ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-
-  // Rotating blades.
-  ctx.save();
-  ctx.rotate(now * 0.85);
-  ctx.fillStyle = flashing ? "rgba(255,255,255,0.9)" : "rgba(255, 77, 109, 0.72)";
-  for (let i = 0; i < 4; i++) {
-    ctx.rotate(Math.PI / 2);
-    ctx.beginPath();
-    ctx.moveTo(r * 0.3, -r * 0.2);
-    ctx.lineTo(r * 1.15, -r * 0.04);
-    ctx.lineTo(r * 0.34, r * 0.22);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // Core.
-  ctx.shadowBlur = 18;
   ctx.fillStyle = flashing ? "#ffffff" : "#ffd166";
   ctx.beginPath();
   ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#1a0710";
+  ctx.shadowBlur = 0;
+}
+
+function drawBossEntity(ctx) {
+  if (state.death) return;
+  const bp = bossPos();
+  const half = bossHalf();
+  const size = half * 2;
+  ctx.save();
+  ctx.translate(bp.x, bp.y);
+
+  // Threat glow.
+  const glow = ctx.createRadialGradient(0, 0, half * 0.2, 0, 0, half * 1.7);
+  glow.addColorStop(0, "rgba(255, 77, 109, 0.32)");
+  glow.addColorStop(1, "rgba(255, 77, 109, 0)");
+  ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(0, 0, r * 0.17, 0, Math.PI * 2);
+  ctx.arc(0, 0, half * 1.7, 0, Math.PI * 2);
   ctx.fill();
 
-  // Angle brackets.
+  const flashing = state.bossHitFlash > 0;
+  if (!drawBossSprite(ctx, half)) drawBossFallback(ctx, half, flashing);
+  if (flashing) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = Math.min(0.85, state.bossHitFlash * 2);
+    drawBossSprite(ctx, half);
+    ctx.restore();
+  }
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(94, 224, 160, 0.55)";
+
+  // Corner brackets mark the square hitbox that covers the sprite.
+  ctx.strokeStyle = flashing ? "rgba(255,255,255,0.95)" : "rgba(94, 224, 160, 0.6)";
   ctx.lineWidth = 2;
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 - now * 0.4;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * (r + 8), Math.sin(a) * (r + 8));
-    ctx.lineTo(Math.cos(a) * (r + 18), Math.sin(a) * (r + 18));
-    ctx.stroke();
+  const arm = Math.max(8, size * 0.12);
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(sx * half - sx * arm, sy * half);
+      ctx.lineTo(sx * half, sy * half);
+      ctx.lineTo(sx * half, sy * half - sy * arm);
+      ctx.stroke();
+    }
   }
 
   // Health sits directly above the entity.
-  drawHeartRow(ctx, 0, -r - 15, state.bossLives, state.maxBossLives, "#ff8fa8");
+  drawHeartRow(ctx, 0, -half - 15, state.bossLives, state.maxBossLives, "#ff8fa8");
 
+  ctx.restore();
+}
+
+function drawPixelBurst(ctx, b) {
+  const fade = Math.max(0, 1 - b.t / b.max);
+  const drift = b.t / b.max;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const block of b.blocks) {
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = block.color;
+    ctx.fillRect(
+      b.x + block.dx * (1 + drift * 0.7),
+      b.y + block.dy * (1 + drift * 0.7),
+      block.size,
+      block.size
+    );
+  }
+  ctx.restore();
+}
+
+function drawDeathEffects(ctx) {
+  const d = state && state.death;
+  if (!d) return;
+  const bp = bossPos();
+  const half = bossHalf();
+
+  if (!d.exploded) {
+    const flicker = 0.82 + Math.sin(d.t * 37) * 0.18;
+    ctx.save();
+    ctx.translate(bp.x, bp.y);
+    if (!drawBossSprite(ctx, half, flicker)) drawBossFallback(ctx, half, true);
+    ctx.restore();
+    for (const b of d.booms) drawPixelBurst(ctx, b);
+    return;
+  }
+
+  const age = d.t - DEATH_BOOM_SECONDS;
+  if (age >= 0 && age < 0.32) {
+    const a = 1 - age / 0.32;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = a;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(bp.x, bp.y, half * (0.7 + age * 5), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const p of d.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+  }
   ctx.restore();
 }
 
@@ -1579,10 +1903,13 @@ function drawTelegraph(ctx) {
     ctx.strokeStyle = `rgba(255, 183, 3, ${alpha})`;
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 8]);
-    for (const a of action.telegraph.angles) {
+    const angles = action.telegraph.angles;
+    const stride = Math.max(1, Math.ceil(angles.length / 36));
+    for (let i = 0; i < angles.length; i += stride) {
+      const a = angles[i];
       ctx.beginPath();
-      ctx.moveTo(bp.x + Math.cos(a) * (stage.boss.radius + 8), bp.y + Math.sin(a) * (stage.boss.radius + 8));
-      ctx.lineTo(bp.x + Math.cos(a) * (stage.boss.radius + 120), bp.y + Math.sin(a) * (stage.boss.radius + 120));
+      ctx.moveTo(bp.x + Math.cos(a) * (bossHalf() + 8), bp.y + Math.sin(a) * (bossHalf() + 8));
+      ctx.lineTo(bp.x + Math.cos(a) * (bossHalf() + 120), bp.y + Math.sin(a) * (bossHalf() + 120));
       ctx.stroke();
     }
     ctx.restore();
@@ -1608,7 +1935,7 @@ function drawTelegraph(ctx) {
     ctx.strokeStyle = `rgba(94, 224, 160, ${alpha})`;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(bp.x, bp.y, stage.boss.radius + 24 + Math.sin(now * 5) * 8, 0, Math.PI * 2);
+    ctx.arc(bp.x, bp.y, bossHalf() + 24 + Math.sin(now * 5) * 8, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   } else if (action.type === "laser") {
@@ -1631,7 +1958,7 @@ function drawTelegraph(ctx) {
   ctx.textBaseline = "middle";
   ctx.shadowColor = "rgba(0,0,0,0.8)";
   ctx.shadowBlur = 4;
-  ctx.fillText(`${action.label} in ${Math.max(0, action.roundsLeft)}`, bp.x, bp.y + stage.boss.radius + 26);
+  ctx.fillText(`${action.label} in ${Math.max(0, action.roundsLeft)}`, bp.x, bp.y + bossHalf() + 26);
   ctx.restore();
 }
 
@@ -1664,7 +1991,7 @@ function drawEffects(ctx) {
       ctx.strokeStyle = `rgba(255, 235, 160, ${0.9 * alpha})`;
       ctx.lineWidth = 5;
       ctx.beginPath();
-      ctx.arc(e.x, e.y, stage.boss.radius * 0.6 + p * 90, 0, Math.PI * 2);
+      ctx.arc(e.x, e.y, bossHalf() * 0.8 + p * 90, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     } else if (e.type === "tee-hit") {

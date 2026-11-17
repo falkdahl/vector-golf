@@ -16,6 +16,7 @@ export const BOSS_STAGE_1 = {
     x: 1012,
     y: 320,
     radius: 30,
+    size: 108,
     lives: 6,
     positions: [
       { x: 1012, y: 320 },
@@ -90,12 +91,14 @@ export const BOSS_STAGE_1 = {
   },
 
   projectiles: {
-    count: 64,
-    speed: 250,
+    count: 128,
+    speed: 375,
     radius: 6,
     windScale: 0.72,
     life: 10,
-    jitter: 0.03
+    jitter: 0.03,
+    launchInterval: 0.018,
+    spiralTurns: 2.5
   },
 
   actions: {
