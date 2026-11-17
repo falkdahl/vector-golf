@@ -1,16 +1,16 @@
 # Dimension-Y Boss Prototype Plan
 
-Status: Stage 1 prototype implemented (`?boss=1`). See "Prototype status" at the end.
+Status: The single Dimension-Y boss level is implemented (main-menu entry + `?boss=1` debug jump). See "Prototype status" at the end.
 
 ## Goal
 
-Build a focused Stage 1 prototype of the Dimension-Y boss battle to validate the turn structure, boss action countdowns, minion pressure, chest economy, 3-life attrition, Free Shot usage, and the debug entry that skips the campaign.
+Build the single Dimension-Y boss battle to validate the turn structure, boss action countdowns, minion pressure, chest economy, 3-life attrition, and Free Shot usage. Dimension-Y has one boss level and no additional stages or bosses.
 
 Boss: Slicer.
 
 ## In scope
 
-- Stage 1 only.
+- One Dimension-Y boss level (Slicer). No additional levels or bosses.
 - One hand-authored arena: crescent platform over a void, tee at one end, boss at the other.
 - Player aim, charge, shoot loop using the existing ball/wind/modifier systems.
 - Minions that advance toward the tee after the player's shot is over, easing between steps instead of teleporting.
@@ -25,21 +25,22 @@ Boss: Slicer.
 - Health and action countdowns are drawn on the entities in the arena. There is no top HUD bar and no boss name label.
 - A floating asteroid barrier in front of the boss blocks straight tee-to-boss shots; curved shots can use the top/bottom gaps.
 - Asteroids advance one short step per enemy turn at different speeds. They spawn just outside the canvas and keep moving in one direction until they leave, then despawn; replacements keep spawning so asteroids are always present between the player and the boss.
-- The wind field is static during the fight. Sources, sinks, doublets, and vortexes keep their Stage 1 positions; only placed modifiers move.
+- The wind field is static during the fight. Sources, sinks, doublets, and vortexes keep their initial positions; only placed modifiers move.
 - A boss hit cancels any boss action that is still counting down (not just the laser) and always triggers the instant pulse.
 - Regular game over screen that returns to the main menu.
 - Free Shot item remains in the reward pool and is usable before the enemy turn.
 - Chests respawn a fixed number of rounds after the previous chest is collected.
 - No tee flag; the tee is a plain launch ring so the ball and its health read clearly.
-- Debug entry: `?boss=1` starts Stage 1 directly, with no campaign, menus, cutscenes, or campaign save dependency. The Hashimoto Protocol cheat (ball drag & drop) also works in boss mode.
+- Main-menu entry: after `end-18-hole` has been seen, the Dimension-Y row starts the boss level through the same "Choose 2 starting items" overlay used by courses.
+- Debug entry: `?boss=1` starts the boss level directly, with no campaign, menus, cutscenes, or campaign save dependency. The Hashimoto Protocol cheat (ball drag & drop) also works in boss mode.
 
 ## Not in this prototype
 
-- Stages 2 and 3.
+- Additional Dimension-Y levels or bosses.
 - Tally, Gaze, gravity lens, wrapping edges, moving portals, core shield.
 - Extra Life modifier.
 - Full trajectory preview, endpoint prediction, or target-hit glow.
-- Story, cutscenes, menu unlock flow, mobile tuning, final art/audio.
+- Story, cutscenes, mobile tuning, final art/audio.
 - Portals. Keep the first prototype to the core turn/attack loop.
 
 ## Turn structure
@@ -133,7 +134,7 @@ Enemies act one by one, with visible sequential feedback.
 - Boss uses the `img/hover-cab.webp` sprite. Its hitbox is an axis-aligned 108px square that covers the whole sprite (the old 30px circle radius remains only as a fallback value).
 - Minion radius is 15px (up from 12) so minions are easier to hit; minion visuals scale with the radius.
 - A boss hit cancels the ongoing action but does not interrupt the shift; the boss still relocates during the post-enemy shift.
-- At 0 boss lives, the boss enters a death sequence: pixel explosions pop across the sprite for ~1.8s, then it bursts into small square particles that are pushed by the live wind field for ~3.1s. Stage 1 is cleared after the particles finish.
+- At 0 boss lives, the boss enters a death sequence: pixel explosions pop across the sprite for ~1.8s, then it bursts into small square particles that are pushed by the live wind field for ~3.1s. Dimension-Y is cleared after the particles finish.
 
 ## Asteroid motion
 
@@ -145,7 +146,7 @@ Enemies act one by one, with visible sequential feedback.
 ## Vector field
 
 - The wind field is static for the whole boss fight.
-- Sources, sinks, doublets, and vortexes keep the Stage 1 positions created when the fight starts.
+- Sources, sinks, doublets, and vortexes keep their initial positions for the whole fight.
 - Placed modifiers remain local and do not move the underlying field.
 
 ## Player lives and game over
@@ -178,7 +179,7 @@ Enemies act one by one, with visible sequential feedback.
 
 ## Debug entry
 
-Required: `?boss=1` skips the entire campaign and starts Stage 1 directly.
+Required: `?boss=1` skips the entire campaign and starts the single Dimension-Y boss level directly. The main-menu Dimension-Y row is the normal entry.
 
 Requirements:
 
@@ -189,7 +190,6 @@ Requirements:
   - `?boss=1&items=deflector,rotator`
   - `?boss=1&lives=3`
   - `?boss=1&debug=1` for hitboxes/entity readout.
-- Reserve `?boss=2` and `?boss=3` for later stages.
 - Expose `window.__boss` for testing: state, lives, boss lives, spawn/kill helpers, action controls.
 
 ## Prototype tuning values
@@ -215,14 +215,15 @@ These are the values to tune during the prototype, not final design:
 ### New files
 
 - `src/bossLevels.js`
-  - Stage 1 arena data: tee, boss positions, minion paths, chest spawn points, boss action tuning.
+  - Dimension-Y arena data: tee, boss positions, minion paths, chest spawn points, boss action tuning.
 - `src/boss.js`
   - Boss run state, player phase/enemy phase state machine, minions, projectiles, chests, boss actions, lives, rendering, debug helpers.
 
 ### Main integration
 
 - `src/main.js`
-  - Parse `?boss=` early and initialize boss mode before campaign load.
+  - Parse `?boss=` early and initialize boss mode before campaign load for the debug jump.
+  - Start the boss level from the main-menu Dimension-Y row after the normal 2-item picker.
   - Branch `loadLevel`, `update`, `render`, `handleLaunch`, and `resetBall` while boss mode is active.
   - Hide campaign HUD; no boss topbar.
   - Reuse the existing game over overlay and return-to-main-menu flow.
@@ -254,7 +255,9 @@ These are the values to tune during the prototype, not final design:
 
 ## Acceptance checklist
 
-- [ ] `?boss=1` starts Stage 1 with no campaign, menu, or cutscene flash.
+- [ ] `?boss=1` starts the single Dimension-Y boss level with no campaign, menu, or cutscene flash.
+- [ ] The main-menu Dimension-Y row starts the boss level through the same "Choose 2 starting items" overlay as courses.
+- [ ] The two chosen starting items are in the bag when the boss fight begins.
 - [ ] Works with a fresh browser profile and no save.
 - [ ] Campaign save and `?hole=` behavior are untouched.
 - [ ] Player can aim, charge, and shoot from the tee.
@@ -333,7 +336,6 @@ Verified in headless Firefox:
 
 Known gaps / next steps:
 
-- `?boss=2` and `?boss=3` still start Stage 1.
 - No pause/menu exit during boss play (Escape is intentionally swallowed); use the game over/victory flow or reload.
 - Mobile controls/layout are not tuned (out of scope).
 - Laser gating and barrage/minion non-interaction are code-reviewed, not exhaustively exercised.

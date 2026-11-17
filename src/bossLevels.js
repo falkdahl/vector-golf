@@ -1,9 +1,9 @@
-// Stage data for the Dimension-Y boss prototype.
+// Level data for the Dimension-Y boss fight.
 // Pure data only: the main game stays untouched when boss mode is not active.
 
-export const BOSS_STAGE_1 = {
-  id: "dimension-y-stage-1",
-  name: "Dimension Y - Stage 1",
+export const DIMENSION_Y_BOSS_LEVEL = {
+  id: "dimension-y",
+  name: "Dimension-Y",
   logicalW: 1280,
   logicalH: 720,
 
@@ -111,6 +111,6 @@ export const BOSS_STAGE_1 = {
   laser: { minOtherActionsBetween: 2 }
 };
 
-export function createBossStage1() {
-  return JSON.parse(JSON.stringify(BOSS_STAGE_1));
+export function createDimensionYBossLevel() {
+  return JSON.parse(JSON.stringify(DIMENSION_Y_BOSS_LEVEL));
 }

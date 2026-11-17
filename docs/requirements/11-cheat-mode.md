@@ -21,7 +21,7 @@ Hidden manual testing aid: Konami code toggles session-scoped ball drag & drop. 
 ## 4. Constraints
 
 Runtime-only (never `STORAGE_KEY`, never `bestTotal`/points/rewards/generation). No UI except the two toasts (~2s).
-Also available in the Dimension-Y boss debug level (`?boss=1`): the Konami toggle arms, and dragging/dropping the ball works in the boss player phase and mid-shot without touching campaign save data.
+Also available in the Dimension-Y boss level (main-menu entry or `?boss=1` debug jump): the Konami toggle arms, and dragging/dropping the ball works in the boss player phase and mid-shot without touching campaign save data.
 
 ## Acceptance
 

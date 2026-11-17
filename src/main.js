@@ -937,6 +937,7 @@ let pendingRewardType = null; // reward chosen while bag full, awaiting discard/
 let pendingPickup = null; // null | { type:string, modifierId:number|string|null, modifierIndex:number }
 // Starting items overlay (replaces loadout) — Choose 2 starting items on first hole of each run
 let startingItemsVisible = false;
+let startingBossMode = false;
 let startingCourseId = null;
 let startingRemaining = 0;
 let startingChoices = []; // remaining types to pick from
@@ -1417,43 +1418,65 @@ function syncStartingItemsOverlay() {
   });
 }
 function showStartingItems(courseId, opts) {
-  if (hasRestorableSave()) return false;
-  const course = findCourseById(courseId);
-  if (!course) return false;
+  const boss = !!(opts && opts.boss);
+  if (!boss && hasRestorableSave()) return false;
+  const course = boss ? null : findCourseById(courseId);
+  if (!boss && !course) return false;
   // Start with empty bag – only the 2 picks are present after auto-confirm
   golfbag = [null, null, null];
   passiveCounts = { fieldExtender: 0, powerCell: 0, freeShot: 0 };
   passiveEnabled = { fieldExtender: true, powerCell: true };
   try { syncDerivedFromBag(); updateHotbarUI(); } catch { }
-  startingCourseId = courseId;
+  startingBossMode = boss;
+  startingCourseId = boss ? null : courseId;
   startingChoices = ['magnifier', 'liquifier', 'deflector', 'rotator'];
   selectedStartingItems = [];
   startingRemaining = 2;
   startingItemsVisible = true;
-  // Load hole preview behind overlay
-  try {
-    setActiveCourse(course);
-    currentHoleIndex = 0;
-    mainMenuVisible = false;
-    mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
-    pauseMenuVisible = false; pauseMenuHover = null;
-    gameState = 'AIMING';
-    loadLevel(0);
-    holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
-    attemptsBannerVisible = false; attemptsBannerTimer = 0;
-    freeShotBannerVisible = false; freeShotBannerTimer = 0;
-    rewardPending = false; rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false;
-    try { syncRewardOverlay(); } catch { }
-    try { redrawBottom(); } catch { }
-  } catch (e) { console.warn('showStartingItems preview failed', e); }
+  if (boss) {
+    try {
+      currentHoleIndex = 0;
+      mainMenuVisible = false;
+      mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+      pauseMenuVisible = false; pauseMenuHover = null;
+      gameState = 'AIMING';
+      if (winOverlay) winOverlay.classList.add('hidden');
+      if (gameoverOverlay) gameoverOverlay.classList.add('hidden');
+      holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
+      attemptsBannerVisible = false; attemptsBannerTimer = 0;
+      freeShotBannerVisible = false; freeShotBannerTimer = 0;
+      rewardPending = false; rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false;
+      try { syncRewardOverlay(); } catch { }
+      try { redrawBottom(); } catch { }
+      try { syncBgCanvasVisibility(); } catch { }
+    } catch (e) { console.warn('showStartingItems boss preview failed', e); }
+  } else {
+    // Load hole preview behind overlay
+    try {
+      setActiveCourse(course);
+      currentHoleIndex = 0;
+      mainMenuVisible = false;
+      mainMenuHover = null; courseMenuVisible = false; helpVisible = false; isInLevelPause = false;
+      pauseMenuVisible = false; pauseMenuHover = null;
+      gameState = 'AIMING';
+      loadLevel(0);
+      holeBannerVisible = false; holeBannerTimer = 0; holeBannerText = '';
+      attemptsBannerVisible = false; attemptsBannerTimer = 0;
+      freeShotBannerVisible = false; freeShotBannerTimer = 0;
+      rewardPending = false; rewardMenuVisible = false; rewardOffered = []; rewardRerolled = false;
+      try { syncRewardOverlay(); } catch { }
+      try { redrawBottom(); } catch { }
+    } catch (e) { console.warn('showStartingItems preview failed', e); }
+    try { banterPreload(); } catch { }
+  }
   syncStartingItemsOverlay();
   syncMainMenu();
   try { loadoutOpenedAt = Date.now(); } catch { }
-  try { banterPreload(); } catch { }
   return true;
 }
 function hideStartingItems() {
   startingItemsVisible = false;
+  startingBossMode = false;
   startingCourseId = null;
   startingRemaining = 0;
   startingChoices = [];
@@ -1498,15 +1521,25 @@ function handleStartingPick(type) {
 function handleStartingOk() {
   if (!startingItemsVisible) return false;
   if (selectedStartingItems.length !== 2) return false;
-  // Journal: a new run begins with these 2 picks
-  try { journalStartRun([...selectedStartingItems]); } catch { }
-  // Add selected items to bag
-  for (const t of selectedStartingItems) addItemToBag(t);
-  updateHotbarUI();
+  const boss = startingBossMode;
+  const picks = [...selectedStartingItems];
   const cid = startingCourseId;
   startingItemsVisible = false;
+  startingBossMode = false;
+  startingCourseId = null;
   selectedStartingItems = [];
   syncStartingItemsOverlay();
+  if (boss) {
+    // Boss mode starts with the same two picks but stays isolated from the
+    // campaign run/journal and campaign save.
+    startBossMode({ items: picks });
+    return true;
+  }
+  // Journal: a new run begins with these 2 picks
+  try { journalStartRun(picks); } catch { }
+  // Add selected items to bag
+  for (const t of picks) addItemToBag(t);
+  updateHotbarUI();
   startCourseWithStartingItems(cid);
   return true;
 }
@@ -1608,7 +1641,7 @@ function startCourseWithStartingItems(courseId) {
   runFirstCourseClear = false;
   runUnlockedNewCourse = false;
   deferredMenuReturn = false;
-  startingItemsVisible = false; startingCourseId = null; startingRemaining = 0; startingChoices = [];
+  startingItemsVisible = false; startingBossMode = false; startingCourseId = null; startingRemaining = 0; startingChoices = [];
   loadoutVisible = false; loadoutCourseId = null; loadoutSlots = [null, null, null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible = false;
@@ -1672,7 +1705,7 @@ function startTutorialCourse(courseId) {
   try { loadoutUnlockedAtRunStart = getUnlockedLoadoutSlots(); } catch { loadoutUnlockedAtRunStart = 4; }
   runShopRestocked = false; runFirstCourseClear = false; runUnlockedNewCourse = false;
   deferredMenuReturn = false;
-  startingItemsVisible = false; startingCourseId = null; startingRemaining = 0; startingChoices = [];
+  startingItemsVisible = false; startingBossMode = false; startingCourseId = null; startingRemaining = 0; startingChoices = [];
   loadoutVisible = false; loadoutCourseId = null; loadoutSlots = [null, null, null];
   loadoutHideShopDueToIntro = false;
   coinSummaryVisible = false;
@@ -3410,26 +3443,22 @@ function renderCourseList() {
       }
       list.appendChild(row);
     }
-    // Dimension-Y teaser: once the end-18-hole finale has played, show a locked
-    // teaser row below the staged courses. Non-playable (no courseId/holes,
-    // disabled button, no click handler) so it never affects unlocking or play.
+    // Dimension-Y boss level: once the end-18-hole finale has played, show the
+    // single boss fight below the staged courses. It uses the normal starting
+    // item picker and is isolated from campaign progress.
     let showDimensionY = false;
     try { showDimensionY = cutsceneHasSeen('end-18-hole'); } catch { }
     if (showDimensionY) {
-      const teaserRow = document.createElement('div');
-      teaserRow.className = 'course-row locked';
-      teaserRow.dataset.teaser = 'dimension-y';
-      const teaserBtn = document.createElement('button');
-      teaserBtn.className = 'course-play-button';
-      teaserBtn.disabled = true;
-      teaserBtn.innerHTML = `<span class="course-name">🔒 Dimension-Y</span><span class="course-meta"></span>`;
-      try {
-        const spans = teaserBtn.querySelectorAll('.course-meta');
-        spans.forEach(s => { s.textContent = 'Coming Soon'; });
-      } catch { }
-      teaserBtn.title = 'Locked — Coming Soon';
-      teaserRow.appendChild(teaserBtn);
-      list.appendChild(teaserRow);
+      const bossRow = document.createElement('div');
+      bossRow.className = 'course-row';
+      bossRow.dataset.teaser = 'dimension-y';
+      const bossBtn = document.createElement('button');
+      bossBtn.className = 'course-play-button';
+      bossBtn.innerHTML = `<span class="course-name">Dimension-Y</span><span class="course-meta">Boss Fight</span>`;
+      bossBtn.title = 'Play Dimension-Y';
+      bossBtn.addEventListener('click', () => handleDimensionYPlay());
+      bossRow.appendChild(bossBtn);
+      list.appendChild(bossRow);
     }
   }
   // Cache signature after render to avoid re-rendering on every help close / menu toggle
@@ -3439,6 +3468,15 @@ function renderCourseList() {
     const contBtn = document.getElementById('continue-button');
     if (contBtn) contBtn.classList.add('hidden');
   } catch { };
+}
+
+function handleDimensionYPlay() {
+  try { audioUIClick(); } catch { }
+  try { requestMobileFullscreen(); } catch { }
+  // Boss mode is isolated from campaign saves; the picker is the same overlay
+  // every course uses, but confirming it starts the single boss level.
+  try { loadProgression(); } catch { }
+  try { showStartingItems(null, { boss: true }); } catch (e) { console.warn('Dimension-Y start failed', e); }
 }
 
 function handleCoursePlay(courseId) {
@@ -4188,6 +4226,11 @@ function startBossMode(params) {
   coinSummaryVisible = false;
   loadoutVisible = false;
   startingItemsVisible = false;
+  startingBossMode = false;
+  startingCourseId = null;
+  startingRemaining = 0;
+  startingChoices = [];
+  try { syncStartingItemsOverlay(); } catch { }
   courseClearedVisible = false;
   holeBannerVisible = false;
   attemptsBannerVisible = false;
@@ -4288,7 +4331,7 @@ function startBossMode(params) {
 function showBossVictory(info) {
   gameState = "WIN";
   try {
-    if (winTitle) winTitle.textContent = "Stage Cleared!";
+    if (winTitle) winTitle.textContent = "Dimension-Y Cleared!";
     if (winTotalValue) winTotalValue.textContent = String(info && info.rounds ? info.rounds : 0);
     if (winAttemptsValue) winAttemptsValue.textContent = String(info && info.playerLives != null ? info.playerLives : 0);
     if (winHoleValue) winHoleValue.textContent = "1";
@@ -4326,6 +4369,11 @@ function bossReturnToMainMenu() {
   cheatMousePos = null;
   cheatSuppressClick = false;
   isTutorialRun = false;
+  startingBossMode = false;
+  startingCourseId = null;
+  startingRemaining = 0;
+  startingChoices = [];
+  try { syncStartingItemsOverlay(); } catch { }
   deferredMenuReturn = false;
   currentHoleIndex = 0;
   holeAttempts = 0;

@@ -1,4 +1,4 @@
-import { createBossStage1 } from "./bossLevels.js";
+import { createDimensionYBossLevel } from "./bossLevels.js";
 import {
   ball,
   launchBall,
@@ -225,7 +225,7 @@ function makeState(params) {
 
 export function initBoss(gameBridge, params = {}) {
   bridge = gameBridge;
-  stage = createBossStage1();
+  stage = createDimensionYBossLevel();
   state = makeState(params);
   nextId = 1;
   active = true;
