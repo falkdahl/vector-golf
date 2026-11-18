@@ -187,22 +187,6 @@ body {
   font: 11px/16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 #boss-hud-debug.hidden { display: none !important; }
-#boss-end-turn {
-  position: absolute;
-  right: 22px;
-  bottom: 96px;
-  z-index: 7;
-  padding: 10px 18px;
-  border: 1px solid rgba(94, 224, 160, 0.7);
-  border-radius: 8px;
-  background: rgba(10, 34, 26, 0.88);
-  color: #d8ffe9;
-  font: 700 14px var(--ui-font);
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-}
-#boss-end-turn:hover { background: rgba(18, 58, 44, 0.95); }
-#boss-end-turn.hidden { display: none !important; }
 
 #loading-screen {
   position: fixed;

@@ -48,6 +48,8 @@ let arenaCache = null;
 let arenaCacheKey = "";
 let bossSprite = null;
 let bossSpriteBroken = false;
+let rocketSprite = null;
+let rocketSpriteBroken = false;
 
 function getBossSprite() {
   if (bossSpriteBroken || typeof Image === "undefined") return null;
@@ -62,6 +64,21 @@ function getBossSprite() {
     }
   }
   return bossSprite;
+}
+
+function getRocketSprite() {
+  if (rocketSpriteBroken || typeof Image === "undefined") return null;
+  if (!rocketSprite) {
+    try {
+      rocketSprite = new Image();
+      rocketSprite.decoding = "async";
+      rocketSprite.src = new URL("../img/rocket.webp", import.meta.url).href;
+    } catch {
+      rocketSpriteBroken = true;
+      return null;
+    }
+  }
+  return rocketSprite;
 }
 
 function clampInt(v, min, max, fallback) {
@@ -116,6 +133,15 @@ function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
+function lerpAngle(a, b, t) {
+  const from = Number.isFinite(a) ? a : 0;
+  const to = Number.isFinite(b) ? b : 0;
+  let delta = to - from;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return from + delta * t;
+}
+
 function settledEntity(x, y) {
   return { x, y, fromX: x, fromY: y, toX: x, toY: y, t: 1, dur: 0.6 };
 }
@@ -128,7 +154,17 @@ function stepEntity(e, dt) {
   e.y = lerp(e.fromY, e.toY, k);
 }
 
-function spawnAsteroidData(initial) {
+function asteroidTargetCount() {
+  const cfg = stage && stage.asteroidField;
+  if (!cfg) return 0;
+  const base = Math.max(0, Number(cfg.targetCount) || 0);
+  const growth = Math.max(0, Number(cfg.growthPerRound) || 0);
+  const max = Math.max(base, Number(cfg.maxCount) || base);
+  const round = state ? Math.max(1, state.round) : 1;
+  return Math.min(max, base + (round - 1) * growth);
+}
+
+function spawnAsteroidData(initial, initialY = null) {
   const cfg = stage.asteroidField;
   if (!cfg || !Array.isArray(cfg.lanes) || !cfg.lanes.length) return null;
   const lane = cfg.lanes[Math.floor(Math.random() * cfg.lanes.length)];
@@ -142,7 +178,7 @@ function spawnAsteroidData(initial) {
   const H = Number(stage.logicalH) || LOGICAL_H;
   let y;
   if (initial) {
-    y = Math.random() * H;
+    y = Number.isFinite(initialY) ? initialY : Math.random() * H;
   } else if (dir > 0) {
     y = -radius - Math.random() * margin;
   } else {
@@ -165,10 +201,13 @@ function spawnAsteroidData(initial) {
 function makeInitialAsteroids() {
   const cfg = stage.asteroidField;
   if (!cfg) return [];
-  const count = Math.max(0, Number(cfg.targetCount) || 0);
+  const count = asteroidTargetCount();
+  const H = Number(stage.logicalH) || LOGICAL_H;
+  const spacing = count > 0 ? H / count : H;
   const out = [];
   for (let i = 0; i < count; i++) {
-    const a = spawnAsteroidData(true);
+    const jitter = (Math.random() - 0.5) * spacing * 0.45;
+    const a = spawnAsteroidData(true, (i + 0.5) * spacing + jitter);
     if (a) out.push(a);
   }
   return out;
@@ -202,7 +241,8 @@ function makeState(params) {
     playerLives: maxPlayer,
     bossLives: maxBoss,
     round: 1,
-    phase: "player", // player | shot | between | bonus | enemy | shift | victory | gameover
+    phase: params.preview ? "preview" : "player", // player | shot | between | bonus | enemy | shift | victory | gameover | preview
+    preview: !!params.preview,
     bossPosIndex: 0,
     boss: settledEntity(start.x, start.y),
     asteroids: makeInitialAsteroids(),
@@ -210,6 +250,8 @@ function makeState(params) {
     projectiles: [],
     barrage: null,
     chests: [],
+    blackHoles: [],
+    voidBombs: [],
     activeAction: null,
     actionsSinceLaser: 0,
     lastExecutedAction: null,
@@ -265,12 +307,6 @@ export function initBoss(gameBridge, params = {}) {
 function bindDom() {
   cacheDom();
   if (hud && hud.root) hud.root.classList.remove("hidden");
-  if (hud && hud.endTurn && !hud.endTurn._bossBound) {
-    hud.endTurn._bossBound = true;
-    hud.endTurn.addEventListener("click", () => {
-      try { bossEndPlayerPhase(); } catch { }
-    });
-  }
   if (!keyBound && typeof window !== "undefined") {
     keyBound = true;
     window.addEventListener("keydown", (e) => {
@@ -290,8 +326,7 @@ function cacheDom() {
   };
   hud = {
     root: byId("boss-hud"),
-    debug: byId("boss-hud-debug"),
-    endTurn: byId("boss-end-turn")
+    debug: byId("boss-hud-debug")
   };
 }
 
@@ -301,13 +336,12 @@ function updateHud() {
   const set = (el, text) => {
     if (el && el.textContent !== text) el.textContent = text;
   };
-  if (hud.endTurn) hud.endTurn.classList.toggle("hidden", state.phase !== "bonus");
 
   if (hud.debug) {
     hud.debug.classList.toggle("hidden", !state.debug);
     if (state.debug) {
       const bp = bossPos();
-      set(hud.debug, `round ${state.round} | ${state.phase} | ball (${ball.pos.x.toFixed(0)},${ball.pos.y.toFixed(0)}) z${ball.z.toFixed(1)} | boss (${Math.round(bp.x)},${Math.round(bp.y)}) | minions ${state.minions.length}/${stage.minions.max} | projectiles ${state.projectiles.length} | chests ${state.chests.length} (next ${state.chestRespawnRound || "-"}) | laser ${state.actionsSinceLaser}/${stage.laser.minOtherActionsBetween}`);
+      set(hud.debug, `round ${state.round} | ${state.phase} | ball (${ball.pos.x.toFixed(0)},${ball.pos.y.toFixed(0)}) z${ball.z.toFixed(1)} | boss (${Math.round(bp.x)},${Math.round(bp.y)}) | missiles ${state.minions.length}/${stage.minions.max} | projectiles ${state.projectiles.length} | black holes ${state.blackHoles.length} | chests ${state.chests.length} (next ${state.chestRespawnRound || "-"}) | laser ${state.actionsSinceLaser}/${stage.laser.minOtherActionsBetween}`);
     }
   }
 }
@@ -341,7 +375,7 @@ function moveAsteroids() {
   state.asteroids = state.asteroids.filter((a) => (
     a.dir > 0 ? a.y - a.radius < H + edge : a.y + a.radius > -edge
   ));
-  const target = Math.max(0, Number(cfg.targetCount) || 0);
+  const target = asteroidTargetCount();
   while (state.asteroids.length < target) {
     const a = spawnAsteroidData(false);
     if (!a) break;
@@ -373,6 +407,18 @@ function updateEntityAnimations(dt) {
       const k = easeInOut(m.t);
       m.x = lerp(m.fromX, m.toX, k);
       m.y = lerp(m.fromY, m.toY, k);
+    }
+    if (m.emerge && m.t >= 1) {
+      // The missile has reached its launch point: face the player from here on.
+      m.emerge = false;
+      m.angleFrom = Number.isFinite(m.angle) ? m.angle : 0;
+      m.angleTo = Math.atan2(stage.tee.y - m.y, stage.tee.x - m.x);
+      m.angleT = 0;
+      m.angleDur = 0.24;
+    }
+    if (m.angleT < 1) {
+      m.angleT = Math.min(1, m.angleT + dt / Math.max(0.0001, m.angleDur || 0.24));
+      m.angle = lerpAngle(m.angleFrom, m.angleTo, easeInOut(m.angleT));
     }
     if (m.reachedTee && m.t >= 1) {
       state.minions = state.minions.filter((x) => x !== m);
@@ -416,6 +462,12 @@ export function updateBoss(dt) {
     return;
   }
 
+  if (state.phase === "preview") {
+    updateEntityAnimations(step);
+    updateHud();
+    return;
+  }
+
   updateEntityAnimations(step);
   if (state.phase === "victory" || state.phase === "gameover") {
     updateHud();
@@ -432,6 +484,7 @@ export function updateBoss(dt) {
 
   updateBarrage(step);
   updateProjectiles(step);
+  updateVoidBombs(step);
   if (state.phase === "victory" || state.phase === "gameover") {
     updateHud();
     return;
@@ -540,14 +593,45 @@ export function bossCheatTryGrab(pos) {
   return true;
 }
 
+function getBossWindAt(x, y) {
+  let wind = { x: 0, y: 0 };
+  try { wind = getWindAt(x, y); } catch { }
+  let vx = wind && Number.isFinite(wind.x) ? wind.x : 0;
+  let vy = wind && Number.isFinite(wind.y) ? wind.y : 0;
+  const cfg = stage.blackHole || {};
+  const strength = Math.max(0, Number(cfg.sinkStrength) || 0);
+  const falloff = Math.max(1, Number(cfg.sinkFalloff) || 140);
+  for (const hole of state.blackHoles) {
+    const dx = hole.x - x;
+    const dy = hole.y - y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.001) continue;
+    // Strong, short-range sink: the ball is pulled toward the event horizon.
+    const mag = strength / (1 + (dist / falloff) ** 2);
+    vx += (dx / dist) * mag;
+    vy += (dy / dist) * mag;
+  }
+  return { x: vx, y: vy };
+}
+
 function updateShot(dt) {
   // 14-cheat-mode: while the Hashimoto grab holds the ball, physics and
   // collisions are suspended; the ball resumes on release.
   if (bridge && bridge.isCheatDraggingBall && bridge.isCheatDraggingBall()) return;
 
   try {
-    updateBall(dt, getWindAt, stage.field.strength, stage.logicalW, stage.logicalH);
+    updateBall(dt, getBossWindAt, stage.field.strength, stage.logicalW, stage.logicalH);
   } catch { }
+
+  // Black holes consume the ball on contact.
+  for (const hole of state.blackHoles) {
+    if (hitDist(ball.pos.x, ball.pos.y, hole.x, hole.y, hole.radius + BALL_RADIUS)) {
+      addEffect("void", ball.pos.x, ball.pos.y, 0.5);
+      message("The black hole consumed the ball!", 1.6);
+      finishShot();
+      return;
+    }
+  }
 
   // Floating asteroids deflect the ball. They sit in front of the boss so a
   // straight tee->boss shot is always blocked.
@@ -599,7 +683,7 @@ function updateShot(dt) {
     if (hitDist(ball.pos.x, ball.pos.y, m.x, m.y, stage.minions.radius + BALL_RADIUS)) {
       state.minions = state.minions.filter((x) => x !== m);
       addEffect("minion-hit", m.x, m.y, 0.32);
-      message("Minion destroyed", 1);
+      message("Missile destroyed", 1);
       break;
     }
   }
@@ -673,8 +757,8 @@ function updateEnemy(dt) {
     return;
   }
   // A spiral barrage streams out over time; hold the rest of the enemy turn
-  // until every projectile has launched.
-  if (state.barrage) {
+  // until every projectile has launched. Void bombs must also land first.
+  if (state.barrage || state.voidBombs.length) {
     e.timer = 0.1;
     updateHud();
     return;
@@ -727,6 +811,7 @@ function beginShiftPhase() {
   }
 
   moveAsteroids();
+  tickBlackHoles();
   if (bridge) bridge.setGameState("ENEMY");
   message("Slicer relocates", 1.1);
   updateHud();
@@ -736,7 +821,7 @@ function updateShift() {
   if (!state) return;
   const bossMoving = state.boss && state.boss.t < 1;
   const asteroidMoving = state.asteroids.some((a) => a.t < 1);
-  const minionMoving = state.minions.some((m) => m.t < 1);
+  const minionMoving = state.minions.some((m) => m.t < 1 || (m.angleT != null && m.angleT < 1));
   if (bossMoving || asteroidMoving || minionMoving) return;
   startPlayerPhase();
 }
@@ -757,7 +842,7 @@ function startPlayerPhase() {
 }
 
 function chooseBossAction() {
-  const pool = ["barrage", "spawn", "pulse"];
+  const pool = ["barrage", "missiles", "voidBombs"];
   if (state.actionsSinceLaser >= stage.laser.minOtherActionsBetween) pool.push("laser");
   let choices = pool.filter((t) => t !== state.lastExecutedAction);
   if (!choices.length) choices = pool;
@@ -783,7 +868,7 @@ function makeTelegraph(type) {
   if (type === "barrage") {
     return { angles: buildBarrageAngles() };
   }
-  if (type === "spawn") {
+  if (type === "missiles" || type === "spawn") {
     const pool = stage.minions.spawns.slice();
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -791,7 +876,11 @@ function makeTelegraph(type) {
       pool[i] = pool[j];
       pool[j] = t;
     }
-    return { spawns: pool.slice(0, stage.actions.spawn.count) };
+    const count = (stage.actions.missiles && stage.actions.missiles.count) || 2;
+    return { spawns: pool.slice(0, count) };
+  }
+  if (type === "voidBombs") {
+    return { targets: makeVoidBombTargets() };
   }
   return {};
 }
@@ -829,10 +918,15 @@ function executeBossAction(type, telegraph = null) {
   if (type === "barrage") {
     startBarrage(telegraph);
     message("Projectile barrage!", 1.8);
-  } else if (type === "spawn") {
+  } else if (type === "missiles" || type === "spawn") {
     const spawns = telegraph && Array.isArray(telegraph.spawns) ? telegraph.spawns : null;
-    spawnMinions(stage.actions.spawn.count, false, spawns);
-    message("Slicer spawns minions!", 1.8);
+    const count = (stage.actions.missiles && stage.actions.missiles.count) || 2;
+    spawnMinions(count, false, spawns);
+    message("Slicer launches homing missiles!", 1.8);
+  } else if (type === "voidBombs") {
+    const targets = telegraph && Array.isArray(telegraph.targets) ? telegraph.targets : null;
+    launchVoidBombs(targets);
+    message("Void bombs incoming!", 1.8);
   } else if (type === "pulse") {
     triggerPulse();
     message("Pulse destroys placed items!", 2.2);
@@ -926,9 +1020,109 @@ function updateProjectiles(dt) {
   if (state.phase === "gameover" || state.phase === "victory") return;
 }
 
+function makeVoidBombTargets(count = null) {
+  const cfg = stage.voidBombs || {};
+  const total = Math.max(1, Number(count) || Number(cfg.count) || 2);
+  const minX = Math.max(0, Number(cfg.targetMinX) || 430);
+  const maxX = Math.max(minX, Number(cfg.targetMaxX) || 860);
+  const minY = Math.max(0, Number(cfg.targetMinY) || 150);
+  const maxY = Math.max(minY, Number(cfg.targetMaxY) || 570);
+  const targets = [];
+  for (let i = 0; i < total; i++) {
+    targets.push({
+      x: minX + Math.random() * (maxX - minX),
+      y: minY + Math.random() * (maxY - minY)
+    });
+  }
+  return targets;
+}
+
+function launchVoidBombs(targets = null) {
+  const cfg = stage.voidBombs || {};
+  const list = Array.isArray(targets) && targets.length ? targets : makeVoidBombTargets();
+  const bp = bossPos();
+  const flightTime = Math.max(0.2, Number(cfg.flightTime) || 1.1);
+  const gravity = Math.max(1, Number(cfg.gravity) || 1100);
+  const radius = Math.max(2, Number(cfg.radius) || 7);
+  for (let i = 0; i < list.length; i++) {
+    const target = list[i];
+    const spread = (i - (list.length - 1) / 2) * 18;
+    const sx = bp.x + spread * 0.4;
+    const sy = bp.y + spread;
+    state.voidBombs.push({
+      id: nextId++,
+      x: sx,
+      y: sy,
+      z: 0,
+      vx: (target.x - sx) / flightTime,
+      vy: (target.y - sy) / flightTime,
+      vz: 0.5 * gravity * flightTime,
+      gravity,
+      radius,
+      targetX: target.x,
+      targetY: target.y
+    });
+  }
+}
+
+function updateVoidBombs(dt) {
+  const bombs = state.voidBombs;
+  if (!bombs || !bombs.length) return;
+  const keep = [];
+  for (const b of bombs) {
+    b.z += b.vz * dt;
+    b.vz -= b.gravity * dt;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    if (b.z <= 0) {
+      spawnBlackHole(b.x, b.y);
+      continue;
+    }
+    keep.push(b);
+  }
+  state.voidBombs = keep;
+}
+
+function spawnBlackHole(x, y) {
+  if (!state) return;
+  const cfg = stage.blackHole || {};
+  const hole = {
+    id: nextId++,
+    x,
+    y,
+    radius: Math.max(8, Number(cfg.radius) || 34),
+    roundsLeft: Math.max(1, Number(cfg.rounds) || 2),
+    fresh: true
+  };
+  state.blackHoles.push(hole);
+  addEffect("black-hole-spawn", x, y, 0.6);
+  message("A black hole opens!", 1.4);
+}
+
+function tickBlackHoles() {
+  if (!state || !state.blackHoles.length) return;
+  const keep = [];
+  for (const hole of state.blackHoles) {
+    if (hole.fresh) {
+      // The shift immediately after it opens does not count as a round.
+      hole.fresh = false;
+      keep.push(hole);
+      continue;
+    }
+    hole.roundsLeft -= 1;
+    if (hole.roundsLeft > 0) {
+      keep.push(hole);
+    } else {
+      addEffect("black-hole-close", hole.x, hole.y, 0.5);
+    }
+  }
+  state.blackHoles = keep;
+}
+
 function spawnMinions(n, initial, spawnsOverride = null) {
   if (!state || !stage.tee) return;
   const count = clampInt(n, 0, stage.minions.max, 0);
+  const bp = bossPos();
   for (let i = 0; i < count; i++) {
     if (state.minions.length >= stage.minions.max) break;
     const spawn = spawnsOverride && spawnsOverride.length
@@ -948,15 +1142,20 @@ function spawnMinions(n, initial, spawnsOverride = null) {
       id: nextId++,
       points,
       progress: 0,
-      x: spawn.x,
-      y: spawn.y,
-      fromX: spawn.x,
-      fromY: spawn.y,
+      x: bp.x,
+      y: bp.y,
+      fromX: bp.x,
+      fromY: bp.y,
       toX: spawn.x,
       toY: spawn.y,
-      t: 1,
-      dur: Math.max(0.05, Number(stage.minions.moveDuration) || 0.34),
-      angle: Math.atan2(stage.tee.y - spawn.y, stage.tee.x - spawn.x),
+      t: 0,
+      dur: Math.max(0.05, Number(stage.minions.emergeDuration) || 0.7),
+      emerge: true,
+      angle: Math.atan2(spawn.y - bp.y, spawn.x - bp.x),
+      angleFrom: 0,
+      angleTo: 0,
+      angleT: 1,
+      angleDur: 0.24,
       radius: stage.minions.radius,
       steps: randomSteps, // Store unique step count per minion
       reachedTee: false,
@@ -968,6 +1167,7 @@ function spawnMinions(n, initial, spawnsOverride = null) {
 function advanceMinion(id) {
   const m = state.minions.find((x) => x.id === id);
   if (!m) return;
+  if (m.emerge) return;
 
   m.progress = Math.min(1, m.progress + 1 / Math.max(1, m.steps));
   const pos = pointOnPath(m.points, m.progress);
@@ -1098,6 +1298,8 @@ function startBossDeath() {
   state.bonusAvailable = false;
   state.postShotPending = false;
   state.projectiles = [];
+  state.voidBombs = [];
+  state.blackHoles = [];
   state.minions = [];
   state.shot = { active: false, isBonus: false };
   state.death = { t: 0, exploded: false, booms: [], particles: [], nextBoom: 0 };
@@ -1218,7 +1420,6 @@ export function bossShutdown() {
   active = false;
   state = null;
   if (hud && hud.root) hud.root.classList.add("hidden");
-  if (hud && hud.endTurn) hud.endTurn.classList.add("hidden");
 }
 
 export function getBossState() {
@@ -1234,6 +1435,14 @@ export function getBossState() {
     freeShots: bridge ? bridge.getFreeShots() : 0,
     minions: state.minions.length,
     projectiles: state.projectiles.length,
+    blackHoles: state.blackHoles.map((h) => ({
+      id: h.id,
+      x: h.x,
+      y: h.y,
+      radius: h.radius,
+      roundsLeft: h.roundsLeft
+    })),
+    voidBombs: state.voidBombs.length,
     barrage: state.barrage ? {
       fired: state.barrage.fired,
       total: state.barrage.total,
@@ -1268,13 +1477,18 @@ function exposeDebug() {
     baseWindAt: (x, y) => {
       try { return getBaseWindAt(Number(x) || 0, Number(y) || 0); } catch { return null; }
     },
+    bossWindAt: (x, y) => {
+      try { return getBossWindAt(Number(x) || 0, Number(y) || 0); } catch { return null; }
+    },
     getEntities: () => {
       if (!state) return null;
       const bp = bossPos();
       return {
         boss: { x: bp.x, y: bp.y, radius: bossHitHalf(), size: bossHitHalf() * 2, visualSize: bossHalf() * 2 },
-        minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress })),
+        minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress, emerge: !!m.emerge, angle: m.angle })),
         projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy, radius: p.radius })),
+        blackHoles: state.blackHoles.map((h) => ({ id: h.id, x: h.x, y: h.y, radius: h.radius, roundsLeft: h.roundsLeft })),
+        voidBombs: state.voidBombs.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, targetX: b.targetX, targetY: b.targetY })),
         chests: state.chests.map((c) => ({ id: c.id, x: c.x, y: c.y })),
         obstacles: (state.asteroids || []).map((a) => ({ id: a.id, x: a.x, y: a.y, radius: a.radius, step: a.step, dir: a.dir, fromY: a.fromY, toY: a.toY, t: a.t })),
         fieldComponents: (() => { try { return getFieldComponents(); } catch { return null; } })(),
@@ -1364,17 +1578,29 @@ function exposeDebug() {
       if (!state) return;
       state.projectiles = [];
     },
+    spawnBlackHole: (x, y) => {
+      if (!state) return false;
+      spawnBlackHole(Number(x) || stage.arena.cx, Number(y) || stage.arena.cy);
+      updateHud();
+      return true;
+    },
+    clearBlackHoles: () => {
+      if (!state) return;
+      state.blackHoles = [];
+      updateHud();
+    },
     clearModifiers: () => {
       if (bridge && bridge.clearModifiers) bridge.clearModifiers();
     },
     forceAction: (type, executeNow = false) => {
-      if (!state || !stage.actions[type]) return false;
-      const cfg = stage.actions[type];
+      const key = type === "spawn" ? "missiles" : type;
+      if (!state || !stage.actions[key]) return false;
+      const cfg = stage.actions[key];
       state.activeAction = {
-        type,
+        type: key,
         label: cfg.label,
         roundsLeft: executeNow ? 1 : cfg.rounds,
-        telegraph: makeTelegraph(type)
+        telegraph: makeTelegraph(key)
       };
       if (executeNow) runBossStep();
       updateHud();
@@ -1417,9 +1643,11 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
 
   const dying = state.phase === "dying";
   if (!dying) {
+    drawBlackHoles(ctx);
     drawChests(ctx);
     drawMinions(ctx);
     drawBossEntity(ctx);
+    drawVoidBombs(ctx);
     drawProjectiles(ctx);
   }
   drawEffects(ctx);
@@ -1493,6 +1721,13 @@ function drawDebugHitboxes(ctx) {
   for (const a of state.asteroids || []) {
     ctx.beginPath();
     ctx.arc(a.x, a.y, a.radius + BALL_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(190, 120, 255, 0.9)";
+  for (const hole of state.blackHoles || []) {
+    ctx.beginPath();
+    ctx.arc(hole.x, hole.y, hole.radius + BALL_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -1838,37 +2073,144 @@ function drawHeartRow(ctx, x, y, lives, max, color) {
   ctx.restore();
 }
 
+function drawRocketFlame(ctx, height, moving, seed) {
+  if (!moving) return;
+  const now = performance.now() / 1000;
+  const flicker = 0.75 + Math.sin(now * 26 + seed) * 0.25;
+  const len = height * (0.32 + flicker * 0.22);
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const grad = ctx.createLinearGradient(0, -height * 0.42, 0, -height * 0.42 - len);
+  grad.addColorStop(0, "rgba(255, 235, 150, 0.95)");
+  grad.addColorStop(0.45, "rgba(255, 146, 40, 0.8)");
+  grad.addColorStop(1, "rgba(255, 70, 20, 0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(-height * 0.1, -height * 0.4);
+  ctx.quadraticCurveTo(-height * 0.05, -height * 0.4 - len * 0.55, -height * 0.02 * flicker, -height * 0.4 - len);
+  ctx.quadraticCurveTo(height * 0.05, -height * 0.4 - len * 0.55, height * 0.1, -height * 0.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawRocket(ctx, m, moving) {
+  const radius = Number(m.radius) || Number(stage.minions.radius) || 15;
+  const height = radius * 4;
+  const img = getRocketSprite();
+  drawRocketFlame(ctx, height, moving, m.id || 0);
+  if (img && img.complete && img.naturalWidth && img.naturalHeight) {
+    const width = height * (img.naturalWidth / img.naturalHeight);
+    try {
+      ctx.drawImage(img, -width / 2, -height / 2, width, height);
+      return;
+    } catch { }
+  }
+  // Fallback: simple triangle missile with the tip in the facing direction.
+  ctx.fillStyle = "#9adf8f";
+  ctx.strokeStyle = "#1c2a18";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, height * 0.5);
+  ctx.lineTo(-height * 0.18, -height * 0.32);
+  ctx.lineTo(height * 0.18, -height * 0.32);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
 function drawMinions(ctx) {
   const now = performance.now() / 1000;
-  const s = Math.max(0.5, (Number(stage.minions.radius) || 12) / 12);
   for (const m of state.minions) {
     let angle = Number.isFinite(m.angle) ? m.angle : Math.atan2(m.toY - m.fromY, m.toX - m.fromX);
     if (!Number.isFinite(angle)) angle = Math.PI;
-
+    const moving = m.t < 1 || (m.angleT != null && m.angleT < 1);
+    const wobble = moving ? 0 : Math.sin(now * 4 + m.id) * 0.05;
     ctx.save();
     ctx.translate(m.x, m.y);
-    ctx.rotate(angle);
+    // The rocket art points down (tip at the bottom of the image), so rotate
+    // its local +y axis onto the direction of travel.
+    ctx.rotate(angle - Math.PI / 2 + wobble);
     ctx.shadowColor = "#ff9f1c";
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = "#ff9f1c";
-    ctx.strokeStyle = "#2a0d02";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(13 * s, 0);
-    ctx.lineTo(-8 * s, 9 * s);
-    ctx.lineTo(-4 * s, 0);
-    ctx.lineTo(-8 * s, -9 * s);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#ffe8c2";
-    ctx.beginPath();
-    ctx.arc(2 * s, 0, (2.4 + Math.sin(now * 5 + m.id) * 0.5) * s, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.shadowBlur = moving ? 14 : 6;
+    drawRocket(ctx, m, moving);
     ctx.restore();
   }
 }
+
+function drawVoidBombs(ctx) {
+  for (const b of state.voidBombs) {
+    const lift = Math.max(0, b.z) * 0.55;
+    const size = b.radius * (1 + Math.min(1.4, b.z / 260) * 0.35);
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.beginPath();
+    ctx.ellipse(b.x, b.y, size * 0.9, size * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(b.x, b.y - lift);
+    const g = ctx.createRadialGradient(-size * 0.35, -size * 0.4, size * 0.15, 0, 0, size);
+    g.addColorStop(0, "#ffffff");
+    g.addColorStop(0.65, "#e6e9ef");
+    g.addColorStop(1, "#9aa2ad");
+    ctx.fillStyle = g;
+    ctx.strokeStyle = "rgba(30, 34, 40, 0.8)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(130, 138, 148, 0.55)";
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.4;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * size * 0.36, Math.sin(a) * size * 0.36, size * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawBlackHoles(ctx) {
+  const now = performance.now() / 1000;
+  for (const hole of state.blackHoles) {
+    ctx.save();
+    ctx.translate(hole.x, hole.y);
+
+    const glow = ctx.createRadialGradient(0, 0, hole.radius * 0.4, 0, 0, hole.radius * 2.3);
+    glow.addColorStop(0, "rgba(150, 90, 255, 0.35)");
+    glow.addColorStop(0.55, "rgba(90, 40, 180, 0.16)");
+    glow.addColorStop(1, "rgba(60, 20, 120, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, hole.radius * 2.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#010104";
+    ctx.beginPath();
+    ctx.arc(0, 0, hole.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.rotate(now * 1.4);
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = `rgba(${170 - i * 25}, ${110 + i * 20}, 255, ${0.55 - i * 0.13})`;
+      ctx.lineWidth = 2.5 - i * 0.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, hole.radius + 5 + i * 5, i * 1.4, i * 1.4 + Math.PI * 1.15);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = "rgba(200, 160, 255, 0.55)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, hole.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 
 function drawProjectiles(ctx) {
   for (const p of state.projectiles) {
@@ -1920,7 +2262,7 @@ function drawTelegraph(ctx) {
       ctx.stroke();
     }
     ctx.restore();
-  } else if (action.type === "spawn" && action.telegraph && action.telegraph.spawns) {
+  } else if ((action.type === "missiles" || action.type === "spawn") && action.telegraph && action.telegraph.spawns) {
     ctx.save();
     ctx.strokeStyle = `rgba(255, 77, 109, ${alpha + 0.15})`;
     ctx.lineWidth = 2;
@@ -1934,6 +2276,24 @@ function drawTelegraph(ctx) {
       ctx.lineTo(s.x + 7, s.y);
       ctx.moveTo(s.x, s.y - 7);
       ctx.lineTo(s.x, s.y + 7);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if (action.type === "voidBombs" && action.telegraph && action.telegraph.targets) {
+    ctx.save();
+    ctx.strokeStyle = `rgba(180, 120, 255, ${alpha + 0.2})`;
+    ctx.fillStyle = `rgba(40, 10, 60, ${0.35 + alpha * 0.3})`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 8]);
+    for (const t of action.telegraph.targets) {
+      const pulse = 20 + Math.sin(now * 6) * 4;
+      ctx.beginPath();
+      ctx.moveTo(bp.x, bp.y);
+      ctx.lineTo(t.x, t.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, pulse, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
     }
     ctx.restore();
@@ -2007,6 +2367,17 @@ function drawEffects(ctx) {
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(e.x, e.y, 20 + p * 60, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else if (e.type === "black-hole-spawn" || e.type === "black-hole-close") {
+      ctx.save();
+      const spawn = e.type === "black-hole-spawn";
+      ctx.strokeStyle = spawn
+        ? `rgba(200, 150, 255, ${0.85 * alpha})`
+        : `rgba(120, 90, 190, ${0.7 * alpha})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, (spawn ? 8 + p * 56 : 60 - p * 40), 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     } else if (e.type === "minion-hit" || e.type === "chest" || e.type === "void" || e.type === "rock-hit") {

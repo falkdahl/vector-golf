@@ -39,9 +39,17 @@ export const DIMENSION_Y_BOSS_LEVEL = {
       { x: 785, radius: 34 },
       { x: 778, radius: 32 },
       { x: 620, radius: 24 },
-      { x: 900, radius: 26 }
+      { x: 655, radius: 26 },
+      { x: 700, radius: 30 },
+      { x: 735, radius: 28 },
+      { x: 830, radius: 30 },
+      { x: 865, radius: 27 },
+      { x: 900, radius: 26 },
+      { x: 940, radius: 30 }
     ],
-    targetCount: 12,
+    targetCount: 14,
+    growthPerRound: 2,
+    maxCount: 34,
     stepMin: 22,
     stepMax: 64,
     duration: 0.5,
@@ -68,6 +76,7 @@ export const DIMENSION_Y_BOSS_LEVEL = {
     minSteps: 3,
     maxSteps: 5,
     moveDuration: 0.34,
+    emergeDuration: 0.7,
     spawns: [
       { x: 1092, y: 168 },
       { x: 1110, y: 356 },
@@ -102,11 +111,30 @@ export const DIMENSION_Y_BOSS_LEVEL = {
     spiralTurns: 2.5
   },
 
+  voidBombs: {
+    count: 2,
+    flightTime: 1.1,
+    gravity: 1100,
+    radius: 7,
+    targetMinX: 430,
+    targetMaxX: 860,
+    targetMinY: 150,
+    targetMaxY: 570
+  },
+
+  blackHole: {
+    radius: 34,
+    rounds: 2,
+    sinkStrength: 2.6,
+    sinkFalloff: 140
+  },
+
   actions: {
-    barrage: { rounds: 2, label: "Projectile Barrage" },
-    spawn: { rounds: 1, label: "Spawn 2 Minions", count: 2 },
+    barrage: { rounds: 1, label: "Projectile Barrage" },
+    missiles: { rounds: 1, label: "Homing Missiles", count: 2 },
     pulse: { rounds: 1, label: "Pulse" },
-    laser: { rounds: 2, label: "Laser" }
+    laser: { rounds: 2, label: "Laser" },
+    voidBombs: { rounds: 1, label: "Void Bombs" }
   },
 
   laser: { minOtherActionsBetween: 2 }

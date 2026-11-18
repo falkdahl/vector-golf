@@ -1422,6 +1422,11 @@ function showStartingItems(courseId, opts) {
   if (!boss && hasRestorableSave()) return false;
   const course = boss ? null : findCourseById(courseId);
   if (!boss && !course) return false;
+  if (boss) {
+    // Render the actual Dimension-Y playfield behind the picker instead of a
+    // campaign course. The fight is re-initialized with the picks on confirm.
+    try { startBossMode({ preview: true }); } catch (e) { console.warn('showStartingItems boss preview failed', e); }
+  }
   // Start with empty bag – only the 2 picks are present after auto-confirm
   golfbag = [null, null, null];
   passiveCounts = { fieldExtender: 0, powerCell: 0, freeShot: 0 };
@@ -1475,12 +1480,16 @@ function showStartingItems(courseId, opts) {
   return true;
 }
 function hideStartingItems() {
+  const cancelBossPreview = startingBossMode && bossModeActive;
   startingItemsVisible = false;
   startingBossMode = false;
   startingCourseId = null;
   startingRemaining = 0;
   startingChoices = [];
   selectedStartingItems = [];
+  if (cancelBossPreview) {
+    try { bossReturnToMainMenu(); } catch { }
+  }
   syncStartingItemsOverlay();
   // return to main menu without starting run
   try {
@@ -4250,8 +4259,6 @@ function startBossMode(params) {
   try {
     const bossHud = document.getElementById("boss-hud");
     if (bossHud) bossHud.classList.remove("hidden");
-    const endBtn = document.getElementById("boss-end-turn");
-    if (endBtn) endBtn.classList.add("hidden");
   } catch { }
 
   // Starting bag (debug override via ?items=deflector,rotator,...).
@@ -4360,8 +4367,6 @@ function bossReturnToMainMenu() {
   try {
     const bossHud = document.getElementById("boss-hud");
     if (bossHud) bossHud.classList.add("hidden");
-    const endBtn = document.getElementById("boss-end-turn");
-    if (endBtn) endBtn.classList.add("hidden");
   } catch { }
 
   // IMPORTANT: no clearProgress() here — the campaign save must survive.
