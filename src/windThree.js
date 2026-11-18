@@ -37,6 +37,17 @@ function isWindMobileMode() {
 }
 let windDPRCap = 0;
 export function setWindDPRCap(cap) { windDPRCap = Math.max(0, Number(cap) || 0); }
+
+// Optional sampler override (Dimension-Y boss mode installs the boss field so
+// black-hole sinks are visible in the streaks). Null = sample the base field.
+let windSamplerOverride = null;
+export function setWindSamplerOverride(fn) {
+  windSamplerOverride = typeof fn === 'function' ? fn : null;
+}
+function activeWindSampler(fallback) {
+  if (windSamplerOverride) return windSamplerOverride;
+  return (typeof getBaseWindAt === 'function') ? getBaseWindAt : fallback;
+}
 function effectiveWindDPR() {
   const dpr = window.devicePixelRatio || 1;
   let out = dpr;
@@ -139,7 +150,7 @@ function spawnStreak(s, getWindAt) {
   // Initial direction from the base field so fresh streaks un-collapse along the flow
   let dx = 1, dy = 0;
   try {
-    const sampler = (typeof getBaseWindAt === 'function') ? getBaseWindAt : getWindAt;
+    const sampler = activeWindSampler(getWindAt);
     if (typeof sampler === 'function') {
       const w = sampler(p.x, p.y);
       const m = Math.hypot(w.x, w.y);
@@ -390,7 +401,7 @@ export function updateWindUniforms(dt, getWindAt) {
   const gust = Math.max(0.55, 0.9 + 0.28 * Math.sin(gustTime * 1.9) + 0.12 * Math.sin(gustTime * 4.7 + 1.3));
   // Base field only: the visualization is unaffected by placed modifier bubbles.
   // Prefer the dedicated base sampler; fall back to the passed getWindAt.
-  const sampler = (typeof getBaseWindAt === 'function') ? getBaseWindAt : getWindAt;
+  const sampler = activeWindSampler(getWindAt);
   const hasField = typeof sampler === 'function';
   let speedSum = 0;
   for (let i = 0; i < streakData.length; i++) {
@@ -464,7 +475,7 @@ export function resetWindStreaks() {
   if (!streakData.length || !streakGeometry) return false;
   const BACKSTEP = 11; // px per history node when pre-rolling the trail
   const totalCells = SPREAD_COLS * SPREAD_ROWS;
-  const sampler = (typeof getBaseWindAt === 'function') ? getBaseWindAt : null;
+  const sampler = activeWindSampler(null);
   for (let i = 0; i < streakData.length; i++) {
     const s = streakData[i];
     // Even coverage: round-robin across spread cells; retry a few cells so the
@@ -533,7 +544,7 @@ export function getWindStreakStats() {
   try {
     const pts = [[640, 360], [200, 600], [1100, 100]];
     fieldProbe = pts.map(([x, y]) => {
-      const w = getBaseWindAt(x, y);
+      const w = activeWindSampler(getBaseWindAt)(x, y);
       return { x, y, wx: +w.x.toFixed(3), wy: +w.y.toFixed(3) };
     });
   } catch (e) { fieldProbe = 'probe-failed:' + String(e && e.message || e); }

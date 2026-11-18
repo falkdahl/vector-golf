@@ -235,6 +235,8 @@ function makeState(params) {
   const maxPlayer = clampInt(params.lives, 1, 99, 3);
   const maxBoss = clampInt(params.bossLives, 1, 99, stage.boss.lives);
   const start = stage.boss.positions[0] || { x: stage.boss.x, y: stage.boss.y };
+  const boss = settledEntity(start.x, start.y);
+  boss.angle = Math.atan2(stage.tee.y - start.y, stage.tee.x - start.x);
   return {
     maxPlayerLives: maxPlayer,
     maxBossLives: maxBoss,
@@ -244,7 +246,7 @@ function makeState(params) {
     phase: params.preview ? "preview" : "player", // player | shot | between | bonus | enemy | shift | victory | gameover | preview
     preview: !!params.preview,
     bossPosIndex: 0,
-    boss: settledEntity(start.x, start.y),
+    boss,
     asteroids: makeInitialAsteroids(),
     minions: [],
     projectiles: [],
@@ -301,6 +303,9 @@ export function initBoss(gameBridge, params = {}) {
   if (state.debug) {
     try { console.log("[boss] debug state", getBossState()); } catch { }
   }
+  // Route the wind streak visualization through the boss field so black holes
+  // spawned by void bombs bend the visible wind as soon as they open.
+  try { if (bridge.setWindSampler) bridge.setWindSampler(getBossWindAt); } catch { }
   exposeDebug();
 }
 
@@ -393,7 +398,21 @@ function moveAsteroids() {
 }
 
 function updateEntityAnimations(dt) {
-  stepEntity(state.boss, dt);
+  const boss = state.boss;
+  if (boss) {
+    stepEntity(boss, dt);
+    // Front of the sprite points to the bottom of the image. While relocating
+    // it faces the direction of travel; once settled it turns back toward the
+    // player. Ease between the two so the turn never snaps.
+    const moving = boss.t < 1;
+    const desired = moving
+      ? Math.atan2(boss.toY - boss.fromY, boss.toX - boss.fromX)
+      : Math.atan2(stage.tee.y - boss.y, stage.tee.x - boss.x);
+    if (Number.isFinite(desired)) {
+      if (!Number.isFinite(boss.angle)) boss.angle = desired;
+      boss.angle = lerpAngle(boss.angle, desired, 1 - Math.exp(-dt * 9));
+    }
+  }
 
   for (const a of state.asteroids) {
     if (a.t >= 1) continue;
@@ -1211,9 +1230,13 @@ function scheduleChestRespawn() {
 function spawnChest() {
   if (!state) return false;
   if (state.chests.length >= stage.chests.max) return false;
+  // Chests always drop on the player's (left) half of the arena.
+  const halfX = Number(stage.arena && stage.arena.cx) || LOGICAL_W / 2;
+  const leftPoints = stage.chests.spawnPoints.filter((p) => p.x < halfX);
+  const points = leftPoints.length ? leftPoints : stage.chests.spawnPoints;
   const occupied = new Set(state.chests.map((c) => `${Math.round(c.x)},${Math.round(c.y)}`));
-  const candidates = stage.chests.spawnPoints.filter((p) => !occupied.has(`${p.x},${p.y}`));
-  const pool = candidates.length ? candidates : stage.chests.spawnPoints;
+  const candidates = points.filter((p) => !occupied.has(`${p.x},${p.y}`));
+  const pool = candidates.length ? candidates : points;
   const p = pool[Math.floor(Math.random() * pool.length)];
   state.chests.push({ id: nextId++, x: p.x, y: p.y, radius: stage.chests.radius, isCollected: false });
   return true;
@@ -1419,6 +1442,7 @@ export function bossHandleResetKey() {
 export function bossShutdown() {
   active = false;
   state = null;
+  try { if (bridge && bridge.clearWindSampler) bridge.clearWindSampler(); } catch { }
   if (hud && hud.root) hud.root.classList.add("hidden");
 }
 
@@ -1484,7 +1508,7 @@ function exposeDebug() {
       if (!state) return null;
       const bp = bossPos();
       return {
-        boss: { x: bp.x, y: bp.y, radius: bossHitHalf(), size: bossHitHalf() * 2, visualSize: bossHalf() * 2 },
+        boss: { x: bp.x, y: bp.y, radius: bossHitHalf(), size: bossHitHalf() * 2, visualSize: bossHalf() * 2, angle: Number.isFinite(state.boss.angle) ? state.boss.angle : null, moving: state.boss.t < 1 },
         minions: state.minions.map((m) => ({ id: m.id, x: m.x, y: m.y, progress: m.progress, emerge: !!m.emerge, angle: m.angle })),
         projectiles: state.projectiles.map((p) => ({ id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy, radius: p.radius })),
         blackHoles: state.blackHoles.map((h) => ({ id: h.id, x: h.x, y: h.y, radius: h.radius, roundsLeft: h.roundsLeft })),
@@ -1970,6 +1994,14 @@ function drawBossEntity(ctx) {
   ctx.fill();
 
   const flashing = state.bossHitFlash > 0;
+  const bossAngle = Number.isFinite(state.boss.angle)
+    ? state.boss.angle
+    : Math.atan2(stage.tee.y - bp.y, stage.tee.x - bp.x);
+  const bossMoving = state.boss.t < 1;
+  ctx.save();
+  // The sprite's front points down in the art, so local +y is the facing axis.
+  ctx.rotate(bossAngle - Math.PI / 2);
+  if (bossMoving) drawBossThrusters(ctx, half, state.boss.id || 0);
   if (!drawBossSprite(ctx, half)) drawBossFallback(ctx, half, flashing);
   if (flashing) {
     ctx.save();
@@ -1978,6 +2010,7 @@ function drawBossEntity(ctx) {
     drawBossSprite(ctx, half);
     ctx.restore();
   }
+  ctx.restore();
   ctx.shadowBlur = 0;
 
   // Corner brackets mark the inset square hitbox.
@@ -2070,6 +2103,32 @@ function drawHeartRow(ctx, x, y, lives, max, color) {
   ctx.strokeText(text, x, y);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawBossThrusters(ctx, half, seed) {
+  const now = performance.now() / 1000;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  // Two tightly-spaced exhaust plumes behind the sprite while it relocates.
+  for (let i = 0; i < 2; i++) {
+    const dir = i === 0 ? -1 : 1;
+    const x = dir * half * 0.16;
+    const flicker = 0.72 + Math.sin(now * 24 + seed * 1.7 + i * 2.1) * 0.28;
+    const len = half * (0.5 + flicker * 0.55);
+    const w = half * 0.13;
+    const grad = ctx.createLinearGradient(x, -half * 0.34, x, -half * 0.34 - len);
+    grad.addColorStop(0, "rgba(255, 240, 170, 0.95)");
+    grad.addColorStop(0.4, "rgba(255, 150, 45, 0.85)");
+    grad.addColorStop(1, "rgba(255, 70, 20, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x - w, -half * 0.34);
+    ctx.quadraticCurveTo(x - w * 0.4, -half * 0.34 - len * 0.55, x, -half * 0.34 - len);
+    ctx.quadraticCurveTo(x + w * 0.4, -half * 0.34 - len * 0.55, x + w, -half * 0.34);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.restore();
 }
 

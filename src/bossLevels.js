@@ -47,9 +47,9 @@ export const DIMENSION_Y_BOSS_LEVEL = {
       { x: 900, radius: 26 },
       { x: 940, radius: 30 }
     ],
-    targetCount: 14,
-    growthPerRound: 2,
-    maxCount: 34,
+    targetCount: 12,
+    growthPerRound: 1,
+    maxCount: 26,
     stepMin: 22,
     stepMax: 64,
     duration: 0.5,
@@ -91,12 +91,12 @@ export const DIMENSION_Y_BOSS_LEVEL = {
     respawnRounds: 3,
     max: 1,
     spawnPoints: [
-      { x: 700, y: 176 },
-      { x: 700, y: 544 },
-      { x: 520, y: 148 },
-      { x: 520, y: 572 },
-      { x: 840, y: 116 },
-      { x: 840, y: 604 }
+      { x: 540, y: 176 },
+      { x: 540, y: 544 },
+      { x: 420, y: 160 },
+      { x: 420, y: 560 },
+      { x: 540, y: 360 },
+      { x: 400, y: 360 }
     ]
   },
 
