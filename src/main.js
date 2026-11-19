@@ -4216,6 +4216,21 @@ function getBossLaunchParams() {
   }
 }
 
+function playDimensionYIntroBanter() {
+  const ids = ["dimension-y-intro-generals", "dimension-y-intro-shell"];
+  const id = ids[Math.floor(Math.random() * ids.length)];
+  Promise.resolve()
+    .then(() => banterLoadFile())
+    .then(() => {
+      if (!bossModeActive) return;
+      const started = banterPlay(id, {
+        onComplete: () => { try { syncBanterSkipButton(); } catch { } }
+      });
+      if (started) try { syncBanterSkipButton(); } catch { }
+    })
+    .catch(() => { });
+}
+
 function startBossMode(params) {
   bossModeActive = true;
   bossLaunchParams = params || {};
@@ -4333,6 +4348,9 @@ function startBossMode(params) {
   };
 
   try { initBoss(bridge, params); } catch (e) { recordFrameError("boss-init", e); try { console.error(e); } catch { } }
+  if (!params || !params.preview) {
+    try { playDimensionYIntroBanter(); } catch { }
+  }
 
   try { syncPauseOverlay(); } catch { }
   try { syncMainMenu(); } catch { }
@@ -7927,6 +7945,15 @@ function update(dt) {
   // Water splash ripples animate on their own clock (even while physics is frozen).
   try { updateWaterRipples(dt); } catch { }
   if (bossModeActive) {
+    // Dimension-Y intro banter freezes the boss turn loop while the dialog is
+    // open; physics/input resume on close or Skip.
+    try {
+      if (banterIsActive()) {
+        banterUpdate(dt);
+        try { syncBanterSkipButton(); } catch { }
+        return;
+      }
+    } catch { }
     try { updateBoss(dt); } catch (e) { recordFrameError("boss-update", e); }
     return;
   }

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "banters": [
+    {
+      "id": "dimension-y-intro-generals",
+      "lines": [
+        {
+          "speaker": "cortex",
+          "text": "Welcome to Dimension-Y, little putters. My stone generals have already taken their positions. They do not blink. They do not miss."
+        },
+        {
+          "speaker": "may",
+          "text": "Generals made of rock. Cute. I have beaten worse with a seven iron and a bad attitude."
+        },
+        {
+          "speaker": "slicer",
+          "text": "Your iron cannot cut what is already broken. I am Slicer. I have been waiting for a worthy slice."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Careful, May. The wind here has teeth, and the void does not give mulligans. Keep your shell- er, your head- down."
+        },
+        {
+          "speaker": "cortex",
+          "text": "The ooze that remade me has shown me the truth. There is no rough here, only the long dark between shots."
+        },
+        {
+          "speaker": "may",
+          "text": "Then we will play the long dark. Caddy, call the line."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Aim through the gaps, not at the wall. And if the big one starts counting, hit him before he finishes."
+        },
+        {
+          "speaker": "slicer",
+          "text": "Count with me. When I reach zero, your little tee becomes a crater."
+        },
+        {
+          "speaker": "cortex",
+          "text": "The Foot has already surrounded this dimension. You are three lives from the sewer, golfers."
+        },
+        {
+          "speaker": "may",
+          "text": "Three lives is plenty. I once saved a whole city with a two-stroke penalty."
+        },
+        {
+          "speaker": "caddy",
+          "text": "She means she saved it from a very boring afternoon. Now swing like the wind owes you money."
+        },
+        {
+          "speaker": "cortex",
+          "text": "Then swing, turtle. My generals are waiting, and they are hungry."
+        }
+      ]
+    },
+    {
+      "id": "dimension-y-intro-shell",
+      "lines": [
+        {
+          "speaker": "slicer",
+          "text": "So this is the golfer who keeps slipping through the portals. I expected a warrior. I got a bag of clubs."
+        },
+        {
+          "speaker": "may",
+          "text": "You got the clubs, too. Step into range and I will show you what a sand wedge thinks of your armor."
+        },
+        {
+          "speaker": "cortex",
+          "text": "Do not taunt her, Slicer. The ooze taught me patience. The darkness taught me hunger. She is only a shell away from both."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Cortex. You used to be a scientist with a bad haircut. Now you are a demon with a worse tailor."
+        },
+        {
+          "speaker": "cortex",
+          "text": "I traded a lab coat for a throne of wind and stone. My stone generals answer only to me."
+        },
+        {
+          "speaker": "may",
+          "text": "Then they can answer me with a divot. Caddy, how do we break a demon?"
+        },
+        {
+          "speaker": "caddy",
+          "text": "Same way we break a wind field. Find the gap, use the spin, and never let him finish his swing. Hit him while he charges."
+        },
+        {
+          "speaker": "slicer",
+          "text": "My missiles remember every tee. They will find yours even in the dark."
+        },
+        {
+          "speaker": "may",
+          "text": "They can try. I have dodged worse things than guided shots."
+        },
+        {
+          "speaker": "cortex",
+          "text": "You misunderstand. This is not a game. This is the last hole of your little sewer world."
+        },
+        {
+          "speaker": "caddy",
+          "text": "Good. I hate long goodbyes. May, drop him before he drops the void on us."
+        },
+        {
+          "speaker": "may",
+          "text": "On it. Cowabunga, demon."
+        }
+      ]
+    }
+  ]
+}

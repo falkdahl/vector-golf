@@ -16,11 +16,17 @@ export const TUTORIAL_BANTER_FILE = './src/tutorial-banter.json';
 // tutorial banters. Same schema; ids carry a -mobile suffix and are
 // tutorial-only like the desktop ones (never in the random rotation pool).
 export const MOBILE_TUTORIAL_BANTER_FILE = './src/tutorial-banter-mobile.json';
+// Dimension-Y boss intros. Kept out of the campaign rotation pool and loaded
+// alongside the other banter files so boss mode can play them on entry.
+export const DIMENSION_Y_BANTER_FILE = './src/dimension-y-banter.json';
 export const BANTER_STATE_KEY = 'golfVectorField.banter.v1';
 
 export const SPEAKERS = {
-  may: { name: 'May', portrait: './img/cutscenes/portrait-may.webp' },
-  caddy: { name: 'Caddy', portrait: './img/cutscenes/portrait-caddy.webp' },
+  may: { name: 'May', portrait: './img/cutscenes/portrait-may.webp', side: 'left' },
+  caddy: { name: 'Caddy', portrait: './img/cutscenes/portrait-caddy.webp', side: 'left' },
+  slicer: { name: 'Slicer', portrait: './img/cutscenes/portrait-slicer.webp', side: 'right' },
+  // Cortex has fully transformed by Dimension-Y: the demon portrait is canon here.
+  cortex: { name: 'Cortex', portrait: './img/cutscenes/portrait-demon.webp', side: 'right' },
 };
 
 export function resolveSpeaker(ref) {
@@ -55,7 +61,7 @@ export function validateBanter(data) {
     for (let j = 0; j < b.lines.length; j++) {
       const ln = b.lines[j];
       if (!ln || typeof ln !== 'object') { errors.push(`banters[${i}].lines[${j}] must be object`); continue; }
-      if (!resolveSpeaker(ln.speaker)) errors.push(`banters[${i}].lines[${j}].speaker must be may|caddy`);
+      if (!resolveSpeaker(ln.speaker)) errors.push(`banters[${i}].lines[${j}].speaker must be may|caddy|slicer|cortex`);
       if (typeof ln.text !== 'string' || !ln.text.length || ln.text.length > 500) {
         errors.push(`banters[${i}].lines[${j}].text must be 1-500 chars`);
       }
@@ -72,6 +78,8 @@ let banterPromise = null;
 let rotationIds = [];
 // Ids of entries loaded from the tutorial file (src/tutorial-banter.json).
 let tutorialIds = [];
+// Ids loaded from src/dimension-y-banter.json (boss-only, never rotated).
+let dimensionYIds = [];
 
 async function fetchBanterJson(path) {
   const res = await fetch(path, { cache: 'no-store' });
@@ -87,15 +95,17 @@ export async function loadBanterFile() {
   if (banterPromise) return banterPromise;
   banterPromise = (async () => {
     try {
-      const [rotation, tutorial, mobileTutorial] = await Promise.all([
+      const [rotation, tutorial, mobileTutorial, dimensionY] = await Promise.all([
         fetchBanterJson(BANTER_FILE).catch(() => null),
         fetchBanterJson(TUTORIAL_BANTER_FILE).catch(() => null),
         fetchBanterJson(MOBILE_TUTORIAL_BANTER_FILE).catch(() => null),
+        fetchBanterJson(DIMENSION_Y_BANTER_FILE).catch(() => null),
       ]);
       const merged = [];
       const seen = new Set();
       rotationIds = [];
       tutorialIds = [];
+      dimensionYIds = [];
       // Rotation file first so its ids define the random pool.
       for (const b of (rotation && rotation.banters) || []) {
         if (!b || seen.has(b.id)) continue;
@@ -119,6 +129,15 @@ export async function loadBanterFile() {
           seen.add(b.id);
           merged.push(b);
           tutorialIds.push(b.id);
+        }
+      }
+      if (dimensionY) {
+        for (const b of dimensionY.banters || []) {
+          if (!b) continue;
+          if (seen.has(b.id)) { console.warn(`[banter] duplicate id across files: ${b.id}`); continue; }
+          seen.add(b.id);
+          merged.push(b);
+          dimensionYIds.push(b.id);
         }
       }
       if (!merged.length) return null;
@@ -166,6 +185,11 @@ export function listTutorialBanterIds() {
 export function listAllBanterIds() {
   if (!banterCache) return [];
   return (banterCache.banters || []).map((b) => b.id);
+}
+
+export function listDimensionYBanterIds() {
+  if (dimensionYIds.length) return [...dimensionYIds];
+  return [];
 }
 
 // --- Tutorial vs non-tutorial banter (2026-09-25, split 2026-09-28) ---
@@ -314,6 +338,7 @@ function buildDialogs(entry) {
     dialogs.push({
       speaker: sp.name,
       portrait: sp.portrait,
+      side: sp.side === 'right' ? 'right' : 'left',
       text,
       start: t,
       reveal,
@@ -337,8 +362,8 @@ function renderActive() {
   els.root.classList.remove('hidden');
   if (els.box) {
     els.box.classList.remove('no-portrait');
-    els.box.classList.add('portrait-left');
-    els.box.classList.remove('portrait-right');
+    els.box.classList.toggle('portrait-left', d.side !== 'right');
+    els.box.classList.toggle('portrait-right', d.side === 'right');
   }
   if (els.portrait) {
     const src = d.portrait;
@@ -533,6 +558,7 @@ if (typeof window !== 'undefined') {
     listBanterIds,
     listTutorialBanterIds,
     listAllBanterIds,
+    listDimensionYBanterIds,
     getBanter,
     TUTORIAL_BANTER_IDS,
     ONBOARDING_BANTER_IDS,

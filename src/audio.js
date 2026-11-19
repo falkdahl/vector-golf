@@ -569,6 +569,55 @@ export function playUIClick() {
   } catch {}
 }
 
+// --- Dimension-Y boss SFX ---
+
+// Homing missiles leaving Slicer: descending launch whoosh.
+export function playBossMissileLaunch(delay = 0) {
+  try {
+    ensureAudio();
+    pulse(420, 110, 0.24, 0.16, delay, 'sawtooth');
+    noiseBurst(0.22, 0.09, delay, 2400, 500);
+  } catch {}
+}
+
+// Each barrage projectile: a tiny, bright launch tick (kept quiet because the
+// stream fires ~55 times per second).
+export function playBossBarrageShot() {
+  try {
+    ensureAudio();
+    pulse(1200, 620, 0.035, 0.045);
+    noiseBurst(0.025, 0.03, 0, 5000, 1500);
+  } catch {}
+}
+
+// Void bomb leaving the boss: falling, unstable whistle.
+export function playVoidBombLaunch(delay = 0) {
+  try {
+    ensureAudio();
+    pulse(260, 900, 0.18, 0.10, delay, 'triangle');
+    noiseBurst(0.16, 0.06, delay, 1800, 600);
+  } catch {}
+}
+
+// Void bomb landing and opening a black hole: low implosion thud.
+export function playVoidBombImpact() {
+  try {
+    ensureAudio();
+    pulse(140, 42, 0.34, 0.22, 0, 'sawtooth');
+    noiseBurst(0.32, 0.16, 0, 900, 120);
+  } catch {}
+}
+
+// Boss-fight explosion (player death / missile impact).
+export function playBossExplosion() {
+  try {
+    ensureAudio();
+    noiseBurst(0.7, 0.30, 0, 3200, 90);
+    pulse(120, 35, 0.55, 0.22, 0, 'sawtooth');
+    triangle(80, 30, 0.6, 0.16, 0.02);
+  } catch {}
+}
+
 // Auto-unlock on first gesture (autoplay policy).
 try {
   if (typeof window !== 'undefined') {
@@ -590,6 +639,8 @@ if (typeof window !== 'undefined') {
       playWater, playHoleWin, playModifierActivated, playTypeTick,
       playNewRecord, playPointsTick, playPointsCount,
       playChest, playReward, playOB, playUIClick,
+      playBossMissileLaunch, playBossBarrageShot, playVoidBombLaunch,
+      playVoidBombImpact, playBossExplosion,
       ensureMusic, setMusicActive, isMusicActive, duckMusic,
       ensureMenuMusic, setMenuMusicActive, isMenuMusicActive,
       isPageHidden, AUDIO_PREFS_KEY,

@@ -45,6 +45,8 @@ const LEVEL_AUDIO = [
 const LEVEL_IMAGES = [
   "./img/cutscenes/portrait-may.webp",
   "./img/cutscenes/portrait-caddy.webp",
+  "./img/cutscenes/portrait-slicer.webp",
+  "./img/cutscenes/portrait-demon.webp",
 ];
 
 function withTimeout(promise, ms) {

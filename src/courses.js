@@ -1,6 +1,11 @@
 import { generateLevels, generateTutorialLevels, LEVELS, LEVEL } from "./levels.js";
 
 export const COURSES_KEY = "golfVectorField.courses.v1";
+// Verified easy-ish seed for the 6- and 9-hole stages:
+// 6-hole scores [0,0,4,4,0,4], 9-hole scores [0,4,4,0,4,4,4,0,5].
+// Used only when a brand-new campaign has no seed yet; explicit refreshes and
+// manual seeds still generate their requested seed.
+export const DEFAULT_CAMPAIGN_SEED = "00000536";
 
 const ADJECTIVES = ["Breezy","Gusty","Stormy","Misty","Blustery","Whispering","Howling","Calm","Sunny","Zephyr","Tempest","Windy","Gentle","Brisk","Hazy","Drafty","Airy","Chilly","Muggy","Crisp"];
 const NOUNS = ["Fairway","Greens","Links","Meadow","Dunes","Valley","Hollow","Pines","Ridge","Course","Haven","Glen","Heights","Acres","Trail","Woods","Fields","Park","Gardens","Estates"];
@@ -353,8 +358,7 @@ export function ensureStagedCourses(courses, campaignSeedParam) {
     if (cs) {
       def = generateCampaignCourse(3, cs, { difficulty: 'easy' });
     } else {
-      const newCs = generateCampaignSeed();
-      campaignSeed = String(newCs);
+      campaignSeed = DEFAULT_CAMPAIGN_SEED;
       def = generateCampaignCourse(3, campaignSeed, { difficulty: 'easy' });
     }
     staged.push(def);
@@ -449,8 +453,7 @@ export function loadCourses() {
     _coursesCacheRaw = raw;
     return staged;
   } catch (e) {
-    const newCs = generateCampaignSeed();
-    campaignSeed = String(newCs);
+    campaignSeed = DEFAULT_CAMPAIGN_SEED;
     const def = generateCampaignCourse(3, campaignSeed, { difficulty: 'easy' });
     try { saveCourses([def], campaignSeed); } catch {}
     _coursesCache = [def];

@@ -33,6 +33,13 @@ import {
   drawTreasure,
   drawFreeShotEdgeGlow
 } from "./render.js";
+import {
+  playBossMissileLaunch,
+  playBossBarrageShot,
+  playVoidBombLaunch,
+  playVoidBombImpact,
+  playBossExplosion
+} from "./audio.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -266,6 +273,7 @@ function makeState(params) {
     enemy: null,
     effects: [],
     death: null,
+    playerDeath: null,
     message: "",
     messageTimer: 0,
     debug: !!params.debug,
@@ -303,9 +311,9 @@ export function initBoss(gameBridge, params = {}) {
   if (state.debug) {
     try { console.log("[boss] debug state", getBossState()); } catch { }
   }
-  // Route the wind streak visualization through the boss field so black holes
-  // spawned by void bombs bend the visible wind as soon as they open.
-  try { if (bridge.setWindSampler) bridge.setWindSampler(getBossWindAt); } catch { }
+  // Keep the wind streaks on the base field. Black holes still pull the ball
+  // through getBossWindAt, but they must not bend the visible wind inside them.
+  try { if (bridge.clearWindSampler) bridge.clearWindSampler(); } catch { }
   exposeDebug();
 }
 
@@ -359,8 +367,14 @@ function message(text, seconds = 2) {
 
 function updateEffects(dt) {
   if (!state.effects.length) return;
-  for (const e of state.effects) e.t -= dt;
-  state.effects = state.effects.filter((e) => e.t > 0);
+  for (const e of state.effects) {
+    if (e.delay > 0) {
+      e.delay -= dt;
+      continue;
+    }
+    e.t -= dt;
+  }
+  state.effects = state.effects.filter((e) => (e.delay > 0) || e.t > 0);
 }
 
 function addEffect(type, x, y, seconds, extra = null) {
@@ -441,8 +455,9 @@ function updateEntityAnimations(dt) {
     }
     if (m.reachedTee && m.t >= 1) {
       state.minions = state.minions.filter((x) => x !== m);
-      addEffect("tee-hit", stage.tee.x, stage.tee.y, 0.5);
-      loseLife("minion");
+      addEffect("explosion", stage.tee.x, stage.tee.y, 0.8, { maxRadius: 78, chunks: 10 });
+      try { playBossExplosion(); } catch { }
+      loseLife("homing missile");
     }
   }
 }
@@ -477,6 +492,12 @@ export function updateBoss(dt) {
 
   if (state.phase === "dying") {
     updateDeath(step);
+    updateHud();
+    return;
+  }
+
+  if (state.phase === "dying-player") {
+    updatePlayerDeath(step);
     updateHud();
     return;
   }
@@ -941,6 +962,9 @@ function executeBossAction(type, telegraph = null) {
     const spawns = telegraph && Array.isArray(telegraph.spawns) ? telegraph.spawns : null;
     const count = (stage.actions.missiles && stage.actions.missiles.count) || 2;
     spawnMinions(count, false, spawns);
+    for (let i = 0; i < count; i++) {
+      try { playBossMissileLaunch(i * 0.08); } catch { }
+    }
     message("Slicer launches homing missiles!", 1.8);
   } else if (type === "voidBombs") {
     const targets = telegraph && Array.isArray(telegraph.targets) ? telegraph.targets : null;
@@ -982,6 +1006,7 @@ function spawnProjectile(angle) {
     radius: stage.projectiles.radius,
     life: stage.projectiles.life
   });
+  try { playBossBarrageShot(); } catch { }
 }
 
 function startBarrage(telegraph = null) {
@@ -1081,6 +1106,7 @@ function launchVoidBombs(targets = null) {
       targetX: target.x,
       targetY: target.y
     });
+    try { playVoidBombLaunch(i * 0.08); } catch { }
   }
 }
 
@@ -1094,6 +1120,7 @@ function updateVoidBombs(dt) {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     if (b.z <= 0) {
+      try { playVoidBombImpact(); } catch { }
       spawnBlackHole(b.x, b.y);
       continue;
     }
@@ -1202,16 +1229,62 @@ function advanceMinion(id) {
 }
 
 function loseLife(reason) {
-  if (!state || state.phase === "gameover" || state.phase === "victory") return false;
+  if (!state || state.phase === "gameover" || state.phase === "victory" || state.phase === "dying-player") return false;
   state.playerLives = Math.max(0, state.playerLives - 1);
   state.teePulse = 0.75;
   if (state.playerLives <= 0) {
-    message("Dimension Y consumes you...", 5);
-    gameOver();
+    startPlayerDeath();
     return true;
   }
   message(`Tee hit by ${reason}! ${state.playerLives} lives left`, 2);
   return true;
+}
+
+const PLAYER_DEATH_SECONDS = 1.7;
+
+function startPlayerDeath() {
+  if (!state || state.playerDeath) return;
+  state.phase = "dying-player";
+  state.enemy = null;
+  state.activeAction = null;
+  state.bonusAvailable = false;
+  state.postShotPending = false;
+  state.barrage = null;
+  state.projectiles = [];
+  state.voidBombs = [];
+  state.minions = [];
+  state.shot = { active: false, isBonus: false };
+  state.playerDeath = { t: 0, shown: false };
+  resetCharge();
+  try { ball.isMoving = false; ball.vel.x = 0; ball.vel.y = 0; ball.z = 0; ball.vz = 0; } catch { }
+  const bx = ball && ball.pos ? ball.pos.x : stage.tee.x;
+  const by = ball && ball.pos ? ball.pos.y : stage.tee.y;
+  const booms = [
+    { x: stage.tee.x, y: stage.tee.y, r: 96, d: 0 },
+    { x: bx, y: by, r: 74, d: 0.08 },
+    { x: stage.tee.x - 42, y: stage.tee.y + 22, r: 56, d: 0.16 },
+    { x: stage.tee.x + 48, y: stage.tee.y - 26, r: 60, d: 0.24 },
+    { x: stage.tee.x + 10, y: stage.tee.y + 52, r: 48, d: 0.32 }
+  ];
+  for (const b of booms) {
+    addEffect("explosion", b.x, b.y, 0.9, { delay: b.d, maxRadius: b.r, chunks: 12 });
+  }
+  try { playBossExplosion(); } catch { }
+  message("Dimension Y consumes you...", 5);
+  updateHud();
+}
+
+function updatePlayerDeath(dt) {
+  const d = state && state.playerDeath;
+  if (!d) {
+    gameOver();
+    return;
+  }
+  d.t += dt;
+  if (!d.shown && d.t >= PLAYER_DEATH_SECONDS) {
+    d.shown = true;
+    gameOver();
+  }
 }
 
 function maybeSpawnChest() {
@@ -1555,8 +1628,8 @@ function exposeDebug() {
     },
     damagePlayer: (n = 1) => {
       if (!state) return;
-      state.playerLives = Math.max(0, state.playerLives - clampInt(n, 1, 99, 1));
-      if (state.playerLives <= 0) gameOver();
+      const hits = clampInt(n, 1, 99, 1);
+      for (let i = 0; i < hits; i++) loseLife("debug hit");
       updateHud();
     },
     spawnMinions: (n = 1) => {
@@ -1684,6 +1757,13 @@ export function renderBoss(ctx, width = LOGICAL_W, height = LOGICAL_H, dpr = 1) 
 
   if (dying) {
     drawDeathEffects(ctx);
+    if (state.debug) {
+      try { drawDebugHitboxes(ctx); } catch { }
+    }
+    return;
+  }
+
+  if (state.phase === "dying-player") {
     if (state.debug) {
       try { drawDebugHitboxes(ctx); } catch { }
     }
@@ -2390,10 +2470,41 @@ function drawTelegraph(ctx) {
 
 function drawEffects(ctx) {
   for (const e of state.effects) {
+    if (e.delay > 0) continue;
     const p = Math.max(0, Math.min(1, 1 - e.t / e.max));
     const alpha = Math.max(0, 1 - p);
 
-    if (e.type === "pulse") {
+    if (e.type === "explosion") {
+      const maxRadius = Math.max(12, Number(e.maxRadius) || 64);
+      const radius = maxRadius * (0.35 + p * 0.85);
+      const chunks = Math.max(4, Number(e.chunks) || 9);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, radius);
+      grad.addColorStop(0, `rgba(255,255,235, ${0.95 * alpha})`);
+      grad.addColorStop(0.25, `rgba(255,214,90, ${0.8 * alpha})`);
+      grad.addColorStop(0.65, `rgba(255,92,32, ${0.42 * alpha})`);
+      grad.addColorStop(1, "rgba(60, 10, 0, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 235, 180, ${0.85 * alpha})`;
+      ctx.lineWidth = 2 + 5 * alpha;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, radius * 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < chunks; i++) {
+        const a = (i / chunks) * Math.PI * 2 + p * 1.6;
+        const r = radius * (0.35 + 0.75 * p);
+        const s = (1.5 + (i % 4)) * (0.6 + alpha);
+        ctx.fillStyle = i % 3 === 0 ? `rgba(255,245,200, ${alpha})` : `rgba(255,140,50, ${0.9 * alpha})`;
+        ctx.beginPath();
+        ctx.arc(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r, s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    } else if (e.type === "pulse") {
       ctx.save();
       ctx.strokeStyle = `rgba(94, 224, 160, ${0.65 * alpha})`;
       ctx.lineWidth = 6 * alpha + 1;
