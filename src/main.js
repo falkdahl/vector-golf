@@ -3210,7 +3210,7 @@ function openInLevelPause() {
   if (rewardMenuVisible || holeBannerVisible || attemptsBannerVisible || freeShotBannerVisible || gameState === "WIN" || gameState === "GAME_OVER") return false;
   if (pauseMenuVisible) return false;
   if (mainMenuVisible) return false;
-  if (!activeCourse && !hasRestorableSave()) return false;
+  if (!bossModeActive && !activeCourse && !hasRestorableSave()) return false;
   pauseMenuVisible = true;
   isInLevelPause = true;
   helpVisible = false;
@@ -4131,6 +4131,18 @@ function startNewGameFromMain() {
 function endRun() {
   // Allow End Run from either legacy pause or new in-level pause (main menu with backdrop)
   if (!pauseMenuVisible && !(mainMenuVisible && isInLevelPause)) return false;
+  // Dimension-Y boss: leave the level for the main menu without touching the
+  // campaign save/journal/points flow.
+  if (bossModeActive) {
+    pauseMenuVisible = false; pauseMenuHover = null;
+    helpVisible = false;
+    endRunConfirmVisible = false;
+    try { syncEndRunConfirmOverlay(); } catch { }
+    try { syncPauseOverlay(); } catch { }
+    try { syncMobileUI(); } catch { }
+    bossReturnToMainMenu();
+    return true;
+  }
   // Journal: record this unfinished run as a best candidate before clearing
   try { commitRunJournal(false); } catch { }
   // Coin economy: finalize coins before clearing run
@@ -7954,6 +7966,12 @@ function update(dt) {
         return;
       }
     } catch { }
+    // In-level pause (hamburger/Escape/P) freezes the boss turn loop and physics.
+    if (pauseMenuVisible) {
+      if (charging) { resetCharge(); gameState = "AIMING"; }
+      needHotbarSync = true;
+      return;
+    }
     try { updateBoss(dt); } catch (e) { recordFrameError("boss-update", e); }
     return;
   }
@@ -9235,6 +9253,8 @@ function init() {
         if (bootGateVisible) return;
         if (isRotateGuardVisible()) return;
         if (bossModeActive && !rewardMenuVisible && gameState !== "GAME_OVER") {
+          // R is blocked while the pause overlay is open (Continue first).
+          if (pauseMenuVisible) return;
           try { bossHandleResetKey(); } catch (e) { recordFrameError("boss-reset-key", e); }
           return;
         }
@@ -9430,19 +9450,6 @@ function init() {
       }
       return;
     }
-    // Dimension-Y boss prototype: Escape/P must not open the campaign pause.
-    // Escape still clears an armed item, and reward menus get first refusal
-    // when one is open. Gameplay hotkeys (bag slots, delete) still fall through.
-    if (bossModeActive && !rewardMenuVisible && (e.code === "Escape" || e.code === "KeyP")) {
-      if (e.code === "Escape" && (selectedModifier !== null || selectedBagIndex !== -1 || isFreeShotActive)) {
-        selectedModifier = null; selectedBagIndex = -1;
-        try { cancelBagDrag(); } catch { }
-        if (isFreeShotActive) clearFreeShotGlow();
-        updateHotbarUI();
-      }
-      e.preventDefault();
-      return;
-    }
     // Campaign edit/confirm popup priority inside main menu
     if (campaignConfirmVisible) {
       if (e.code === "Escape") {
@@ -9635,7 +9642,7 @@ function init() {
         return;
       }
       // Open in-level pause if currently in a level (active run), regardless of AIMING/CHARGING/FLYING
-      const inLevel = !!activeCourse || hasRestorableSave();
+      const inLevel = bossModeActive || !!activeCourse || hasRestorableSave();
       if (inLevel && !rewardMenuVisible && gameState !== "WIN") {
         // Allow Escape to open main menu with backdrop even if ball in flight (selection already cleared above)
         openInLevelPause();
