@@ -150,6 +150,18 @@ function noiseBurst(dur, vol = 0.2, delay = 0, filterFrom = 3000, filterTo = 500
   } catch {}
 }
 
+// Crackling burst: a cluster of tiny bright noise ticks. Used for thrusters,
+// engine movement and impact debris.
+function crackleBurst(dur = 0.18, vol = 0.05, delay = 0) {
+  const ticks = 4 + Math.floor(Math.random() * 5);
+  for (let i = 0; i < ticks; i++) {
+    const d = delay + Math.random() * Math.max(0.01, dur);
+    const len = 0.008 + Math.random() * 0.02;
+    const v = vol * (0.4 + Math.random() * 0.6);
+    noiseBurst(len, v, d, 7000 + Math.random() * 3000, 2500 + Math.random() * 1500);
+  }
+}
+
 function noteSeq(notes, noteDur = 0.09, vol = 0.2, wave = 'square') {
   notes.forEach((f, i) => pulse(f, f, noteDur, vol, i * noteDur, wave));
 }
@@ -580,6 +592,96 @@ export function playBossMissileLaunch(delay = 0) {
   } catch {}
 }
 
+// Boss begins charging an attack: rising charge hum.
+export function playBossCharge() {
+  try {
+    ensureAudio();
+    pulse(170, 540, 0.5, 0.11, 0, 'sawtooth');
+    pulse(340, 1080, 0.5, 0.06, 0.05, 'square');
+    noiseBurst(0.45, 0.05, 0, 900, 2600);
+  } catch {}
+}
+
+// Boss laser fires: high descending zap with a crackle.
+export function playBossLaser() {
+  try {
+    ensureAudio();
+    pulse(1600, 180, 0.35, 0.18, 0, 'sawtooth');
+    noiseBurst(0.3, 0.14, 0, 6000, 800);
+    triangle(300, 60, 0.4, 0.12, 0.02);
+  } catch {}
+}
+
+// Boss pulse fires: deep expanding shockwave.
+export function playBossPulse() {
+  try {
+    ensureAudio();
+    pulse(420, 60, 0.4, 0.18, 0, 'triangle');
+    noiseBurst(0.38, 0.12, 0, 2200, 160);
+  } catch {}
+}
+
+// A homing missile advances one step: short thrust whoosh with crackle.
+export function playBossMissileMove() {
+  try {
+    ensureAudio();
+    pulse(320, 160, 0.14, 0.13, 0, 'sawtooth');
+    noiseBurst(0.12, 0.12, 0, 2200, 600);
+    crackleBurst(0.2, 0.09);
+  } catch {}
+}
+
+// Boss relocates to its next preset position: heavy engine sweep with crackle.
+export function playBossMove() {
+  try {
+    ensureAudio();
+    pulse(130, 280, 0.38, 0.2, 0, 'sawtooth');
+    noiseBurst(0.34, 0.14, 0, 800, 2000);
+    crackleBurst(0.42, 0.11);
+  } catch {}
+}
+
+// A missile is destroyed by the ball: metallic pop + debris crackle.
+export function playBossMissileDestroy() {
+  try {
+    ensureAudio();
+    pulse(700, 160, 0.18, 0.18, 0, 'square');
+    noiseBurst(0.2, 0.16, 0, 5200, 300);
+    crackleBurst(0.22, 0.09);
+  } catch {}
+}
+
+// Meaty impact when the boss takes a hit.
+export function playBossHit() {
+  try {
+    ensureAudio();
+    pulse(120, 34, 0.4, 0.26, 0, 'sawtooth');
+    triangle(72, 28, 0.46, 0.18, 0);
+    noiseBurst(0.3, 0.2, 0, 4200, 120);
+    crackleBurst(0.24, 0.06);
+  } catch {}
+}
+
+// Meaty impact when the player loses a life.
+export function playPlayerHit() {
+  try {
+    ensureAudio();
+    pulse(190, 45, 0.32, 0.22, 0, 'square');
+    triangle(120, 38, 0.4, 0.16, 0);
+    noiseBurst(0.32, 0.18, 0, 3000, 140);
+    crackleBurst(0.18, 0.05);
+  } catch {}
+}
+
+// The ball is consumed/destroyed: quick pop.
+export function playBossBallDestroy() {
+  try {
+    ensureAudio();
+    pulse(520, 120, 0.14, 0.12);
+    noiseBurst(0.12, 0.08, 0, 3500, 500);
+  } catch {}
+}
+
 // Each barrage projectile: a tiny, bright launch tick (kept quiet because the
 // stream fires ~55 times per second).
 export function playBossBarrageShot() {
@@ -640,7 +742,9 @@ if (typeof window !== 'undefined') {
       playNewRecord, playPointsTick, playPointsCount,
       playChest, playReward, playOB, playUIClick,
       playBossMissileLaunch, playBossBarrageShot, playVoidBombLaunch,
-      playVoidBombImpact, playBossExplosion,
+      playVoidBombImpact, playBossExplosion, playBossCharge, playBossLaser,
+      playBossPulse, playBossMissileMove, playBossMove, playBossBallDestroy,
+      playBossHit, playPlayerHit, playBossMissileDestroy,
       ensureMusic, setMusicActive, isMusicActive, duckMusic,
       ensureMenuMusic, setMenuMusicActive, isMenuMusicActive,
       isPageHidden, AUDIO_PREFS_KEY,

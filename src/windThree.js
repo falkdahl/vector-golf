@@ -79,6 +79,7 @@ let uniforms = null;
 let streakData = []; // {hx,hy,dx,dy,nodes:Float32Array,age,maxAge,jitter,width}
 let gustTime = 0;
 let currentModifiers = [];
+let hiddenZones = []; // circular areas where no streak ribbons are drawn (boss black holes)
 let showWind = true;
 
 function isInsideAnyModifier(x, y) {
@@ -87,6 +88,20 @@ function isInsideAnyModifier(x, y) {
     if (Math.hypot(x - m.x, y - m.y) < r) return true;
   }
   return false;
+}
+
+function isInsideAnyHiddenZone(x, y) {
+  for (const z of hiddenZones) {
+    const r = Number(z.radius) || 0;
+    if (r > 0 && Math.hypot(x - z.x, y - z.y) < r) return true;
+  }
+  return false;
+}
+
+export function setWindHiddenZones(zones) {
+  hiddenZones = Array.isArray(zones)
+    ? zones.map((z) => ({ x: Number(z.x) || 0, y: Number(z.y) || 0, radius: Number(z.radius) || 0 }))
+    : [];
 }
 let containerEl = null;
 let canvasEl = null;
@@ -294,7 +309,9 @@ function updateStreakGeometry() {
       // No lines inside placed modifier bubbles (advection still uses the base
       // field — bubbles never bend the streaks, the ribbon just hides there)
       const modA = isInsideAnyModifier(cx, cy) ? 0 : 1;
-      const a = STREAK_ALPHA * bodyA * ageA * stretchA * modA;
+      // No vector-field lines inside boss black holes (the void stays empty).
+      const zoneA = isInsideAnyHiddenZone(cx, cy) ? 0 : 1;
+      const a = STREAK_ALPHA * bodyA * ageA * stretchA * modA * zoneA;
       const ai = base + n * 2;
       alp[ai] = a; alp[ai + 1] = a;
     }
@@ -555,4 +572,5 @@ if (typeof window !== 'undefined') {
   window.__windUniforms = () => uniforms;
   window.__windRenderer = () => renderer;
   window.__windStreakStats = () => { try { return getWindStreakStats(); } catch { return null; } };
+  window.__windHiddenZones = () => hiddenZones;
 }

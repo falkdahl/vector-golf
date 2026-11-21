@@ -38,7 +38,16 @@ import {
   playBossBarrageShot,
   playVoidBombLaunch,
   playVoidBombImpact,
-  playBossExplosion
+  playBossExplosion,
+  playBossCharge,
+  playBossLaser,
+  playBossPulse,
+  playBossMissileMove,
+  playBossMove,
+  playBossBallDestroy,
+  playBossHit,
+  playPlayerHit,
+  playBossMissileDestroy
 } from "./audio.js";
 
 const LOGICAL_W = 1280;
@@ -311,9 +320,11 @@ export function initBoss(gameBridge, params = {}) {
   if (state.debug) {
     try { console.log("[boss] debug state", getBossState()); } catch { }
   }
-  // Keep the wind streaks on the base field. Black holes still pull the ball
-  // through getBossWindAt, but they must not bend the visible wind inside them.
-  try { if (bridge.clearWindSampler) bridge.clearWindSampler(); } catch { }
+  // Route the streak visualization through the base field plus live black-hole
+  // sinks, so void bombs visibly bend the wind as soon as they land. The
+  // black-hole interiors themselves are hidden from the streak renderer.
+  try { if (bridge.setWindSampler) bridge.setWindSampler(getBossVisualWindAt); } catch { }
+  syncWindHiddenZones();
   exposeDebug();
 }
 
@@ -633,9 +644,7 @@ export function bossCheatTryGrab(pos) {
   return true;
 }
 
-function getBossWindAt(x, y) {
-  let wind = { x: 0, y: 0 };
-  try { wind = getWindAt(x, y); } catch { }
+function applyBlackHoleSink(x, y, wind) {
   let vx = wind && Number.isFinite(wind.x) ? wind.x : 0;
   let vy = wind && Number.isFinite(wind.y) ? wind.y : 0;
   const cfg = stage.blackHole || {};
@@ -654,6 +663,30 @@ function getBossWindAt(x, y) {
   return { x: vx, y: vy };
 }
 
+function getBossWindAt(x, y) {
+  let wind = { x: 0, y: 0 };
+  try { wind = getWindAt(x, y); } catch { }
+  return applyBlackHoleSink(x, y, wind);
+}
+
+// Streak visualization: base field + live black-hole sinks. Placed modifiers
+// stay local and never bend the visible field.
+function getBossVisualWindAt(x, y) {
+  let wind = { x: 0, y: 0 };
+  try { wind = getBaseWindAt(x, y); } catch { }
+  return applyBlackHoleSink(x, y, wind);
+}
+
+// Hide the vector-field streaks inside black-hole interiors.
+function syncWindHiddenZones() {
+  if (!bridge || !bridge.setWindHiddenZones) return;
+  try {
+    const zones = (state && state.blackHoles ? state.blackHoles : [])
+      .map((h) => ({ x: h.x, y: h.y, radius: h.radius }));
+    bridge.setWindHiddenZones(zones);
+  } catch { }
+}
+
 function updateShot(dt) {
   // 14-cheat-mode: while the Hashimoto grab holds the ball, physics and
   // collisions are suspended; the ball resumes on release.
@@ -667,6 +700,7 @@ function updateShot(dt) {
   for (const hole of state.blackHoles) {
     if (hitDist(ball.pos.x, ball.pos.y, hole.x, hole.y, hole.radius + BALL_RADIUS)) {
       addEffect("void", ball.pos.x, ball.pos.y, 0.5);
+      try { playBossBallDestroy(); } catch { }
       message("The black hole consumed the ball!", 1.6);
       finishShot();
       return;
@@ -706,7 +740,9 @@ function updateShot(dt) {
     state.bossHitFlash = 0.42;
     addEffect("boss-hit", bp.x, bp.y, 0.42);
     const disrupted = abortActiveCharge();
-    triggerPulse();
+    triggerPulse(false);
+    try { playBossHit(); } catch { }
+    try { playBossBallDestroy(); } catch { }
     if (state.bossLives <= 0) {
       startBossDeath();
       return;
@@ -723,6 +759,7 @@ function updateShot(dt) {
     if (hitDist(ball.pos.x, ball.pos.y, m.x, m.y, stage.minions.radius + BALL_RADIUS)) {
       state.minions = state.minions.filter((x) => x !== m);
       addEffect("minion-hit", m.x, m.y, 0.32);
+      try { playBossMissileDestroy(); } catch { }
       message("Missile destroyed", 1);
       break;
     }
@@ -742,6 +779,7 @@ function updateShot(dt) {
   // is never recalled or reset while it is still in flight.
   if (!isBallAirborne(ball) && !insideArena(ball.pos.x, ball.pos.y)) {
     addEffect("void", ball.pos.x, ball.pos.y, 0.4);
+    try { playBossBallDestroy(); } catch { }
     finishShot();
   }
 }
@@ -848,6 +886,7 @@ function beginShiftPhase() {
     b.toY = target.y;
     b.t = 0;
     b.dur = 0.7;
+    try { playBossMove(); } catch { }
   }
 
   moveAsteroids();
@@ -891,6 +930,7 @@ function chooseBossAction() {
   const telegraph = makeTelegraph(type);
   state.activeAction = { type, label: cfg.label, roundsLeft: cfg.rounds, telegraph };
   message(`Slicer: ${cfg.label} in ${cfg.rounds}`, 2);
+  try { playBossCharge(); } catch { }
 }
 
 function buildBarrageAngles(count = stage.projectiles.count) {
@@ -947,6 +987,7 @@ function executeBossAction(type, telegraph = null) {
 
   if (type === "laser") {
     state.actionsSinceLaser = 0;
+    try { playBossLaser(); } catch { }
     addEffect("laser", bossPos().x, bossPos().y, 0.55, { tx: stage.tee.x, ty: stage.tee.y });
     message("Slicer fires a life-removing laser!", 2.4);
     loseLife("laser");
@@ -985,11 +1026,12 @@ function abortActiveCharge() {
   return type;
 }
 
-function triggerPulse() {
+function triggerPulse(playSound = true) {
   if (!state) return;
   if (bridge && bridge.clearModifiers) bridge.clearModifiers();
   const bp = bossPos();
   addEffect("pulse", bp.x, bp.y, 0.85);
+  if (playSound) { try { playBossPulse(); } catch { } }
 }
 
 function spawnProjectile(angle) {
@@ -1141,6 +1183,7 @@ function spawnBlackHole(x, y) {
     fresh: true
   };
   state.blackHoles.push(hole);
+  syncWindHiddenZones();
   addEffect("black-hole-spawn", x, y, 0.6);
   message("A black hole opens!", 1.4);
 }
@@ -1163,6 +1206,7 @@ function tickBlackHoles() {
     }
   }
   state.blackHoles = keep;
+  syncWindHiddenZones();
 }
 
 function spawnMinions(n, initial, spawnsOverride = null) {
@@ -1215,6 +1259,8 @@ function advanceMinion(id) {
   if (!m) return;
   if (m.emerge) return;
 
+  try { playBossMissileMove(); } catch { }
+
   m.progress = Math.min(1, m.progress + 1 / Math.max(1, m.steps));
   const pos = pointOnPath(m.points, m.progress);
 
@@ -1232,6 +1278,7 @@ function loseLife(reason) {
   if (!state || state.phase === "gameover" || state.phase === "victory" || state.phase === "dying-player") return false;
   state.playerLives = Math.max(0, state.playerLives - 1);
   state.teePulse = 0.75;
+  try { playPlayerHit(); } catch { }
   if (state.playerLives <= 0) {
     startPlayerDeath();
     return true;
@@ -1399,6 +1446,7 @@ function startBossDeath() {
   state.minions = [];
   state.shot = { active: false, isBonus: false };
   state.death = { t: 0, exploded: false, booms: [], particles: [], nextBoom: 0 };
+  syncWindHiddenZones();
   resetCharge();
   try { ball.isMoving = false; ball.vel.x = 0; ball.vel.y = 0; ball.z = 0; ball.vz = 0; } catch { }
   addEffect("boss-hit", bp.x, bp.y, 0.6);
@@ -1516,6 +1564,7 @@ export function bossShutdown() {
   active = false;
   state = null;
   try { if (bridge && bridge.clearWindSampler) bridge.clearWindSampler(); } catch { }
+  try { if (bridge && bridge.setWindHiddenZones) bridge.setWindHiddenZones([]); } catch { }
   if (hud && hud.root) hud.root.classList.add("hidden");
 }
 
@@ -1577,6 +1626,9 @@ function exposeDebug() {
     bossWindAt: (x, y) => {
       try { return getBossWindAt(Number(x) || 0, Number(y) || 0); } catch { return null; }
     },
+    visualWindAt: (x, y) => {
+      try { return getBossVisualWindAt(Number(x) || 0, Number(y) || 0); } catch { return null; }
+    },
     getEntities: () => {
       if (!state) return null;
       const bp = bossPos();
@@ -1621,6 +1673,7 @@ function exposeDebug() {
     damageBoss: (n = 1) => {
       if (!state) return;
       state.bossLives = Math.max(0, state.bossLives - clampInt(n, 1, 99, 1));
+      try { playBossHit(); } catch { }
       const disrupted = abortActiveCharge();
       if (disrupted) message(`${stage.actions[disrupted] ? stage.actions[disrupted].label : "Charge"} canceled!`, 1.6);
       if (state.bossLives <= 0) startBossDeath();
@@ -1684,6 +1737,7 @@ function exposeDebug() {
     clearBlackHoles: () => {
       if (!state) return;
       state.blackHoles = [];
+      syncWindHiddenZones();
       updateHud();
     },
     clearModifiers: () => {
@@ -1699,6 +1753,7 @@ function exposeDebug() {
         roundsLeft: executeNow ? 1 : cfg.rounds,
         telegraph: makeTelegraph(key)
       };
+      try { playBossCharge(); } catch { }
       if (executeNow) runBossStep();
       updateHud();
       return true;

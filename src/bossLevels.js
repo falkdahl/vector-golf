@@ -130,7 +130,7 @@ export const DIMENSION_Y_BOSS_LEVEL = {
   },
 
   actions: {
-    barrage: { rounds: 1, label: "Projectile Barrage" },
+    barrage: { rounds: 2, label: "Projectile Barrage" },
     missiles: { rounds: 1, label: "Homing Missiles", count: 2 },
     pulse: { rounds: 1, label: "Pulse" },
     laser: { rounds: 2, label: "Laser" },

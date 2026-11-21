@@ -56,12 +56,17 @@ import { initBoss, updateBoss, renderBoss, bossHandleLaunch, bossHandleResetKey,
 let __windMod = null;
 let __windDPRCap = 0;
 let __windSampler = null;
+let __windHiddenZones = [];
 function initWindOverlay(...args) { try { if (__windMod) return __windMod.initWindOverlay(...args); } catch { } }
 function updateWindUniforms(...args) { try { if (__windMod) return __windMod.updateWindUniforms(...args); } catch { } }
 function setWindUniformsFromField(...args) { try { if (__windMod) return __windMod.setWindUniformsFromField(...args); } catch { } }
 function setWindSampler(fn) {
   __windSampler = typeof fn === 'function' ? fn : null;
   try { if (__windMod && typeof __windMod.setWindSamplerOverride === 'function') __windMod.setWindSamplerOverride(__windSampler); } catch { }
+}
+function setWindHiddenZones(zones) {
+  __windHiddenZones = Array.isArray(zones) ? zones.map((z) => ({ x: z.x, y: z.y, radius: z.radius })) : [];
+  try { if (__windMod && typeof __windMod.setWindHiddenZones === 'function') __windMod.setWindHiddenZones(__windHiddenZones); } catch { }
 }
 function setWindVisible(...args) { try { if (__windMod) return __windMod.setWindVisible(...args); } catch { } }
 function toggleWindThree(...args) { try { if (__windMod) return __windMod.toggleWind(...args); } catch { } }
@@ -85,6 +90,7 @@ if (typeof window !== 'undefined') {
         m.initWindOverlay(container);
         try { if (__windDPRCap > 0 && typeof m.setWindDPRCap === 'function') m.setWindDPRCap(__windDPRCap); } catch { }
         try { if (typeof m.setWindSamplerOverride === 'function') m.setWindSamplerOverride(__windSampler); } catch { }
+        try { if (typeof m.setWindHiddenZones === 'function') m.setWindHiddenZones(__windHiddenZones); } catch { }
         try { syncWindFieldToShader(); } catch { }
         m.resizeWindOverlay();
       } catch (e) { console.warn('wind overlay init failed', e); }
@@ -4355,6 +4361,7 @@ function startBossMode(params) {
     setWindDPRCap(cap) { try { setWindDPRCap(cap); resizeWindOverlay(); } catch { } },
     setWindSampler(fn) { try { setWindSampler(fn); } catch { } },
     clearWindSampler() { try { setWindSampler(null); } catch { } },
+    setWindHiddenZones(zones) { try { setWindHiddenZones(zones); } catch { } },
     returnToMenu() { bossReturnToMainMenu(); },
     log(...args) { try { console.log("[boss]", ...args); } catch { } }
   };
