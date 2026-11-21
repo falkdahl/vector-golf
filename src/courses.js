@@ -7,6 +7,27 @@ export const COURSES_KEY = "golfVectorField.courses.v1";
 // manual seeds still generate their requested seed.
 export const DEFAULT_CAMPAIGN_SEED = "00000536";
 
+// Fixed stage names for the default campaign seed.
+export const DEFAULT_COURSE_NAMES = Object.freeze({
+  6: "Breezy Fairway",
+  9: "Gusty Links",
+  18: "Gale Greens"
+});
+
+function applyDefaultCourseNames(courses, campaignSeedVal) {
+  if (!Array.isArray(courses) || String(campaignSeedVal) !== DEFAULT_CAMPAIGN_SEED) return false;
+  let changed = false;
+  for (const c of courses) {
+    if (!c) continue;
+    const fixed = DEFAULT_COURSE_NAMES[c.holeCount];
+    if (fixed && c.name !== fixed) {
+      c.name = fixed;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 const ADJECTIVES = ["Breezy","Gusty","Stormy","Misty","Blustery","Whispering","Howling","Calm","Sunny","Zephyr","Tempest","Windy","Gentle","Brisk","Hazy","Drafty","Airy","Chilly","Muggy","Crisp"];
 const NOUNS = ["Fairway","Greens","Links","Meadow","Dunes","Valley","Hollow","Pines","Ridge","Course","Haven","Glen","Heights","Acres","Trail","Woods","Fields","Park","Gardens","Estates"];
 
@@ -197,6 +218,10 @@ export function generateCampaignCourse(holeCount = 18, campaignSeedVal = getOrCr
     name = getUniqueNameForCourse(campaignSeedVal, holeCount, set);
   } else {
     name = deterministicNameForCourse(campaignSeedVal, holeCount);
+  }
+  // The default campaign seed always uses the fixed stage names.
+  if (String(campaignSeedVal) === DEFAULT_CAMPAIGN_SEED && DEFAULT_COURSE_NAMES[holeCount]) {
+    name = DEFAULT_COURSE_NAMES[holeCount];
   }
   const id = deterministicIdForCourse(campaignSeedVal, holeCount);
   let prevLevelsCopy = null;
@@ -440,10 +465,14 @@ export function loadCourses() {
         }
       }
     } catch {}
+    // Default campaign seed always uses the fixed stage names.
+    const defaultNamesChanged = String(campaignSeed) === DEFAULT_CAMPAIGN_SEED &&
+      staged.some((c) => c && DEFAULT_COURSE_NAMES[c.holeCount] && c.name !== DEFAULT_COURSE_NAMES[c.holeCount]);
+    try { applyDefaultCourseNames(staged, campaignSeed); } catch {}
     // Detect name fixes for duplicates
     const namesChanged = staged.some((c,i) => valid[i] && c.name !== valid[i].name);
     // If staged differs (e.g. old save had 18 only, or missing 3), or names were fixed for uniqueness, persist normalized with campaignSeed
-    if (staged.length !== valid.length || staged.some((c,i) => c.id !== valid[i]?.id) || namesChanged || d.campaignSeed === undefined) {
+    if (staged.length !== valid.length || staged.some((c,i) => c.id !== valid[i]?.id) || namesChanged || defaultNamesChanged || d.campaignSeed === undefined) {
       try { saveCourses(staged, campaignSeed); } catch {}
       _coursesCache = staged;
       _coursesCacheRaw = localStorage.getItem(COURSES_KEY);
@@ -520,6 +549,8 @@ export function saveCourses(courses, campaignSeedOverride) {
   campaignSeed = String(cs);
   // Never persist collected treasure - courses are definitions, run state lives in STORAGE_KEY
   try { normalizeCourseTreasures(courses); } catch {}
+  // Default campaign seed always uses the fixed stage names.
+  try { applyDefaultCourseNames(courses, cs); } catch {}
   // Ensure course names within campaign are unique
   try { ensureUniqueCourseNames(courses, cs); } catch {}
   localStorage.setItem(COURSES_KEY, JSON.stringify({ version: 1, campaignSeed: cs, courses }));
