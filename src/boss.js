@@ -47,7 +47,8 @@ import {
   playBossBallDestroy,
   playBossHit,
   playPlayerHit,
-  playBossMissileDestroy
+  playBossMissileDestroy,
+  playModifierActivated
 } from "./audio.js";
 
 const LOGICAL_W = 1280;
@@ -58,6 +59,7 @@ let stage = null;
 let state = null;
 let active = false;
 let nextId = 1;
+let ballInsideModifierIds = new Set();
 let hud = null;
 let keyBound = false;
 let arenaCache = null;
@@ -295,6 +297,7 @@ export function initBoss(gameBridge, params = {}) {
   stage = createDimensionYBossLevel();
   state = makeState(params);
   nextId = 1;
+  ballInsideModifierIds = new Set();
   active = true;
 
   const lvl = {
@@ -601,6 +604,7 @@ export function bossHandleLaunch(angle, power) {
   state.shot = { active: true, isBonus };
   state.phase = "shot";
   state.bonusAvailable = false;
+  ballInsideModifierIds = new Set();
   try { launchBall(angle, power); } catch { }
   bridge.setGameState("FLYING");
   message(isBonus ? "Free Shot away!" : "Shot away!", 1.1);
@@ -633,6 +637,7 @@ export function bossCheatTryGrab(pos) {
   state.shot = { active: true, isBonus };
   state.phase = "shot";
   state.bonusAvailable = false;
+  ballInsideModifierIds = new Set();
   ball.isMoving = true;
   ball.vel.x = 0;
   ball.vel.y = 0;
@@ -669,6 +674,40 @@ function getBossWindAt(x, y) {
   return applyBlackHoleSink(x, y, wind);
 }
 
+function modifierFlashKey(m) {
+  try {
+    return (m && m.id !== undefined) ? String(m.id) : (m.x + "," + m.y);
+  } catch {
+    return String(Math.random());
+  }
+}
+
+function modifierNowMs() {
+  try { return performance.now(); } catch { return Date.now(); }
+}
+
+// Match campaign behavior: when the ball newly enters a placed modifier
+// bubble, flash it and play the activation sound.
+function trackModifierActivation() {
+  if (!bridge || !bridge.getModifiers) return;
+  let mods = [];
+  try { mods = bridge.getModifiers() || []; } catch { return; }
+  const nowMs = modifierNowMs();
+  const newInside = new Set();
+  for (const m of mods) {
+    if (!m) continue;
+    if (Math.hypot(ball.pos.x - m.x, ball.pos.y - m.y) < (m.radius || 54)) {
+      const key = modifierFlashKey(m);
+      newInside.add(key);
+      if (!ballInsideModifierIds.has(key)) {
+        try { m.flashAt = nowMs; } catch { }
+        try { playModifierActivated(m.type); } catch { }
+      }
+    }
+  }
+  ballInsideModifierIds = newInside;
+}
+
 // Streak visualization: base field + live black-hole sinks. Placed modifiers
 // stay local and never bend the visible field.
 function getBossVisualWindAt(x, y) {
@@ -695,6 +734,8 @@ function updateShot(dt) {
   try {
     updateBall(dt, getBossWindAt, stage.field.strength, stage.logicalW, stage.logicalH);
   } catch { }
+
+  trackModifierActivation();
 
   // Black holes consume the ball on contact.
   for (const hole of state.blackHoles) {
