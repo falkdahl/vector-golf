@@ -686,26 +686,28 @@ function modifierNowMs() {
   try { return performance.now(); } catch { return Date.now(); }
 }
 
-// Match campaign behavior: when the ball newly enters a placed modifier
-// bubble, flash it and play the activation sound.
-function trackModifierActivation() {
-  if (!bridge || !bridge.getModifiers) return;
+// Match campaign behavior: when an entity newly enters a placed modifier
+// bubble, flash it and play the activation sound. Each entity keeps its own
+// inside-set so crossings retrigger independently.
+function trackModifierEntry(x, y, insideIds) {
+  if (!bridge || !bridge.getModifiers) return insideIds || new Set();
   let mods = [];
-  try { mods = bridge.getModifiers() || []; } catch { return; }
+  try { mods = bridge.getModifiers() || []; } catch { return insideIds || new Set(); }
+  const prev = insideIds instanceof Set ? insideIds : new Set();
   const nowMs = modifierNowMs();
   const newInside = new Set();
   for (const m of mods) {
     if (!m) continue;
-    if (Math.hypot(ball.pos.x - m.x, ball.pos.y - m.y) < (m.radius || 54)) {
+    if (Math.hypot(x - m.x, y - m.y) < (m.radius || 54)) {
       const key = modifierFlashKey(m);
       newInside.add(key);
-      if (!ballInsideModifierIds.has(key)) {
+      if (!prev.has(key)) {
         try { m.flashAt = nowMs; } catch { }
         try { playModifierActivated(m.type); } catch { }
       }
     }
   }
-  ballInsideModifierIds = newInside;
+  return newInside;
 }
 
 // Streak visualization: base field + live black-hole sinks. Placed modifiers
@@ -735,7 +737,7 @@ function updateShot(dt) {
     updateBall(dt, getBossWindAt, stage.field.strength, stage.logicalW, stage.logicalH);
   } catch { }
 
-  trackModifierActivation();
+  ballInsideModifierIds = trackModifierEntry(ball.pos.x, ball.pos.y, ballInsideModifierIds);
 
   // Black holes consume the ball on contact.
   for (const hole of state.blackHoles) {
@@ -1134,6 +1136,8 @@ function updateProjectiles(dt) {
     p.vy += wind.y * scale * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
+
+    p.insideModifiers = trackModifierEntry(p.x, p.y, p.insideModifiers);
 
     if (hitDist(p.x, p.y, stage.tee.x, stage.tee.y, 18 + p.radius)) {
       addEffect("tee-hit", stage.tee.x, stage.tee.y, 0.5);
