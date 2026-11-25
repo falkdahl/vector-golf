@@ -1429,7 +1429,7 @@ function collectChest(chest) {
 
 function rollChestOffer() {
   const spatials = ["magnifier", "liquifier", "deflector", "rotator"];
-  const passives = ["freeShot", "fieldExtender", "powerCell"];
+  const passives = ["fieldExtender", "powerCell"];
   const shuffle = (list) => {
     const out = list.slice();
     for (let i = out.length - 1; i > 0; i--) {

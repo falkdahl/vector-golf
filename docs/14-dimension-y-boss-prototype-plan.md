@@ -28,7 +28,7 @@ Boss: Slicer.
 - The wind field is static during the fight. Sources, sinks, doublets, and vortexes keep their initial positions; only placed modifiers move.
 - A boss hit cancels any boss action that is still counting down (not just the laser) and always triggers the instant pulse.
 - Regular game over screen that returns to the main menu.
-- Free Shot item remains in the reward pool and is usable before the enemy turn.
+- Free Shot item is excluded from the boss reward pool and is not offered by chest rewards in this fight.
 - Chests respawn a fixed number of rounds after the previous chest is collected.
 - No tee flag; the tee is a plain launch ring so the ball and its health read clearly.
 - Main-menu entry: after `end-18-hole` has been seen, the Dimension-Y row starts the boss level through the same "Choose 2 starting items" overlay used by courses.
@@ -173,7 +173,7 @@ Enemies act one by one, with visible sequential feedback.
 - Chests spawn periodically during the battle.
 - Spawn interval, cap, and locations are tuning values.
 - The player collects a chest by hitting it with the ball.
-- Chest rewards use the existing reward flow and can include Free Shot.
+- Chest rewards use the existing reward flow and never include Free Shot in this fight.
 - Pulses (boss action or boss-hit) do not destroy chests.
 - No Extra Life reward in this prototype.
 
