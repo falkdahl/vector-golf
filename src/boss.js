@@ -1334,6 +1334,19 @@ function loseLife(reason) {
 
 const PLAYER_DEATH_SECONDS = 1.7;
 
+function spawnDeathExplosions(cx, cy, bx, by) {
+  const booms = [
+    { x: cx, y: cy, r: 96, d: 0 },
+    { x: bx, y: by, r: 74, d: 0.08 },
+    { x: cx - 42, y: cy + 22, r: 56, d: 0.16 },
+    { x: cx + 48, y: cy - 26, r: 60, d: 0.24 },
+    { x: cx + 10, y: cy + 52, r: 48, d: 0.32 }
+  ];
+  for (const b of booms) {
+    addEffect("explosion", b.x, b.y, 0.9, { delay: b.d, maxRadius: b.r, chunks: 12 });
+  }
+}
+
 function startPlayerDeath() {
   if (!state || state.playerDeath) return;
   state.phase = "dying-player";
@@ -1351,16 +1364,7 @@ function startPlayerDeath() {
   try { ball.isMoving = false; ball.vel.x = 0; ball.vel.y = 0; ball.z = 0; ball.vz = 0; } catch { }
   const bx = ball && ball.pos ? ball.pos.x : stage.tee.x;
   const by = ball && ball.pos ? ball.pos.y : stage.tee.y;
-  const booms = [
-    { x: stage.tee.x, y: stage.tee.y, r: 96, d: 0 },
-    { x: bx, y: by, r: 74, d: 0.08 },
-    { x: stage.tee.x - 42, y: stage.tee.y + 22, r: 56, d: 0.16 },
-    { x: stage.tee.x + 48, y: stage.tee.y - 26, r: 60, d: 0.24 },
-    { x: stage.tee.x + 10, y: stage.tee.y + 52, r: 48, d: 0.32 }
-  ];
-  for (const b of booms) {
-    addEffect("explosion", b.x, b.y, 0.9, { delay: b.d, maxRadius: b.r, chunks: 12 });
-  }
+  spawnDeathExplosions(stage.tee.x, stage.tee.y, bx, by);
   try { playBossExplosion(); } catch { }
   message("Dimension Y consumes you...", 5);
   updateHud();
@@ -1463,20 +1467,6 @@ const DEATH_BOOM_SECONDS = 1.8;
 const DEATH_PARTICLE_SECONDS = 3.1;
 const DEATH_COLORS = ["#ffffff", "#ffe066", "#ffb703", "#ff4d6d", "#5ee0a0", "#8ecae6"];
 
-function makePixelBurst(x, y, scale = 1) {
-  const blocks = [];
-  const count = 5 + Math.floor(Math.random() * 7);
-  for (let i = 0; i < count; i++) {
-    blocks.push({
-      dx: (Math.random() - 0.5) * 30 * scale,
-      dy: (Math.random() - 0.5) * 30 * scale,
-      size: 2 + Math.floor(Math.random() * 5),
-      color: DEATH_COLORS[Math.floor(Math.random() * DEATH_COLORS.length)]
-    });
-  }
-  return { x, y, t: 0, max: 0.22 + Math.random() * 0.32, blocks };
-}
-
 function startBossDeath() {
   if (!state || state.death) return;
   const bp = bossPos();
@@ -1490,11 +1480,13 @@ function startBossDeath() {
   state.blackHoles = [];
   state.minions = [];
   state.shot = { active: false, isBonus: false };
-  state.death = { t: 0, exploded: false, booms: [], particles: [], nextBoom: 0 };
+  state.boss.angle = Math.atan2(stage.tee.y - bp.y, stage.tee.x - bp.x);
+  state.death = { t: 0, exploded: false, particles: [] };
   syncWindHiddenZones();
   resetCharge();
   try { ball.isMoving = false; ball.vel.x = 0; ball.vel.y = 0; ball.z = 0; ball.vz = 0; } catch { }
   addEffect("boss-hit", bp.x, bp.y, 0.6);
+  spawnDeathExplosions(bp.x, bp.y, bp.x, bp.y);
   message("Slicer destroyed!", 3);
   updateHud();
 }
@@ -1530,24 +1522,8 @@ function updateDeath(dt) {
   d.t += dt;
 
   if (!d.exploded) {
-    d.nextBoom -= dt;
-    if (d.nextBoom <= 0) {
-      const bp = bossPos();
-      const half = bossHalf();
-      const bursts = Math.random() < 0.35 ? 2 : 1;
-      for (let i = 0; i < bursts; i++) {
-        d.booms.push(makePixelBurst(
-          bp.x + (Math.random() * 2 - 1) * half * 0.85,
-          bp.y + (Math.random() * 2 - 1) * half * 0.85
-        ));
-      }
-      d.nextBoom = 0.035 + Math.random() * 0.08;
-    }
-    for (const b of d.booms) b.t += dt;
-    d.booms = d.booms.filter((b) => b.t < b.max);
     if (d.t >= DEATH_BOOM_SECONDS) {
       d.exploded = true;
-      d.booms = [];
       spawnDeathParticles();
       addEffect("pulse", bossPos().x, bossPos().y, 0.8);
       message("Slicer breaks apart in the wind!", 3);
@@ -1645,7 +1621,6 @@ export function getBossState() {
     death: state.death ? {
       t: state.death.t,
       exploded: state.death.exploded,
-      booms: state.death.booms.length,
       particles: state.death.particles.length
     } : null,
     activeAction: state.activeAction ? { type: state.activeAction.type, roundsLeft: state.activeAction.roundsLeft } : null,
@@ -2215,24 +2190,6 @@ function drawBossEntity(ctx) {
   ctx.restore();
 }
 
-function drawPixelBurst(ctx, b) {
-  const fade = Math.max(0, 1 - b.t / b.max);
-  const drift = b.t / b.max;
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  for (const block of b.blocks) {
-    ctx.globalAlpha = fade;
-    ctx.fillStyle = block.color;
-    ctx.fillRect(
-      b.x + block.dx * (1 + drift * 0.7),
-      b.y + block.dy * (1 + drift * 0.7),
-      block.size,
-      block.size
-    );
-  }
-  ctx.restore();
-}
-
 function drawDeathEffects(ctx) {
   const d = state && state.death;
   if (!d) return;
@@ -2241,11 +2198,14 @@ function drawDeathEffects(ctx) {
 
   if (!d.exploded) {
     const flicker = 0.82 + Math.sin(d.t * 37) * 0.18;
+    const bossAngle = Number.isFinite(state.boss.angle)
+      ? state.boss.angle
+      : Math.atan2(stage.tee.y - bp.y, stage.tee.x - bp.x);
     ctx.save();
     ctx.translate(bp.x, bp.y);
+    ctx.rotate(bossAngle - Math.PI / 2);
     if (!drawBossSprite(ctx, half, flicker)) drawBossFallback(ctx, half, true);
     ctx.restore();
-    for (const b of d.booms) drawPixelBurst(ctx, b);
     return;
   }
 
