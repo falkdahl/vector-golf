@@ -116,6 +116,7 @@ export const DIMENSION_Y_BOSS_LEVEL = {
     flightTime: 1.1,
     gravity: 1100,
     radius: 7,
+    windScale: 0.72,
     targetMinX: 430,
     targetMaxX: 860,
     targetMinY: 150,

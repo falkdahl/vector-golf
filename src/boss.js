@@ -1191,7 +1191,8 @@ function launchVoidBombs(targets = null) {
       gravity,
       radius,
       targetX: target.x,
-      targetY: target.y
+      targetY: target.y,
+      insideModifiers: new Set()
     });
     try { playVoidBombLaunch(i * 0.08); } catch { }
   }
@@ -1200,12 +1201,19 @@ function launchVoidBombs(targets = null) {
 function updateVoidBombs(dt) {
   const bombs = state.voidBombs;
   if (!bombs || !bombs.length) return;
+  const cfg = stage.voidBombs || {};
+  const windScale = (Number(stage.field.strength) || 0) * (Number(cfg.windScale) || 0.72);
   const keep = [];
   for (const b of bombs) {
+    let wind = { x: 0, y: 0 };
+    try { wind = getWindAt(b.x, b.y); } catch { }
+    b.vx += wind.x * windScale * dt;
+    b.vy += wind.y * windScale * dt;
     b.z += b.vz * dt;
     b.vz -= b.gravity * dt;
     b.x += b.vx * dt;
     b.y += b.vy * dt;
+    b.insideModifiers = trackModifierEntry(b.x, b.y, b.insideModifiers);
     if (b.z <= 0) {
       try { playVoidBombImpact(); } catch { }
       spawnBlackHole(b.x, b.y);
