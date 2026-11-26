@@ -235,17 +235,22 @@ export function isWindActive() { return windActive; }
 // when switching between menu and levels.
 const MUSIC_SRC = './audio/main-theme.ogg';
 const MENU_MUSIC_SRC = './audio/main-menu.ogg';
+const CORTEX_THEME_SRC = './audio/cortex-theme.ogg';
 const MUSIC_VOL = 0.15;
 const MENU_MUSIC_VOL = MUSIC_VOL;
+const CORTEX_THEME_VOL = MUSIC_VOL;
 const MUSIC_DUCK_VOL = 0.05;
 const MUSIC_FADE_MS = 900;
 let musicEl = null;
 let menuMusicEl = null;
+let cortexThemeEl = null;
 let musicWanted = false;
 let menuMusicWanted = false;
+let cortexThemeWanted = false;
 let duckToken = 0;
 const musicFade = { id: 0, timer: null };
 const menuFade = { id: 0, timer: null };
+const cortexFade = { id: 0, timer: null };
 
 // Linear fade of an <audio> element to targetVol. Fade-in auto-plays from 0;
 // fade-out pauses on completion. Overlapping fades cancel via token.
@@ -325,6 +330,21 @@ export function ensureMenuMusic() {
   } catch { return null; }
 }
 
+export function ensureCortexTheme() {
+  try {
+    if (typeof window === 'undefined' || typeof Audio === 'undefined') return null;
+    if (!cortexThemeEl) {
+      const el = new Audio();
+      el.src = CORTEX_THEME_SRC;
+      el.loop = true;
+      el.preload = 'auto';
+      el.volume = CORTEX_THEME_VOL;
+      cortexThemeEl = el;
+    }
+    return cortexThemeEl;
+  } catch { return null; }
+}
+
 function musicPlay(fadeMs = MUSIC_FADE_MS) {
   try {
     if (!isMusicEnabled()) return; // user pref: music off
@@ -360,6 +380,46 @@ function menuMusicPause(fadeMs = MUSIC_FADE_MS) {
     fadeAudioTo(el, 0, fadeMs, menuFade);
   } catch {}
 }
+
+function cortexThemePlay(fadeMs = MUSIC_FADE_MS) {
+  try {
+    if (!isMusicEnabled()) return; // user pref: music off
+    if (isPageHidden()) return; // deferred: intent flag kept, resume on visible
+    const el = ensureCortexTheme();
+    if (!el) return;
+    fadeAudioTo(el, CORTEX_THEME_VOL, fadeMs, cortexFade);
+  } catch {}
+}
+
+function cortexThemePause(fadeMs = MUSIC_FADE_MS) {
+  try {
+    const el = ensureCortexTheme();
+    if (!el) { try { if (cortexThemeEl) cortexThemeEl.pause(); } catch {} return; }
+    fadeAudioTo(el, 0, fadeMs, cortexFade);
+  } catch {}
+}
+
+// Dedicated end-credits track. Taking over the music slot fades out the stage
+// and menu themes so the credits theme is heard cleanly; returning to the menu
+// lets the normal menu/stage logic fade the right track back in.
+export function setCortexThemeActive(on, fadeMs = MUSIC_FADE_MS) {
+  try {
+    cortexThemeWanted = !!on;
+    if (cortexThemeWanted) {
+      musicWanted = false;
+      menuMusicWanted = false;
+      try { musicPause(fadeMs); } catch {}
+      try { menuMusicPause(fadeMs); } catch {}
+      ensureAudio();
+      cortexThemePlay(fadeMs);
+    } else {
+      if (!cortexThemeEl) return;
+      cortexThemePause(fadeMs);
+    }
+  } catch {}
+}
+
+export function isCortexThemeActive() { return cortexThemeWanted; }
 
 export function setMusicActive(on, fadeMs = MUSIC_FADE_MS) {
   try {
@@ -412,9 +472,11 @@ function pauseAllMusicForHidden() {
   try {
     cancelFade(musicFade);
     cancelFade(menuFade);
+    cancelFade(cortexFade);
     try { duckToken++; } catch {}
     try { if (musicEl && !musicEl.paused) musicEl.pause(); } catch {}
     try { if (menuMusicEl && !menuMusicEl.paused) menuMusicEl.pause(); } catch {}
+    try { if (cortexThemeEl && !cortexThemeEl.paused) cortexThemeEl.pause(); } catch {}
   } catch {}
 }
 
@@ -424,6 +486,7 @@ function resumeWantedMusic() {
     try { if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {}); } catch {}
     if (musicWanted) { try { musicPlay(); } catch {} }
     if (menuMusicWanted) { try { menuMusicPlay(); } catch {} }
+    if (cortexThemeWanted) { try { cortexThemePlay(); } catch {} }
   } catch {}
 }
 
@@ -747,6 +810,7 @@ if (typeof window !== 'undefined') {
       playBossHit, playPlayerHit, playBossMissileDestroy,
       ensureMusic, setMusicActive, isMusicActive, duckMusic,
       ensureMenuMusic, setMenuMusicActive, isMenuMusicActive,
+      ensureCortexTheme, setCortexThemeActive, isCortexThemeActive,
       isPageHidden, AUDIO_PREFS_KEY,
       isMusicEnabled, setMusicEnabled, isSfxEnabled, setSfxEnabled,
     };

@@ -48,8 +48,10 @@ import {
   playBossHit,
   playPlayerHit,
   playBossMissileDestroy,
-  playModifierActivated
+  playModifierActivated,
+  setCortexThemeActive
 } from "./audio.js";
+import { playBanter, isBanterActive } from "./banter.js";
 
 const LOGICAL_W = 1280;
 const LOGICAL_H = 720;
@@ -68,6 +70,8 @@ let bossSprite = null;
 let bossSpriteBroken = false;
 let rocketSprite = null;
 let rocketSpriteBroken = false;
+let portalSprite = null;
+let portalSpriteBroken = false;
 
 function getBossSprite() {
   if (bossSpriteBroken || typeof Image === "undefined") return null;
@@ -97,6 +101,21 @@ function getRocketSprite() {
     }
   }
   return rocketSprite;
+}
+
+function getPortalSprite() {
+  if (portalSpriteBroken || typeof Image === "undefined") return null;
+  if (!portalSprite) {
+    try {
+      portalSprite = new Image();
+      portalSprite.decoding = "async";
+      portalSprite.src = new URL("../img/cutscenes/portals.webp", import.meta.url).href;
+    } catch {
+      portalSpriteBroken = true;
+      return null;
+    }
+  }
+  return portalSprite;
 }
 
 function clampInt(v, min, max, fallback) {
@@ -1472,8 +1491,100 @@ function victory() {
 }
 
 const DEATH_BOOM_SECONDS = 1.8;
-const DEATH_PARTICLE_SECONDS = 3.1;
+const DEATH_OUTWARD_SECONDS = 1.0;
+const DEATH_GATHER_SECONDS = 1.25;
+const DEATH_PORTAL_GROW_SECONDS = 1.6;
+const DEATH_FADE_SECONDS = 1.5;
+const PORTAL_FADE_SECONDS = 1.4;
+const BLACK_HOLD_SECONDS = 1.2;
+const CREDITS_SCROLL_SPEED = 46;
 const DEATH_COLORS = ["#ffffff", "#ffe066", "#ffb703", "#ff4d6d", "#5ee0a0", "#8ecae6"];
+
+// Portal-open frame inside img/cutscenes/portals.webp (see character-sprites.json).
+const PORTAL_OPEN_FRAME = { x: 472, y: 37, w: 289, h: 293 };
+const PORTAL_FULL_SCALE = 0.9;
+
+const ENDING_BANTER = {
+  id: "boss-victory-home",
+  lines: [
+    {
+      speaker: "may",
+      text: "That is it. Six lives, two demons, and not one of them left standing. I think that counts as a good round."
+    },
+    {
+      speaker: "caddy",
+      text: "A good round? May, you just broke the boss of Dimension-Y. I am calling it a masterpiece."
+    },
+    {
+      speaker: "may",
+      text: "Then let us not overstay. This dimension has terrible wind, worse company, and I am out of balls."
+    },
+    {
+      speaker: "caddy",
+      text: "The portal is open. Home, a hot meal, and a scorecard nobody will believe."
+    },
+    {
+      speaker: "may",
+      text: "Home. Yeah. Let us go home, Caddy."
+    }
+  ]
+};
+
+// Raw credits. A line wrapped in *asterisks* renders bold (matching the
+// requested credits copy); blank lines are section spacing.
+const ENDING_CREDITS_LINES = [
+  "*GALE FORCE GOLF*",
+  "",
+  "*Creative Director, Writer, Producer & Chief Caffeine Consumer*",
+  "Joel Romare",
+  "",
+  "*Code & Questionable Logic*",
+  "Muse Spark 1.2",
+  "Muse Spark 1.3",
+  "DeepSeek V4.1 Flash Free",
+  "(No AIs were harmed in the making of this game, though several hallucinated)",
+  "",
+  "*Graphics*",
+  "Gemini Nano Banana",
+  "",
+  "*Music*",
+  "Google Flow Music",
+  "",
+  "*Victims of Early Builds*",
+  "Måns Fritzner",
+  "Linus Selvén",
+  "Moeid Heidari",
+  "Tapan Gupta",
+  "",
+  "*Special Thanks*",
+  "Måns Fritzner — Game literally wouldn't exist without you.",
+  "Kevin Eastman & Peter Laird — For the inspiration.",
+  "",
+  "Thank you for playing!",
+  "(Now go outside and touch some actual grass)"
+].map((raw, index) => {
+  const bold = raw.length > 2 && raw.startsWith("*") && raw.endsWith("*");
+  return {
+    text: bold ? raw.slice(1, -1) : raw,
+    bold,
+    title: index === 0
+  };
+});
+
+function creditLineHeight(line) {
+  if (!line.text) return 24;
+  if (line.title) return 84;
+  if (line.bold) return 50;
+  return 38;
+}
+
+const ENDING_CREDITS_HEIGHT = ENDING_CREDITS_LINES.reduce((sum, line) => sum + creditLineHeight(line), 0);
+const CREDITS_START_OFFSET = LOGICAL_H + 60;
+
+function easeOutCubic(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return 1 - Math.pow(1 - x, 3);
+}
 
 function startBossDeath() {
   if (!state || state.death) return;
@@ -1489,9 +1600,21 @@ function startBossDeath() {
   state.minions = [];
   state.shot = { active: false, isBonus: false };
   state.boss.angle = Math.atan2(stage.tee.y - bp.y, stage.tee.x - bp.x);
-  state.death = { t: 0, exploded: false, particles: [] };
+  state.death = {
+    t: 0,
+    stage: "pre",
+    stageT: 0,
+    exploded: false,
+    particles: [],
+    portalScale: 0,
+    dotAlpha: 0,
+    fadeAlpha: 0,
+    creditsScroll: 0,
+    portalAlpha: 1
+  };
   syncWindHiddenZones();
   resetCharge();
+  if (hud && hud.root) hud.root.classList.add("hidden");
   try { ball.isMoving = false; ball.vel.x = 0; ball.vel.y = 0; ball.z = 0; ball.vz = 0; } catch { }
   addEffect("boss-hit", bp.x, bp.y, 0.6);
   spawnDeathExplosions(bp.x, bp.y, bp.x, bp.y);
@@ -1521,6 +1644,26 @@ function spawnDeathParticles() {
   }
 }
 
+function startEndingBanter() {
+  let started = false;
+  try {
+    started = playBanter(ENDING_BANTER, {
+      onComplete: () => {
+        if (state && state.death && state.death.stage === "dialog") {
+          state.death.stage = "fade";
+          state.death.stageT = 0;
+        }
+      }
+    });
+  } catch {
+    started = false;
+  }
+  if (!started && state && state.death) {
+    state.death.stage = "fade";
+    state.death.stageT = 0;
+  }
+}
+
 function updateDeath(dt) {
   const d = state && state.death;
   if (!d) {
@@ -1528,32 +1671,137 @@ function updateDeath(dt) {
     return;
   }
   d.t += dt;
+  d.stageT += dt;
+  const bp = bossPos();
 
-  if (!d.exploded) {
-    if (d.t >= DEATH_BOOM_SECONDS) {
+  if (d.stage === "pre") {
+    if (d.stageT >= DEATH_BOOM_SECONDS) {
       d.exploded = true;
       spawnDeathParticles();
-      addEffect("pulse", bossPos().x, bossPos().y, 0.8);
+      addEffect("pulse", bp.x, bp.y, 0.8);
       message("Slicer breaks apart in the wind!", 3);
+      d.stage = "out";
+      d.stageT = 0;
     }
     return;
   }
 
-  const windScale = ((Number(stage.field.strength) || 0) * 1.6);
-  for (const p of d.particles) {
-    p.life -= dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    let wind = { x: 0, y: 0 };
-    try { wind = getWindAt(p.x, p.y) || wind; } catch { }
-    p.vx += wind.x * windScale * dt;
-    p.vy += wind.y * windScale * dt;
-    p.vx *= Math.max(0, 1 - 0.55 * dt);
-    p.vy *= Math.max(0, 1 - 0.55 * dt);
+  if (d.stage === "out") {
+    const windScale = ((Number(stage.field.strength) || 0) * 1.6);
+    for (const p of d.particles) {
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      let wind = { x: 0, y: 0 };
+      try { wind = getWindAt(p.x, p.y) || wind; } catch { }
+      p.vx += wind.x * windScale * dt;
+      p.vy += wind.y * windScale * dt;
+      p.vx *= Math.max(0, 1 - 0.55 * dt);
+      p.vy *= Math.max(0, 1 - 0.55 * dt);
+    }
+    d.particles = d.particles.filter((p) => p.life > 0);
+    if (d.stageT >= DEATH_OUTWARD_SECONDS) {
+      // Reverse the outward momentum and reel every fragment back to the
+      // exact pixel where the Slicer died.
+      for (const p of d.particles) {
+        p.vx = -p.vx * 0.55;
+        p.vy = -p.vy * 0.55;
+        p.life = p.maxLife;
+      }
+      d.stage = "gather";
+      d.stageT = 0;
+    }
+    return;
   }
-  d.particles = d.particles.filter((p) => p.life > 0);
 
-  if (d.t >= DEATH_BOOM_SECONDS + DEATH_PARTICLE_SECONDS) victory();
+  if (d.stage === "gather") {
+    const k = Math.min(1, d.stageT / DEATH_GATHER_SECONDS);
+    d.dotAlpha = Math.min(0.95, k * 1.15);
+    for (const p of d.particles) {
+      const dx = bp.x - p.x;
+      const dy = bp.y - p.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      const pull = 700 + 2600 * k;
+      p.vx += (dx / dist) * pull * dt;
+      p.vy += (dy / dist) * pull * dt;
+      const damp = Math.max(0, 1 - (2.2 + 7 * k) * dt);
+      p.vx *= damp;
+      p.vy *= damp;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (dist < 4.5) p.life = 0;
+    }
+    d.particles = d.particles.filter((p) => p.life > 0 && Math.hypot(bp.x - p.x, bp.y - p.y) > 2.5);
+    if (d.stageT >= DEATH_GATHER_SECONDS || !d.particles.length) {
+      d.particles = [];
+      d.dotAlpha = 1;
+      d.stage = "portal";
+      d.stageT = 0;
+    }
+    return;
+  }
+
+  if (d.stage === "portal") {
+    const k = Math.min(1, d.stageT / DEATH_PORTAL_GROW_SECONDS);
+    d.portalScale = easeOutCubic(k) * PORTAL_FULL_SCALE;
+    d.dotAlpha = 1 - k;
+    if (d.stageT >= DEATH_PORTAL_GROW_SECONDS) {
+      d.portalScale = PORTAL_FULL_SCALE;
+      d.dotAlpha = 0;
+      d.stage = "dialog";
+      d.stageT = 0;
+      startEndingBanter();
+    }
+    return;
+  }
+
+  if (d.stage === "dialog") {
+    // The main loop drives the banter clock; this is only a fallback if the
+    // dialog could not be created for some reason.
+    if (!isBanterActive() && d.stageT > 0.25) {
+      d.stage = "fade";
+      d.stageT = 0;
+    }
+    return;
+  }
+
+  if (d.stage === "fade") {
+    d.fadeAlpha = Math.min(1, d.stageT / DEATH_FADE_SECONDS);
+    if (d.fadeAlpha >= 1) {
+      d.stage = "credits";
+      d.stageT = 0;
+      d.creditsScroll = 0;
+      try { setCortexThemeActive(true); } catch { }
+    }
+    return;
+  }
+
+  if (d.stage === "credits") {
+    d.creditsScroll += CREDITS_SCROLL_SPEED * dt;
+    if (d.creditsScroll >= CREDITS_START_OFFSET + ENDING_CREDITS_HEIGHT) {
+      d.stage = "portalFade";
+      d.stageT = 0;
+      try { setCortexThemeActive(false); } catch { }
+    }
+    return;
+  }
+
+  if (d.stage === "portalFade") {
+    d.portalAlpha = Math.max(0, 1 - d.stageT / PORTAL_FADE_SECONDS);
+    if (d.stageT >= PORTAL_FADE_SECONDS) {
+      d.portalAlpha = 0;
+      d.stage = "black";
+      d.stageT = 0;
+    }
+    return;
+  }
+
+  if (d.stage === "black") {
+    if (d.stageT >= BLACK_HOLD_SECONDS) {
+      d.stage = "done";
+      if (bridge && bridge.returnToMenu) bridge.returnToMenu();
+    }
+  }
 }
 
 export function bossEndPlayerPhase() {
@@ -1592,6 +1840,7 @@ export function bossHandleResetKey() {
 export function bossShutdown() {
   active = false;
   state = null;
+  try { setCortexThemeActive(false); } catch { }
   try { if (bridge && bridge.clearWindSampler) bridge.clearWindSampler(); } catch { }
   try { if (bridge && bridge.setWindHiddenZones) bridge.setWindHiddenZones([]); } catch { }
   if (hud && hud.root) hud.root.classList.add("hidden");
@@ -1628,6 +1877,8 @@ export function getBossState() {
     bossSize: bossHitHalf() * 2,
     death: state.death ? {
       t: state.death.t,
+      stage: state.death.stage,
+      stageT: state.death.stageT,
       exploded: state.death.exploded,
       particles: state.death.particles.length
     } : null,
@@ -2198,14 +2449,89 @@ function drawBossEntity(ctx) {
   ctx.restore();
 }
 
+function drawPortalSprite(ctx, cx, cy, scale, alpha = 1) {
+  if (!Number.isFinite(scale) || scale <= 0 || alpha <= 0) return;
+  const w = PORTAL_OPEN_FRAME.w * scale;
+  const h = PORTAL_OPEN_FRAME.h * scale;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  const img = getPortalSprite();
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.drawImage(
+      img,
+      PORTAL_OPEN_FRAME.x,
+      PORTAL_OPEN_FRAME.y,
+      PORTAL_OPEN_FRAME.w,
+      PORTAL_OPEN_FRAME.h,
+      cx - w / 2,
+      cy - h / 2,
+      w,
+      h
+    );
+  } else {
+    // Fallback while the sprite decodes (or if the asset is unavailable).
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(8, w * 0.55));
+    grad.addColorStop(0, "rgba(255,255,255,0.98)");
+    grad.addColorStop(0.24, "rgba(142,202,230,0.92)");
+    grad.addColorStop(0.7, "rgba(90,60,200,0.7)");
+    grad.addColorStop(1, "rgba(20,10,50,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, Math.max(1, w * 0.5), Math.max(1, h * 0.5), 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDeathDot(ctx, x, y, alpha) {
+  if (!Number.isFinite(alpha) || alpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const r = 2 + 6 * alpha;
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+  grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+  grad.addColorStop(0.25, `rgba(255,230,150,${alpha * 0.9})`);
+  grad.addColorStop(1, "rgba(255,180,80,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEndingCredits(ctx, scroll) {
+  let y = CREDITS_START_OFFSET - scroll;
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0,0,0,0.85)";
+  ctx.shadowBlur = 8;
+  for (const line of ENDING_CREDITS_LINES) {
+    const lineHeight = creditLineHeight(line);
+    if (line.text) {
+      const size = line.title ? 52 : line.bold ? 30 : 24;
+      const weight = line.title || line.bold ? 700 : 400;
+      ctx.font = `${weight} ${size}px ${uiFont()}`;
+      ctx.fillStyle = line.title ? "#ffe9a8" : line.bold ? "#ffffff" : "rgba(220,226,238,0.9)";
+      ctx.fillText(line.text, LOGICAL_W / 2, y);
+    }
+    y += lineHeight;
+  }
+  ctx.restore();
+}
+
 function drawDeathEffects(ctx) {
   const d = state && state.death;
   if (!d) return;
   const bp = bossPos();
   const half = bossHalf();
 
-  if (!d.exploded) {
-    const flicker = 0.82 + Math.sin(d.t * 37) * 0.18;
+  if (d.stage === "pre") {
+    const flicker = 0.82 + Math.sin(d.stageT * 37) * 0.18;
     const bossAngle = Number.isFinite(state.boss.angle)
       ? state.boss.angle
       : Math.atan2(stage.tee.y - bp.y, stage.tee.x - bp.x);
@@ -2217,27 +2543,54 @@ function drawDeathEffects(ctx) {
     return;
   }
 
-  const age = d.t - DEATH_BOOM_SECONDS;
-  if (age >= 0 && age < 0.32) {
-    const a = 1 - age / 0.32;
+  if (d.stage === "out" && d.stageT < 0.32) {
+    const a = 1 - d.stageT / 0.32;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = a;
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.arc(bp.x, bp.y, half * (0.7 + age * 5), 0, Math.PI * 2);
+    ctx.arc(bp.x, bp.y, half * (0.7 + d.stageT * 5), 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  for (const p of d.particles) {
-    ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+  if (d.particles.length) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const p of d.particles) {
+      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+    }
+    ctx.restore();
   }
-  ctx.restore();
+
+  if (d.dotAlpha > 0) drawDeathDot(ctx, bp.x, bp.y, d.dotAlpha);
+
+  if (d.stage === "portal") {
+    drawPortalSprite(ctx, bp.x, bp.y, d.portalScale, 1);
+  } else if (d.stage === "dialog") {
+    drawPortalSprite(ctx, bp.x, bp.y, PORTAL_FULL_SCALE, 1);
+  } else if (d.stage === "fade") {
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 0, 0, ${d.fadeAlpha})`;
+    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+    ctx.restore();
+    drawPortalSprite(ctx, bp.x, bp.y, PORTAL_FULL_SCALE, 1);
+  } else if (d.stage === "credits") {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+    drawPortalSprite(ctx, bp.x, bp.y, PORTAL_FULL_SCALE, 1);
+    drawEndingCredits(ctx, d.creditsScroll);
+  } else if (d.stage === "portalFade") {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+    drawPortalSprite(ctx, bp.x, bp.y, PORTAL_FULL_SCALE, d.portalAlpha);
+  } else if (d.stage === "black" || d.stage === "done") {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+  }
 }
 
 function drawHeartRow(ctx, x, y, lives, max, color) {
