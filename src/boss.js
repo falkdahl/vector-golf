@@ -1551,16 +1551,19 @@ const ENDING_CREDITS_LINES = [
   "Google Flow Music",
   "",
   "*Victims of Early Builds*",
+  "Mia Romare",
+  "Frans Romare",
   "Måns Fritzner",
   "Linus Selvén",
   "Moeid Heidari",
   "Tapan Gupta",
   "",
   "*Special Thanks*",
+  "Frans & Mia - You are the best.",
   "Måns Fritzner — Game literally wouldn't exist without you.",
   "Kevin Eastman & Peter Laird — For the inspiration.",
   "",
-  "Thank you for playing!",
+  "*Thank you for playing!*",
   "(Now go outside and touch some actual grass)"
 ].map((raw, index) => {
   const bold = raw.length > 2 && raw.startsWith("*") && raw.endsWith("*");
