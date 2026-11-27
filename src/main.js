@@ -4362,6 +4362,7 @@ function startBossMode(params) {
     setWindSampler(fn) { try { setWindSampler(fn); } catch { } },
     clearWindSampler() { try { setWindSampler(null); } catch { } },
     setWindHiddenZones(zones) { try { setWindHiddenZones(zones); } catch { } },
+    setWindVisible(v) { try { setWindVisible(v); } catch { } },
     returnToMenu() { bossReturnToMainMenu(); },
     log(...args) { try { console.log("[boss]", ...args); } catch { } }
   };

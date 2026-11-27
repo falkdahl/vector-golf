@@ -1497,12 +1497,12 @@ const DEATH_PORTAL_GROW_SECONDS = 1.6;
 const DEATH_FADE_SECONDS = 1.5;
 const PORTAL_FADE_SECONDS = 1.4;
 const BLACK_HOLD_SECONDS = 1.2;
-const CREDITS_SCROLL_SPEED = 46;
+const CREDITS_SCROLL_SPEED = 23;
 const DEATH_COLORS = ["#ffffff", "#ffe066", "#ffb703", "#ff4d6d", "#5ee0a0", "#8ecae6"];
 
 // Portal-open frame inside img/cutscenes/portals.webp (see character-sprites.json).
 const PORTAL_OPEN_FRAME = { x: 472, y: 37, w: 289, h: 293 };
-const PORTAL_FULL_SCALE = 0.9;
+const PORTAL_FULL_SCALE = 0.45;
 
 const ENDING_BANTER = {
   id: "boss-victory-home",
@@ -1771,6 +1771,7 @@ function updateDeath(dt) {
       d.stage = "credits";
       d.stageT = 0;
       d.creditsScroll = 0;
+      try { if (bridge && bridge.setWindVisible) bridge.setWindVisible(false); } catch { }
       try { setCortexThemeActive(true); } catch { }
     }
     return;
@@ -1840,6 +1841,7 @@ export function bossHandleResetKey() {
 export function bossShutdown() {
   active = false;
   state = null;
+  try { if (bridge && bridge.setWindVisible) bridge.setWindVisible(true); } catch { }
   try { setCortexThemeActive(false); } catch { }
   try { if (bridge && bridge.clearWindSampler) bridge.clearWindSampler(); } catch { }
   try { if (bridge && bridge.setWindHiddenZones) bridge.setWindHiddenZones([]); } catch { }
