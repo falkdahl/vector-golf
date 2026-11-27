@@ -1,6 +1,9 @@
 import { generateLevels, generateTutorialLevels, LEVELS, LEVEL } from "./levels.js";
 
 export const COURSES_KEY = "golfVectorField.courses.v1";
+export const DAILY_COURSE_KEY = "golfVectorField.daily.v1";
+export const DAILY_COURSE_NAME = "The Daily Mulligan";
+export const DAILY_COURSE_HOLE_COUNT = 9;
 // Verified easy-ish seed for the 6- and 9-hole stages:
 // 6-hole scores [0,0,4,4,0,4], 9-hole scores [0,4,4,0,4,4,4,0,5].
 // Used only when a brand-new campaign has no seed yet; explicit refreshes and
@@ -313,6 +316,69 @@ export function generateCourse(holeCount = 18, seed = Date.now(), options = {}) 
     createdAt: Date.now(),
     bestTotal: null
   };
+}
+
+export function getDailyDateKey(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (!Number.isFinite(d.getTime())) return getDailyDateKey();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function dailyCourseIdForDate(dateKey = getDailyDateKey()) {
+  return `daily-${dateKey}`;
+}
+
+export function generateDailyCourse(dateKey = getDailyDateKey()) {
+  const seed = deriveCourseSeed(`daily-mulligan:${dateKey}`, DAILY_COURSE_HOLE_COUNT);
+  const base = generateCourse(DAILY_COURSE_HOLE_COUNT, seed);
+  return {
+    ...base,
+    id: dailyCourseIdForDate(dateKey),
+    name: DAILY_COURSE_NAME,
+    holeCount: DAILY_COURSE_HOLE_COUNT,
+    seed,
+    campaignSeed: null,
+    daily: true,
+    dailyDate: dateKey,
+    bestTotal: null
+  };
+}
+
+export function loadDailyCourse() {
+  try {
+    const raw = localStorage.getItem(DAILY_COURSE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || d.version !== 1 || !d.course) return null;
+    const c = d.course;
+    if (c.daily !== true || typeof c.dailyDate !== "string") return null;
+    validateCourse(c);
+    if (c.holeCount !== DAILY_COURSE_HOLE_COUNT || c.holes.length !== DAILY_COURSE_HOLE_COUNT) return null;
+    return c;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDailyCourse(course) {
+  if (!course || course.daily !== true) return false;
+  try {
+    localStorage.setItem(DAILY_COURSE_KEY, JSON.stringify({ version: 1, course }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getOrCreateDailyCourse(dateKey = getDailyDateKey()) {
+  const existing = loadDailyCourse();
+  if (existing && existing.dailyDate === dateKey && existing.name === DAILY_COURSE_NAME) return existing;
+  const fresh = generateDailyCourse(dateKey);
+  saveDailyCourse(fresh);
+  return fresh;
 }
 
 export function validateCourse(c) {

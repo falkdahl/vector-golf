@@ -1614,6 +1614,7 @@ function startBossDeath() {
   };
   syncWindHiddenZones();
   resetCharge();
+  try { if (bridge && bridge.onBossDefeated) bridge.onBossDefeated(); } catch { }
   if (hud && hud.root) hud.root.classList.add("hidden");
   try { ball.isMoving = false; ball.vel.x = 0; ball.vel.y = 0; ball.z = 0; ball.vz = 0; } catch { }
   addEffect("boss-hit", bp.x, bp.y, 0.6);

@@ -98,7 +98,7 @@ if (typeof window !== 'undefined') {
   } catch { }
 }
 import { getFieldComponents, getSourcePositions, getSinkPositions, getVortexPositions, getDoubletPositions, SOFTENING_A } from "./vectorField.js";
-import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache } from "./courses.js";
+import { COURSES_KEY, STAGES, generateCampaignCourse, loadCourses as loadCoursesFromStorage, saveCourses as saveCoursesToStorage, exportCourse, importCourse, validateCourse, isStageUnlocked, getUnlockedStages, ensureNextStageUnlocked, getCampaignSeed, setCampaignSeed, generateCampaignSeed, deriveCourseSeed, regenerateCampaign, applyManualSeed, invalidateCoursesCache, DAILY_COURSE_NAME, getDailyDateKey, getOrCreateDailyCourse, saveDailyCourse as saveDailyCourseToStorage } from "./courses.js";
 import { PROGRESSION_KEY, LOADOUT_KEY, COINS_PER_HOLE, COINS_PER_ATTEMPT, COURSE_COMPLETE_BONUS, SHOP_PRICE_SPATIAL, SHOP_PRICE_PASSIVE, MAX_LOADOUT_SLOTS, SHOP_INITIAL_STOCK, LOADOUT_SLOT_COSTS, DEFAULT_UNLOCKED_SLOTS, costFor, getProgression, getCoins, getPersonalSupply, getPersonalSupplyCount, getShopStock, getShopStockCount, addShopStock, purchase as progressionPurchase, addCoins, saveProgression, loadProgression, clearProgression, getLastLoadout, setLastLoadout, clearLastLoadout, hasLastLoadout, getUnlockedLoadoutSlots as getProgressionUnlockedSlots, getNextLoadoutSlotCost, canUnlockNextLoadoutSlot, unlockNextLoadoutSlot, setUnlockedLoadoutSlots, getRunsStarted, incrementRunsStarted } from "./progression.js";
 import { playCutscene as cutscenePlay, loadCutscene as cutsceneLoad, validateCutscene as cutsceneValidate, isCutsceneActive as cutsceneIsActive, getActiveCutsceneId as cutsceneGetId, updateCutscene as cutsceneUpdate, renderCutscene as cutsceneRender, handleCutsceneInput as cutsceneHandleInput, skipCutscene as cutsceneSkip, preloadCutscene as cutscenePreload, hasSeenCutscene as cutsceneHasSeen, markCutsceneSeen as cutsceneMarkSeen, CUTSCENE_SEEN_KEY as cutsceneSeenKey } from "./cutscene.js";
 import { isBanterActive as banterIsActive, playRunStartBanter as banterPlayRunStart, updateBanter as banterUpdate, handleBanterInput as banterHandleInput, preloadBanterFile as banterPreload, skipBanter as banterSkip, playBanter as banterPlay, loadBanterFile as banterLoadFile } from "./banter.js";
@@ -489,6 +489,9 @@ let attempts = 0; // alias for totalAttempts for backward compat
 let courses = [];
 let activeCourse = null;
 let activeCourseId = null;
+// The Daily Mulligan: unlocked by defeating the final boss, regenerated per day.
+const BOSS_DEFEATED_KEY = "golfVectorField.boss.v1";
+let dailyCourse = null;
 
 function getActiveCourse() { return activeCourse; }
 // Key for the static-buffer cache (course identity + hole count + DPR).
@@ -693,7 +696,42 @@ function loadCourses() {
 function saveCourses() {
   try { saveCoursesToStorage(courses); } catch { };
 }
-function findCourseById(id) { return courses.find(c => c.id === id) || null; }
+function findCourseById(id) {
+  const course = courses.find(c => c.id === id);
+  if (course) return course;
+  try {
+    const daily = ensureDailyCourse();
+    if (daily && daily.id === id) return daily;
+  } catch { }
+  return null;
+}
+function isBossDefeated() {
+  try {
+    const raw = localStorage.getItem(BOSS_DEFEATED_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    return !!(d && d.version === 1 && d.defeated === true);
+  } catch { return false; }
+}
+function ensureDailyCourse() {
+  if (!isBossDefeated()) {
+    dailyCourse = null;
+    return null;
+  }
+  const dateKey = getDailyDateKey();
+  if (dailyCourse && dailyCourse.dailyDate === dateKey) return dailyCourse;
+  try { dailyCourse = getOrCreateDailyCourse(dateKey); } catch { dailyCourse = null; }
+  return dailyCourse;
+}
+function markBossDefeated() {
+  try {
+    localStorage.setItem(BOSS_DEFEATED_KEY, JSON.stringify({ version: 1, defeated: true, defeatedAt: Date.now() }));
+  } catch { }
+  // Generate the daily course lazily on the next menu render so the boss death
+  // sequence never pays the 9-hole generation cost.
+  try { _lastCourseListSig = null; } catch { }
+  try { if (mainMenuVisible) renderCourseList(); } catch { }
+}
 function isTutorialCourse(course) { return !!(course && (course.name === "The Proving Grounds" || course.name === "The 3-Hole Trial" || course.name === "3-hole Trial")); }
 function isTutorialActive() { return isTutorialCourse(activeCourse); }
 function getLevelTreasures(lvl) {
@@ -2910,6 +2948,7 @@ function clearAllStorageForSeedGeneration() {
   try { clearProgress(); } catch { }
   // Also invalidate in-memory course cache
   try { invalidateCoursesCache(); } catch { }
+  try { dailyCourse = null; } catch { }
   // Reset run-specific progress variables
   try { runHolesCleared = 0; runCoinsEarned = 0; } catch { }
   try { coinSummaryVisible = false; syncCoinSummaryOverlay(); } catch { }
@@ -3064,10 +3103,14 @@ function _courseListSignature() {
   try {
     // Cheap signature: length + each id/bestTotal + Dimension-Y teaser state
     // (teaser appears once end-18-hole has been seen; include it so the menu
-    // re-renders when the cutscene is first marked seen).
+    // re-renders when the cutscene is first marked seen). The daily course id
+    // includes the date, so a date rollover also re-renders the row.
     let teaser = false;
     try { teaser = cutsceneHasSeen('end-18-hole'); } catch { }
-    return courses.map(c => `${c.id}:${c.holeCount}:${c.bestTotal}`).join('|') + `;dy:${teaser ? 1 : 0}`;
+    let daily = null;
+    try { daily = ensureDailyCourse(); } catch { }
+    const dailySig = daily ? `${daily.id}:${daily.bestTotal}` : '-';
+    return courses.map(c => `${c.id}:${c.holeCount}:${c.bestTotal}`).join('|') + `;dy:${teaser ? 1 : 0};daily:${dailySig}`;
   } catch { return null; }
 }
 function renderMainMenuRootVisibility() {
@@ -3241,6 +3284,7 @@ function setHighScore(n) {
 function clearHighScore() { try { localStorage.removeItem(HIGH_SCORE_KEY); } catch { }; }
 function maybeUpdateHighScore() {
   if (!activeCourse) return;
+  const isDaily = activeCourse.daily === true;
   // Course record (bestTotal) only counts on full course clear — this function is
   // only called from final-hole WIN (and tutorial). End Run / Game Over never call it.
   // Journal partial-run saving (commitRunJournal(false)) still records best-run
@@ -3253,22 +3297,27 @@ function maybeUpdateHighScore() {
     firstClear = (activeCourse.bestTotal == null);
     activeCourse.bestTotal = totalPoints;
     updated = true;
-    try { saveCourses(); } catch { };
+    if (isDaily) {
+      try { saveDailyCourseToStorage(activeCourse); } catch { }
+    } else {
+      try { saveCourses(); } catch { };
+    }
     // Re-render course list to show new record
     try { renderCourseList(); } catch { };
   }
   // Shop stock milestones (10-progression.md §1.6): first clear of a course
-  // unlocks stock. Replays never re-grant.
-  if (firstClear) {
+  // unlocks stock. Replays never re-grant. The daily course is isolated.
+  if (firstClear && !isDaily) {
     try { grantShopMilestoneStock(activeCourse.holeCount); } catch { }
   }
   // First-clear + unlock tracking for this run (coin bonus, summary notices,
-  // end-9-hole cutscene). Replays leave both flags false.
-  if (firstClear) {
+  // end-9-hole cutscene). Replays leave both flags false. The daily course
+  // never drives campaign unlocks or story cutscenes.
+  if (firstClear && !isDaily) {
     runFirstCourseClear = true;
   }
   // Auto-generate next stage if this stage was just cleared (or already cleared)
-  if (activeCourse.bestTotal !== null) {
+  if (!isDaily && activeCourse.bestTotal !== null) {
     const next = ensureNextStageUnlocked(courses);
     if (next) {
       // A new staged course was generated by this run's clear.
@@ -3412,6 +3461,8 @@ function renderCourseList() {
   if (stagedList) targets.push(stagedList);
   if (legacyList && legacyList !== stagedList) targets.push(legacyList);
   if (targets.length === 0) return;
+  let daily = null;
+  try { daily = ensureDailyCourse(); } catch { }
   for (const list of targets) {
     list.innerHTML = '';
     for (const holeCount of STAGES) {
@@ -3480,6 +3531,23 @@ function renderCourseList() {
       bossBtn.addEventListener('click', () => handleDimensionYPlay());
       bossRow.appendChild(bossBtn);
       list.appendChild(bossRow);
+    }
+    // The Daily Mulligan: unlocked once the final boss has been defeated.
+    // Its 9 holes regenerate every local calendar day.
+    if (daily) {
+      const dailyRow = document.createElement('div');
+      dailyRow.className = 'course-row';
+      dailyRow.dataset.daily = 'the-daily-mulligan';
+      dailyRow.dataset.courseId = daily.id;
+      dailyRow.dataset.holes = String(daily.holeCount);
+      const dailyBtn = document.createElement('button');
+      dailyBtn.className = 'course-play-button';
+      const record = daily.bestTotal == null ? '—' : String(daily.bestTotal);
+      dailyBtn.innerHTML = `<span class="course-name">${DAILY_COURSE_NAME}</span><span class="course-meta">9 holes \u2003 Today: ${record}</span>`;
+      dailyBtn.title = 'Play The Daily Mulligan (regenerates every day)';
+      dailyBtn.addEventListener('click', () => handleCoursePlay(daily.id));
+      dailyRow.appendChild(dailyBtn);
+      list.appendChild(dailyRow);
     }
   }
   // Cache signature after render to avoid re-rendering on every help close / menu toggle
@@ -4363,6 +4431,7 @@ function startBossMode(params) {
     clearWindSampler() { try { setWindSampler(null); } catch { } },
     setWindHiddenZones(zones) { try { setWindHiddenZones(zones); } catch { } },
     setWindVisible(v) { try { setWindVisible(v); } catch { } },
+    onBossDefeated() { try { markBossDefeated(); } catch { } },
     returnToMenu() { bossReturnToMainMenu(); },
     log(...args) { try { console.log("[boss]", ...args); } catch { } }
   };
@@ -9057,6 +9126,9 @@ function init() {
   }
   // REQ-031: load courses collection before progress (so courseId can be resolved)
   try { loadCourses(); } catch (e) { console.warn('loadCourses failed', e); }
+  // Daily Mulligan: unlocked after the final boss; load/regenerate for today so
+  // an in-progress daily run can be resolved by courseId.
+  try { ensureDailyCourse(); } catch (e) { console.warn('daily course load failed', e); }
   // Legacy migration (10-progression.md §1.6): detect saves persisted before
   // shopStock existed BEFORE loadProgression normalizes them.
   let legacyMissingShopStock = false;
