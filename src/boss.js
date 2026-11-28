@@ -2224,54 +2224,96 @@ function drawArena(ctx, width, height) {
   }
   ctx.restore();
 
-  // Platform body.
+  // Soft purple haze hugging the platform so the mist reads as a glow rather
+  // than a hard band.
   ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(a.cx, a.cy, a.rx, a.ry, 0, 0, Math.PI * 2);
-  ctx.clip();
+  ctx.translate(a.cx, a.cy);
+  ctx.scale(1, a.ry / a.rx);
+  const haze = ctx.createRadialGradient(0, 0, a.rx * 0.78, 0, 0, a.rx * 1.18);
+  haze.addColorStop(0, "rgba(120, 60, 200, 0)");
+  haze.addColorStop(0.55, "rgba(120, 60, 200, 0.10)");
+  haze.addColorStop(0.82, "rgba(135, 70, 215, 0.22)");
+  haze.addColorStop(1, "rgba(90, 45, 160, 0)");
+  ctx.fillStyle = haze;
+  ctx.fillRect(-a.rx * 1.25, -a.rx * 1.25, a.rx * 2.5, a.rx * 2.5);
+  ctx.restore();
+
+  // Blocky, irregular platform edge wrapped in a purple out-of-bounds mist.
+  // Blocks are sampled on the same 4px grid as the regular course terrain.
+  const block = 4;
+  const mistBlocks = 16;
+  const pad = block * (mistBlocks + 2);
+  const bx0 = Math.max(0, Math.floor((a.cx - a.rx - pad) / block) * block);
+  const bx1 = Math.min(width, Math.ceil((a.cx + a.rx + pad) / block) * block);
+  const by0 = Math.max(0, Math.floor((a.cy - a.ry - pad) / block) * block);
+  const by1 = Math.min(height, Math.ceil((a.cy + a.ry + pad) / block) * block);
 
   const g = ctx.createLinearGradient(0, a.cy - a.ry, 0, a.cy + a.ry);
   g.addColorStop(0, "#243d36");
   g.addColorStop(0.48, "#172a27");
   g.addColorStop(1, "#0d1918");
-  ctx.fillStyle = g;
-  ctx.fillRect(a.cx - a.rx, a.cy - a.ry, a.rx * 2, a.ry * 2);
 
-  // Subtle contour rings.
-  ctx.strokeStyle = "rgba(94, 224, 160, 0.08)";
-  ctx.lineWidth = 1.5;
-  for (let i = 1; i <= 4; i++) {
-    ctx.beginPath();
-    ctx.ellipse(a.cx, a.cy, a.rx * (i / 5), a.ry * (i / 5), 0, 0, Math.PI * 2);
-    ctx.stroke();
+  const invMin = 1 / Math.min(a.rx, a.ry);
+  const rimSpan = block * invMin;
+  const mistSpan = (block * mistBlocks) * invMin;
+  const shadow = {
+    cx: a.cx + 190,
+    cy: a.cy + a.ry + 120,
+    rx: a.rx * 0.92,
+    ry: a.ry * 1.02
+  };
+
+  const hash = (x, y) => {
+    const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return s - Math.floor(s);
+  };
+
+  for (let y = by0; y < by1; y += block) {
+    for (let x = bx0; x < bx1; x += block) {
+      const cx = x + block / 2;
+      const cy = y + block / 2;
+      const ndx = (cx - a.cx) / a.rx;
+      const ndy = (cy - a.cy) / a.ry;
+      const ang = Math.atan2(ndy, ndx);
+      const wobble =
+        0.018 * Math.sin(ang * 5 + 0.7) +
+        0.012 * Math.sin(ang * 11 + 2.1) +
+        0.006 * Math.sin(ang * 19 + 4.3);
+      const grain = (hash(cx, cy) - 0.5) * 0.006;
+      const d = Math.sqrt(ndx * ndx + ndy * ndy) + wobble + grain;
+
+      if (d <= 1) {
+        // Platform body, block-quantized for the pixelated edge.
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, block, block);
+
+        // Crescent void shadow on the lower-right edge.
+        const sdx = (cx - shadow.cx) / shadow.rx;
+        const sdy = (cy - shadow.cy) / shadow.ry;
+        if (sdx * sdx + sdy * sdy <= 1) {
+          ctx.fillStyle = "rgba(3, 4, 10, 0.72)";
+          ctx.fillRect(x, y, block, block);
+        }
+
+        // Pixelated purple rim that blends into the mist.
+        if (d > 1 - rimSpan) {
+          ctx.fillStyle = "rgba(150, 95, 235, 0.72)";
+          ctx.fillRect(x, y, block, block);
+        }
+      } else if (d <= 1 + mistSpan) {
+        // Purple out-of-bounds mist, fading outward with soft wispy variation.
+        const t = Math.min(1, (d - 1) / mistSpan);
+        const n = hash(cx * 1.7 + 11, cy * 1.3 + 7);
+        const wisp = 0.6 + 0.4 * Math.sin(ang * 4 + t * 7 + 1.3);
+        const alpha = (1 - t) * (0.22 + 0.26 * n) * wisp;
+        const r = Math.round(150 - 70 * t);
+        const gr = Math.round(80 - 45 * t);
+        const bl = Math.round(230 - 90 * t);
+        ctx.fillStyle = `rgba(${r}, ${gr}, ${bl}, ${alpha.toFixed(3)})`;
+        ctx.fillRect(x, y, block, block);
+      }
+    }
   }
-
-  // Crescent void shadow on the lower-right edge.
-  ctx.beginPath();
-  ctx.ellipse(a.cx + 190, a.cy + a.ry + 120, a.rx * 0.92, a.ry * 1.02, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(3, 4, 10, 0.72)";
-  ctx.fill();
-  ctx.restore();
-
-  // Rim.
-  ctx.save();
-  ctx.strokeStyle = "rgba(94, 224, 160, 0.85)";
-  ctx.lineWidth = 4;
-  ctx.shadowColor = "rgba(94, 224, 160, 0.75)";
-  ctx.shadowBlur = 18;
-  ctx.beginPath();
-  ctx.ellipse(a.cx, a.cy, a.rx, a.ry, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-
-  // Inner rim accent.
-  ctx.save();
-  ctx.strokeStyle = "rgba(255, 77, 109, 0.16)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.ellipse(a.cx, a.cy, a.rx - 14, a.ry - 14, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
 }
 
 function drawAsteroids(ctx) {
